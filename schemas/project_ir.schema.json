@@ -1,0 +1,307 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibegraph.dev/schemas/project_ir/2.1.json",
+  "title": "VibeGraph project envelope IR",
+  "description": "Project-mode wrapper around per-file IRs (schemas/ir.schema.json). Adds project-scoped fields the v2 thread-organisation work depends on. See PLAN-v2.md §1.1.\n\nM8.1 baseline: envelope ships with empty `entryPoints` and `threads` arrays. M8.2 fills `entryPoints` (auto + manual). M8.3 fills `threads` by running extract_thread.py over each entry point at parse time.\n\nM19.1 (PLAN-v5 §1.1): bumped 2.0 -> 2.1 by ADDING the `system` field — a pure roll-up of the already-parsed threads + effectKind + entryPoints into subsystems + cross-subsystem edges (scripts/build_system_tier.py). Additive only: no per-file IR change, no enum change. The system tier is language-shallow (LIGHT path, PLAN-v5 §0.3) — the frontend is one node, detected by convention + a text scan, never parsed.\n\nVersioning is independent of the per-file IR. Adding envelope-level fields bumps to 2.x additively; removing or changing existing fields is a 3.0 break.",
+  "type": "object",
+  "required": ["version", "files", "symbolIndex", "entryPoints", "threads", "system"],
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "description": "Project envelope schema version. v2.0 = M8.1 baseline; v2.1 = M19.1 adds `system`.",
+      "enum": ["2.1"]
+    },
+    "files": {
+      "description": "Map of project-relative file path -> per-file IR (schemas/ir.schema.json, version 1.1). Validated structurally as object-of-objects here; per-file schema validation is the IR snapshot test's job (test:ir).",
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["nodes", "edges", "symbolIndex"],
+        "properties": {
+          "nodes": { "type": "array" },
+          "edges": { "type": "array" },
+          "symbolIndex": { "type": "array" }
+        },
+        "additionalProperties": true
+      }
+    },
+    "symbolIndex": {
+      "description": "Project-wide flattened symbol index — union of every per-file IR's symbolIndex. Each entry self-identifies its source file via the `source` field. Empty until populated; M8.1 emits the union of per-file entries.",
+      "type": "array",
+      "items": { "type": "object" }
+    },
+    "entryPoints": {
+      "description": "Detected and manual thread entry points. Empty array in M8.1; populated in M8.2 by scripts/discover_entry_points.py.",
+      "type": "array",
+      "items": { "$ref": "#/$defs/EntryPoint" }
+    },
+    "threads": {
+      "description": "Threads extracted at parse time, one per entry point. Empty array in M8.1; populated in M8.3 by running scripts/extract_thread.py over each entryPoints[] item.",
+      "type": "array",
+      "items": { "$ref": "#/$defs/ProjectThread" }
+    },
+    "system": {
+      "description": "M19.1 (PLAN-v5 §1): the system tier — a pure roll-up of threads + effectKind + entryPoints into subsystems and the cross-subsystem edges between them. Emitted by scripts/build_system_tier.py. Derivation only; no new parsing. The system view (M19.2+) renders this.",
+      "$ref": "#/$defs/System"
+    },
+    "systemPlan": {
+      "description": "PLAN-v7 Stage 3 (additive, OPTIONAL — no version bump; envelopes without it validate unchanged): the ratified architecture PLAN, when one exists. A LABELLED PLAN traceable to the user's description, NEVER honest IR — a SIBLING of `system`, composed with it only at render (planned subsystems ghost-render; ids that exist in the honest tier are already real). Persisted at <projectRoot>/.vibegraph/system-plan.json on human acceptance; becomes honest only when built code re-parses into matching subsystems.",
+      "$ref": "#/$defs/SystemPlan"
+    },
+    "buildPlan": {
+      "description": "PLAN-v7 Stage 5 (additive, OPTIONAL — no version bump): the ratified BUILD PLAN (the roadmap) + its live per-item status. A LABELLED PLAN and the orchestrator's durable state: persisted at <projectRoot>/.vibegraph/build-plan.json on ratification and re-persisted on every status transition, so a run survives reloads and resumes from disk. The human gate stays at every increment — the orchestrator automates BETWEEN gates, never through them.",
+      "$ref": "#/$defs/BuildPlan"
+    }
+  },
+  "$defs": {
+    "BuildPlan": {
+      "description": "PLAN-v7 Stage 5: an ordered, dependency-aware capability list decomposing the ratified SystemPlan. Foundation-first is STRUCTURAL: an item's needs[] may only reference ids declared BEFORE it (build order = declared order), making the graph a DAG by construction. groundedIn quotes the user's description or is null = INFERRED.",
+      "type": "object",
+      "required": ["version", "description", "items", "drafted"],
+      "additionalProperties": false,
+      "properties": {
+        "version": { "enum": ["1"] },
+        "description": { "type": "string", "minLength": 1 },
+        "items": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/BuildPlanItem" } },
+        "drafted": { "type": "boolean" },
+        "ratifiedAt": { "type": "string" }
+      }
+    },
+    "BuildPlanItem": {
+      "type": "object",
+      "required": ["id", "capability", "needs", "groundedIn", "status"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
+        "capability": { "type": "string", "minLength": 1 },
+        "needs": { "type": "array", "items": { "type": "string" } },
+        "groundedIn": { "type": ["string", "null"] },
+        "status": { "enum": ["pending", "drafting", "gated", "built", "failed", "skipped"] },
+        "failReason": { "type": "string" }
+      }
+    },
+    "SystemPlan": {
+      "description": "PLAN-v7 Stage 3: a proposed architecture. Deliberately NOT $defs/Subsystem or $defs/SystemEdge — those carry parse-derived facts (endpointRefs, refs, confidence, evidence) a plan cannot honestly claim. Instead every planned item carries GROUNDING: `groundedIn` quotes (or closely paraphrases) the user's description; null = INFERRED (proposed unasked) and the gate renders that distinction.",
+      "type": "object",
+      "required": ["version", "description", "subsystems", "edges", "drafted"],
+      "additionalProperties": false,
+      "properties": {
+        "version": { "enum": ["1"] },
+        "description": {
+          "description": "The user's project description this plan traces to. Non-empty.",
+          "type": "string",
+          "minLength": 1
+        },
+        "subsystems": { "type": "array", "items": { "$ref": "#/$defs/PlannedSubsystem" } },
+        "edges": { "type": "array", "items": { "$ref": "#/$defs/PlannedSystemEdge" } },
+        "drafted": {
+          "description": "True when `claude -p` drafted the plan (Stage 3b); false for canned/user-authored proposals.",
+          "type": "boolean"
+        },
+        "ratifiedAt": {
+          "description": "ISO timestamp of human acceptance. Present once persisted.",
+          "type": "string"
+        }
+      }
+    },
+    "PlannedSubsystem": {
+      "type": "object",
+      "required": ["id", "kind", "label", "groundedIn"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "kind": { "$ref": "#/$defs/SubsystemKind" },
+        "label": { "type": "string" },
+        "groundedIn": { "type": ["string", "null"] }
+      }
+    },
+    "PlannedSystemEdge": {
+      "type": "object",
+      "required": ["from", "to", "groundedIn"],
+      "additionalProperties": false,
+      "properties": {
+        "from": { "type": "string" },
+        "to": { "type": "string" },
+        "groundedIn": { "type": ["string", "null"] }
+      }
+    },
+    "System": {
+      "description": "Subsystems and the cross-subsystem edges between them (PLAN-v5 §1.1).",
+      "type": "object",
+      "required": ["subsystems", "edges"],
+      "additionalProperties": false,
+      "properties": {
+        "subsystems": { "type": "array", "items": { "$ref": "#/$defs/Subsystem" } },
+        "edges": { "type": "array", "items": { "$ref": "#/$defs/SystemEdge" } }
+      }
+    },
+    "SubsystemKind": {
+      "description": "Closed set for v5 (PLAN-v5 §1.2). fs/subprocess/log effects are deliberately NOT subsystems (§5.4).",
+      "type": "string",
+      "enum": ["frontend", "backend", "db", "cache", "external_http", "library"]
+    },
+    "Subsystem": {
+      "description": "One architectural node. `id` grammar: bare kind (`frontend`/`backend`/`db`/`cache`/`library`) or `external_http:<host>` (one node per distinct host). Edge endpoints reference these ids, optionally endpoint-qualified as `<owner>:<entryPointId>` for backend/library origins.",
+      "type": "object",
+      "required": ["id", "kind", "label"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "kind": { "$ref": "#/$defs/SubsystemKind" },
+        "label": { "type": "string" },
+        "framework": {
+          "description": "Backend/frontend framework discriminator (e.g. 'flask', 'React'). Null when not meaningful.",
+          "type": ["string", "null"]
+        },
+        "endpointRefs": {
+          "description": "Backend and library: the entryPoints[].id values the card owns — for backend, kind=route only (the M19.2 expand-to-reveal endpoints; effect edges may originate from non-route backend entry points too, not listed here); for library (M-NN-2), the routeless project's own non-manual entries (model/public_api/cli/test).",
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "fileCount": {
+          "description": "Backend and library (when the card owns entry points): number of project (.py) files.",
+          "type": "integer"
+        },
+        "detectedBy": {
+          "description": "Frontend only: how the convention scan flagged it (e.g. 'package.json:react + 2 component file(s)'). No JS was parsed.",
+          "type": "string"
+        },
+        "path": {
+          "description": "Frontend only: project-relative directory of the frontend source.",
+          "type": "string"
+        },
+        "evidence": {
+          "description": "Derived subsystems (db/cache/external_http): why this node exists (e.g. 'effectKind:db', 'name-match').",
+          "type": "string"
+        }
+      }
+    },
+    "SystemEdge": {
+      "description": "A cross-subsystem edge. `effect` edges (confidence=high) roll up an effectKind/name-match hit reached inside a thread; `viaThread` is the drill-down handle into threads[]. `calls` edges (confidence=low) are frontend->endpoint route-string text matches — the only language-crossing, and it is text not AST.",
+      "type": "object",
+      "required": ["from", "to", "kind", "confidence", "evidence", "refs"],
+      "additionalProperties": false,
+      "properties": {
+        "from": {
+          "description": "Source subsystem id, possibly endpoint-qualified (`backend:<entryPointId>` / `library:<entryPointId>`) for effect edges, or the bare `frontend` for calls edges.",
+          "type": "string"
+        },
+        "to": {
+          "description": "Target subsystem id (`db` / `cache` / `external_http:<host>`) for effect edges, or `backend:<routeEntryPointId>` for calls edges.",
+          "type": "string"
+        },
+        "kind": { "type": "string", "enum": ["calls", "effect"] },
+        "confidence": {
+          "description": "high = derived from parsed effectKind; low = heuristic (frontend string-scan).",
+          "type": "string",
+          "enum": ["high", "low"]
+        },
+        "evidence": {
+          "description": "How the edge was derived: 'effectKind' | 'name-match' (cache) | 'string-scan' (frontend calls).",
+          "type": "string"
+        },
+        "effectKind": {
+          "description": "System-tier effect classification (effect edges only). DISTINCT from the per-file IR EffectKind enum — `cache` is classified at the aggregation layer by name-match, not in the per-file IR (PLAN-v5 §6, Q6).",
+          "type": "string",
+          "enum": ["db", "cache", "http"]
+        },
+        "viaThread": {
+          "description": "effect edges: entryPoints[].id of the thread this edge was rolled up from — the drill-down back-pointer. Null for library origins with no entry point.",
+          "type": ["string", "null"]
+        },
+        "refs": {
+          "description": "Source sites backing this edge, as '<relpath>:<line>' strings.",
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "EntryPointKind": {
+      "description": "How this entry point was discovered. See PLAN-v2.md §1.2 for per-kind detection rules. `model` = a PyTorch nn.Module subclass's forward() method (the model's data path) — surfaced so ML projects aren't blank in the thread launchpad.",
+      "type": "string",
+      "enum": ["cli", "route", "public_api", "test", "manual", "model"]
+    },
+    "EntryPoint": {
+      "description": "A function (and the file it lives in) flagged as a thread seed. `id` is the join key into threads[].entryPointId.",
+      "type": "object",
+      "required": ["id", "kind", "file", "irNodeId", "qualifiedName", "label"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "description": "Stable per-entry-point id, formatted '<file>:<funcName>'. Used as threads[].entryPointId back-reference.",
+          "type": "string"
+        },
+        "kind": { "$ref": "#/$defs/EntryPointKind" },
+        "file": {
+          "description": "Project-relative path of the file containing the entry-point function.",
+          "type": "string"
+        },
+        "irNodeId": {
+          "description": "Structural-path id of the function in the per-file IR.",
+          "type": "string"
+        },
+        "qualifiedName": {
+          "description": "Module-qualified symbol path, e.g. 'main:cli_main' or 'views:user_profile'.",
+          "type": "string"
+        },
+        "label": {
+          "description": "Display label — usually the bare function name.",
+          "type": "string"
+        },
+        "summary": {
+          "description": "One-line summary derived from the function's docstring (or signature, if no docstring). Optional in M8.1; M8.3 fills.",
+          "type": "string"
+        },
+        "framework": {
+          "description": "Framework discriminator for kind=route / kind=cli / kind=model detections (e.g. 'flask', 'fastapi', 'django', 'argparse', 'click', 'typer', 'pytest', 'pytorch'). Null for kinds where framework is not meaningful. `pytorch` added with M-NN-2's library_only fixture — discover_entry_points.py had emitted it on kind=model since the Arch-view arc, but no committed envelope carried a model entry until then.",
+          "type": ["string", "null"],
+          "enum": [null, "argparse", "click", "typer", "flask", "fastapi", "django", "pytest", "pytorch"]
+        },
+        "metadata": {
+          "description": "Kind-specific extras — e.g. { 'route': '/users/<id>', 'method': 'GET' } for routes, { 'decorator': '@app.cli.command' } for CLI. Free-form object; consumers must check kind first.",
+          "type": "object"
+        }
+      }
+    },
+    "ProjectThread": {
+      "description": "A thread (extract_thread.py output, version 1.0) plus envelope-level back-references and computed reach-set. Inner shape unchanged from src/webview/threads/types.ts:Thread.",
+      "type": "object",
+      "required": ["version", "seed", "entryPointId", "nodes", "edges", "filesReached"],
+      "additionalProperties": true,
+      "properties": {
+        "version": {
+          "description": "Inner thread shape version — pinned by extract_thread.py output.",
+          "enum": ["1.0"]
+        },
+        "seed": {
+          "type": "object",
+          "required": ["file", "irNodeId", "qualifiedName"],
+          "properties": {
+            "file": { "type": "string" },
+            "irNodeId": { "type": "string" },
+            "qualifiedName": { "type": "string" }
+          }
+        },
+        "entryPointId": {
+          "description": "Back-reference into entryPoints[].id. Null for ad-hoc seeds that weren't promoted to entry points.",
+          "type": ["string", "null"]
+        },
+        "nodes": {
+          "description": "ThreadNode[] — see src/webview/threads/types.ts.",
+          "type": "array",
+          "items": { "type": "object" }
+        },
+        "edges": {
+          "description": "ThreadEdge[] — see src/webview/threads/types.ts.",
+          "type": "array",
+          "items": { "type": "object" }
+        },
+        "filesReached": {
+          "description": "Computed: every project-relative file path the thread touches (DFS over thread nodes' .file). Drives §1.5 unreachable-file filtering in the thread view.",
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    }
+  }
+}

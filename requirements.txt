@@ -1,0 +1,6 @@
+libcst
+# >=24 for `black --line-ranges` (M-DIRTY): the CST chokepoint formats only
+# the lines an op produced, so edits to non-black-clean files are no longer
+# rejected by whole-file reformatting. An older black rejects the flag and
+# _run_black fails loud — it never silently falls back to whole-file mode.
+black>=24

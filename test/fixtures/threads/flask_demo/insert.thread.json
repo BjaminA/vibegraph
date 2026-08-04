@@ -1,0 +1,159 @@
+{
+  "version": "1.0",
+  "seed": {
+    "file": "db.py",
+    "irNodeId": "module/insert.fn",
+    "qualifiedName": "db:insert"
+  },
+  "nodes": [
+    {
+      "id": "db:insert",
+      "kind": "seed",
+      "label": "insert",
+      "file": "db.py",
+      "irNodeId": "module/insert.fn",
+      "preview": null
+    },
+    {
+      "id": "db:_get_conn",
+      "kind": "step",
+      "label": "_get_conn",
+      "file": "db.py",
+      "irNodeId": "module/_get_conn.fn",
+      "preview": null
+    },
+    {
+      "id": "external:sqlite3.connect",
+      "kind": "external",
+      "label": "sqlite3.connect",
+      "file": null,
+      "irNodeId": "module/_get_conn.fn/return@0",
+      "preview": "sqlite3.connect(DB_PATH)"
+    },
+    {
+      "id": "dynamic:conn.close",
+      "kind": "dynamic",
+      "label": "conn.close",
+      "file": null,
+      "irNodeId": "module/insert.fn/finally@0/conn_close.call",
+      "preview": "conn.close",
+      "receiverBoundKind": "local-call",
+      "receiverBoundFrom": "_get_conn"
+    },
+    {
+      "id": "db:insert.fn/finally@0",
+      "kind": "container",
+      "containerKind": "finally",
+      "label": "finally",
+      "file": "db.py",
+      "irNodeId": "module/insert.fn/finally@0",
+      "preview": null
+    },
+    {
+      "id": "dynamic:conn.commit",
+      "kind": "dynamic",
+      "label": "conn.commit",
+      "file": null,
+      "irNodeId": "module/insert.fn/try@0/conn_commit.call",
+      "preview": "conn.commit",
+      "receiverBoundKind": "local-call",
+      "receiverBoundFrom": "_get_conn"
+    },
+    {
+      "id": "db:insert.fn/try@0",
+      "kind": "container",
+      "containerKind": "try",
+      "label": "try",
+      "file": "db.py",
+      "irNodeId": "module/insert.fn/try@0",
+      "preview": null
+    },
+    {
+      "id": "dynamic:conn.execute",
+      "kind": "dynamic",
+      "label": "conn.execute",
+      "file": null,
+      "irNodeId": "module/insert.fn/try@0/cursor.assign",
+      "preview": "conn.execute(sql, params)",
+      "receiverBoundKind": "local-call",
+      "receiverBoundFrom": "_get_conn"
+    },
+    {
+      "id": "db:insert:return@0",
+      "kind": "return",
+      "label": "return",
+      "file": "db.py",
+      "irNodeId": "module/insert.fn/try@0/return@0",
+      "preview": "cursor.lastrowid"
+    }
+  ],
+  "edges": [
+    {
+      "from": "db:_get_conn",
+      "to": "external:sqlite3.connect",
+      "kind": "direct",
+      "irSource": "module/_get_conn.fn/return@0"
+    },
+    {
+      "from": "db:insert",
+      "to": "db:_get_conn",
+      "kind": "direct",
+      "irSource": "module/insert.fn/conn.assign"
+    },
+    {
+      "from": "db:insert",
+      "to": "dynamic:conn.close",
+      "kind": "direct",
+      "irSource": "module/insert.fn/finally@0/conn_close.call"
+    },
+    {
+      "from": "db:insert.fn/finally@0",
+      "to": "dynamic:conn.close",
+      "kind": "contains",
+      "irSource": "module/insert.fn/finally@0"
+    },
+    {
+      "from": "db:insert",
+      "to": "dynamic:conn.commit",
+      "kind": "direct",
+      "irSource": "module/insert.fn/try@0/conn_commit.call"
+    },
+    {
+      "from": "db:insert.fn/try@0",
+      "to": "dynamic:conn.commit",
+      "kind": "contains",
+      "irSource": "module/insert.fn/try@0"
+    },
+    {
+      "from": "db:insert",
+      "to": "dynamic:conn.execute",
+      "kind": "direct",
+      "irSource": "module/insert.fn/try@0/cursor.assign"
+    },
+    {
+      "from": "db:insert.fn/try@0",
+      "to": "dynamic:conn.execute",
+      "kind": "contains",
+      "irSource": "module/insert.fn/try@0"
+    },
+    {
+      "from": "dynamic:conn.commit",
+      "to": "db:insert:return@0",
+      "kind": "direct",
+      "irSource": "module/insert.fn/try@0/return@0"
+    },
+    {
+      "from": "db:insert.fn/try@0",
+      "to": "db:insert:return@0",
+      "kind": "contains",
+      "irSource": "module/insert.fn/try@0"
+    },
+    {
+      "from": "db:insert.fn/try@0",
+      "to": "db:insert.fn/finally@0",
+      "kind": "flow",
+      "irSource": "module/insert.fn/finally@0",
+      "label": "always"
+    }
+  ]
+}

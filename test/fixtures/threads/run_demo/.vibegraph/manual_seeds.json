@@ -1,0 +1,59 @@
+{
+  "seeds": [
+    {
+      "file": "calc.py",
+      "irNodeId": "module/happy.fn",
+      "comment": "ok happy path"
+    },
+    {
+      "file": "calc.py",
+      "irNodeId": "module/report.fn",
+      "comment": "M-RUN3 return-capture path"
+    },
+    {
+      "file": "calc.py",
+      "irNodeId": "module/scaled.fn",
+      "comment": "synth path"
+    },
+    {
+      "file": "calc.py",
+      "irNodeId": "module/crashed.fn",
+      "comment": "runtime-error"
+    },
+    {
+      "file": "calc.py",
+      "irNodeId": "module/not_reached.fn",
+      "comment": "probe-not-reached"
+    },
+    {
+      "file": "calc.py",
+      "irNodeId": "module/opaque.fn",
+      "comment": "value-opaque"
+    },
+    {
+      "file": "calc.py",
+      "irNodeId": "module/swallowed.fn",
+      "comment": "stop-not-enforced"
+    },
+    {
+      "file": "effects.py",
+      "irNodeId": "module/touched.fn",
+      "comment": "side-effect gate"
+    },
+    {
+      "file": "broken.py",
+      "irNodeId": "module/needs_dep.fn",
+      "comment": "import-error"
+    },
+    {
+      "file": "torchy.py",
+      "irNodeId": "module/train.fn",
+      "comment": "Sitting-2: long unverifiable-call gate + category trust"
+    },
+    {
+      "file": "torchy.py",
+      "irNodeId": "module/train_more.fn",
+      "comment": "Sitting-2: session grant covers later paths"
+    }
+  ]
+}

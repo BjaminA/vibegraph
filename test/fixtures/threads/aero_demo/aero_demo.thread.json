@@ -1,0 +1,252 @@
+{
+  "version": "1.0",
+  "seed": {
+    "file": "main.py",
+    "irNodeId": "module/compute_drag.fn",
+    "qualifiedName": "main:compute_drag"
+  },
+  "nodes": [
+    {
+      "id": "main:compute_drag",
+      "kind": "seed",
+      "label": "compute_drag",
+      "file": "main.py",
+      "irNodeId": "module/compute_drag.fn",
+      "preview": "Compute aerodynamic drag for an aircraft under given conditions."
+    },
+    {
+      "id": "unresolved:audit_drag",
+      "kind": "unresolved",
+      "label": "audit_drag",
+      "file": null,
+      "irNodeId": "module/compute_drag.fn/audit_drag.call",
+      "preview": "audit_drag"
+    },
+    {
+      "id": "processing:normalize_conditions",
+      "kind": "step",
+      "label": "normalize_conditions",
+      "file": "processing.py",
+      "irNodeId": "module/normalize_conditions.fn",
+      "preview": "Fill in missing condition fields. Branches on whether temperature\n    was supplied; both arms call other functions and return a full dict."
+    },
+    {
+      "id": "processing:density_from_temperature",
+      "kind": "step",
+      "label": "density_from_temperature",
+      "file": "processing.py",
+      "irNodeId": "module/density_from_temperature.fn",
+      "preview": "Ideal-gas-law density estimate at sea-level pressure."
+    },
+    {
+      "id": "processing:normalize_conditions.fn/if@0#then",
+      "kind": "container",
+      "containerKind": "if_then",
+      "label": "if \"temperature\" in conditions",
+      "file": "processing.py",
+      "irNodeId": "module/normalize_conditions.fn/if@0",
+      "preview": null
+    },
+    {
+      "id": "dynamic:conditions.get",
+      "kind": "dynamic",
+      "label": "conditions.get",
+      "file": null,
+      "irNodeId": "module/normalize_conditions.fn/if@0/density.assign@1",
+      "preview": "conditions.get(\"density\", REFERENCE_DENSITY)",
+      "receiverBoundKind": "param"
+    },
+    {
+      "id": "processing:normalize_conditions.fn/if@0#else",
+      "kind": "container",
+      "containerKind": "if_else",
+      "label": "else",
+      "file": "processing.py",
+      "irNodeId": "module/normalize_conditions.fn/if@0",
+      "preview": null
+    },
+    {
+      "id": "dynamic:conditions.get@1",
+      "kind": "dynamic",
+      "label": "conditions.get",
+      "file": null,
+      "irNodeId": "module/normalize_conditions.fn/if@0/velocity.assign",
+      "preview": "conditions.get(\"velocity\", REFERENCE_VELOCITY)",
+      "receiverBoundKind": "param"
+    },
+    {
+      "id": "data:load_aircraft_config",
+      "kind": "step",
+      "label": "load_aircraft_config",
+      "file": "data.py",
+      "irNodeId": "module/load_aircraft_config.fn",
+      "preview": "Load aircraft configuration by id; caches per process."
+    },
+    {
+      "id": "external:json.loads",
+      "kind": "external",
+      "label": "json.loads",
+      "file": null,
+      "irNodeId": "module/load_aircraft_config.fn/config.assign",
+      "preview": "json.loads(raw)"
+    },
+    {
+      "id": "processing:apply_correction_factor",
+      "kind": "step",
+      "label": "apply_correction_factor",
+      "file": "processing.py",
+      "irNodeId": "module/apply_correction_factor.fn",
+      "preview": "Combine velocity and density into a corrected airspeed.\n    Calls math.sqrt \u2014 a library boundary the thread must mark as external."
+    },
+    {
+      "id": "dynamic:model",
+      "kind": "dynamic",
+      "label": "model",
+      "file": null,
+      "irNodeId": "module/compute_drag.fn/drag_coeff.assign",
+      "preview": "model(corrected, state)"
+    },
+    {
+      "id": "registry:select_model",
+      "kind": "step",
+      "label": "select_model",
+      "file": "registry.py",
+      "irNodeId": "module/select_model.fn",
+      "preview": "Look up a drag model by name. Resolved dynamically -- thread stops."
+    },
+    {
+      "id": "dynamic:getattr",
+      "kind": "dynamic",
+      "label": "getattr",
+      "file": null,
+      "irNodeId": "module/select_model.fn/return@0",
+      "preview": "getattr(models, name)"
+    },
+    {
+      "id": "data:fetch_state",
+      "kind": "step",
+      "label": "fetch_state",
+      "file": "data.py",
+      "irNodeId": "module/fetch_state.fn",
+      "preview": "Load runtime state for an aircraft (stub for disk/network read)."
+    },
+    {
+      "id": "main:compute_drag:return@0",
+      "kind": "return",
+      "label": "return",
+      "file": "main.py",
+      "irNodeId": "module/compute_drag.fn/return@0",
+      "preview": "{\n    \"aircraft_id\": aircraft_id,\n    \"drag_coefficient\": drag_coeff,\n    \"velocity\": velocity,\n}"
+    }
+  ],
+  "edges": [
+    {
+      "from": "main:compute_drag",
+      "to": "unresolved:audit_drag",
+      "kind": "direct",
+      "irSource": "module/compute_drag.fn/audit_drag.call"
+    },
+    {
+      "from": "processing:normalize_conditions",
+      "to": "processing:density_from_temperature",
+      "kind": "conditional",
+      "irSource": "module/normalize_conditions.fn/if@0/density.assign"
+    },
+    {
+      "from": "processing:normalize_conditions.fn/if@0#then",
+      "to": "processing:density_from_temperature",
+      "kind": "contains",
+      "irSource": "module/normalize_conditions.fn/if@0"
+    },
+    {
+      "from": "processing:normalize_conditions",
+      "to": "dynamic:conditions.get",
+      "kind": "conditional",
+      "irSource": "module/normalize_conditions.fn/if@0/density.assign@1"
+    },
+    {
+      "from": "processing:normalize_conditions.fn/if@0#else",
+      "to": "dynamic:conditions.get",
+      "kind": "contains",
+      "irSource": "module/normalize_conditions.fn/if@0"
+    },
+    {
+      "from": "processing:normalize_conditions",
+      "to": "dynamic:conditions.get@1",
+      "kind": "conditional",
+      "irSource": "module/normalize_conditions.fn/if@0/velocity.assign"
+    },
+    {
+      "from": "processing:normalize_conditions.fn/if@0#else",
+      "to": "dynamic:conditions.get@1",
+      "kind": "contains",
+      "irSource": "module/normalize_conditions.fn/if@0"
+    },
+    {
+      "from": "main:compute_drag",
+      "to": "processing:normalize_conditions",
+      "kind": "direct",
+      "irSource": "module/compute_drag.fn/cond.assign"
+    },
+    {
+      "from": "data:load_aircraft_config",
+      "to": "external:json.loads",
+      "kind": "direct",
+      "irSource": "module/load_aircraft_config.fn/config.assign"
+    },
+    {
+      "from": "main:compute_drag",
+      "to": "data:load_aircraft_config",
+      "kind": "direct",
+      "irSource": "module/compute_drag.fn/config.assign"
+    },
+    {
+      "from": "main:compute_drag",
+      "to": "processing:apply_correction_factor",
+      "kind": "direct",
+      "irSource": "module/compute_drag.fn/corrected.assign"
+    },
+    {
+      "from": "main:compute_drag",
+      "to": "dynamic:model",
+      "kind": "direct",
+      "irSource": "module/compute_drag.fn/drag_coeff.assign"
+    },
+    {
+      "from": "registry:select_model",
+      "to": "dynamic:getattr",
+      "kind": "direct",
+      "irSource": "module/select_model.fn/return@0"
+    },
+    {
+      "from": "main:compute_drag",
+      "to": "registry:select_model",
+      "kind": "direct",
+      "irSource": "module/compute_drag.fn/model.assign"
+    },
+    {
+      "from": "main:compute_drag",
+      "to": "data:fetch_state",
+      "kind": "direct",
+      "irSource": "module/compute_drag.fn/state.assign"
+    },
+    {
+      "from": "unresolved:audit_drag",
+      "to": "main:compute_drag:return@0",
+      "kind": "direct",
+      "irSource": "module/compute_drag.fn/return@0"
+    },
+    {
+      "from": "processing:normalize_conditions",
+      "to": "processing:normalize_conditions.fn/if@0#then",
+      "kind": "conditional",
+      "irSource": "module/normalize_conditions.fn/if@0"
+    },
+    {
+      "from": "processing:normalize_conditions",
+      "to": "processing:normalize_conditions.fn/if@0#else",
+      "kind": "conditional",
+      "irSource": "module/normalize_conditions.fn/if@0"
+    }
+  ]
+}

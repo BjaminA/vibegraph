@@ -1,0 +1,1111 @@
+{
+  "main.py": {
+    "version": "1.3",
+    "nodes": [
+      {
+        "id": "module/data.import_from",
+        "type": "import_from",
+        "parentId": null,
+        "line": 16,
+        "endLine": 16,
+        "col": 0,
+        "endCol": 50,
+        "module": "data",
+        "names": [
+          "fetch_state",
+          "load_aircraft_config"
+        ]
+      },
+      {
+        "id": "module/processing.import_from",
+        "type": "import_from",
+        "parentId": null,
+        "line": 17,
+        "endLine": 17,
+        "col": 0,
+        "endCol": 68,
+        "module": "processing",
+        "names": [
+          "normalize_conditions",
+          "apply_correction_factor"
+        ]
+      },
+      {
+        "id": "module/registry.import_from",
+        "type": "import_from",
+        "parentId": null,
+        "line": 18,
+        "endLine": 18,
+        "col": 0,
+        "endCol": 33,
+        "module": "registry",
+        "names": [
+          "select_model"
+        ]
+      },
+      {
+        "id": "module/compute_drag.fn",
+        "type": "function_def",
+        "parentId": null,
+        "line": 21,
+        "endLine": 36,
+        "col": 0,
+        "endCol": 5,
+        "name": "compute_drag",
+        "params": [
+          "aircraft_id",
+          "conditions"
+        ],
+        "docstring": "Compute aerodynamic drag for an aircraft under given conditions.",
+        "decorators": [],
+        "isAsync": false,
+        "returns": "dict"
+      },
+      {
+        "id": "module/compute_drag.fn/config.assign",
+        "type": "assignment",
+        "parentId": "module/compute_drag.fn",
+        "line": 23,
+        "endLine": 23,
+        "col": 4,
+        "endCol": 46,
+        "name": "config",
+        "valueKind": "call",
+        "preview": "load_aircraft_config(aircraft_id)",
+        "callTarget": "load_aircraft_config",
+        "args": [
+          "aircraft_id"
+        ]
+      },
+      {
+        "id": "module/compute_drag.fn/state.assign",
+        "type": "assignment",
+        "parentId": "module/compute_drag.fn",
+        "line": 24,
+        "endLine": 24,
+        "col": 4,
+        "endCol": 36,
+        "name": "state",
+        "valueKind": "call",
+        "preview": "fetch_state(aircraft_id)",
+        "callTarget": "fetch_state",
+        "args": [
+          "aircraft_id"
+        ]
+      },
+      {
+        "id": "module/compute_drag.fn/cond.assign",
+        "type": "assignment",
+        "parentId": "module/compute_drag.fn",
+        "line": 25,
+        "endLine": 25,
+        "col": 4,
+        "endCol": 43,
+        "name": "cond",
+        "valueKind": "call",
+        "preview": "normalize_conditions(conditions)",
+        "callTarget": "normalize_conditions",
+        "args": [
+          "conditions"
+        ]
+      },
+      {
+        "id": "module/compute_drag.fn/velocity.assign",
+        "type": "assignment",
+        "parentId": "module/compute_drag.fn",
+        "line": 26,
+        "endLine": 26,
+        "col": 4,
+        "endCol": 31,
+        "name": "velocity",
+        "valueKind": "other",
+        "preview": "cond[\"velocity\"]"
+      },
+      {
+        "id": "module/compute_drag.fn/density.assign",
+        "type": "assignment",
+        "parentId": "module/compute_drag.fn",
+        "line": 27,
+        "endLine": 27,
+        "col": 4,
+        "endCol": 29,
+        "name": "density",
+        "valueKind": "other",
+        "preview": "cond[\"density\"]"
+      },
+      {
+        "id": "module/compute_drag.fn/corrected.assign",
+        "type": "assignment",
+        "parentId": "module/compute_drag.fn",
+        "line": 28,
+        "endLine": 28,
+        "col": 4,
+        "endCol": 58,
+        "name": "corrected",
+        "valueKind": "call",
+        "preview": "apply_correction_factor(velocity, density)",
+        "callTarget": "apply_correction_factor",
+        "args": [
+          "velocity",
+          "density"
+        ]
+      },
+      {
+        "id": "module/compute_drag.fn/model.assign",
+        "type": "assignment",
+        "parentId": "module/compute_drag.fn",
+        "line": 29,
+        "endLine": 29,
+        "col": 4,
+        "endCol": 46,
+        "name": "model",
+        "valueKind": "call",
+        "preview": "select_model(config[\"model_name\"])",
+        "callTarget": "select_model",
+        "args": [
+          "config[\"model_name\"]"
+        ]
+      },
+      {
+        "id": "module/compute_drag.fn/drag_coeff.assign",
+        "type": "assignment",
+        "parentId": "module/compute_drag.fn",
+        "line": 30,
+        "endLine": 30,
+        "col": 4,
+        "endCol": 40,
+        "name": "drag_coeff",
+        "valueKind": "call",
+        "preview": "model(corrected, state)",
+        "callTarget": "model",
+        "args": [
+          "corrected",
+          "state"
+        ]
+      },
+      {
+        "id": "module/compute_drag.fn/audit_drag.call",
+        "type": "call",
+        "parentId": "module/compute_drag.fn",
+        "line": 31,
+        "endLine": 31,
+        "col": 4,
+        "endCol": 26,
+        "funcName": "audit_drag",
+        "args": [
+          "drag_coeff"
+        ],
+        "isEffect": false
+      },
+      {
+        "id": "module/compute_drag.fn/return@0",
+        "type": "return_stmt",
+        "parentId": "module/compute_drag.fn",
+        "line": 32,
+        "endLine": 36,
+        "col": 4,
+        "endCol": 5,
+        "value": "{\n    \"aircraft_id\": aircraft_id,\n    \"drag_coefficient\": drag_coeff,\n    \"velocity\": velocity,\n}"
+      },
+      {
+        "id": "module/if@0",
+        "type": "if_stmt",
+        "parentId": null,
+        "line": 39,
+        "endLine": 40,
+        "col": 0,
+        "endCol": 63,
+        "condition": "__name__ == \"__main__\"",
+        "hasElse": false
+      },
+      {
+        "id": "module/if@0/compute_drag.call",
+        "type": "call",
+        "parentId": "module/if@0",
+        "line": 40,
+        "endLine": 40,
+        "col": 4,
+        "endCol": 63,
+        "funcName": "compute_drag",
+        "args": [
+          "\"A320\"",
+          "{\"velocity\": 250.0, \"density\": 1.225}"
+        ],
+        "isEffect": false
+      }
+    ],
+    "edges": [
+      {
+        "source": "module/compute_drag.fn",
+        "target": "module/compute_drag.fn/config.assign",
+        "type": "contains"
+      },
+      {
+        "source": "module/compute_drag.fn",
+        "target": "module/compute_drag.fn/state.assign",
+        "type": "contains"
+      },
+      {
+        "source": "module/compute_drag.fn",
+        "target": "module/compute_drag.fn/cond.assign",
+        "type": "contains"
+      },
+      {
+        "source": "module/compute_drag.fn",
+        "target": "module/compute_drag.fn/velocity.assign",
+        "type": "contains"
+      },
+      {
+        "source": "module/compute_drag.fn",
+        "target": "module/compute_drag.fn/density.assign",
+        "type": "contains"
+      },
+      {
+        "source": "module/compute_drag.fn",
+        "target": "module/compute_drag.fn/corrected.assign",
+        "type": "contains"
+      },
+      {
+        "source": "module/compute_drag.fn",
+        "target": "module/compute_drag.fn/model.assign",
+        "type": "contains"
+      },
+      {
+        "source": "module/compute_drag.fn",
+        "target": "module/compute_drag.fn/drag_coeff.assign",
+        "type": "contains"
+      },
+      {
+        "source": "module/compute_drag.fn",
+        "target": "module/compute_drag.fn/audit_drag.call",
+        "type": "contains"
+      },
+      {
+        "source": "module/compute_drag.fn",
+        "target": "module/compute_drag.fn/return@0",
+        "type": "contains"
+      },
+      {
+        "source": "module/if@0",
+        "target": "module/if@0/compute_drag.call",
+        "type": "contains"
+      },
+      {
+        "source": "module/if@0/compute_drag.call",
+        "target": "module/compute_drag.fn",
+        "type": "reference"
+      },
+      {
+        "source": "module/compute_drag.fn/config.assign",
+        "target": "module/load_aircraft_config.fn",
+        "type": "reference",
+        "targetFile": "data.py",
+        "qualifiedTarget": "data:load_aircraft_config"
+      },
+      {
+        "source": "module/compute_drag.fn/state.assign",
+        "target": "module/fetch_state.fn",
+        "type": "reference",
+        "targetFile": "data.py",
+        "qualifiedTarget": "data:fetch_state"
+      },
+      {
+        "source": "module/compute_drag.fn/cond.assign",
+        "target": "module/normalize_conditions.fn",
+        "type": "reference",
+        "targetFile": "processing.py",
+        "qualifiedTarget": "processing:normalize_conditions"
+      },
+      {
+        "source": "module/compute_drag.fn/corrected.assign",
+        "target": "module/apply_correction_factor.fn",
+        "type": "reference",
+        "targetFile": "processing.py",
+        "qualifiedTarget": "processing:apply_correction_factor"
+      },
+      {
+        "source": "module/compute_drag.fn/model.assign",
+        "target": "module/select_model.fn",
+        "type": "reference",
+        "targetFile": "registry.py",
+        "qualifiedTarget": "registry:select_model"
+      }
+    ],
+    "symbolIndex": [
+      {
+        "sym": "function:compute_drag",
+        "kind": "function",
+        "name": "compute_drag",
+        "scope": "module",
+        "loc": {
+          "line": 21,
+          "endLine": 36,
+          "col": 0,
+          "endCol": 5
+        },
+        "signature": "def compute_drag(aircraft_id, conditions)",
+        "docstring": "Compute aerodynamic drag for an aircraft under given conditions.",
+        "source": "\n\ndef compute_drag(aircraft_id: str, conditions: dict) -> dict:\n    \"\"\"Compute aerodynamic drag for an aircraft under given conditions.\"\"\"\n    config = load_aircraft_config(aircraft_id)\n    state = fetch_state(aircraft_id)\n    cond = normalize_conditions(conditions)\n    velocity = cond[\"velocity\"]\n    density = cond[\"density\"]\n    corrected = apply_correction_factor(velocity, density)\n    model = select_model(config[\"model_name\"])\n    drag_coeff = model(corrected, state)\n    audit_drag(drag_coeff)\n    return {\n        \"aircraft_id\": aircraft_id,\n        \"drag_coefficient\": drag_coeff,\n        \"velocity\": velocity,\n    }\n"
+      }
+    ],
+    "modulePath": "main"
+  },
+  "data.py": {
+    "version": "1.3",
+    "nodes": [
+      {
+        "id": "module/json.import",
+        "type": "import",
+        "parentId": null,
+        "line": 7,
+        "endLine": 7,
+        "col": 0,
+        "endCol": 11,
+        "names": [
+          "json"
+        ]
+      },
+      {
+        "id": "module/_CONFIG_CACHE.assign",
+        "type": "assignment",
+        "parentId": null,
+        "line": 9,
+        "endLine": 9,
+        "col": 0,
+        "endCol": 24,
+        "name": "_CONFIG_CACHE",
+        "annotation": "dict",
+        "valueKind": "dict",
+        "preview": "{}"
+      },
+      {
+        "id": "module/fetch_state.fn",
+        "type": "function_def",
+        "parentId": null,
+        "line": 12,
+        "endLine": 18,
+        "col": 0,
+        "endCol": 5,
+        "name": "fetch_state",
+        "params": [
+          "aircraft_id"
+        ],
+        "docstring": "Load runtime state for an aircraft (stub for disk/network read).",
+        "decorators": [],
+        "isAsync": false,
+        "returns": "dict"
+      },
+      {
+        "id": "module/fetch_state.fn/return@0",
+        "type": "return_stmt",
+        "parentId": "module/fetch_state.fn",
+        "line": 14,
+        "endLine": 18,
+        "col": 4,
+        "endCol": 5,
+        "value": "{\n    \"altitude\": 30000.0,\n    \"fuel_kg\": 12000.0,\n    \"aircraft_id\": aircraft_id,\n}"
+      },
+      {
+        "id": "module/load_aircraft_config.fn",
+        "type": "function_def",
+        "parentId": null,
+        "line": 21,
+        "endLine": 28,
+        "col": 0,
+        "endCol": 17,
+        "name": "load_aircraft_config",
+        "params": [
+          "aircraft_id"
+        ],
+        "docstring": "Load aircraft configuration by id; caches per process.",
+        "decorators": [],
+        "isAsync": false,
+        "returns": "dict"
+      },
+      {
+        "id": "module/load_aircraft_config.fn/if@0",
+        "type": "if_stmt",
+        "parentId": "module/load_aircraft_config.fn",
+        "line": 23,
+        "endLine": 24,
+        "col": 4,
+        "endCol": 41,
+        "condition": "aircraft_id in _CONFIG_CACHE",
+        "hasElse": false
+      },
+      {
+        "id": "module/load_aircraft_config.fn/if@0/return@0",
+        "type": "return_stmt",
+        "parentId": "module/load_aircraft_config.fn/if@0",
+        "line": 24,
+        "endLine": 24,
+        "col": 8,
+        "endCol": 41,
+        "value": "_CONFIG_CACHE[aircraft_id]"
+      },
+      {
+        "id": "module/load_aircraft_config.fn/raw.assign",
+        "type": "assignment",
+        "parentId": "module/load_aircraft_config.fn",
+        "line": 25,
+        "endLine": 25,
+        "col": 4,
+        "endCol": 58,
+        "name": "raw",
+        "valueKind": "string",
+        "preview": "'{\"model_name\": \"subsonic\", \"wing_area\": 122.6}'"
+      },
+      {
+        "id": "module/load_aircraft_config.fn/config.assign",
+        "type": "assignment",
+        "parentId": "module/load_aircraft_config.fn",
+        "line": 26,
+        "endLine": 26,
+        "col": 4,
+        "endCol": 28,
+        "name": "config",
+        "valueKind": "call",
+        "preview": "json.loads(raw)",
+        "callTarget": "json.loads",
+        "args": [
+          "raw"
+        ]
+      },
+      {
+        "id": "module/load_aircraft_config.fn/?.assign",
+        "type": "assignment",
+        "parentId": "module/load_aircraft_config.fn",
+        "line": 27,
+        "endLine": 27,
+        "col": 4,
+        "endCol": 39,
+        "name": "?",
+        "valueKind": "other",
+        "preview": "config"
+      },
+      {
+        "id": "module/load_aircraft_config.fn/return@0",
+        "type": "return_stmt",
+        "parentId": "module/load_aircraft_config.fn",
+        "line": 28,
+        "endLine": 28,
+        "col": 4,
+        "endCol": 17,
+        "value": "config"
+      }
+    ],
+    "edges": [
+      {
+        "source": "module/fetch_state.fn",
+        "target": "module/fetch_state.fn/return@0",
+        "type": "contains"
+      },
+      {
+        "source": "module/load_aircraft_config.fn",
+        "target": "module/load_aircraft_config.fn/if@0",
+        "type": "contains"
+      },
+      {
+        "source": "module/load_aircraft_config.fn/if@0",
+        "target": "module/load_aircraft_config.fn/if@0/return@0",
+        "type": "contains"
+      },
+      {
+        "source": "module/load_aircraft_config.fn",
+        "target": "module/load_aircraft_config.fn/raw.assign",
+        "type": "contains"
+      },
+      {
+        "source": "module/load_aircraft_config.fn",
+        "target": "module/load_aircraft_config.fn/config.assign",
+        "type": "contains"
+      },
+      {
+        "source": "module/load_aircraft_config.fn",
+        "target": "module/load_aircraft_config.fn/?.assign",
+        "type": "contains"
+      },
+      {
+        "source": "module/load_aircraft_config.fn",
+        "target": "module/load_aircraft_config.fn/return@0",
+        "type": "contains"
+      }
+    ],
+    "symbolIndex": [
+      {
+        "sym": "function:fetch_state",
+        "kind": "function",
+        "name": "fetch_state",
+        "scope": "module",
+        "loc": {
+          "line": 12,
+          "endLine": 18,
+          "col": 0,
+          "endCol": 5
+        },
+        "signature": "def fetch_state(aircraft_id)",
+        "docstring": "Load runtime state for an aircraft (stub for disk/network read).",
+        "source": "\n\ndef fetch_state(aircraft_id: str) -> dict:\n    \"\"\"Load runtime state for an aircraft (stub for disk/network read).\"\"\"\n    return {\n        \"altitude\": 30000.0,\n        \"fuel_kg\": 12000.0,\n        \"aircraft_id\": aircraft_id,\n    }\n"
+      },
+      {
+        "sym": "function:load_aircraft_config",
+        "kind": "function",
+        "name": "load_aircraft_config",
+        "scope": "module",
+        "loc": {
+          "line": 21,
+          "endLine": 28,
+          "col": 0,
+          "endCol": 17
+        },
+        "signature": "def load_aircraft_config(aircraft_id)",
+        "docstring": "Load aircraft configuration by id; caches per process.",
+        "source": "\n\ndef load_aircraft_config(aircraft_id: str) -> dict:\n    \"\"\"Load aircraft configuration by id; caches per process.\"\"\"\n    if aircraft_id in _CONFIG_CACHE:\n        return _CONFIG_CACHE[aircraft_id]\n    raw = '{\"model_name\": \"subsonic\", \"wing_area\": 122.6}'\n    config = json.loads(raw)\n    _CONFIG_CACHE[aircraft_id] = config\n    return config\n"
+      }
+    ],
+    "modulePath": "data"
+  },
+  "processing.py": {
+    "version": "1.3",
+    "nodes": [
+      {
+        "id": "module/math.import",
+        "type": "import",
+        "parentId": null,
+        "line": 7,
+        "endLine": 7,
+        "col": 0,
+        "endCol": 11,
+        "names": [
+          "math"
+        ]
+      },
+      {
+        "id": "module/REFERENCE_DENSITY.assign",
+        "type": "assignment",
+        "parentId": null,
+        "line": 9,
+        "endLine": 9,
+        "col": 0,
+        "endCol": 25,
+        "name": "REFERENCE_DENSITY",
+        "valueKind": "scalar",
+        "preview": "1.225"
+      },
+      {
+        "id": "module/REFERENCE_VELOCITY.assign",
+        "type": "assignment",
+        "parentId": null,
+        "line": 10,
+        "endLine": 10,
+        "col": 0,
+        "endCol": 26,
+        "name": "REFERENCE_VELOCITY",
+        "valueKind": "scalar",
+        "preview": "200.0"
+      },
+      {
+        "id": "module/normalize_conditions.fn",
+        "type": "function_def",
+        "parentId": null,
+        "line": 13,
+        "endLine": 28,
+        "col": 0,
+        "endCol": 9,
+        "name": "normalize_conditions",
+        "params": [
+          "conditions"
+        ],
+        "docstring": "Fill in missing condition fields. Branches on whether temperature\n    was supplied; both arms call other functions and return a full dict.",
+        "decorators": [],
+        "isAsync": false,
+        "returns": "dict"
+      },
+      {
+        "id": "module/normalize_conditions.fn/if@0",
+        "type": "if_stmt",
+        "parentId": "module/normalize_conditions.fn",
+        "line": 16,
+        "endLine": 28,
+        "col": 4,
+        "endCol": 9,
+        "condition": "\"temperature\" in conditions",
+        "hasElse": true,
+        "elseLine": 22
+      },
+      {
+        "id": "module/normalize_conditions.fn/if@0/density.assign",
+        "type": "assignment",
+        "parentId": "module/normalize_conditions.fn/if@0",
+        "line": 17,
+        "endLine": 17,
+        "col": 8,
+        "endCol": 69,
+        "name": "density",
+        "valueKind": "call",
+        "preview": "density_from_temperature(conditions[\"temperature\"])",
+        "callTarget": "density_from_temperature",
+        "args": [
+          "conditions[\"temperature\"]"
+        ]
+      },
+      {
+        "id": "module/normalize_conditions.fn/if@0/return@0",
+        "type": "return_stmt",
+        "parentId": "module/normalize_conditions.fn/if@0",
+        "line": 18,
+        "endLine": 21,
+        "col": 8,
+        "endCol": 9,
+        "value": "{\n    \"velocity\": conditions.get(\"velocity\", REFERENCE_VELOCITY),\n    \"density\": density,\n}",
+        "nestsInnerCalls": true,
+        "nestExtracted": false
+      },
+      {
+        "id": "module/normalize_conditions.fn/if@0/velocity.assign",
+        "type": "assignment",
+        "parentId": "module/normalize_conditions.fn/if@0",
+        "line": 23,
+        "endLine": 23,
+        "col": 8,
+        "endCol": 65,
+        "name": "velocity",
+        "valueKind": "call",
+        "preview": "conditions.get(\"velocity\", REFERENCE_VELOCITY)",
+        "callTarget": "conditions.get",
+        "args": [
+          "\"velocity\"",
+          "REFERENCE_VELOCITY"
+        ]
+      },
+      {
+        "id": "module/normalize_conditions.fn/if@0/density.assign@1",
+        "type": "assignment",
+        "parentId": "module/normalize_conditions.fn/if@0",
+        "line": 24,
+        "endLine": 24,
+        "col": 8,
+        "endCol": 62,
+        "name": "density",
+        "valueKind": "call",
+        "preview": "conditions.get(\"density\", REFERENCE_DENSITY)",
+        "callTarget": "conditions.get",
+        "args": [
+          "\"density\"",
+          "REFERENCE_DENSITY"
+        ]
+      },
+      {
+        "id": "module/normalize_conditions.fn/if@0/return@1",
+        "type": "return_stmt",
+        "parentId": "module/normalize_conditions.fn/if@0",
+        "line": 25,
+        "endLine": 28,
+        "col": 8,
+        "endCol": 9,
+        "value": "{\n    \"velocity\": velocity,\n    \"density\": density,\n}"
+      },
+      {
+        "id": "module/density_from_temperature.fn",
+        "type": "function_def",
+        "parentId": null,
+        "line": 31,
+        "endLine": 35,
+        "col": 0,
+        "endCol": 59,
+        "name": "density_from_temperature",
+        "params": [
+          "temp_kelvin"
+        ],
+        "docstring": "Ideal-gas-law density estimate at sea-level pressure.",
+        "decorators": [],
+        "isAsync": false,
+        "returns": "float"
+      },
+      {
+        "id": "module/density_from_temperature.fn/pressure.assign",
+        "type": "assignment",
+        "parentId": "module/density_from_temperature.fn",
+        "line": 33,
+        "endLine": 33,
+        "col": 4,
+        "endCol": 23,
+        "name": "pressure",
+        "valueKind": "scalar",
+        "preview": "101325.0"
+      },
+      {
+        "id": "module/density_from_temperature.fn/specific_gas_constant.assign",
+        "type": "assignment",
+        "parentId": "module/density_from_temperature.fn",
+        "line": 34,
+        "endLine": 34,
+        "col": 4,
+        "endCol": 34,
+        "name": "specific_gas_constant",
+        "valueKind": "scalar",
+        "preview": "287.05"
+      },
+      {
+        "id": "module/density_from_temperature.fn/return@0",
+        "type": "return_stmt",
+        "parentId": "module/density_from_temperature.fn",
+        "line": 35,
+        "endLine": 35,
+        "col": 4,
+        "endCol": 59,
+        "value": "pressure / (specific_gas_constant * temp_kelvin)"
+      },
+      {
+        "id": "module/apply_correction_factor.fn",
+        "type": "function_def",
+        "parentId": null,
+        "line": 38,
+        "endLine": 41,
+        "col": 0,
+        "endCol": 60,
+        "name": "apply_correction_factor",
+        "params": [
+          "velocity",
+          "density"
+        ],
+        "docstring": "Combine velocity and density into a corrected airspeed.\n    Calls math.sqrt \u2014 a library boundary the thread must mark as external.",
+        "decorators": [],
+        "isAsync": false,
+        "returns": "float"
+      },
+      {
+        "id": "module/apply_correction_factor.fn/return@0",
+        "type": "return_stmt",
+        "parentId": "module/apply_correction_factor.fn",
+        "line": 41,
+        "endLine": 41,
+        "col": 4,
+        "endCol": 60,
+        "value": "velocity * math.sqrt(density / REFERENCE_DENSITY)",
+        "nestsInnerCalls": true,
+        "nestExtracted": false
+      }
+    ],
+    "edges": [
+      {
+        "source": "module/normalize_conditions.fn",
+        "target": "module/normalize_conditions.fn/if@0",
+        "type": "contains"
+      },
+      {
+        "source": "module/normalize_conditions.fn/if@0",
+        "target": "module/normalize_conditions.fn/if@0/density.assign",
+        "type": "contains"
+      },
+      {
+        "source": "module/normalize_conditions.fn/if@0",
+        "target": "module/normalize_conditions.fn/if@0/return@0",
+        "type": "contains"
+      },
+      {
+        "source": "module/normalize_conditions.fn/if@0",
+        "target": "module/normalize_conditions.fn/if@0/velocity.assign",
+        "type": "contains"
+      },
+      {
+        "source": "module/normalize_conditions.fn/if@0",
+        "target": "module/normalize_conditions.fn/if@0/density.assign@1",
+        "type": "contains"
+      },
+      {
+        "source": "module/normalize_conditions.fn/if@0",
+        "target": "module/normalize_conditions.fn/if@0/return@1",
+        "type": "contains"
+      },
+      {
+        "source": "module/density_from_temperature.fn",
+        "target": "module/density_from_temperature.fn/pressure.assign",
+        "type": "contains"
+      },
+      {
+        "source": "module/density_from_temperature.fn",
+        "target": "module/density_from_temperature.fn/specific_gas_constant.assign",
+        "type": "contains"
+      },
+      {
+        "source": "module/density_from_temperature.fn",
+        "target": "module/density_from_temperature.fn/return@0",
+        "type": "contains"
+      },
+      {
+        "source": "module/apply_correction_factor.fn",
+        "target": "module/apply_correction_factor.fn/return@0",
+        "type": "contains"
+      }
+    ],
+    "symbolIndex": [
+      {
+        "sym": "function:normalize_conditions",
+        "kind": "function",
+        "name": "normalize_conditions",
+        "scope": "module",
+        "loc": {
+          "line": 13,
+          "endLine": 28,
+          "col": 0,
+          "endCol": 9
+        },
+        "signature": "def normalize_conditions(conditions)",
+        "docstring": "Fill in missing condition fields. Branches on whether temperature\n    was supplied; both arms call other functions and return a full dict.",
+        "source": "\n\ndef normalize_conditions(conditions: dict) -> dict:\n    \"\"\"Fill in missing condition fields. Branches on whether temperature\n    was supplied; both arms call other functions and return a full dict.\"\"\"\n    if \"temperature\" in conditions:\n        density = density_from_temperature(conditions[\"temperature\"])\n        return {\n            \"velocity\": conditions.get(\"velocity\", REFERENCE_VELOCITY),\n            \"density\": density,\n        }\n    else:\n        velocity = conditions.get(\"velocity\", REFERENCE_VELOCITY)\n        density = conditions.get(\"density\", REFERENCE_DENSITY)\n        return {\n            \"velocity\": velocity,\n            \"density\": density,\n        }\n"
+      },
+      {
+        "sym": "function:density_from_temperature",
+        "kind": "function",
+        "name": "density_from_temperature",
+        "scope": "module",
+        "loc": {
+          "line": 31,
+          "endLine": 35,
+          "col": 0,
+          "endCol": 59
+        },
+        "signature": "def density_from_temperature(temp_kelvin)",
+        "docstring": "Ideal-gas-law density estimate at sea-level pressure.",
+        "source": "\n\ndef density_from_temperature(temp_kelvin: float) -> float:\n    \"\"\"Ideal-gas-law density estimate at sea-level pressure.\"\"\"\n    pressure = 101325.0\n    specific_gas_constant = 287.05\n    return pressure / (specific_gas_constant * temp_kelvin)\n"
+      },
+      {
+        "sym": "function:apply_correction_factor",
+        "kind": "function",
+        "name": "apply_correction_factor",
+        "scope": "module",
+        "loc": {
+          "line": 38,
+          "endLine": 41,
+          "col": 0,
+          "endCol": 60
+        },
+        "signature": "def apply_correction_factor(velocity, density)",
+        "docstring": "Combine velocity and density into a corrected airspeed.\n    Calls math.sqrt \u2014 a library boundary the thread must mark as external.",
+        "source": "\n\ndef apply_correction_factor(velocity: float, density: float) -> float:\n    \"\"\"Combine velocity and density into a corrected airspeed.\n    Calls math.sqrt \u2014 a library boundary the thread must mark as external.\"\"\"\n    return velocity * math.sqrt(density / REFERENCE_DENSITY)\n"
+      }
+    ],
+    "modulePath": "processing"
+  },
+  "registry.py": {
+    "version": "1.3",
+    "nodes": [
+      {
+        "id": "module/typing.import_from",
+        "type": "import_from",
+        "parentId": null,
+        "line": 8,
+        "endLine": 8,
+        "col": 0,
+        "endCol": 27,
+        "module": "typing",
+        "names": [
+          "Callable"
+        ]
+      },
+      {
+        "id": "module/models.import",
+        "type": "import",
+        "parentId": null,
+        "line": 10,
+        "endLine": 10,
+        "col": 0,
+        "endCol": 13,
+        "names": [
+          "models"
+        ]
+      },
+      {
+        "id": "module/select_model.fn",
+        "type": "function_def",
+        "parentId": null,
+        "line": 13,
+        "endLine": 15,
+        "col": 0,
+        "endCol": 32,
+        "name": "select_model",
+        "params": [
+          "name"
+        ],
+        "docstring": "Look up a drag model by name. Resolved dynamically -- thread stops.",
+        "decorators": [],
+        "isAsync": false,
+        "returns": "Callable[[float, dict], float]"
+      },
+      {
+        "id": "module/select_model.fn/return@0",
+        "type": "return_stmt",
+        "parentId": "module/select_model.fn",
+        "line": 15,
+        "endLine": 15,
+        "col": 4,
+        "endCol": 32,
+        "value": "getattr(models, name)",
+        "callTarget": "getattr"
+      }
+    ],
+    "edges": [
+      {
+        "source": "module/select_model.fn",
+        "target": "module/select_model.fn/return@0",
+        "type": "contains"
+      }
+    ],
+    "symbolIndex": [
+      {
+        "sym": "function:select_model",
+        "kind": "function",
+        "name": "select_model",
+        "scope": "module",
+        "loc": {
+          "line": 13,
+          "endLine": 15,
+          "col": 0,
+          "endCol": 32
+        },
+        "signature": "def select_model(name)",
+        "docstring": "Look up a drag model by name. Resolved dynamically -- thread stops.",
+        "source": "\n\ndef select_model(name: str) -> Callable[[float, dict], float]:\n    \"\"\"Look up a drag model by name. Resolved dynamically -- thread stops.\"\"\"\n    return getattr(models, name)\n"
+      }
+    ],
+    "modulePath": "registry"
+  },
+  "models.py": {
+    "version": "1.3",
+    "nodes": [
+      {
+        "id": "module/math.import",
+        "type": "import",
+        "parentId": null,
+        "line": 9,
+        "endLine": 9,
+        "col": 0,
+        "endCol": 11,
+        "names": [
+          "math"
+        ]
+      },
+      {
+        "id": "module/subsonic.fn",
+        "type": "function_def",
+        "parentId": null,
+        "line": 12,
+        "endLine": 15,
+        "col": 0,
+        "endCol": 55,
+        "name": "subsonic",
+        "params": [
+          "corrected_velocity",
+          "state"
+        ],
+        "docstring": "Drag coefficient model for subsonic flight.",
+        "decorators": [],
+        "isAsync": false,
+        "returns": "float"
+      },
+      {
+        "id": "module/subsonic.fn/altitude_factor.assign",
+        "type": "assignment",
+        "parentId": "module/subsonic.fn",
+        "line": 14,
+        "endLine": 14,
+        "col": 4,
+        "endCol": 56,
+        "name": "altitude_factor",
+        "valueKind": "other",
+        "preview": "1.0 - state[\"altitude\"] / 100000.0"
+      },
+      {
+        "id": "module/subsonic.fn/return@0",
+        "type": "return_stmt",
+        "parentId": "module/subsonic.fn",
+        "line": 15,
+        "endLine": 15,
+        "col": 4,
+        "endCol": 55,
+        "value": "0.025 * corrected_velocity * altitude_factor"
+      },
+      {
+        "id": "module/supersonic.fn",
+        "type": "function_def",
+        "parentId": null,
+        "line": 18,
+        "endLine": 20,
+        "col": 0,
+        "endCol": 86,
+        "name": "supersonic",
+        "params": [
+          "corrected_velocity",
+          "state"
+        ],
+        "docstring": "Drag coefficient model for supersonic flight.",
+        "decorators": [],
+        "isAsync": false,
+        "returns": "float"
+      },
+      {
+        "id": "module/supersonic.fn/return@0",
+        "type": "return_stmt",
+        "parentId": "module/supersonic.fn",
+        "line": 20,
+        "endLine": 20,
+        "col": 4,
+        "endCol": 86,
+        "value": "0.08 * math.log1p(corrected_velocity) * (1.0 + state[\"altitude\"] / 50000.0)",
+        "nestsInnerCalls": true,
+        "nestExtracted": false
+      }
+    ],
+    "edges": [
+      {
+        "source": "module/subsonic.fn",
+        "target": "module/subsonic.fn/altitude_factor.assign",
+        "type": "contains"
+      },
+      {
+        "source": "module/subsonic.fn",
+        "target": "module/subsonic.fn/return@0",
+        "type": "contains"
+      },
+      {
+        "source": "module/supersonic.fn",
+        "target": "module/supersonic.fn/return@0",
+        "type": "contains"
+      }
+    ],
+    "symbolIndex": [
+      {
+        "sym": "function:subsonic",
+        "kind": "function",
+        "name": "subsonic",
+        "scope": "module",
+        "loc": {
+          "line": 12,
+          "endLine": 15,
+          "col": 0,
+          "endCol": 55
+        },
+        "signature": "def subsonic(corrected_velocity, state)",
+        "docstring": "Drag coefficient model for subsonic flight.",
+        "source": "\n\ndef subsonic(corrected_velocity: float, state: dict) -> float:\n    \"\"\"Drag coefficient model for subsonic flight.\"\"\"\n    altitude_factor = 1.0 - state[\"altitude\"] / 100000.0\n    return 0.025 * corrected_velocity * altitude_factor\n"
+      },
+      {
+        "sym": "function:supersonic",
+        "kind": "function",
+        "name": "supersonic",
+        "scope": "module",
+        "loc": {
+          "line": 18,
+          "endLine": 20,
+          "col": 0,
+          "endCol": 86
+        },
+        "signature": "def supersonic(corrected_velocity, state)",
+        "docstring": "Drag coefficient model for supersonic flight.",
+        "source": "\n\ndef supersonic(corrected_velocity: float, state: dict) -> float:\n    \"\"\"Drag coefficient model for supersonic flight.\"\"\"\n    return 0.08 * math.log1p(corrected_velocity) * (1.0 + state[\"altitude\"] / 50000.0)\n"
+      }
+    ],
+    "modulePath": "models"
+  }
+}

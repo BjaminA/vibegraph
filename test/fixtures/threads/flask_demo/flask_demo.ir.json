@@ -1,0 +1,1833 @@
+{
+  "app.py": {
+    "version": "1.3",
+    "nodes": [
+      {
+        "id": "module/flask.import_from",
+        "type": "import_from",
+        "parentId": null,
+        "line": 13,
+        "endLine": 13,
+        "col": 0,
+        "endCol": 41,
+        "module": "flask",
+        "names": [
+          "Flask",
+          "request",
+          "jsonify"
+        ]
+      },
+      {
+        "id": "module/models.import_from",
+        "type": "import_from",
+        "parentId": null,
+        "line": 15,
+        "endLine": 15,
+        "col": 0,
+        "endCol": 59,
+        "module": "models",
+        "names": [
+          "User",
+          "find_user",
+          "list_users",
+          "create_user"
+        ]
+      },
+      {
+        "id": "module/app.assign",
+        "type": "assignment",
+        "parentId": null,
+        "line": 17,
+        "endLine": 17,
+        "col": 0,
+        "endCol": 21,
+        "name": "app",
+        "valueKind": "call",
+        "preview": "Flask(__name__)",
+        "callTarget": "Flask",
+        "args": [
+          "__name__"
+        ]
+      },
+      {
+        "id": "module/list_users_route.fn",
+        "type": "function_def",
+        "parentId": null,
+        "line": 21,
+        "endLine": 23,
+        "col": 0,
+        "endCol": 85,
+        "name": "list_users_route",
+        "params": [],
+        "docstring": null,
+        "decorators": [
+          "app.route(\"/users\")"
+        ],
+        "isAsync": false,
+        "returns": null
+      },
+      {
+        "id": "module/list_users_route.fn/users.assign",
+        "type": "assignment",
+        "parentId": "module/list_users_route.fn",
+        "line": 22,
+        "endLine": 22,
+        "col": 4,
+        "endCol": 24,
+        "name": "users",
+        "valueKind": "call",
+        "preview": "list_users()",
+        "callTarget": "list_users"
+      },
+      {
+        "id": "module/list_users_route.fn/return@0",
+        "type": "return_stmt",
+        "parentId": "module/list_users_route.fn",
+        "line": 23,
+        "endLine": 23,
+        "col": 4,
+        "endCol": 85,
+        "value": "jsonify([{\"uid\": u.uid, \"name\": u.name, \"email\": u.email} for u in users])",
+        "callTarget": "jsonify"
+      },
+      {
+        "id": "module/get_user_route.fn",
+        "type": "function_def",
+        "parentId": null,
+        "line": 27,
+        "endLine": 31,
+        "col": 0,
+        "endCol": 77,
+        "name": "get_user_route",
+        "params": [
+          "uid"
+        ],
+        "docstring": null,
+        "decorators": [
+          "app.route(\"/users/<int:uid>\", methods=[\"GET\"])"
+        ],
+        "isAsync": false,
+        "returns": null
+      },
+      {
+        "id": "module/get_user_route.fn/user.assign",
+        "type": "assignment",
+        "parentId": "module/get_user_route.fn",
+        "line": 28,
+        "endLine": 28,
+        "col": 4,
+        "endCol": 25,
+        "name": "user",
+        "valueKind": "call",
+        "preview": "find_user(uid)",
+        "callTarget": "find_user",
+        "args": [
+          "uid"
+        ]
+      },
+      {
+        "id": "module/get_user_route.fn/if@0",
+        "type": "if_stmt",
+        "parentId": "module/get_user_route.fn",
+        "line": 29,
+        "endLine": 30,
+        "col": 4,
+        "endCol": 51,
+        "condition": "user is None",
+        "hasElse": false
+      },
+      {
+        "id": "module/get_user_route.fn/if@0/return@0",
+        "type": "return_stmt",
+        "parentId": "module/get_user_route.fn/if@0",
+        "line": 30,
+        "endLine": 30,
+        "col": 8,
+        "endCol": 51,
+        "value": "jsonify({\"error\": \"not found\"}), 404",
+        "nestsInnerCalls": true,
+        "nestExtracted": false
+      },
+      {
+        "id": "module/get_user_route.fn/return@0",
+        "type": "return_stmt",
+        "parentId": "module/get_user_route.fn",
+        "line": 31,
+        "endLine": 31,
+        "col": 4,
+        "endCol": 77,
+        "value": "jsonify({\"uid\": user.uid, \"name\": user.name, \"email\": user.email})",
+        "callTarget": "jsonify"
+      },
+      {
+        "id": "module/create_user_route.fn",
+        "type": "function_def",
+        "parentId": null,
+        "line": 35,
+        "endLine": 38,
+        "col": 0,
+        "endCol": 42,
+        "name": "create_user_route",
+        "params": [],
+        "docstring": null,
+        "decorators": [
+          "app.post(\"/users\")"
+        ],
+        "isAsync": false,
+        "returns": null
+      },
+      {
+        "id": "module/create_user_route.fn/body.assign",
+        "type": "assignment",
+        "parentId": "module/create_user_route.fn",
+        "line": 36,
+        "endLine": 36,
+        "col": 4,
+        "endCol": 29,
+        "name": "body",
+        "valueKind": "call",
+        "preview": "request.get_json()",
+        "callTarget": "request.get_json"
+      },
+      {
+        "id": "module/create_user_route.fn/user.assign",
+        "type": "assignment",
+        "parentId": "module/create_user_route.fn",
+        "line": 37,
+        "endLine": 37,
+        "col": 4,
+        "endCol": 51,
+        "name": "user",
+        "valueKind": "call",
+        "preview": "create_user(body[\"name\"], body[\"email\"])",
+        "callTarget": "create_user",
+        "args": [
+          "body[\"name\"]",
+          "body[\"email\"]"
+        ]
+      },
+      {
+        "id": "module/create_user_route.fn/return@0",
+        "type": "return_stmt",
+        "parentId": "module/create_user_route.fn",
+        "line": 38,
+        "endLine": 38,
+        "col": 4,
+        "endCol": 42,
+        "value": "jsonify({\"uid\": user.uid}), 201",
+        "nestsInnerCalls": true,
+        "nestExtracted": false
+      }
+    ],
+    "edges": [
+      {
+        "source": "module/list_users_route.fn",
+        "target": "module/list_users_route.fn/users.assign",
+        "type": "contains"
+      },
+      {
+        "source": "module/list_users_route.fn",
+        "target": "module/list_users_route.fn/return@0",
+        "type": "contains"
+      },
+      {
+        "source": "module/get_user_route.fn",
+        "target": "module/get_user_route.fn/user.assign",
+        "type": "contains"
+      },
+      {
+        "source": "module/get_user_route.fn",
+        "target": "module/get_user_route.fn/if@0",
+        "type": "contains"
+      },
+      {
+        "source": "module/get_user_route.fn/if@0",
+        "target": "module/get_user_route.fn/if@0/return@0",
+        "type": "contains"
+      },
+      {
+        "source": "module/get_user_route.fn",
+        "target": "module/get_user_route.fn/return@0",
+        "type": "contains"
+      },
+      {
+        "source": "module/create_user_route.fn",
+        "target": "module/create_user_route.fn/body.assign",
+        "type": "contains"
+      },
+      {
+        "source": "module/create_user_route.fn",
+        "target": "module/create_user_route.fn/user.assign",
+        "type": "contains"
+      },
+      {
+        "source": "module/create_user_route.fn",
+        "target": "module/create_user_route.fn/return@0",
+        "type": "contains"
+      },
+      {
+        "source": "module/list_users_route.fn/users.assign",
+        "target": "module/list_users.fn",
+        "type": "reference",
+        "targetFile": "models.py",
+        "qualifiedTarget": "models:list_users"
+      },
+      {
+        "source": "module/get_user_route.fn/user.assign",
+        "target": "module/find_user.fn",
+        "type": "reference",
+        "targetFile": "models.py",
+        "qualifiedTarget": "models:find_user"
+      },
+      {
+        "source": "module/create_user_route.fn/user.assign",
+        "target": "module/create_user.fn",
+        "type": "reference",
+        "targetFile": "models.py",
+        "qualifiedTarget": "models:create_user"
+      }
+    ],
+    "symbolIndex": [
+      {
+        "sym": "function:list_users_route",
+        "kind": "function",
+        "name": "list_users_route",
+        "scope": "module",
+        "loc": {
+          "line": 21,
+          "endLine": 23,
+          "col": 0,
+          "endCol": 85
+        },
+        "signature": "def list_users_route()",
+        "docstring": null,
+        "source": "\n\n@app.route(\"/users\")\ndef list_users_route():\n    users = list_users()\n    return jsonify([{\"uid\": u.uid, \"name\": u.name, \"email\": u.email} for u in users])\n"
+      },
+      {
+        "sym": "function:get_user_route",
+        "kind": "function",
+        "name": "get_user_route",
+        "scope": "module",
+        "loc": {
+          "line": 27,
+          "endLine": 31,
+          "col": 0,
+          "endCol": 77
+        },
+        "signature": "def get_user_route(uid)",
+        "docstring": null,
+        "source": "\n\n@app.route(\"/users/<int:uid>\", methods=[\"GET\"])\ndef get_user_route(uid):\n    user = find_user(uid)\n    if user is None:\n        return jsonify({\"error\": \"not found\"}), 404\n    return jsonify({\"uid\": user.uid, \"name\": user.name, \"email\": user.email})\n"
+      },
+      {
+        "sym": "function:create_user_route",
+        "kind": "function",
+        "name": "create_user_route",
+        "scope": "module",
+        "loc": {
+          "line": 35,
+          "endLine": 38,
+          "col": 0,
+          "endCol": 42
+        },
+        "signature": "def create_user_route()",
+        "docstring": null,
+        "source": "\n\n@app.post(\"/users\")\ndef create_user_route():\n    body = request.get_json()\n    user = create_user(body[\"name\"], body[\"email\"])\n    return jsonify({\"uid\": user.uid}), 201\n"
+      }
+    ],
+    "modulePath": "app"
+  },
+  "cli.py": {
+    "version": "1.4",
+    "nodes": [
+      {
+        "id": "module/argparse.import",
+        "type": "import",
+        "parentId": null,
+        "line": 9,
+        "endLine": 9,
+        "col": 0,
+        "endCol": 15,
+        "names": [
+          "argparse"
+        ]
+      },
+      {
+        "id": "module/models.import_from",
+        "type": "import_from",
+        "parentId": null,
+        "line": 11,
+        "endLine": 11,
+        "col": 0,
+        "endCol": 42,
+        "module": "models",
+        "names": [
+          "list_users",
+          "create_user"
+        ]
+      },
+      {
+        "id": "module/cmd_list.fn",
+        "type": "function_def",
+        "parentId": null,
+        "line": 14,
+        "endLine": 16,
+        "col": 0,
+        "endCol": 46,
+        "name": "cmd_list",
+        "params": [],
+        "docstring": null,
+        "decorators": [],
+        "isAsync": false,
+        "returns": null
+      },
+      {
+        "id": "module/cmd_list.fn/for@0",
+        "type": "for_loop",
+        "parentId": "module/cmd_list.fn",
+        "line": 15,
+        "endLine": 16,
+        "col": 4,
+        "endCol": 46,
+        "target": "u",
+        "iterName": "list_users()"
+      },
+      {
+        "id": "module/cmd_list.fn/for@0/print.call",
+        "type": "call",
+        "parentId": "module/cmd_list.fn/for@0",
+        "line": 16,
+        "endLine": 16,
+        "col": 8,
+        "endCol": 46,
+        "funcName": "print",
+        "args": [
+          "f\"{u.uid}\\t{u.name}\\t{u.email}\""
+        ],
+        "isEffect": true
+      },
+      {
+        "id": "module/cmd_create.fn",
+        "type": "function_def",
+        "parentId": null,
+        "line": 19,
+        "endLine": 21,
+        "col": 0,
+        "endCol": 36,
+        "name": "cmd_create",
+        "params": [
+          "name",
+          "email"
+        ],
+        "docstring": null,
+        "decorators": [],
+        "isAsync": false,
+        "returns": null
+      },
+      {
+        "id": "module/cmd_create.fn/user.assign",
+        "type": "assignment",
+        "parentId": "module/cmd_create.fn",
+        "line": 20,
+        "endLine": 20,
+        "col": 4,
+        "endCol": 35,
+        "name": "user",
+        "valueKind": "call",
+        "preview": "create_user(name, email)",
+        "callTarget": "create_user",
+        "args": [
+          "name",
+          "email"
+        ]
+      },
+      {
+        "id": "module/cmd_create.fn/print.call",
+        "type": "call",
+        "parentId": "module/cmd_create.fn",
+        "line": 21,
+        "endLine": 21,
+        "col": 4,
+        "endCol": 36,
+        "funcName": "print",
+        "args": [
+          "f\"created uid={user.uid}\""
+        ],
+        "isEffect": true
+      },
+      {
+        "id": "module/main.fn",
+        "type": "function_def",
+        "parentId": null,
+        "line": 24,
+        "endLine": 35,
+        "col": 0,
+        "endCol": 41,
+        "name": "main",
+        "params": [],
+        "docstring": null,
+        "decorators": [],
+        "isAsync": false,
+        "returns": null
+      },
+      {
+        "id": "module/main.fn/parser.assign",
+        "type": "assignment",
+        "parentId": "module/main.fn",
+        "line": 25,
+        "endLine": 25,
+        "col": 4,
+        "endCol": 66,
+        "name": "parser",
+        "valueKind": "call",
+        "preview": "argparse.ArgumentParser(description=\"flask_demo CLI\")",
+        "callTarget": "argparse.ArgumentParser",
+        "kwargs": [
+          {
+            "name": "description",
+            "value": "\"flask_demo CLI\""
+          }
+        ]
+      },
+      {
+        "id": "module/main.fn/sub.assign",
+        "type": "assignment",
+        "parentId": "module/main.fn",
+        "line": 26,
+        "endLine": 26,
+        "col": 4,
+        "endCol": 58,
+        "name": "sub",
+        "valueKind": "call",
+        "preview": "parser.add_subparsers(dest=\"cmd\", required=True)",
+        "callTarget": "parser.add_subparsers",
+        "kwargs": [
+          {
+            "name": "dest",
+            "value": "\"cmd\""
+          },
+          {
+            "name": "required",
+            "value": "True"
+          }
+        ]
+      },
+      {
+        "id": "module/main.fn/sub_add_parser.call",
+        "type": "call",
+        "parentId": "module/main.fn",
+        "line": 27,
+        "endLine": 27,
+        "col": 4,
+        "endCol": 49,
+        "funcName": "sub.add_parser",
+        "args": [
+          "\"list\"",
+          "\"list all users\""
+        ],
+        "isEffect": false
+      },
+      {
+        "id": "module/main.fn/create.assign",
+        "type": "assignment",
+        "parentId": "module/main.fn",
+        "line": 28,
+        "endLine": 28,
+        "col": 4,
+        "endCol": 56,
+        "name": "create",
+        "valueKind": "call",
+        "preview": "sub.add_parser(\"create\", help=\"add a user\")",
+        "callTarget": "sub.add_parser",
+        "args": [
+          "\"create\""
+        ],
+        "kwargs": [
+          {
+            "name": "help",
+            "value": "\"add a user\""
+          }
+        ]
+      },
+      {
+        "id": "module/main.fn/create_add_argument.call",
+        "type": "call",
+        "parentId": "module/main.fn",
+        "line": 29,
+        "endLine": 29,
+        "col": 4,
+        "endCol": 31,
+        "funcName": "create.add_argument",
+        "args": [
+          "\"name\""
+        ],
+        "isEffect": false
+      },
+      {
+        "id": "module/main.fn/create_add_argument.call@1",
+        "type": "call",
+        "parentId": "module/main.fn",
+        "line": 30,
+        "endLine": 30,
+        "col": 4,
+        "endCol": 32,
+        "funcName": "create.add_argument",
+        "args": [
+          "\"email\""
+        ],
+        "isEffect": false
+      },
+      {
+        "id": "module/main.fn/args.assign",
+        "type": "assignment",
+        "parentId": "module/main.fn",
+        "line": 31,
+        "endLine": 31,
+        "col": 4,
+        "endCol": 30,
+        "name": "args",
+        "valueKind": "call",
+        "preview": "parser.parse_args()",
+        "callTarget": "parser.parse_args"
+      },
+      {
+        "id": "module/main.fn/if@0",
+        "type": "if_stmt",
+        "parentId": "module/main.fn",
+        "line": 32,
+        "endLine": 35,
+        "col": 4,
+        "endCol": 41,
+        "condition": "args.cmd == \"list\"",
+        "hasElse": true,
+        "elseLine": 34
+      },
+      {
+        "id": "module/main.fn/if@0/cmd_list.call",
+        "type": "call",
+        "parentId": "module/main.fn/if@0",
+        "line": 33,
+        "endLine": 33,
+        "col": 8,
+        "endCol": 18,
+        "funcName": "cmd_list",
+        "args": [],
+        "isEffect": false
+      },
+      {
+        "id": "module/main.fn/if@0/if@0",
+        "type": "if_stmt",
+        "parentId": "module/main.fn/if@0",
+        "line": 34,
+        "endLine": 35,
+        "col": 4,
+        "endCol": 41,
+        "condition": "args.cmd == \"create\"",
+        "hasElse": false
+      },
+      {
+        "id": "module/main.fn/if@0/if@0/cmd_create.call",
+        "type": "call",
+        "parentId": "module/main.fn/if@0/if@0",
+        "line": 35,
+        "endLine": 35,
+        "col": 8,
+        "endCol": 41,
+        "funcName": "cmd_create",
+        "args": [
+          "args.name",
+          "args.email"
+        ],
+        "isEffect": false
+      },
+      {
+        "id": "module/if@0",
+        "type": "if_stmt",
+        "parentId": null,
+        "line": 38,
+        "endLine": 39,
+        "col": 0,
+        "endCol": 10,
+        "condition": "__name__ == \"__main__\"",
+        "hasElse": false
+      },
+      {
+        "id": "module/if@0/main.call",
+        "type": "call",
+        "parentId": "module/if@0",
+        "line": 39,
+        "endLine": 39,
+        "col": 4,
+        "endCol": 10,
+        "funcName": "main",
+        "args": [],
+        "isEffect": false
+      }
+    ],
+    "edges": [
+      {
+        "source": "module/cmd_list.fn",
+        "target": "module/cmd_list.fn/for@0",
+        "type": "contains"
+      },
+      {
+        "source": "module/cmd_list.fn/for@0",
+        "target": "module/cmd_list.fn/for@0/print.call",
+        "type": "contains"
+      },
+      {
+        "source": "module/cmd_create.fn",
+        "target": "module/cmd_create.fn/user.assign",
+        "type": "contains"
+      },
+      {
+        "source": "module/cmd_create.fn",
+        "target": "module/cmd_create.fn/print.call",
+        "type": "contains"
+      },
+      {
+        "source": "module/main.fn",
+        "target": "module/main.fn/parser.assign",
+        "type": "contains"
+      },
+      {
+        "source": "module/main.fn",
+        "target": "module/main.fn/sub.assign",
+        "type": "contains"
+      },
+      {
+        "source": "module/main.fn",
+        "target": "module/main.fn/sub_add_parser.call",
+        "type": "contains"
+      },
+      {
+        "source": "module/main.fn",
+        "target": "module/main.fn/create.assign",
+        "type": "contains"
+      },
+      {
+        "source": "module/main.fn",
+        "target": "module/main.fn/create_add_argument.call",
+        "type": "contains"
+      },
+      {
+        "source": "module/main.fn",
+        "target": "module/main.fn/create_add_argument.call@1",
+        "type": "contains"
+      },
+      {
+        "source": "module/main.fn",
+        "target": "module/main.fn/args.assign",
+        "type": "contains"
+      },
+      {
+        "source": "module/main.fn",
+        "target": "module/main.fn/if@0",
+        "type": "contains"
+      },
+      {
+        "source": "module/main.fn/if@0",
+        "target": "module/main.fn/if@0/cmd_list.call",
+        "type": "contains"
+      },
+      {
+        "source": "module/main.fn/if@0/cmd_list.call",
+        "target": "module/cmd_list.fn",
+        "type": "reference"
+      },
+      {
+        "source": "module/main.fn/if@0",
+        "target": "module/main.fn/if@0/if@0",
+        "type": "contains"
+      },
+      {
+        "source": "module/main.fn/if@0/if@0",
+        "target": "module/main.fn/if@0/if@0/cmd_create.call",
+        "type": "contains"
+      },
+      {
+        "source": "module/main.fn/if@0/if@0/cmd_create.call",
+        "target": "module/cmd_create.fn",
+        "type": "reference"
+      },
+      {
+        "source": "module/if@0",
+        "target": "module/if@0/main.call",
+        "type": "contains"
+      },
+      {
+        "source": "module/if@0/main.call",
+        "target": "module/main.fn",
+        "type": "reference"
+      },
+      {
+        "source": "module/cmd_create.fn/user.assign",
+        "target": "module/create_user.fn",
+        "type": "reference",
+        "targetFile": "models.py",
+        "qualifiedTarget": "models:create_user"
+      },
+      {
+        "source": "module/main.fn/sub.assign",
+        "target": "module/main.fn/parser.assign",
+        "type": "reference",
+        "qualifiedTarget": "argparse:ArgumentParser.add_subparsers",
+        "viaLocal": "parser"
+      },
+      {
+        "source": "module/main.fn/args.assign",
+        "target": "module/main.fn/parser.assign",
+        "type": "reference",
+        "qualifiedTarget": "argparse:ArgumentParser.parse_args",
+        "viaLocal": "parser"
+      }
+    ],
+    "symbolIndex": [
+      {
+        "sym": "function:cmd_list",
+        "kind": "function",
+        "name": "cmd_list",
+        "scope": "module",
+        "loc": {
+          "line": 14,
+          "endLine": 16,
+          "col": 0,
+          "endCol": 46
+        },
+        "signature": "def cmd_list()",
+        "docstring": null,
+        "source": "\n\ndef cmd_list():\n    for u in list_users():\n        print(f\"{u.uid}\\t{u.name}\\t{u.email}\")\n"
+      },
+      {
+        "sym": "function:cmd_create",
+        "kind": "function",
+        "name": "cmd_create",
+        "scope": "module",
+        "loc": {
+          "line": 19,
+          "endLine": 21,
+          "col": 0,
+          "endCol": 36
+        },
+        "signature": "def cmd_create(name, email)",
+        "docstring": null,
+        "source": "\n\ndef cmd_create(name, email):\n    user = create_user(name, email)\n    print(f\"created uid={user.uid}\")\n"
+      },
+      {
+        "sym": "function:main",
+        "kind": "function",
+        "name": "main",
+        "scope": "module",
+        "loc": {
+          "line": 24,
+          "endLine": 35,
+          "col": 0,
+          "endCol": 41
+        },
+        "signature": "def main()",
+        "docstring": null,
+        "source": "\n\ndef main():\n    parser = argparse.ArgumentParser(description=\"flask_demo CLI\")\n    sub = parser.add_subparsers(dest=\"cmd\", required=True)\n    sub.add_parser(\"list\", help=\"list all users\")\n    create = sub.add_parser(\"create\", help=\"add a user\")\n    create.add_argument(\"name\")\n    create.add_argument(\"email\")\n    args = parser.parse_args()\n    if args.cmd == \"list\":\n        cmd_list()\n    elif args.cmd == \"create\":\n        cmd_create(args.name, args.email)\n"
+      }
+    ],
+    "modulePath": "cli"
+  },
+  "db.py": {
+    "version": "1.5",
+    "nodes": [
+      {
+        "id": "module/sqlite3.import",
+        "type": "import",
+        "parentId": null,
+        "line": 9,
+        "endLine": 9,
+        "col": 0,
+        "endCol": 14,
+        "names": [
+          "sqlite3"
+        ]
+      },
+      {
+        "id": "module/DB_PATH.assign",
+        "type": "assignment",
+        "parentId": null,
+        "line": 11,
+        "endLine": 11,
+        "col": 0,
+        "endCol": 29,
+        "name": "DB_PATH",
+        "valueKind": "string",
+        "preview": "\"flask_demo.sqlite\""
+      },
+      {
+        "id": "module/_get_conn.fn",
+        "type": "function_def",
+        "parentId": null,
+        "line": 14,
+        "endLine": 15,
+        "col": 0,
+        "endCol": 35,
+        "name": "_get_conn",
+        "params": [],
+        "docstring": null,
+        "decorators": [],
+        "isAsync": false,
+        "returns": null
+      },
+      {
+        "id": "module/_get_conn.fn/return@0",
+        "type": "return_stmt",
+        "parentId": "module/_get_conn.fn",
+        "line": 15,
+        "endLine": 15,
+        "col": 4,
+        "endCol": 35,
+        "value": "sqlite3.connect(DB_PATH)",
+        "callTarget": "sqlite3.connect",
+        "effectKind": "db"
+      },
+      {
+        "id": "module/query.fn",
+        "type": "function_def",
+        "parentId": null,
+        "line": 18,
+        "endLine": 24,
+        "col": 0,
+        "endCol": 20,
+        "name": "query",
+        "params": [
+          "sql",
+          "params=()"
+        ],
+        "docstring": null,
+        "decorators": [],
+        "isAsync": false,
+        "returns": null
+      },
+      {
+        "id": "module/query.fn/conn.assign",
+        "type": "assignment",
+        "parentId": "module/query.fn",
+        "line": 19,
+        "endLine": 19,
+        "col": 4,
+        "endCol": 22,
+        "name": "conn",
+        "valueKind": "call",
+        "preview": "_get_conn()",
+        "callTarget": "_get_conn"
+      },
+      {
+        "id": "module/query.fn/try@0",
+        "type": "try_stmt",
+        "parentId": "module/query.fn",
+        "line": 20,
+        "endLine": 24,
+        "col": 4,
+        "endCol": 20
+      },
+      {
+        "id": "module/query.fn/try@0/cursor.assign",
+        "type": "assignment",
+        "parentId": "module/query.fn/try@0",
+        "line": 21,
+        "endLine": 21,
+        "col": 8,
+        "endCol": 42,
+        "name": "cursor",
+        "valueKind": "call",
+        "preview": "conn.execute(sql, params)",
+        "callTarget": "conn.execute",
+        "effectKind": "db",
+        "args": [
+          "sql",
+          "params"
+        ]
+      },
+      {
+        "id": "module/query.fn/try@0/return@0",
+        "type": "return_stmt",
+        "parentId": "module/query.fn/try@0",
+        "line": 22,
+        "endLine": 22,
+        "col": 8,
+        "endCol": 32,
+        "value": "cursor.fetchall()",
+        "callTarget": "cursor.fetchall"
+      },
+      {
+        "id": "module/query.fn/finally@0",
+        "type": "finally_block",
+        "parentId": "module/query.fn",
+        "line": 23,
+        "endLine": 24,
+        "col": 4,
+        "endCol": 20
+      },
+      {
+        "id": "module/query.fn/finally@0/conn_close.call",
+        "type": "call",
+        "parentId": "module/query.fn/finally@0",
+        "line": 24,
+        "endLine": 24,
+        "col": 8,
+        "endCol": 20,
+        "funcName": "conn.close",
+        "args": [],
+        "isEffect": false
+      },
+      {
+        "id": "module/insert.fn",
+        "type": "function_def",
+        "parentId": null,
+        "line": 27,
+        "endLine": 34,
+        "col": 0,
+        "endCol": 20,
+        "name": "insert",
+        "params": [
+          "sql",
+          "params"
+        ],
+        "docstring": null,
+        "decorators": [],
+        "isAsync": false,
+        "returns": null
+      },
+      {
+        "id": "module/insert.fn/conn.assign",
+        "type": "assignment",
+        "parentId": "module/insert.fn",
+        "line": 28,
+        "endLine": 28,
+        "col": 4,
+        "endCol": 22,
+        "name": "conn",
+        "valueKind": "call",
+        "preview": "_get_conn()",
+        "callTarget": "_get_conn"
+      },
+      {
+        "id": "module/insert.fn/try@0",
+        "type": "try_stmt",
+        "parentId": "module/insert.fn",
+        "line": 29,
+        "endLine": 34,
+        "col": 4,
+        "endCol": 20
+      },
+      {
+        "id": "module/insert.fn/try@0/cursor.assign",
+        "type": "assignment",
+        "parentId": "module/insert.fn/try@0",
+        "line": 30,
+        "endLine": 30,
+        "col": 8,
+        "endCol": 42,
+        "name": "cursor",
+        "valueKind": "call",
+        "preview": "conn.execute(sql, params)",
+        "callTarget": "conn.execute",
+        "effectKind": "db",
+        "args": [
+          "sql",
+          "params"
+        ]
+      },
+      {
+        "id": "module/insert.fn/try@0/conn_commit.call",
+        "type": "call",
+        "parentId": "module/insert.fn/try@0",
+        "line": 31,
+        "endLine": 31,
+        "col": 8,
+        "endCol": 21,
+        "funcName": "conn.commit",
+        "args": [],
+        "isEffect": false
+      },
+      {
+        "id": "module/insert.fn/try@0/return@0",
+        "type": "return_stmt",
+        "parentId": "module/insert.fn/try@0",
+        "line": 32,
+        "endLine": 32,
+        "col": 8,
+        "endCol": 31,
+        "value": "cursor.lastrowid"
+      },
+      {
+        "id": "module/insert.fn/finally@0",
+        "type": "finally_block",
+        "parentId": "module/insert.fn",
+        "line": 33,
+        "endLine": 34,
+        "col": 4,
+        "endCol": 20
+      },
+      {
+        "id": "module/insert.fn/finally@0/conn_close.call",
+        "type": "call",
+        "parentId": "module/insert.fn/finally@0",
+        "line": 34,
+        "endLine": 34,
+        "col": 8,
+        "endCol": 20,
+        "funcName": "conn.close",
+        "args": [],
+        "isEffect": false
+      }
+    ],
+    "edges": [
+      {
+        "source": "module/_get_conn.fn",
+        "target": "module/_get_conn.fn/return@0",
+        "type": "contains"
+      },
+      {
+        "source": "module/query.fn",
+        "target": "module/query.fn/conn.assign",
+        "type": "contains"
+      },
+      {
+        "source": "module/query.fn/conn.assign",
+        "target": "module/_get_conn.fn",
+        "type": "reference"
+      },
+      {
+        "source": "module/query.fn",
+        "target": "module/query.fn/try@0",
+        "type": "contains"
+      },
+      {
+        "source": "module/query.fn/try@0",
+        "target": "module/query.fn/try@0/cursor.assign",
+        "type": "contains"
+      },
+      {
+        "source": "module/query.fn/try@0",
+        "target": "module/query.fn/try@0/return@0",
+        "type": "contains"
+      },
+      {
+        "source": "module/query.fn",
+        "target": "module/query.fn/finally@0",
+        "type": "contains"
+      },
+      {
+        "source": "module/query.fn/finally@0",
+        "target": "module/query.fn/finally@0/conn_close.call",
+        "type": "contains"
+      },
+      {
+        "source": "module/insert.fn",
+        "target": "module/insert.fn/conn.assign",
+        "type": "contains"
+      },
+      {
+        "source": "module/insert.fn/conn.assign",
+        "target": "module/_get_conn.fn",
+        "type": "reference"
+      },
+      {
+        "source": "module/insert.fn",
+        "target": "module/insert.fn/try@0",
+        "type": "contains"
+      },
+      {
+        "source": "module/insert.fn/try@0",
+        "target": "module/insert.fn/try@0/cursor.assign",
+        "type": "contains"
+      },
+      {
+        "source": "module/insert.fn/try@0",
+        "target": "module/insert.fn/try@0/conn_commit.call",
+        "type": "contains"
+      },
+      {
+        "source": "module/insert.fn/try@0",
+        "target": "module/insert.fn/try@0/return@0",
+        "type": "contains"
+      },
+      {
+        "source": "module/insert.fn",
+        "target": "module/insert.fn/finally@0",
+        "type": "contains"
+      },
+      {
+        "source": "module/insert.fn/finally@0",
+        "target": "module/insert.fn/finally@0/conn_close.call",
+        "type": "contains"
+      }
+    ],
+    "symbolIndex": [
+      {
+        "sym": "function:_get_conn",
+        "kind": "function",
+        "name": "_get_conn",
+        "scope": "module",
+        "loc": {
+          "line": 14,
+          "endLine": 15,
+          "col": 0,
+          "endCol": 35
+        },
+        "signature": "def _get_conn()",
+        "docstring": null,
+        "source": "\n\ndef _get_conn():\n    return sqlite3.connect(DB_PATH)\n"
+      },
+      {
+        "sym": "function:query",
+        "kind": "function",
+        "name": "query",
+        "scope": "module",
+        "loc": {
+          "line": 18,
+          "endLine": 24,
+          "col": 0,
+          "endCol": 20
+        },
+        "signature": "def query(sql, params=())",
+        "docstring": null,
+        "source": "\n\ndef query(sql, params=()):\n    conn = _get_conn()\n    try:\n        cursor = conn.execute(sql, params)\n        return cursor.fetchall()\n    finally:\n        conn.close()\n"
+      },
+      {
+        "sym": "function:insert",
+        "kind": "function",
+        "name": "insert",
+        "scope": "module",
+        "loc": {
+          "line": 27,
+          "endLine": 34,
+          "col": 0,
+          "endCol": 20
+        },
+        "signature": "def insert(sql, params)",
+        "docstring": null,
+        "source": "\n\ndef insert(sql, params):\n    conn = _get_conn()\n    try:\n        cursor = conn.execute(sql, params)\n        conn.commit()\n        return cursor.lastrowid\n    finally:\n        conn.close()\n"
+      }
+    ],
+    "modulePath": "db"
+  },
+  "models.py": {
+    "version": "1.3",
+    "nodes": [
+      {
+        "id": "module/dataclasses.import_from",
+        "type": "import_from",
+        "parentId": null,
+        "line": 8,
+        "endLine": 8,
+        "col": 0,
+        "endCol": 33,
+        "module": "dataclasses",
+        "names": [
+          "dataclass"
+        ]
+      },
+      {
+        "id": "module/db.import_from",
+        "type": "import_from",
+        "parentId": null,
+        "line": 10,
+        "endLine": 10,
+        "col": 0,
+        "endCol": 28,
+        "module": "db",
+        "names": [
+          "query",
+          "insert"
+        ]
+      },
+      {
+        "id": "module/User.class",
+        "type": "class_def",
+        "parentId": null,
+        "line": 14,
+        "endLine": 17,
+        "col": 0,
+        "endCol": 14,
+        "name": "User",
+        "bases": [],
+        "decorators": [
+          "dataclass"
+        ],
+        "docstring": null
+      },
+      {
+        "id": "module/User.class/uid.assign",
+        "type": "assignment",
+        "parentId": "module/User.class",
+        "line": 15,
+        "endLine": 15,
+        "col": 4,
+        "endCol": 12,
+        "name": "uid",
+        "annotation": "int",
+        "valueKind": "other",
+        "preview": ""
+      },
+      {
+        "id": "module/User.class/name.assign",
+        "type": "assignment",
+        "parentId": "module/User.class",
+        "line": 16,
+        "endLine": 16,
+        "col": 4,
+        "endCol": 13,
+        "name": "name",
+        "annotation": "str",
+        "valueKind": "other",
+        "preview": ""
+      },
+      {
+        "id": "module/User.class/email.assign",
+        "type": "assignment",
+        "parentId": "module/User.class",
+        "line": 17,
+        "endLine": 17,
+        "col": 4,
+        "endCol": 14,
+        "name": "email",
+        "annotation": "str",
+        "valueKind": "other",
+        "preview": ""
+      },
+      {
+        "id": "module/find_user.fn",
+        "type": "function_def",
+        "parentId": null,
+        "line": 20,
+        "endLine": 25,
+        "col": 0,
+        "endCol": 54,
+        "name": "find_user",
+        "params": [
+          "uid"
+        ],
+        "docstring": null,
+        "decorators": [],
+        "isAsync": false,
+        "returns": null
+      },
+      {
+        "id": "module/find_user.fn/rows.assign",
+        "type": "assignment",
+        "parentId": "module/find_user.fn",
+        "line": 21,
+        "endLine": 21,
+        "col": 4,
+        "endCol": 76,
+        "name": "rows",
+        "valueKind": "call",
+        "preview": "query(\"SELECT uid, name, email FROM users WHERE uid = ?\", (uid,))",
+        "callTarget": "query",
+        "args": [
+          "\"SELECT uid, name, email FROM users WHERE uid = ?\"",
+          "(uid,)"
+        ]
+      },
+      {
+        "id": "module/find_user.fn/if@0",
+        "type": "if_stmt",
+        "parentId": "module/find_user.fn",
+        "line": 22,
+        "endLine": 23,
+        "col": 4,
+        "endCol": 19,
+        "condition": "not rows",
+        "hasElse": false
+      },
+      {
+        "id": "module/find_user.fn/if@0/return@0",
+        "type": "return_stmt",
+        "parentId": "module/find_user.fn/if@0",
+        "line": 23,
+        "endLine": 23,
+        "col": 8,
+        "endCol": 19,
+        "value": "None"
+      },
+      {
+        "id": "module/find_user.fn/row.assign",
+        "type": "assignment",
+        "parentId": "module/find_user.fn",
+        "line": 24,
+        "endLine": 24,
+        "col": 4,
+        "endCol": 17,
+        "name": "row",
+        "valueKind": "other",
+        "preview": "rows[0]"
+      },
+      {
+        "id": "module/find_user.fn/return@0",
+        "type": "return_stmt",
+        "parentId": "module/find_user.fn",
+        "line": 25,
+        "endLine": 25,
+        "col": 4,
+        "endCol": 54,
+        "value": "User(uid=row[0], name=row[1], email=row[2])",
+        "callTarget": "User"
+      },
+      {
+        "id": "module/list_users.fn",
+        "type": "function_def",
+        "parentId": null,
+        "line": 28,
+        "endLine": 30,
+        "col": 0,
+        "endCol": 64,
+        "name": "list_users",
+        "params": [],
+        "docstring": null,
+        "decorators": [],
+        "isAsync": false,
+        "returns": null
+      },
+      {
+        "id": "module/list_users.fn/rows.assign",
+        "type": "assignment",
+        "parentId": "module/list_users.fn",
+        "line": 29,
+        "endLine": 29,
+        "col": 4,
+        "endCol": 71,
+        "name": "rows",
+        "valueKind": "call",
+        "preview": "query(\"SELECT uid, name, email FROM users ORDER BY uid\", ())",
+        "callTarget": "query",
+        "args": [
+          "\"SELECT uid, name, email FROM users ORDER BY uid\"",
+          "()"
+        ]
+      },
+      {
+        "id": "module/list_users.fn/return@0",
+        "type": "return_stmt",
+        "parentId": "module/list_users.fn",
+        "line": 30,
+        "endLine": 30,
+        "col": 4,
+        "endCol": 64,
+        "value": "[User(uid=r[0], name=r[1], email=r[2]) for r in rows]",
+        "nestsInnerCalls": true,
+        "nestExtracted": false
+      },
+      {
+        "id": "module/create_user.fn",
+        "type": "function_def",
+        "parentId": null,
+        "line": 33,
+        "endLine": 35,
+        "col": 0,
+        "endCol": 48,
+        "name": "create_user",
+        "params": [
+          "name",
+          "email"
+        ],
+        "docstring": null,
+        "decorators": [],
+        "isAsync": false,
+        "returns": null
+      },
+      {
+        "id": "module/create_user.fn/uid.assign",
+        "type": "assignment",
+        "parentId": "module/create_user.fn",
+        "line": 34,
+        "endLine": 34,
+        "col": 4,
+        "endCol": 80,
+        "name": "uid",
+        "valueKind": "call",
+        "preview": "insert(\"INSERT INTO users (name, email) VALUES (?, ?)\", (name, email))",
+        "callTarget": "insert",
+        "effectKind": "db",
+        "args": [
+          "\"INSERT INTO users (name, email) VALUES (?, ?)\"",
+          "(name, email)"
+        ]
+      },
+      {
+        "id": "module/create_user.fn/return@0",
+        "type": "return_stmt",
+        "parentId": "module/create_user.fn",
+        "line": 35,
+        "endLine": 35,
+        "col": 4,
+        "endCol": 48,
+        "value": "User(uid=uid, name=name, email=email)",
+        "callTarget": "User"
+      }
+    ],
+    "edges": [
+      {
+        "source": "module/User.class",
+        "target": "module/User.class/uid.assign",
+        "type": "contains"
+      },
+      {
+        "source": "module/User.class",
+        "target": "module/User.class/name.assign",
+        "type": "contains"
+      },
+      {
+        "source": "module/User.class",
+        "target": "module/User.class/email.assign",
+        "type": "contains"
+      },
+      {
+        "source": "module/find_user.fn",
+        "target": "module/find_user.fn/rows.assign",
+        "type": "contains"
+      },
+      {
+        "source": "module/find_user.fn",
+        "target": "module/find_user.fn/if@0",
+        "type": "contains"
+      },
+      {
+        "source": "module/find_user.fn/if@0",
+        "target": "module/find_user.fn/if@0/return@0",
+        "type": "contains"
+      },
+      {
+        "source": "module/find_user.fn",
+        "target": "module/find_user.fn/row.assign",
+        "type": "contains"
+      },
+      {
+        "source": "module/find_user.fn",
+        "target": "module/find_user.fn/return@0",
+        "type": "contains"
+      },
+      {
+        "source": "module/find_user.fn/return@0",
+        "target": "module/User.class",
+        "type": "reference"
+      },
+      {
+        "source": "module/list_users.fn",
+        "target": "module/list_users.fn/rows.assign",
+        "type": "contains"
+      },
+      {
+        "source": "module/list_users.fn",
+        "target": "module/list_users.fn/return@0",
+        "type": "contains"
+      },
+      {
+        "source": "module/create_user.fn",
+        "target": "module/create_user.fn/uid.assign",
+        "type": "contains"
+      },
+      {
+        "source": "module/create_user.fn",
+        "target": "module/create_user.fn/return@0",
+        "type": "contains"
+      },
+      {
+        "source": "module/create_user.fn/return@0",
+        "target": "module/User.class",
+        "type": "reference"
+      },
+      {
+        "source": "module/find_user.fn/rows.assign",
+        "target": "module/query.fn",
+        "type": "reference",
+        "targetFile": "db.py",
+        "qualifiedTarget": "db:query"
+      },
+      {
+        "source": "module/list_users.fn/rows.assign",
+        "target": "module/query.fn",
+        "type": "reference",
+        "targetFile": "db.py",
+        "qualifiedTarget": "db:query"
+      },
+      {
+        "source": "module/create_user.fn/uid.assign",
+        "target": "module/insert.fn",
+        "type": "reference",
+        "targetFile": "db.py",
+        "qualifiedTarget": "db:insert"
+      }
+    ],
+    "symbolIndex": [
+      {
+        "sym": "class:User",
+        "kind": "class",
+        "name": "User",
+        "scope": "module",
+        "loc": {
+          "line": 14,
+          "endLine": 17,
+          "col": 0,
+          "endCol": 14
+        },
+        "bases": [],
+        "docstring": null,
+        "source": "\n\n@dataclass\nclass User:\n    uid: int\n    name: str\n    email: str\n"
+      },
+      {
+        "sym": "function:find_user",
+        "kind": "function",
+        "name": "find_user",
+        "scope": "module",
+        "loc": {
+          "line": 20,
+          "endLine": 25,
+          "col": 0,
+          "endCol": 54
+        },
+        "signature": "def find_user(uid)",
+        "docstring": null,
+        "source": "\n\ndef find_user(uid):\n    rows = query(\"SELECT uid, name, email FROM users WHERE uid = ?\", (uid,))\n    if not rows:\n        return None\n    row = rows[0]\n    return User(uid=row[0], name=row[1], email=row[2])\n"
+      },
+      {
+        "sym": "function:list_users",
+        "kind": "function",
+        "name": "list_users",
+        "scope": "module",
+        "loc": {
+          "line": 28,
+          "endLine": 30,
+          "col": 0,
+          "endCol": 64
+        },
+        "signature": "def list_users()",
+        "docstring": null,
+        "source": "\n\ndef list_users():\n    rows = query(\"SELECT uid, name, email FROM users ORDER BY uid\", ())\n    return [User(uid=r[0], name=r[1], email=r[2]) for r in rows]\n"
+      },
+      {
+        "sym": "function:create_user",
+        "kind": "function",
+        "name": "create_user",
+        "scope": "module",
+        "loc": {
+          "line": 33,
+          "endLine": 35,
+          "col": 0,
+          "endCol": 48
+        },
+        "signature": "def create_user(name, email)",
+        "docstring": null,
+        "source": "\n\ndef create_user(name, email):\n    uid = insert(\"INSERT INTO users (name, email) VALUES (?, ?)\", (name, email))\n    return User(uid=uid, name=name, email=email)\n"
+      }
+    ],
+    "modulePath": "models"
+  },
+  "test_flow.py": {
+    "version": "1.3",
+    "nodes": [
+      {
+        "id": "module/models.import_from",
+        "type": "import_from",
+        "parentId": null,
+        "line": 7,
+        "endLine": 7,
+        "col": 0,
+        "endCol": 53,
+        "module": "models",
+        "names": [
+          "find_user",
+          "create_user",
+          "list_users"
+        ]
+      },
+      {
+        "id": "module/test_create_then_find.fn",
+        "type": "function_def",
+        "parentId": null,
+        "line": 10,
+        "endLine": 14,
+        "col": 0,
+        "endCol": 45,
+        "name": "test_create_then_find",
+        "params": [],
+        "docstring": null,
+        "decorators": [],
+        "isAsync": false,
+        "returns": null
+      },
+      {
+        "id": "module/test_create_then_find.fn/user.assign",
+        "type": "assignment",
+        "parentId": "module/test_create_then_find.fn",
+        "line": 11,
+        "endLine": 11,
+        "col": 4,
+        "endCol": 52,
+        "name": "user",
+        "valueKind": "call",
+        "preview": "create_user(\"alice\", \"alice@example.com\")",
+        "callTarget": "create_user",
+        "args": [
+          "\"alice\"",
+          "\"alice@example.com\""
+        ]
+      },
+      {
+        "id": "module/test_create_then_find.fn/found.assign",
+        "type": "assignment",
+        "parentId": "module/test_create_then_find.fn",
+        "line": 12,
+        "endLine": 12,
+        "col": 4,
+        "endCol": 31,
+        "name": "found",
+        "valueKind": "call",
+        "preview": "find_user(user.uid)",
+        "callTarget": "find_user",
+        "args": [
+          "user.uid"
+        ]
+      },
+      {
+        "id": "module/test_list_returns_users.fn",
+        "type": "function_def",
+        "parentId": null,
+        "line": 17,
+        "endLine": 19,
+        "col": 0,
+        "endCol": 34,
+        "name": "test_list_returns_users",
+        "params": [],
+        "docstring": null,
+        "decorators": [],
+        "isAsync": false,
+        "returns": null
+      },
+      {
+        "id": "module/test_list_returns_users.fn/users.assign",
+        "type": "assignment",
+        "parentId": "module/test_list_returns_users.fn",
+        "line": 18,
+        "endLine": 18,
+        "col": 4,
+        "endCol": 24,
+        "name": "users",
+        "valueKind": "call",
+        "preview": "list_users()",
+        "callTarget": "list_users"
+      },
+      {
+        "id": "module/_helper_not_a_test.fn",
+        "type": "function_def",
+        "parentId": null,
+        "line": 22,
+        "endLine": 24,
+        "col": 0,
+        "endCol": 13,
+        "name": "_helper_not_a_test",
+        "params": [],
+        "docstring": "Leading underscore \u2014 must NOT be detected as a test seed.",
+        "decorators": [],
+        "isAsync": false,
+        "returns": null
+      },
+      {
+        "id": "module/_helper_not_a_test.fn/return@0",
+        "type": "return_stmt",
+        "parentId": "module/_helper_not_a_test.fn",
+        "line": 24,
+        "endLine": 24,
+        "col": 4,
+        "endCol": 13,
+        "value": "42"
+      }
+    ],
+    "edges": [
+      {
+        "source": "module/test_create_then_find.fn",
+        "target": "module/test_create_then_find.fn/user.assign",
+        "type": "contains"
+      },
+      {
+        "source": "module/test_create_then_find.fn",
+        "target": "module/test_create_then_find.fn/found.assign",
+        "type": "contains"
+      },
+      {
+        "source": "module/test_list_returns_users.fn",
+        "target": "module/test_list_returns_users.fn/users.assign",
+        "type": "contains"
+      },
+      {
+        "source": "module/_helper_not_a_test.fn",
+        "target": "module/_helper_not_a_test.fn/return@0",
+        "type": "contains"
+      },
+      {
+        "source": "module/test_create_then_find.fn/user.assign",
+        "target": "module/create_user.fn",
+        "type": "reference",
+        "targetFile": "models.py",
+        "qualifiedTarget": "models:create_user"
+      },
+      {
+        "source": "module/test_create_then_find.fn/found.assign",
+        "target": "module/find_user.fn",
+        "type": "reference",
+        "targetFile": "models.py",
+        "qualifiedTarget": "models:find_user"
+      },
+      {
+        "source": "module/test_list_returns_users.fn/users.assign",
+        "target": "module/list_users.fn",
+        "type": "reference",
+        "targetFile": "models.py",
+        "qualifiedTarget": "models:list_users"
+      }
+    ],
+    "symbolIndex": [
+      {
+        "sym": "function:test_create_then_find",
+        "kind": "function",
+        "name": "test_create_then_find",
+        "scope": "module",
+        "loc": {
+          "line": 10,
+          "endLine": 14,
+          "col": 0,
+          "endCol": 45
+        },
+        "signature": "def test_create_then_find()",
+        "docstring": null,
+        "source": "\n\ndef test_create_then_find():\n    user = create_user(\"alice\", \"alice@example.com\")\n    found = find_user(user.uid)\n    assert found is not None\n    assert found.email == \"alice@example.com\"\n"
+      },
+      {
+        "sym": "function:test_list_returns_users",
+        "kind": "function",
+        "name": "test_list_returns_users",
+        "scope": "module",
+        "loc": {
+          "line": 17,
+          "endLine": 19,
+          "col": 0,
+          "endCol": 34
+        },
+        "signature": "def test_list_returns_users()",
+        "docstring": null,
+        "source": "\n\ndef test_list_returns_users():\n    users = list_users()\n    assert isinstance(users, list)\n"
+      },
+      {
+        "sym": "function:_helper_not_a_test",
+        "kind": "function",
+        "name": "_helper_not_a_test",
+        "scope": "module",
+        "loc": {
+          "line": 22,
+          "endLine": 24,
+          "col": 0,
+          "endCol": 13
+        },
+        "signature": "def _helper_not_a_test()",
+        "docstring": "Leading underscore \u2014 must NOT be detected as a test seed.",
+        "source": "\n\ndef _helper_not_a_test():\n    \"\"\"Leading underscore \u2014 must NOT be detected as a test seed.\"\"\"\n    return 42\n"
+      }
+    ],
+    "modulePath": "test_flow"
+  }
+}

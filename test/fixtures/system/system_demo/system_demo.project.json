@@ -1,0 +1,2351 @@
+{
+  "version": "2.1",
+  "files": {
+    "app.py": {
+      "version": "1.3",
+      "nodes": [
+        {
+          "id": "module/flask.import_from",
+          "type": "import_from",
+          "parentId": null,
+          "line": 12,
+          "endLine": 12,
+          "col": 0,
+          "endCol": 41,
+          "module": "flask",
+          "names": [
+            "Flask",
+            "jsonify",
+            "request"
+          ]
+        },
+        {
+          "id": "module/cache.import",
+          "type": "import",
+          "parentId": null,
+          "line": 14,
+          "endLine": 14,
+          "col": 0,
+          "endCol": 24,
+          "names": [
+            "cache as cachelib"
+          ]
+        },
+        {
+          "id": "module/payments.import",
+          "type": "import",
+          "parentId": null,
+          "line": 15,
+          "endLine": 15,
+          "col": 0,
+          "endCol": 15,
+          "names": [
+            "payments"
+          ]
+        },
+        {
+          "id": "module/store.import",
+          "type": "import",
+          "parentId": null,
+          "line": 16,
+          "endLine": 16,
+          "col": 0,
+          "endCol": 12,
+          "names": [
+            "store"
+          ]
+        },
+        {
+          "id": "module/app.assign",
+          "type": "assignment",
+          "parentId": null,
+          "line": 18,
+          "endLine": 18,
+          "col": 0,
+          "endCol": 21,
+          "name": "app",
+          "valueKind": "call",
+          "preview": "Flask(__name__)",
+          "callTarget": "Flask",
+          "args": [
+            "__name__"
+          ]
+        },
+        {
+          "id": "module/list_users_route.fn",
+          "type": "function_def",
+          "parentId": null,
+          "line": 22,
+          "endLine": 25,
+          "col": 0,
+          "endCol": 25,
+          "name": "list_users_route",
+          "params": [],
+          "docstring": "List every user.",
+          "decorators": [
+            "app.route(\"/api/users\", methods=[\"GET\"])"
+          ],
+          "isAsync": false,
+          "returns": null
+        },
+        {
+          "id": "module/list_users_route.fn/users.assign",
+          "type": "assignment",
+          "parentId": "module/list_users_route.fn",
+          "line": 24,
+          "endLine": 24,
+          "col": 4,
+          "endCol": 29,
+          "name": "users",
+          "valueKind": "call",
+          "preview": "store.all_users()",
+          "callTarget": "store.all_users"
+        },
+        {
+          "id": "module/list_users_route.fn/return@0",
+          "type": "return_stmt",
+          "parentId": "module/list_users_route.fn",
+          "line": 25,
+          "endLine": 25,
+          "col": 4,
+          "endCol": 25,
+          "value": "jsonify(users)",
+          "callTarget": "jsonify"
+        },
+        {
+          "id": "module/get_user_route.fn",
+          "type": "function_def",
+          "parentId": null,
+          "line": 29,
+          "endLine": 32,
+          "col": 0,
+          "endCol": 24,
+          "name": "get_user_route",
+          "params": [
+            "uid"
+          ],
+          "docstring": "Fetch one user, cache-first.",
+          "decorators": [
+            "app.route(\"/api/users/<int:uid>\", methods=[\"GET\"])"
+          ],
+          "isAsync": false,
+          "returns": null
+        },
+        {
+          "id": "module/get_user_route.fn/user.assign",
+          "type": "assignment",
+          "parentId": "module/get_user_route.fn",
+          "line": 31,
+          "endLine": 31,
+          "col": 4,
+          "endCol": 24,
+          "name": "user",
+          "valueKind": "call",
+          "preview": "get_user(uid)",
+          "callTarget": "get_user",
+          "args": [
+            "uid"
+          ]
+        },
+        {
+          "id": "module/get_user_route.fn/return@0",
+          "type": "return_stmt",
+          "parentId": "module/get_user_route.fn",
+          "line": 32,
+          "endLine": 32,
+          "col": 4,
+          "endCol": 24,
+          "value": "jsonify(user)",
+          "callTarget": "jsonify"
+        },
+        {
+          "id": "module/get_user.fn",
+          "type": "function_def",
+          "parentId": null,
+          "line": 35,
+          "endLine": 41,
+          "col": 0,
+          "endCol": 15,
+          "name": "get_user",
+          "params": [
+            "uid"
+          ],
+          "docstring": null,
+          "decorators": [],
+          "isAsync": false,
+          "returns": null
+        },
+        {
+          "id": "module/get_user.fn/cached.assign",
+          "type": "assignment",
+          "parentId": "module/get_user.fn",
+          "line": 36,
+          "endLine": 36,
+          "col": 4,
+          "endCol": 46,
+          "name": "cached",
+          "valueKind": "call",
+          "preview": "cachelib.cache.get(f\"user:{uid}\")",
+          "callTarget": "cachelib.cache.get",
+          "args": [
+            "f\"user:{uid}\""
+          ]
+        },
+        {
+          "id": "module/get_user.fn/if@0",
+          "type": "if_stmt",
+          "parentId": "module/get_user.fn",
+          "line": 37,
+          "endLine": 38,
+          "col": 4,
+          "endCol": 21,
+          "condition": "cached",
+          "hasElse": false
+        },
+        {
+          "id": "module/get_user.fn/if@0/return@0",
+          "type": "return_stmt",
+          "parentId": "module/get_user.fn/if@0",
+          "line": 38,
+          "endLine": 38,
+          "col": 8,
+          "endCol": 21,
+          "value": "cached"
+        },
+        {
+          "id": "module/get_user.fn/user.assign",
+          "type": "assignment",
+          "parentId": "module/get_user.fn",
+          "line": 39,
+          "endLine": 39,
+          "col": 4,
+          "endCol": 31,
+          "name": "user",
+          "valueKind": "call",
+          "preview": "store.find_user(uid)",
+          "callTarget": "store.find_user",
+          "args": [
+            "uid"
+          ]
+        },
+        {
+          "id": "module/get_user.fn/cachelib_cache_set.call",
+          "type": "call",
+          "parentId": "module/get_user.fn",
+          "line": 40,
+          "endLine": 40,
+          "col": 4,
+          "endCol": 43,
+          "funcName": "cachelib.cache.set",
+          "args": [
+            "f\"user:{uid}\"",
+            "user"
+          ],
+          "isEffect": false
+        },
+        {
+          "id": "module/get_user.fn/return@0",
+          "type": "return_stmt",
+          "parentId": "module/get_user.fn",
+          "line": 41,
+          "endLine": 41,
+          "col": 4,
+          "endCol": 15,
+          "value": "user"
+        },
+        {
+          "id": "module/create_charge_route.fn",
+          "type": "function_def",
+          "parentId": null,
+          "line": 45,
+          "endLine": 49,
+          "col": 0,
+          "endCol": 26,
+          "name": "create_charge_route",
+          "params": [],
+          "docstring": "Create a payment charge via the external API.",
+          "decorators": [
+            "app.route(\"/api/charges\", methods=[\"POST\"])"
+          ],
+          "isAsync": false,
+          "returns": null
+        },
+        {
+          "id": "module/create_charge_route.fn/body.assign",
+          "type": "assignment",
+          "parentId": "module/create_charge_route.fn",
+          "line": 47,
+          "endLine": 47,
+          "col": 4,
+          "endCol": 29,
+          "name": "body",
+          "valueKind": "call",
+          "preview": "request.get_json()",
+          "callTarget": "request.get_json"
+        },
+        {
+          "id": "module/create_charge_route.fn/result.assign",
+          "type": "assignment",
+          "parentId": "module/create_charge_route.fn",
+          "line": 48,
+          "endLine": 48,
+          "col": 4,
+          "endCol": 44,
+          "name": "result",
+          "valueKind": "call",
+          "preview": "payments.charge(body[\"amount\"])",
+          "callTarget": "payments.charge",
+          "args": [
+            "body[\"amount\"]"
+          ]
+        },
+        {
+          "id": "module/create_charge_route.fn/return@0",
+          "type": "return_stmt",
+          "parentId": "module/create_charge_route.fn",
+          "line": 49,
+          "endLine": 49,
+          "col": 4,
+          "endCol": 26,
+          "value": "jsonify(result)",
+          "callTarget": "jsonify"
+        }
+      ],
+      "edges": [
+        {
+          "source": "module/list_users_route.fn",
+          "target": "module/list_users_route.fn/users.assign",
+          "type": "contains"
+        },
+        {
+          "source": "module/list_users_route.fn",
+          "target": "module/list_users_route.fn/return@0",
+          "type": "contains"
+        },
+        {
+          "source": "module/get_user_route.fn",
+          "target": "module/get_user_route.fn/user.assign",
+          "type": "contains"
+        },
+        {
+          "source": "module/get_user_route.fn",
+          "target": "module/get_user_route.fn/return@0",
+          "type": "contains"
+        },
+        {
+          "source": "module/get_user.fn",
+          "target": "module/get_user.fn/cached.assign",
+          "type": "contains"
+        },
+        {
+          "source": "module/get_user.fn",
+          "target": "module/get_user.fn/if@0",
+          "type": "contains"
+        },
+        {
+          "source": "module/get_user.fn/if@0",
+          "target": "module/get_user.fn/if@0/return@0",
+          "type": "contains"
+        },
+        {
+          "source": "module/get_user.fn",
+          "target": "module/get_user.fn/user.assign",
+          "type": "contains"
+        },
+        {
+          "source": "module/get_user.fn",
+          "target": "module/get_user.fn/cachelib_cache_set.call",
+          "type": "contains"
+        },
+        {
+          "source": "module/get_user.fn",
+          "target": "module/get_user.fn/return@0",
+          "type": "contains"
+        },
+        {
+          "source": "module/create_charge_route.fn",
+          "target": "module/create_charge_route.fn/body.assign",
+          "type": "contains"
+        },
+        {
+          "source": "module/create_charge_route.fn",
+          "target": "module/create_charge_route.fn/result.assign",
+          "type": "contains"
+        },
+        {
+          "source": "module/create_charge_route.fn",
+          "target": "module/create_charge_route.fn/return@0",
+          "type": "contains"
+        },
+        {
+          "source": "module/list_users_route.fn/users.assign",
+          "target": "module/all_users.fn",
+          "type": "reference",
+          "targetFile": "store.py",
+          "qualifiedTarget": "store:all_users"
+        },
+        {
+          "source": "module/get_user.fn/user.assign",
+          "target": "module/find_user.fn",
+          "type": "reference",
+          "targetFile": "store.py",
+          "qualifiedTarget": "store:find_user"
+        },
+        {
+          "source": "module/create_charge_route.fn/result.assign",
+          "target": "module/charge.fn",
+          "type": "reference",
+          "targetFile": "payments.py",
+          "qualifiedTarget": "payments:charge"
+        }
+      ],
+      "symbolIndex": [
+        {
+          "sym": "function:list_users_route",
+          "kind": "function",
+          "name": "list_users_route",
+          "scope": "module",
+          "loc": {
+            "line": 22,
+            "endLine": 25,
+            "col": 0,
+            "endCol": 25
+          },
+          "signature": "def list_users_route()",
+          "docstring": "List every user.",
+          "source": "\n\n@app.route(\"/api/users\", methods=[\"GET\"])\ndef list_users_route():\n    \"\"\"List every user.\"\"\"\n    users = store.all_users()\n    return jsonify(users)\n"
+        },
+        {
+          "sym": "function:get_user_route",
+          "kind": "function",
+          "name": "get_user_route",
+          "scope": "module",
+          "loc": {
+            "line": 29,
+            "endLine": 32,
+            "col": 0,
+            "endCol": 24
+          },
+          "signature": "def get_user_route(uid)",
+          "docstring": "Fetch one user, cache-first.",
+          "source": "\n\n@app.route(\"/api/users/<int:uid>\", methods=[\"GET\"])\ndef get_user_route(uid):\n    \"\"\"Fetch one user, cache-first.\"\"\"\n    user = get_user(uid)\n    return jsonify(user)\n"
+        },
+        {
+          "sym": "function:get_user",
+          "kind": "function",
+          "name": "get_user",
+          "scope": "module",
+          "loc": {
+            "line": 35,
+            "endLine": 41,
+            "col": 0,
+            "endCol": 15
+          },
+          "signature": "def get_user(uid)",
+          "docstring": null,
+          "source": "\n\ndef get_user(uid):\n    cached = cachelib.cache.get(f\"user:{uid}\")\n    if cached:\n        return cached\n    user = store.find_user(uid)\n    cachelib.cache.set(f\"user:{uid}\", user)\n    return user\n"
+        },
+        {
+          "sym": "function:create_charge_route",
+          "kind": "function",
+          "name": "create_charge_route",
+          "scope": "module",
+          "loc": {
+            "line": 45,
+            "endLine": 49,
+            "col": 0,
+            "endCol": 26
+          },
+          "signature": "def create_charge_route()",
+          "docstring": "Create a payment charge via the external API.",
+          "source": "\n\n@app.route(\"/api/charges\", methods=[\"POST\"])\ndef create_charge_route():\n    \"\"\"Create a payment charge via the external API.\"\"\"\n    body = request.get_json()\n    result = payments.charge(body[\"amount\"])\n    return jsonify(result)\n"
+        }
+      ],
+      "modulePath": "app"
+    },
+    "store.py": {
+      "version": "1.3",
+      "nodes": [
+        {
+          "id": "module/sqlite3.import",
+          "type": "import",
+          "parentId": null,
+          "line": 3,
+          "endLine": 3,
+          "col": 0,
+          "endCol": 14,
+          "names": [
+            "sqlite3"
+          ]
+        },
+        {
+          "id": "module/_conn.fn",
+          "type": "function_def",
+          "parentId": null,
+          "line": 6,
+          "endLine": 7,
+          "col": 0,
+          "endCol": 44,
+          "name": "_conn",
+          "params": [],
+          "docstring": null,
+          "decorators": [],
+          "isAsync": false,
+          "returns": null
+        },
+        {
+          "id": "module/_conn.fn/return@0",
+          "type": "return_stmt",
+          "parentId": "module/_conn.fn",
+          "line": 7,
+          "endLine": 7,
+          "col": 4,
+          "endCol": 44,
+          "value": "sqlite3.connect(\"system_demo.db\")",
+          "callTarget": "sqlite3.connect",
+          "effectKind": "db"
+        },
+        {
+          "id": "module/all_users.fn",
+          "type": "function_def",
+          "parentId": null,
+          "line": 10,
+          "endLine": 14,
+          "col": 0,
+          "endCol": 28,
+          "name": "all_users",
+          "params": [],
+          "docstring": "Return every user row.",
+          "decorators": [],
+          "isAsync": false,
+          "returns": null
+        },
+        {
+          "id": "module/all_users.fn/conn.assign",
+          "type": "assignment",
+          "parentId": "module/all_users.fn",
+          "line": 12,
+          "endLine": 12,
+          "col": 4,
+          "endCol": 18,
+          "name": "conn",
+          "valueKind": "call",
+          "preview": "_conn()",
+          "callTarget": "_conn"
+        },
+        {
+          "id": "module/all_users.fn/cursor.assign",
+          "type": "assignment",
+          "parentId": "module/all_users.fn",
+          "line": 13,
+          "endLine": 13,
+          "col": 4,
+          "endCol": 55,
+          "name": "cursor",
+          "valueKind": "call",
+          "preview": "conn.execute(\"SELECT id, name FROM users\")",
+          "callTarget": "conn.execute",
+          "effectKind": "db",
+          "args": [
+            "\"SELECT id, name FROM users\""
+          ]
+        },
+        {
+          "id": "module/all_users.fn/return@0",
+          "type": "return_stmt",
+          "parentId": "module/all_users.fn",
+          "line": 14,
+          "endLine": 14,
+          "col": 4,
+          "endCol": 28,
+          "value": "cursor.fetchall()",
+          "callTarget": "cursor.fetchall"
+        },
+        {
+          "id": "module/find_user.fn",
+          "type": "function_def",
+          "parentId": null,
+          "line": 17,
+          "endLine": 21,
+          "col": 0,
+          "endCol": 28,
+          "name": "find_user",
+          "params": [
+            "uid"
+          ],
+          "docstring": "Return one user row by id.",
+          "decorators": [],
+          "isAsync": false,
+          "returns": null
+        },
+        {
+          "id": "module/find_user.fn/conn.assign",
+          "type": "assignment",
+          "parentId": "module/find_user.fn",
+          "line": 19,
+          "endLine": 19,
+          "col": 4,
+          "endCol": 18,
+          "name": "conn",
+          "valueKind": "call",
+          "preview": "_conn()",
+          "callTarget": "_conn"
+        },
+        {
+          "id": "module/find_user.fn/cursor.assign",
+          "type": "assignment",
+          "parentId": "module/find_user.fn",
+          "line": 20,
+          "endLine": 20,
+          "col": 4,
+          "endCol": 76,
+          "name": "cursor",
+          "valueKind": "call",
+          "preview": "conn.execute(\"SELECT id, name FROM users WHERE id = ?\", (uid,))",
+          "callTarget": "conn.execute",
+          "effectKind": "db",
+          "args": [
+            "\"SELECT id, name FROM users WHERE id = ?\"",
+            "(uid,)"
+          ]
+        },
+        {
+          "id": "module/find_user.fn/return@0",
+          "type": "return_stmt",
+          "parentId": "module/find_user.fn",
+          "line": 21,
+          "endLine": 21,
+          "col": 4,
+          "endCol": 28,
+          "value": "cursor.fetchone()",
+          "callTarget": "cursor.fetchone"
+        }
+      ],
+      "edges": [
+        {
+          "source": "module/_conn.fn",
+          "target": "module/_conn.fn/return@0",
+          "type": "contains"
+        },
+        {
+          "source": "module/all_users.fn",
+          "target": "module/all_users.fn/conn.assign",
+          "type": "contains"
+        },
+        {
+          "source": "module/all_users.fn/conn.assign",
+          "target": "module/_conn.fn",
+          "type": "reference"
+        },
+        {
+          "source": "module/all_users.fn",
+          "target": "module/all_users.fn/cursor.assign",
+          "type": "contains"
+        },
+        {
+          "source": "module/all_users.fn",
+          "target": "module/all_users.fn/return@0",
+          "type": "contains"
+        },
+        {
+          "source": "module/find_user.fn",
+          "target": "module/find_user.fn/conn.assign",
+          "type": "contains"
+        },
+        {
+          "source": "module/find_user.fn/conn.assign",
+          "target": "module/_conn.fn",
+          "type": "reference"
+        },
+        {
+          "source": "module/find_user.fn",
+          "target": "module/find_user.fn/cursor.assign",
+          "type": "contains"
+        },
+        {
+          "source": "module/find_user.fn",
+          "target": "module/find_user.fn/return@0",
+          "type": "contains"
+        }
+      ],
+      "symbolIndex": [
+        {
+          "sym": "function:_conn",
+          "kind": "function",
+          "name": "_conn",
+          "scope": "module",
+          "loc": {
+            "line": 6,
+            "endLine": 7,
+            "col": 0,
+            "endCol": 44
+          },
+          "signature": "def _conn()",
+          "docstring": null,
+          "source": "\n\ndef _conn():\n    return sqlite3.connect(\"system_demo.db\")\n"
+        },
+        {
+          "sym": "function:all_users",
+          "kind": "function",
+          "name": "all_users",
+          "scope": "module",
+          "loc": {
+            "line": 10,
+            "endLine": 14,
+            "col": 0,
+            "endCol": 28
+          },
+          "signature": "def all_users()",
+          "docstring": "Return every user row.",
+          "source": "\n\ndef all_users():\n    \"\"\"Return every user row.\"\"\"\n    conn = _conn()\n    cursor = conn.execute(\"SELECT id, name FROM users\")\n    return cursor.fetchall()\n"
+        },
+        {
+          "sym": "function:find_user",
+          "kind": "function",
+          "name": "find_user",
+          "scope": "module",
+          "loc": {
+            "line": 17,
+            "endLine": 21,
+            "col": 0,
+            "endCol": 28
+          },
+          "signature": "def find_user(uid)",
+          "docstring": "Return one user row by id.",
+          "source": "\n\ndef find_user(uid):\n    \"\"\"Return one user row by id.\"\"\"\n    conn = _conn()\n    cursor = conn.execute(\"SELECT id, name FROM users WHERE id = ?\", (uid,))\n    return cursor.fetchone()\n"
+        }
+      ],
+      "modulePath": "store"
+    },
+    "payments.py": {
+      "version": "1.3",
+      "nodes": [
+        {
+          "id": "module/requests.import",
+          "type": "import",
+          "parentId": null,
+          "line": 3,
+          "endLine": 3,
+          "col": 0,
+          "endCol": 15,
+          "names": [
+            "requests"
+          ]
+        },
+        {
+          "id": "module/charge.fn",
+          "type": "function_def",
+          "parentId": null,
+          "line": 6,
+          "endLine": 12,
+          "col": 0,
+          "endCol": 22,
+          "name": "charge",
+          "params": [
+            "amount"
+          ],
+          "docstring": "Charge via the external payments API.",
+          "decorators": [],
+          "isAsync": false,
+          "returns": null
+        },
+        {
+          "id": "module/charge.fn/resp.assign",
+          "type": "assignment",
+          "parentId": "module/charge.fn",
+          "line": 8,
+          "endLine": 11,
+          "col": 4,
+          "endCol": 5,
+          "name": "resp",
+          "valueKind": "call",
+          "preview": "requests.post(\n    \"https://api.stripe.com/v1/charges\",\n    json={\"amount\": amount},\n)",
+          "callTarget": "requests.post",
+          "effectKind": "http",
+          "args": [
+            "\"https://api.stripe.com/v1/charges\""
+          ],
+          "kwargs": [
+            {
+              "name": "json",
+              "value": "{\"amount\": amount}"
+            }
+          ]
+        },
+        {
+          "id": "module/charge.fn/return@0",
+          "type": "return_stmt",
+          "parentId": "module/charge.fn",
+          "line": 12,
+          "endLine": 12,
+          "col": 4,
+          "endCol": 22,
+          "value": "resp.json()",
+          "callTarget": "resp.json"
+        }
+      ],
+      "edges": [
+        {
+          "source": "module/charge.fn",
+          "target": "module/charge.fn/resp.assign",
+          "type": "contains"
+        },
+        {
+          "source": "module/charge.fn",
+          "target": "module/charge.fn/return@0",
+          "type": "contains"
+        }
+      ],
+      "symbolIndex": [
+        {
+          "sym": "function:charge",
+          "kind": "function",
+          "name": "charge",
+          "scope": "module",
+          "loc": {
+            "line": 6,
+            "endLine": 12,
+            "col": 0,
+            "endCol": 22
+          },
+          "signature": "def charge(amount)",
+          "docstring": "Charge via the external payments API.",
+          "source": "\n\ndef charge(amount):\n    \"\"\"Charge via the external payments API.\"\"\"\n    resp = requests.post(\n        \"https://api.stripe.com/v1/charges\",\n        json={\"amount\": amount},\n    )\n    return resp.json()\n"
+        }
+      ],
+      "modulePath": "payments"
+    },
+    "cache.py": {
+      "version": "1.3",
+      "nodes": [
+        {
+          "id": "module/_Cache.class",
+          "type": "class_def",
+          "parentId": null,
+          "line": 8,
+          "endLine": 16,
+          "col": 0,
+          "endCol": 32,
+          "name": "_Cache",
+          "bases": [],
+          "decorators": [],
+          "docstring": null
+        },
+        {
+          "id": "module/_Cache.class/__init__.fn",
+          "type": "function_def",
+          "parentId": "module/_Cache.class",
+          "line": 9,
+          "endLine": 10,
+          "col": 4,
+          "endCol": 24,
+          "name": "__init__",
+          "params": [
+            "self"
+          ],
+          "docstring": null,
+          "decorators": [],
+          "isAsync": false,
+          "returns": null
+        },
+        {
+          "id": "module/_Cache.class/__init__.fn/self__store.assign",
+          "type": "assignment",
+          "parentId": "module/_Cache.class/__init__.fn",
+          "line": 10,
+          "endLine": 10,
+          "col": 8,
+          "endCol": 24,
+          "name": "self._store",
+          "valueKind": "dict",
+          "preview": "{}"
+        },
+        {
+          "id": "module/_Cache.class/get.fn",
+          "type": "function_def",
+          "parentId": "module/_Cache.class",
+          "line": 12,
+          "endLine": 13,
+          "col": 4,
+          "endCol": 35,
+          "name": "get",
+          "params": [
+            "self",
+            "key"
+          ],
+          "docstring": null,
+          "decorators": [],
+          "isAsync": false,
+          "returns": null
+        },
+        {
+          "id": "module/_Cache.class/get.fn/return@0",
+          "type": "return_stmt",
+          "parentId": "module/_Cache.class/get.fn",
+          "line": 13,
+          "endLine": 13,
+          "col": 8,
+          "endCol": 35,
+          "value": "self._store.get(key)",
+          "callTarget": "self._store.get"
+        },
+        {
+          "id": "module/_Cache.class/set.fn",
+          "type": "function_def",
+          "parentId": "module/_Cache.class",
+          "line": 15,
+          "endLine": 16,
+          "col": 4,
+          "endCol": 32,
+          "name": "set",
+          "params": [
+            "self",
+            "key",
+            "value"
+          ],
+          "docstring": null,
+          "decorators": [],
+          "isAsync": false,
+          "returns": null
+        },
+        {
+          "id": "module/_Cache.class/set.fn/?.assign",
+          "type": "assignment",
+          "parentId": "module/_Cache.class/set.fn",
+          "line": 16,
+          "endLine": 16,
+          "col": 8,
+          "endCol": 32,
+          "name": "?",
+          "valueKind": "other",
+          "preview": "value"
+        },
+        {
+          "id": "module/cache.assign",
+          "type": "assignment",
+          "parentId": null,
+          "line": 19,
+          "endLine": 19,
+          "col": 0,
+          "endCol": 16,
+          "name": "cache",
+          "valueKind": "call",
+          "preview": "_Cache()",
+          "callTarget": "_Cache"
+        }
+      ],
+      "edges": [
+        {
+          "source": "module/_Cache.class",
+          "target": "module/_Cache.class/__init__.fn",
+          "type": "contains"
+        },
+        {
+          "source": "module/_Cache.class/__init__.fn",
+          "target": "module/_Cache.class/__init__.fn/self__store.assign",
+          "type": "contains"
+        },
+        {
+          "source": "module/_Cache.class",
+          "target": "module/_Cache.class/get.fn",
+          "type": "contains"
+        },
+        {
+          "source": "module/_Cache.class/get.fn",
+          "target": "module/_Cache.class/get.fn/return@0",
+          "type": "contains"
+        },
+        {
+          "source": "module/_Cache.class",
+          "target": "module/_Cache.class/set.fn",
+          "type": "contains"
+        },
+        {
+          "source": "module/_Cache.class/set.fn",
+          "target": "module/_Cache.class/set.fn/?.assign",
+          "type": "contains"
+        },
+        {
+          "source": "module/cache.assign",
+          "target": "module/_Cache.class",
+          "type": "reference"
+        }
+      ],
+      "symbolIndex": [
+        {
+          "sym": "class:_Cache",
+          "kind": "class",
+          "name": "_Cache",
+          "scope": "module",
+          "loc": {
+            "line": 8,
+            "endLine": 16,
+            "col": 0,
+            "endCol": 32
+          },
+          "bases": [],
+          "docstring": null,
+          "source": "\n\nclass _Cache:\n    def __init__(self):\n        self._store = {}\n\n    def get(self, key):\n        return self._store.get(key)\n\n    def set(self, key, value):\n        self._store[key] = value\n"
+        },
+        {
+          "sym": "function:__init__",
+          "kind": "function",
+          "name": "__init__",
+          "scope": "module/_Cache.class",
+          "loc": {
+            "line": 9,
+            "endLine": 10,
+            "col": 4,
+            "endCol": 24
+          },
+          "signature": "def __init__(self)",
+          "docstring": null,
+          "source": "def __init__(self):\n    self._store = {}\n"
+        },
+        {
+          "sym": "function:get",
+          "kind": "function",
+          "name": "get",
+          "scope": "module/_Cache.class",
+          "loc": {
+            "line": 12,
+            "endLine": 13,
+            "col": 4,
+            "endCol": 35
+          },
+          "signature": "def get(self, key)",
+          "docstring": null,
+          "source": "\ndef get(self, key):\n    return self._store.get(key)\n"
+        },
+        {
+          "sym": "function:set",
+          "kind": "function",
+          "name": "set",
+          "scope": "module/_Cache.class",
+          "loc": {
+            "line": 15,
+            "endLine": 16,
+            "col": 4,
+            "endCol": 32
+          },
+          "signature": "def set(self, key, value)",
+          "docstring": null,
+          "source": "\ndef set(self, key, value):\n    self._store[key] = value\n"
+        }
+      ],
+      "modulePath": "cache"
+    }
+  },
+  "symbolIndex": [
+    {
+      "sym": "function:list_users_route",
+      "kind": "function",
+      "name": "list_users_route",
+      "scope": "module",
+      "loc": {
+        "line": 22,
+        "endLine": 25,
+        "col": 0,
+        "endCol": 25
+      },
+      "signature": "def list_users_route()",
+      "docstring": "List every user.",
+      "source": "\n\n@app.route(\"/api/users\", methods=[\"GET\"])\ndef list_users_route():\n    \"\"\"List every user.\"\"\"\n    users = store.all_users()\n    return jsonify(users)\n"
+    },
+    {
+      "sym": "function:get_user_route",
+      "kind": "function",
+      "name": "get_user_route",
+      "scope": "module",
+      "loc": {
+        "line": 29,
+        "endLine": 32,
+        "col": 0,
+        "endCol": 24
+      },
+      "signature": "def get_user_route(uid)",
+      "docstring": "Fetch one user, cache-first.",
+      "source": "\n\n@app.route(\"/api/users/<int:uid>\", methods=[\"GET\"])\ndef get_user_route(uid):\n    \"\"\"Fetch one user, cache-first.\"\"\"\n    user = get_user(uid)\n    return jsonify(user)\n"
+    },
+    {
+      "sym": "function:get_user",
+      "kind": "function",
+      "name": "get_user",
+      "scope": "module",
+      "loc": {
+        "line": 35,
+        "endLine": 41,
+        "col": 0,
+        "endCol": 15
+      },
+      "signature": "def get_user(uid)",
+      "docstring": null,
+      "source": "\n\ndef get_user(uid):\n    cached = cachelib.cache.get(f\"user:{uid}\")\n    if cached:\n        return cached\n    user = store.find_user(uid)\n    cachelib.cache.set(f\"user:{uid}\", user)\n    return user\n"
+    },
+    {
+      "sym": "function:create_charge_route",
+      "kind": "function",
+      "name": "create_charge_route",
+      "scope": "module",
+      "loc": {
+        "line": 45,
+        "endLine": 49,
+        "col": 0,
+        "endCol": 26
+      },
+      "signature": "def create_charge_route()",
+      "docstring": "Create a payment charge via the external API.",
+      "source": "\n\n@app.route(\"/api/charges\", methods=[\"POST\"])\ndef create_charge_route():\n    \"\"\"Create a payment charge via the external API.\"\"\"\n    body = request.get_json()\n    result = payments.charge(body[\"amount\"])\n    return jsonify(result)\n"
+    },
+    {
+      "sym": "function:_conn",
+      "kind": "function",
+      "name": "_conn",
+      "scope": "module",
+      "loc": {
+        "line": 6,
+        "endLine": 7,
+        "col": 0,
+        "endCol": 44
+      },
+      "signature": "def _conn()",
+      "docstring": null,
+      "source": "\n\ndef _conn():\n    return sqlite3.connect(\"system_demo.db\")\n"
+    },
+    {
+      "sym": "function:all_users",
+      "kind": "function",
+      "name": "all_users",
+      "scope": "module",
+      "loc": {
+        "line": 10,
+        "endLine": 14,
+        "col": 0,
+        "endCol": 28
+      },
+      "signature": "def all_users()",
+      "docstring": "Return every user row.",
+      "source": "\n\ndef all_users():\n    \"\"\"Return every user row.\"\"\"\n    conn = _conn()\n    cursor = conn.execute(\"SELECT id, name FROM users\")\n    return cursor.fetchall()\n"
+    },
+    {
+      "sym": "function:find_user",
+      "kind": "function",
+      "name": "find_user",
+      "scope": "module",
+      "loc": {
+        "line": 17,
+        "endLine": 21,
+        "col": 0,
+        "endCol": 28
+      },
+      "signature": "def find_user(uid)",
+      "docstring": "Return one user row by id.",
+      "source": "\n\ndef find_user(uid):\n    \"\"\"Return one user row by id.\"\"\"\n    conn = _conn()\n    cursor = conn.execute(\"SELECT id, name FROM users WHERE id = ?\", (uid,))\n    return cursor.fetchone()\n"
+    },
+    {
+      "sym": "function:charge",
+      "kind": "function",
+      "name": "charge",
+      "scope": "module",
+      "loc": {
+        "line": 6,
+        "endLine": 12,
+        "col": 0,
+        "endCol": 22
+      },
+      "signature": "def charge(amount)",
+      "docstring": "Charge via the external payments API.",
+      "source": "\n\ndef charge(amount):\n    \"\"\"Charge via the external payments API.\"\"\"\n    resp = requests.post(\n        \"https://api.stripe.com/v1/charges\",\n        json={\"amount\": amount},\n    )\n    return resp.json()\n"
+    },
+    {
+      "sym": "class:_Cache",
+      "kind": "class",
+      "name": "_Cache",
+      "scope": "module",
+      "loc": {
+        "line": 8,
+        "endLine": 16,
+        "col": 0,
+        "endCol": 32
+      },
+      "bases": [],
+      "docstring": null,
+      "source": "\n\nclass _Cache:\n    def __init__(self):\n        self._store = {}\n\n    def get(self, key):\n        return self._store.get(key)\n\n    def set(self, key, value):\n        self._store[key] = value\n"
+    },
+    {
+      "sym": "function:__init__",
+      "kind": "function",
+      "name": "__init__",
+      "scope": "module/_Cache.class",
+      "loc": {
+        "line": 9,
+        "endLine": 10,
+        "col": 4,
+        "endCol": 24
+      },
+      "signature": "def __init__(self)",
+      "docstring": null,
+      "source": "def __init__(self):\n    self._store = {}\n"
+    },
+    {
+      "sym": "function:get",
+      "kind": "function",
+      "name": "get",
+      "scope": "module/_Cache.class",
+      "loc": {
+        "line": 12,
+        "endLine": 13,
+        "col": 4,
+        "endCol": 35
+      },
+      "signature": "def get(self, key)",
+      "docstring": null,
+      "source": "\ndef get(self, key):\n    return self._store.get(key)\n"
+    },
+    {
+      "sym": "function:set",
+      "kind": "function",
+      "name": "set",
+      "scope": "module/_Cache.class",
+      "loc": {
+        "line": 15,
+        "endLine": 16,
+        "col": 4,
+        "endCol": 32
+      },
+      "signature": "def set(self, key, value)",
+      "docstring": null,
+      "source": "\ndef set(self, key, value):\n    self._store[key] = value\n"
+    }
+  ],
+  "entryPoints": [
+    {
+      "id": "app.py:create_charge_route",
+      "kind": "route",
+      "file": "app.py",
+      "irNodeId": "module/create_charge_route.fn",
+      "qualifiedName": "app:create_charge_route",
+      "label": "create_charge_route",
+      "summary": "Create a payment charge via the external API.",
+      "framework": "flask",
+      "metadata": {
+        "route": "/api/charges",
+        "method": "POST"
+      }
+    },
+    {
+      "id": "app.py:get_user_route",
+      "kind": "route",
+      "file": "app.py",
+      "irNodeId": "module/get_user_route.fn",
+      "qualifiedName": "app:get_user_route",
+      "label": "get_user_route",
+      "summary": "Fetch one user, cache-first.",
+      "framework": "flask",
+      "metadata": {
+        "route": "/api/users/<int:uid>",
+        "method": "GET"
+      }
+    },
+    {
+      "id": "app.py:list_users_route",
+      "kind": "route",
+      "file": "app.py",
+      "irNodeId": "module/list_users_route.fn",
+      "qualifiedName": "app:list_users_route",
+      "label": "list_users_route",
+      "summary": "List every user.",
+      "framework": "flask",
+      "metadata": {
+        "route": "/api/users",
+        "method": "GET"
+      }
+    },
+    {
+      "id": "payments.py:charge",
+      "kind": "public_api",
+      "file": "payments.py",
+      "irNodeId": "module/charge.fn",
+      "qualifiedName": "payments:charge",
+      "label": "charge",
+      "summary": "Charge via the external payments API.",
+      "framework": null
+    },
+    {
+      "id": "store.py:all_users",
+      "kind": "public_api",
+      "file": "store.py",
+      "irNodeId": "module/all_users.fn",
+      "qualifiedName": "store:all_users",
+      "label": "all_users",
+      "summary": "Return every user row.",
+      "framework": null
+    },
+    {
+      "id": "store.py:find_user",
+      "kind": "public_api",
+      "file": "store.py",
+      "irNodeId": "module/find_user.fn",
+      "qualifiedName": "store:find_user",
+      "label": "find_user",
+      "summary": "Return one user row by id.",
+      "framework": null
+    },
+    {
+      "id": "app.py:get_user",
+      "kind": "manual",
+      "file": "app.py",
+      "irNodeId": "module/get_user.fn",
+      "qualifiedName": "app:get_user",
+      "label": "get_user",
+      "summary": "def get_user(uid)",
+      "framework": null
+    }
+  ],
+  "threads": [
+    {
+      "version": "1.0",
+      "seed": {
+        "file": "app.py",
+        "irNodeId": "module/create_charge_route.fn",
+        "qualifiedName": "app:create_charge_route"
+      },
+      "nodes": [
+        {
+          "id": "app:create_charge_route",
+          "kind": "seed",
+          "label": "create_charge_route",
+          "file": "app.py",
+          "irNodeId": "module/create_charge_route.fn",
+          "preview": "Create a payment charge via the external API."
+        },
+        {
+          "id": "external:request.get_json",
+          "kind": "external",
+          "label": "request.get_json",
+          "file": null,
+          "irNodeId": "module/create_charge_route.fn/body.assign",
+          "preview": "request.get_json()"
+        },
+        {
+          "id": "payments:charge",
+          "kind": "step",
+          "label": "charge",
+          "file": "payments.py",
+          "irNodeId": "module/charge.fn",
+          "preview": "Charge via the external payments API."
+        },
+        {
+          "id": "external:requests.post",
+          "kind": "external",
+          "label": "requests.post",
+          "file": null,
+          "irNodeId": "module/charge.fn/resp.assign",
+          "preview": "requests.post(\n    \"https://api.stripe.com/v1/charges\",\n    json={\"amount\": amount},\n)"
+        },
+        {
+          "id": "dynamic:resp.json",
+          "kind": "dynamic",
+          "label": "resp.json",
+          "file": null,
+          "irNodeId": "module/charge.fn/return@0",
+          "preview": "resp.json()",
+          "receiverBoundKind": "local-call",
+          "receiverBoundFrom": "requests.post"
+        },
+        {
+          "id": "external:jsonify",
+          "kind": "external",
+          "label": "jsonify",
+          "file": null,
+          "irNodeId": "module/create_charge_route.fn/return@0",
+          "preview": "jsonify(result)",
+          "qualifiedTarget": "flask.jsonify"
+        },
+        {
+          "id": "app:create_charge_route:return@0",
+          "kind": "return",
+          "label": "return",
+          "file": "app.py",
+          "irNodeId": "module/create_charge_route.fn/return@0",
+          "preview": "jsonify(result)"
+        }
+      ],
+      "edges": [
+        {
+          "from": "app:create_charge_route",
+          "to": "external:request.get_json",
+          "kind": "direct",
+          "irSource": "module/create_charge_route.fn/body.assign"
+        },
+        {
+          "from": "payments:charge",
+          "to": "external:requests.post",
+          "kind": "direct",
+          "irSource": "module/charge.fn/resp.assign"
+        },
+        {
+          "from": "payments:charge",
+          "to": "dynamic:resp.json",
+          "kind": "direct",
+          "irSource": "module/charge.fn/return@0"
+        },
+        {
+          "from": "app:create_charge_route",
+          "to": "payments:charge",
+          "kind": "direct",
+          "irSource": "module/create_charge_route.fn/result.assign"
+        },
+        {
+          "from": "app:create_charge_route",
+          "to": "external:jsonify",
+          "kind": "direct",
+          "irSource": "module/create_charge_route.fn/return@0"
+        },
+        {
+          "from": "external:jsonify",
+          "to": "app:create_charge_route:return@0",
+          "kind": "direct",
+          "irSource": "module/create_charge_route.fn/return@0"
+        }
+      ],
+      "entryPointId": "app.py:create_charge_route",
+      "filesReached": [
+        "app.py",
+        "payments.py"
+      ]
+    },
+    {
+      "version": "1.0",
+      "seed": {
+        "file": "app.py",
+        "irNodeId": "module/get_user_route.fn",
+        "qualifiedName": "app:get_user_route"
+      },
+      "nodes": [
+        {
+          "id": "app:get_user_route",
+          "kind": "seed",
+          "label": "get_user_route",
+          "file": "app.py",
+          "irNodeId": "module/get_user_route.fn",
+          "preview": "Fetch one user, cache-first."
+        },
+        {
+          "id": "external:jsonify",
+          "kind": "external",
+          "label": "jsonify",
+          "file": null,
+          "irNodeId": "module/get_user_route.fn/return@0",
+          "preview": "jsonify(user)",
+          "qualifiedTarget": "flask.jsonify"
+        },
+        {
+          "id": "app:get_user",
+          "kind": "step",
+          "label": "get_user",
+          "file": "app.py",
+          "irNodeId": "module/get_user.fn",
+          "preview": null
+        },
+        {
+          "id": "external:cachelib.cache.get",
+          "kind": "external",
+          "label": "cachelib.cache.get",
+          "file": null,
+          "irNodeId": "module/get_user.fn/cached.assign",
+          "preview": "cachelib.cache.get(f\"user:{uid}\")"
+        },
+        {
+          "id": "external:cachelib.cache.set",
+          "kind": "external",
+          "label": "cachelib.cache.set",
+          "file": null,
+          "irNodeId": "module/get_user.fn/cachelib_cache_set.call",
+          "preview": "cachelib.cache.set"
+        },
+        {
+          "id": "store:find_user",
+          "kind": "step",
+          "label": "find_user",
+          "file": "store.py",
+          "irNodeId": "module/find_user.fn",
+          "preview": "Return one user row by id."
+        },
+        {
+          "id": "store:_conn",
+          "kind": "step",
+          "label": "_conn",
+          "file": "store.py",
+          "irNodeId": "module/_conn.fn",
+          "preview": null
+        },
+        {
+          "id": "external:sqlite3.connect",
+          "kind": "external",
+          "label": "sqlite3.connect",
+          "file": null,
+          "irNodeId": "module/_conn.fn/return@0",
+          "preview": "sqlite3.connect(\"system_demo.db\")"
+        },
+        {
+          "id": "dynamic:conn.execute",
+          "kind": "dynamic",
+          "label": "conn.execute",
+          "file": null,
+          "irNodeId": "module/find_user.fn/cursor.assign",
+          "preview": "conn.execute(\"SELECT id, name FROM users WHERE id = ?\", (uid,))",
+          "receiverBoundKind": "local-call",
+          "receiverBoundFrom": "_conn"
+        },
+        {
+          "id": "dynamic:cursor.fetchone",
+          "kind": "dynamic",
+          "label": "cursor.fetchone",
+          "file": null,
+          "irNodeId": "module/find_user.fn/return@0",
+          "preview": "cursor.fetchone()",
+          "receiverBoundKind": "local-call",
+          "receiverBoundFrom": "conn.execute"
+        },
+        {
+          "id": "app:get_user_route:return@0",
+          "kind": "return",
+          "label": "return",
+          "file": "app.py",
+          "irNodeId": "module/get_user_route.fn/return@0",
+          "preview": "jsonify(user)"
+        }
+      ],
+      "edges": [
+        {
+          "from": "app:get_user_route",
+          "to": "external:jsonify",
+          "kind": "direct",
+          "irSource": "module/get_user_route.fn/return@0"
+        },
+        {
+          "from": "app:get_user",
+          "to": "external:cachelib.cache.get",
+          "kind": "direct",
+          "irSource": "module/get_user.fn/cached.assign"
+        },
+        {
+          "from": "app:get_user",
+          "to": "external:cachelib.cache.set",
+          "kind": "direct",
+          "irSource": "module/get_user.fn/cachelib_cache_set.call"
+        },
+        {
+          "from": "store:_conn",
+          "to": "external:sqlite3.connect",
+          "kind": "direct",
+          "irSource": "module/_conn.fn/return@0"
+        },
+        {
+          "from": "store:find_user",
+          "to": "store:_conn",
+          "kind": "direct",
+          "irSource": "module/find_user.fn/conn.assign"
+        },
+        {
+          "from": "store:find_user",
+          "to": "dynamic:conn.execute",
+          "kind": "direct",
+          "irSource": "module/find_user.fn/cursor.assign"
+        },
+        {
+          "from": "store:find_user",
+          "to": "dynamic:cursor.fetchone",
+          "kind": "direct",
+          "irSource": "module/find_user.fn/return@0"
+        },
+        {
+          "from": "app:get_user",
+          "to": "store:find_user",
+          "kind": "direct",
+          "irSource": "module/get_user.fn/user.assign"
+        },
+        {
+          "from": "app:get_user_route",
+          "to": "app:get_user",
+          "kind": "direct",
+          "irSource": "module/get_user_route.fn/user.assign"
+        },
+        {
+          "from": "external:jsonify",
+          "to": "app:get_user_route:return@0",
+          "kind": "direct",
+          "irSource": "module/get_user_route.fn/return@0"
+        }
+      ],
+      "entryPointId": "app.py:get_user_route",
+      "filesReached": [
+        "app.py",
+        "store.py"
+      ]
+    },
+    {
+      "version": "1.0",
+      "seed": {
+        "file": "app.py",
+        "irNodeId": "module/list_users_route.fn",
+        "qualifiedName": "app:list_users_route"
+      },
+      "nodes": [
+        {
+          "id": "app:list_users_route",
+          "kind": "seed",
+          "label": "list_users_route",
+          "file": "app.py",
+          "irNodeId": "module/list_users_route.fn",
+          "preview": "List every user."
+        },
+        {
+          "id": "external:jsonify",
+          "kind": "external",
+          "label": "jsonify",
+          "file": null,
+          "irNodeId": "module/list_users_route.fn/return@0",
+          "preview": "jsonify(users)",
+          "qualifiedTarget": "flask.jsonify"
+        },
+        {
+          "id": "store:all_users",
+          "kind": "step",
+          "label": "all_users",
+          "file": "store.py",
+          "irNodeId": "module/all_users.fn",
+          "preview": "Return every user row."
+        },
+        {
+          "id": "store:_conn",
+          "kind": "step",
+          "label": "_conn",
+          "file": "store.py",
+          "irNodeId": "module/_conn.fn",
+          "preview": null
+        },
+        {
+          "id": "external:sqlite3.connect",
+          "kind": "external",
+          "label": "sqlite3.connect",
+          "file": null,
+          "irNodeId": "module/_conn.fn/return@0",
+          "preview": "sqlite3.connect(\"system_demo.db\")"
+        },
+        {
+          "id": "dynamic:conn.execute",
+          "kind": "dynamic",
+          "label": "conn.execute",
+          "file": null,
+          "irNodeId": "module/all_users.fn/cursor.assign",
+          "preview": "conn.execute(\"SELECT id, name FROM users\")",
+          "receiverBoundKind": "local-call",
+          "receiverBoundFrom": "_conn"
+        },
+        {
+          "id": "dynamic:cursor.fetchall",
+          "kind": "dynamic",
+          "label": "cursor.fetchall",
+          "file": null,
+          "irNodeId": "module/all_users.fn/return@0",
+          "preview": "cursor.fetchall()",
+          "receiverBoundKind": "local-call",
+          "receiverBoundFrom": "conn.execute"
+        },
+        {
+          "id": "app:list_users_route:return@0",
+          "kind": "return",
+          "label": "return",
+          "file": "app.py",
+          "irNodeId": "module/list_users_route.fn/return@0",
+          "preview": "jsonify(users)"
+        }
+      ],
+      "edges": [
+        {
+          "from": "app:list_users_route",
+          "to": "external:jsonify",
+          "kind": "direct",
+          "irSource": "module/list_users_route.fn/return@0"
+        },
+        {
+          "from": "store:_conn",
+          "to": "external:sqlite3.connect",
+          "kind": "direct",
+          "irSource": "module/_conn.fn/return@0"
+        },
+        {
+          "from": "store:all_users",
+          "to": "store:_conn",
+          "kind": "direct",
+          "irSource": "module/all_users.fn/conn.assign"
+        },
+        {
+          "from": "store:all_users",
+          "to": "dynamic:conn.execute",
+          "kind": "direct",
+          "irSource": "module/all_users.fn/cursor.assign"
+        },
+        {
+          "from": "store:all_users",
+          "to": "dynamic:cursor.fetchall",
+          "kind": "direct",
+          "irSource": "module/all_users.fn/return@0"
+        },
+        {
+          "from": "app:list_users_route",
+          "to": "store:all_users",
+          "kind": "direct",
+          "irSource": "module/list_users_route.fn/users.assign"
+        },
+        {
+          "from": "external:jsonify",
+          "to": "app:list_users_route:return@0",
+          "kind": "direct",
+          "irSource": "module/list_users_route.fn/return@0"
+        }
+      ],
+      "entryPointId": "app.py:list_users_route",
+      "filesReached": [
+        "app.py",
+        "store.py"
+      ]
+    },
+    {
+      "version": "1.0",
+      "seed": {
+        "file": "payments.py",
+        "irNodeId": "module/charge.fn",
+        "qualifiedName": "payments:charge"
+      },
+      "nodes": [
+        {
+          "id": "payments:charge",
+          "kind": "seed",
+          "label": "charge",
+          "file": "payments.py",
+          "irNodeId": "module/charge.fn",
+          "preview": "Charge via the external payments API."
+        },
+        {
+          "id": "external:requests.post",
+          "kind": "external",
+          "label": "requests.post",
+          "file": null,
+          "irNodeId": "module/charge.fn/resp.assign",
+          "preview": "requests.post(\n    \"https://api.stripe.com/v1/charges\",\n    json={\"amount\": amount},\n)"
+        },
+        {
+          "id": "dynamic:resp.json",
+          "kind": "dynamic",
+          "label": "resp.json",
+          "file": null,
+          "irNodeId": "module/charge.fn/return@0",
+          "preview": "resp.json()",
+          "receiverBoundKind": "local-call",
+          "receiverBoundFrom": "requests.post"
+        },
+        {
+          "id": "payments:charge:return@0",
+          "kind": "return",
+          "label": "return",
+          "file": "payments.py",
+          "irNodeId": "module/charge.fn/return@0",
+          "preview": "resp.json()"
+        }
+      ],
+      "edges": [
+        {
+          "from": "payments:charge",
+          "to": "external:requests.post",
+          "kind": "direct",
+          "irSource": "module/charge.fn/resp.assign"
+        },
+        {
+          "from": "payments:charge",
+          "to": "dynamic:resp.json",
+          "kind": "direct",
+          "irSource": "module/charge.fn/return@0"
+        },
+        {
+          "from": "dynamic:resp.json",
+          "to": "payments:charge:return@0",
+          "kind": "direct",
+          "irSource": "module/charge.fn/return@0"
+        }
+      ],
+      "entryPointId": "payments.py:charge",
+      "filesReached": [
+        "payments.py"
+      ]
+    },
+    {
+      "version": "1.0",
+      "seed": {
+        "file": "store.py",
+        "irNodeId": "module/all_users.fn",
+        "qualifiedName": "store:all_users"
+      },
+      "nodes": [
+        {
+          "id": "store:all_users",
+          "kind": "seed",
+          "label": "all_users",
+          "file": "store.py",
+          "irNodeId": "module/all_users.fn",
+          "preview": "Return every user row."
+        },
+        {
+          "id": "store:_conn",
+          "kind": "step",
+          "label": "_conn",
+          "file": "store.py",
+          "irNodeId": "module/_conn.fn",
+          "preview": null
+        },
+        {
+          "id": "external:sqlite3.connect",
+          "kind": "external",
+          "label": "sqlite3.connect",
+          "file": null,
+          "irNodeId": "module/_conn.fn/return@0",
+          "preview": "sqlite3.connect(\"system_demo.db\")"
+        },
+        {
+          "id": "dynamic:conn.execute",
+          "kind": "dynamic",
+          "label": "conn.execute",
+          "file": null,
+          "irNodeId": "module/all_users.fn/cursor.assign",
+          "preview": "conn.execute(\"SELECT id, name FROM users\")",
+          "receiverBoundKind": "local-call",
+          "receiverBoundFrom": "_conn"
+        },
+        {
+          "id": "dynamic:cursor.fetchall",
+          "kind": "dynamic",
+          "label": "cursor.fetchall",
+          "file": null,
+          "irNodeId": "module/all_users.fn/return@0",
+          "preview": "cursor.fetchall()",
+          "receiverBoundKind": "local-call",
+          "receiverBoundFrom": "conn.execute"
+        },
+        {
+          "id": "store:all_users:return@0",
+          "kind": "return",
+          "label": "return",
+          "file": "store.py",
+          "irNodeId": "module/all_users.fn/return@0",
+          "preview": "cursor.fetchall()"
+        }
+      ],
+      "edges": [
+        {
+          "from": "store:_conn",
+          "to": "external:sqlite3.connect",
+          "kind": "direct",
+          "irSource": "module/_conn.fn/return@0"
+        },
+        {
+          "from": "store:all_users",
+          "to": "store:_conn",
+          "kind": "direct",
+          "irSource": "module/all_users.fn/conn.assign"
+        },
+        {
+          "from": "store:all_users",
+          "to": "dynamic:conn.execute",
+          "kind": "direct",
+          "irSource": "module/all_users.fn/cursor.assign"
+        },
+        {
+          "from": "store:all_users",
+          "to": "dynamic:cursor.fetchall",
+          "kind": "direct",
+          "irSource": "module/all_users.fn/return@0"
+        },
+        {
+          "from": "dynamic:cursor.fetchall",
+          "to": "store:all_users:return@0",
+          "kind": "direct",
+          "irSource": "module/all_users.fn/return@0"
+        }
+      ],
+      "entryPointId": "store.py:all_users",
+      "filesReached": [
+        "store.py"
+      ]
+    },
+    {
+      "version": "1.0",
+      "seed": {
+        "file": "store.py",
+        "irNodeId": "module/find_user.fn",
+        "qualifiedName": "store:find_user"
+      },
+      "nodes": [
+        {
+          "id": "store:find_user",
+          "kind": "seed",
+          "label": "find_user",
+          "file": "store.py",
+          "irNodeId": "module/find_user.fn",
+          "preview": "Return one user row by id."
+        },
+        {
+          "id": "store:_conn",
+          "kind": "step",
+          "label": "_conn",
+          "file": "store.py",
+          "irNodeId": "module/_conn.fn",
+          "preview": null
+        },
+        {
+          "id": "external:sqlite3.connect",
+          "kind": "external",
+          "label": "sqlite3.connect",
+          "file": null,
+          "irNodeId": "module/_conn.fn/return@0",
+          "preview": "sqlite3.connect(\"system_demo.db\")"
+        },
+        {
+          "id": "dynamic:conn.execute",
+          "kind": "dynamic",
+          "label": "conn.execute",
+          "file": null,
+          "irNodeId": "module/find_user.fn/cursor.assign",
+          "preview": "conn.execute(\"SELECT id, name FROM users WHERE id = ?\", (uid,))",
+          "receiverBoundKind": "local-call",
+          "receiverBoundFrom": "_conn"
+        },
+        {
+          "id": "dynamic:cursor.fetchone",
+          "kind": "dynamic",
+          "label": "cursor.fetchone",
+          "file": null,
+          "irNodeId": "module/find_user.fn/return@0",
+          "preview": "cursor.fetchone()",
+          "receiverBoundKind": "local-call",
+          "receiverBoundFrom": "conn.execute"
+        },
+        {
+          "id": "store:find_user:return@0",
+          "kind": "return",
+          "label": "return",
+          "file": "store.py",
+          "irNodeId": "module/find_user.fn/return@0",
+          "preview": "cursor.fetchone()"
+        }
+      ],
+      "edges": [
+        {
+          "from": "store:_conn",
+          "to": "external:sqlite3.connect",
+          "kind": "direct",
+          "irSource": "module/_conn.fn/return@0"
+        },
+        {
+          "from": "store:find_user",
+          "to": "store:_conn",
+          "kind": "direct",
+          "irSource": "module/find_user.fn/conn.assign"
+        },
+        {
+          "from": "store:find_user",
+          "to": "dynamic:conn.execute",
+          "kind": "direct",
+          "irSource": "module/find_user.fn/cursor.assign"
+        },
+        {
+          "from": "store:find_user",
+          "to": "dynamic:cursor.fetchone",
+          "kind": "direct",
+          "irSource": "module/find_user.fn/return@0"
+        },
+        {
+          "from": "dynamic:cursor.fetchone",
+          "to": "store:find_user:return@0",
+          "kind": "direct",
+          "irSource": "module/find_user.fn/return@0"
+        }
+      ],
+      "entryPointId": "store.py:find_user",
+      "filesReached": [
+        "store.py"
+      ]
+    },
+    {
+      "version": "1.0",
+      "seed": {
+        "file": "app.py",
+        "irNodeId": "module/get_user.fn",
+        "qualifiedName": "app:get_user"
+      },
+      "nodes": [
+        {
+          "id": "app:get_user",
+          "kind": "seed",
+          "label": "get_user",
+          "file": "app.py",
+          "irNodeId": "module/get_user.fn",
+          "preview": null
+        },
+        {
+          "id": "external:cachelib.cache.get",
+          "kind": "external",
+          "label": "cachelib.cache.get",
+          "file": null,
+          "irNodeId": "module/get_user.fn/cached.assign",
+          "preview": "cachelib.cache.get(f\"user:{uid}\")"
+        },
+        {
+          "id": "external:cachelib.cache.set",
+          "kind": "external",
+          "label": "cachelib.cache.set",
+          "file": null,
+          "irNodeId": "module/get_user.fn/cachelib_cache_set.call",
+          "preview": "cachelib.cache.set"
+        },
+        {
+          "id": "store:find_user",
+          "kind": "step",
+          "label": "find_user",
+          "file": "store.py",
+          "irNodeId": "module/find_user.fn",
+          "preview": "Return one user row by id."
+        },
+        {
+          "id": "store:_conn",
+          "kind": "step",
+          "label": "_conn",
+          "file": "store.py",
+          "irNodeId": "module/_conn.fn",
+          "preview": null
+        },
+        {
+          "id": "external:sqlite3.connect",
+          "kind": "external",
+          "label": "sqlite3.connect",
+          "file": null,
+          "irNodeId": "module/_conn.fn/return@0",
+          "preview": "sqlite3.connect(\"system_demo.db\")"
+        },
+        {
+          "id": "dynamic:conn.execute",
+          "kind": "dynamic",
+          "label": "conn.execute",
+          "file": null,
+          "irNodeId": "module/find_user.fn/cursor.assign",
+          "preview": "conn.execute(\"SELECT id, name FROM users WHERE id = ?\", (uid,))",
+          "receiverBoundKind": "local-call",
+          "receiverBoundFrom": "_conn"
+        },
+        {
+          "id": "dynamic:cursor.fetchone",
+          "kind": "dynamic",
+          "label": "cursor.fetchone",
+          "file": null,
+          "irNodeId": "module/find_user.fn/return@0",
+          "preview": "cursor.fetchone()",
+          "receiverBoundKind": "local-call",
+          "receiverBoundFrom": "conn.execute"
+        },
+        {
+          "id": "app:get_user:return@0",
+          "kind": "return",
+          "label": "return",
+          "file": "app.py",
+          "irNodeId": "module/get_user.fn/if@0/return@0",
+          "preview": "cached"
+        },
+        {
+          "id": "app:get_user.fn/if@0#then",
+          "kind": "container",
+          "containerKind": "if_then",
+          "label": "if cached",
+          "file": "app.py",
+          "irNodeId": "module/get_user.fn/if@0",
+          "preview": null
+        },
+        {
+          "id": "app:get_user:return@1",
+          "kind": "return",
+          "label": "return",
+          "file": "app.py",
+          "irNodeId": "module/get_user.fn/return@0",
+          "preview": "user"
+        }
+      ],
+      "edges": [
+        {
+          "from": "app:get_user",
+          "to": "external:cachelib.cache.get",
+          "kind": "direct",
+          "irSource": "module/get_user.fn/cached.assign"
+        },
+        {
+          "from": "app:get_user",
+          "to": "external:cachelib.cache.set",
+          "kind": "direct",
+          "irSource": "module/get_user.fn/cachelib_cache_set.call"
+        },
+        {
+          "from": "store:_conn",
+          "to": "external:sqlite3.connect",
+          "kind": "direct",
+          "irSource": "module/_conn.fn/return@0"
+        },
+        {
+          "from": "store:find_user",
+          "to": "store:_conn",
+          "kind": "direct",
+          "irSource": "module/find_user.fn/conn.assign"
+        },
+        {
+          "from": "store:find_user",
+          "to": "dynamic:conn.execute",
+          "kind": "direct",
+          "irSource": "module/find_user.fn/cursor.assign"
+        },
+        {
+          "from": "store:find_user",
+          "to": "dynamic:cursor.fetchone",
+          "kind": "direct",
+          "irSource": "module/find_user.fn/return@0"
+        },
+        {
+          "from": "app:get_user",
+          "to": "store:find_user",
+          "kind": "direct",
+          "irSource": "module/get_user.fn/user.assign"
+        },
+        {
+          "from": "app:get_user",
+          "to": "app:get_user:return@0",
+          "kind": "direct",
+          "irSource": "module/get_user.fn/if@0/return@0"
+        },
+        {
+          "from": "app:get_user.fn/if@0#then",
+          "to": "app:get_user:return@0",
+          "kind": "contains",
+          "irSource": "module/get_user.fn/if@0"
+        },
+        {
+          "from": "external:cachelib.cache.set",
+          "to": "app:get_user:return@1",
+          "kind": "direct",
+          "irSource": "module/get_user.fn/return@0"
+        },
+        {
+          "from": "external:cachelib.cache.get",
+          "to": "app:get_user.fn/if@0#then",
+          "kind": "conditional",
+          "irSource": "module/get_user.fn/if@0"
+        }
+      ],
+      "entryPointId": "app.py:get_user",
+      "filesReached": [
+        "app.py",
+        "store.py"
+      ]
+    }
+  ],
+  "system": {
+    "subsystems": [
+      {
+        "id": "frontend",
+        "kind": "frontend",
+        "label": "React app",
+        "framework": "React",
+        "detectedBy": "package.json:react + 1 component file(s)",
+        "path": "web"
+      },
+      {
+        "id": "backend",
+        "kind": "backend",
+        "label": "Flask backend",
+        "framework": "flask",
+        "endpointRefs": [
+          "app.py:create_charge_route",
+          "app.py:get_user_route",
+          "app.py:list_users_route"
+        ],
+        "fileCount": 4
+      },
+      {
+        "id": "cache",
+        "kind": "cache",
+        "label": "Cache",
+        "evidence": "name-match"
+      },
+      {
+        "id": "db",
+        "kind": "db",
+        "label": "Database",
+        "evidence": "effectKind:db"
+      },
+      {
+        "id": "external_http:api.stripe.com",
+        "kind": "external_http",
+        "label": "api.stripe.com",
+        "evidence": "effectKind:http"
+      },
+      {
+        "id": "library",
+        "kind": "library",
+        "label": "Library / internal"
+      }
+    ],
+    "edges": [
+      {
+        "from": "frontend",
+        "to": "backend:app.py:create_charge_route",
+        "kind": "calls",
+        "confidence": "low",
+        "evidence": "string-scan",
+        "refs": [
+          "web/src/api.jsx:14"
+        ]
+      },
+      {
+        "from": "frontend",
+        "to": "backend:app.py:get_user_route",
+        "kind": "calls",
+        "confidence": "low",
+        "evidence": "string-scan",
+        "refs": [
+          "web/src/api.jsx:10"
+        ]
+      },
+      {
+        "from": "frontend",
+        "to": "backend:app.py:list_users_route",
+        "kind": "calls",
+        "confidence": "low",
+        "evidence": "string-scan",
+        "refs": [
+          "web/src/api.jsx:6"
+        ]
+      },
+      {
+        "from": "backend:app.py:create_charge_route",
+        "to": "external_http:api.stripe.com",
+        "kind": "effect",
+        "effectKind": "http",
+        "confidence": "high",
+        "evidence": "effectKind",
+        "viaThread": "app.py:create_charge_route",
+        "refs": [
+          "payments.py:8"
+        ]
+      },
+      {
+        "from": "backend:app.py:get_user_route",
+        "to": "cache",
+        "kind": "effect",
+        "effectKind": "cache",
+        "confidence": "high",
+        "evidence": "name-match",
+        "viaThread": "app.py:get_user_route",
+        "refs": [
+          "app.py:36",
+          "app.py:40"
+        ]
+      },
+      {
+        "from": "backend:app.py:get_user_route",
+        "to": "db",
+        "kind": "effect",
+        "effectKind": "db",
+        "confidence": "high",
+        "evidence": "effectKind",
+        "viaThread": "app.py:get_user_route",
+        "refs": [
+          "store.py:7",
+          "store.py:20"
+        ]
+      },
+      {
+        "from": "backend:app.py:list_users_route",
+        "to": "db",
+        "kind": "effect",
+        "effectKind": "db",
+        "confidence": "high",
+        "evidence": "effectKind",
+        "viaThread": "app.py:list_users_route",
+        "refs": [
+          "store.py:7",
+          "store.py:13"
+        ]
+      },
+      {
+        "from": "backend:payments.py:charge",
+        "to": "external_http:api.stripe.com",
+        "kind": "effect",
+        "effectKind": "http",
+        "confidence": "high",
+        "evidence": "effectKind",
+        "viaThread": "payments.py:charge",
+        "refs": [
+          "payments.py:8"
+        ]
+      },
+      {
+        "from": "backend:store.py:all_users",
+        "to": "db",
+        "kind": "effect",
+        "effectKind": "db",
+        "confidence": "high",
+        "evidence": "effectKind",
+        "viaThread": "store.py:all_users",
+        "refs": [
+          "store.py:7",
+          "store.py:13"
+        ]
+      },
+      {
+        "from": "backend:store.py:find_user",
+        "to": "db",
+        "kind": "effect",
+        "effectKind": "db",
+        "confidence": "high",
+        "evidence": "effectKind",
+        "viaThread": "store.py:find_user",
+        "refs": [
+          "store.py:7",
+          "store.py:20"
+        ]
+      },
+      {
+        "from": "library:app.py:get_user",
+        "to": "cache",
+        "kind": "effect",
+        "effectKind": "cache",
+        "confidence": "high",
+        "evidence": "name-match",
+        "viaThread": "app.py:get_user",
+        "refs": [
+          "app.py:36",
+          "app.py:40"
+        ]
+      },
+      {
+        "from": "library:app.py:get_user",
+        "to": "db",
+        "kind": "effect",
+        "effectKind": "db",
+        "confidence": "high",
+        "evidence": "effectKind",
+        "viaThread": "app.py:get_user",
+        "refs": [
+          "store.py:7",
+          "store.py:20"
+        ]
+      }
+    ]
+  }
+}

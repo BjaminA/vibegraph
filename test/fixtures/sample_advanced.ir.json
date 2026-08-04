@@ -1,0 +1,750 @@
+{
+  "version": "1.3",
+  "nodes": [
+    {
+      "id": "module/math.import",
+      "type": "import",
+      "parentId": null,
+      "line": 1,
+      "endLine": 1,
+      "col": 0,
+      "endCol": 11,
+      "names": [
+        "math"
+      ]
+    },
+    {
+      "id": "module/os_path.import_from",
+      "type": "import_from",
+      "parentId": null,
+      "line": 2,
+      "endLine": 2,
+      "col": 0,
+      "endCol": 32,
+      "module": "os.path",
+      "names": [
+        "join",
+        "exists"
+      ]
+    },
+    {
+      "id": "module/PI.assign",
+      "type": "assignment",
+      "parentId": null,
+      "line": 4,
+      "endLine": 4,
+      "col": 0,
+      "endCol": 12,
+      "name": "PI",
+      "valueKind": "scalar",
+      "preview": "3.14159"
+    },
+    {
+      "id": "module/greeting.assign",
+      "type": "assignment",
+      "parentId": null,
+      "line": 5,
+      "endLine": 5,
+      "col": 0,
+      "endCol": 18,
+      "name": "greeting",
+      "valueKind": "string",
+      "preview": "\"hello\""
+    },
+    {
+      "id": "module/my_list.assign",
+      "type": "assignment",
+      "parentId": null,
+      "line": 6,
+      "endLine": 6,
+      "col": 0,
+      "endCol": 25,
+      "name": "my_list",
+      "valueKind": "list",
+      "preview": "[1, 2, 3, 4, 5]"
+    },
+    {
+      "id": "module/names.assign",
+      "type": "assignment",
+      "parentId": null,
+      "line": 7,
+      "endLine": 7,
+      "col": 0,
+      "endCol": 35,
+      "name": "names",
+      "valueKind": "list",
+      "preview": "[\"Alice\", \"Bob\", \"Charlie\"]"
+    },
+    {
+      "id": "module/calculate_area.fn",
+      "type": "function_def",
+      "parentId": null,
+      "line": 10,
+      "endLine": 12,
+      "col": 0,
+      "endCol": 25,
+      "name": "calculate_area",
+      "params": [
+        "radius"
+      ],
+      "docstring": "Calculate the area of a circle.",
+      "decorators": [],
+      "isAsync": false,
+      "returns": null
+    },
+    {
+      "id": "module/calculate_area.fn/return@0",
+      "type": "return_stmt",
+      "parentId": "module/calculate_area.fn",
+      "line": 12,
+      "endLine": 12,
+      "col": 4,
+      "endCol": 25,
+      "value": "PI * radius**2"
+    },
+    {
+      "id": "module/greet.fn",
+      "type": "function_def",
+      "parentId": null,
+      "line": 15,
+      "endLine": 20,
+      "col": 0,
+      "endCol": 14,
+      "name": "greet",
+      "params": [
+        "name",
+        "loud=False"
+      ],
+      "docstring": null,
+      "decorators": [],
+      "isAsync": false,
+      "returns": null
+    },
+    {
+      "id": "module/greet.fn/msg.assign",
+      "type": "assignment",
+      "parentId": "module/greet.fn",
+      "line": 16,
+      "endLine": 16,
+      "col": 4,
+      "endCol": 32,
+      "name": "msg",
+      "valueKind": "fstring",
+      "preview": "f\"{greeting}, {name}!\""
+    },
+    {
+      "id": "module/greet.fn/if@0",
+      "type": "if_stmt",
+      "parentId": "module/greet.fn",
+      "line": 17,
+      "endLine": 18,
+      "col": 4,
+      "endCol": 25,
+      "condition": "loud",
+      "hasElse": false
+    },
+    {
+      "id": "module/greet.fn/if@0/msg.assign",
+      "type": "assignment",
+      "parentId": "module/greet.fn/if@0",
+      "line": 18,
+      "endLine": 18,
+      "col": 8,
+      "endCol": 25,
+      "name": "msg",
+      "valueKind": "call",
+      "preview": "msg.upper()",
+      "callTarget": "msg.upper"
+    },
+    {
+      "id": "module/greet.fn/print.call",
+      "type": "call",
+      "parentId": "module/greet.fn",
+      "line": 19,
+      "endLine": 19,
+      "col": 4,
+      "endCol": 14,
+      "funcName": "print",
+      "args": [
+        "msg"
+      ],
+      "isEffect": true
+    },
+    {
+      "id": "module/greet.fn/return@0",
+      "type": "return_stmt",
+      "parentId": "module/greet.fn",
+      "line": 20,
+      "endLine": 20,
+      "col": 4,
+      "endCol": 14,
+      "value": "msg"
+    },
+    {
+      "id": "module/Shape.class",
+      "type": "class_def",
+      "parentId": null,
+      "line": 23,
+      "endLine": 34,
+      "col": 0,
+      "endCol": 33,
+      "name": "Shape",
+      "bases": [],
+      "decorators": [],
+      "docstring": null
+    },
+    {
+      "id": "module/Shape.class/kind.assign",
+      "type": "assignment",
+      "parentId": "module/Shape.class",
+      "line": 24,
+      "endLine": 24,
+      "col": 4,
+      "endCol": 20,
+      "name": "kind",
+      "valueKind": "string",
+      "preview": "\"generic\""
+    },
+    {
+      "id": "module/Shape.class/__init__.fn",
+      "type": "function_def",
+      "parentId": "module/Shape.class",
+      "line": 26,
+      "endLine": 28,
+      "col": 4,
+      "endCol": 22,
+      "name": "__init__",
+      "params": [
+        "self",
+        "name"
+      ],
+      "docstring": null,
+      "decorators": [],
+      "isAsync": false,
+      "returns": null
+    },
+    {
+      "id": "module/Shape.class/__init__.fn/self_name.assign",
+      "type": "assignment",
+      "parentId": "module/Shape.class/__init__.fn",
+      "line": 27,
+      "endLine": 27,
+      "col": 8,
+      "endCol": 24,
+      "name": "self.name",
+      "valueKind": "other",
+      "preview": "name"
+    },
+    {
+      "id": "module/Shape.class/__init__.fn/self_sides.assign",
+      "type": "assignment",
+      "parentId": "module/Shape.class/__init__.fn",
+      "line": 28,
+      "endLine": 28,
+      "col": 8,
+      "endCol": 22,
+      "name": "self.sides",
+      "valueKind": "scalar",
+      "preview": "0"
+    },
+    {
+      "id": "module/Shape.class/describe.fn",
+      "type": "function_def",
+      "parentId": "module/Shape.class",
+      "line": 30,
+      "endLine": 31,
+      "col": 4,
+      "endCol": 53,
+      "name": "describe",
+      "params": [
+        "self"
+      ],
+      "docstring": null,
+      "decorators": [],
+      "isAsync": false,
+      "returns": null
+    },
+    {
+      "id": "module/Shape.class/describe.fn/return@0",
+      "type": "return_stmt",
+      "parentId": "module/Shape.class/describe.fn",
+      "line": 31,
+      "endLine": 31,
+      "col": 8,
+      "endCol": 53,
+      "value": "f\"{self.name} with {self.sides} sides\""
+    },
+    {
+      "id": "module/Shape.class/area.fn",
+      "type": "function_def",
+      "parentId": "module/Shape.class",
+      "line": 33,
+      "endLine": 34,
+      "col": 4,
+      "endCol": 33,
+      "name": "area",
+      "params": [
+        "self"
+      ],
+      "docstring": null,
+      "decorators": [],
+      "isAsync": false,
+      "returns": null
+    },
+    {
+      "id": "module/Shape.class/area.fn/raise@0",
+      "type": "raise_stmt",
+      "parentId": "module/Shape.class/area.fn",
+      "line": 34,
+      "endLine": 34,
+      "col": 8,
+      "endCol": 33,
+      "exc": "NotImplementedError"
+    },
+    {
+      "id": "module/Circle.class",
+      "type": "class_def",
+      "parentId": null,
+      "line": 37,
+      "endLine": 43,
+      "col": 0,
+      "endCol": 42,
+      "name": "Circle",
+      "bases": [
+        "Shape"
+      ],
+      "decorators": [],
+      "docstring": null
+    },
+    {
+      "id": "module/Circle.class/__init__.fn",
+      "type": "function_def",
+      "parentId": "module/Circle.class",
+      "line": 38,
+      "endLine": 40,
+      "col": 4,
+      "endCol": 28,
+      "name": "__init__",
+      "params": [
+        "self",
+        "radius"
+      ],
+      "docstring": null,
+      "decorators": [],
+      "isAsync": false,
+      "returns": null
+    },
+    {
+      "id": "module/Circle.class/__init__.fn/super___init__.call",
+      "type": "call",
+      "parentId": "module/Circle.class/__init__.fn",
+      "line": 39,
+      "endLine": 39,
+      "col": 8,
+      "endCol": 34,
+      "funcName": "super().__init__",
+      "args": [
+        "\"circle\""
+      ],
+      "isEffect": false,
+      "nestsInnerCalls": true,
+      "nestExtracted": false
+    },
+    {
+      "id": "module/Circle.class/__init__.fn/self_radius.assign",
+      "type": "assignment",
+      "parentId": "module/Circle.class/__init__.fn",
+      "line": 40,
+      "endLine": 40,
+      "col": 8,
+      "endCol": 28,
+      "name": "self.radius",
+      "valueKind": "other",
+      "preview": "radius"
+    },
+    {
+      "id": "module/Circle.class/area.fn",
+      "type": "function_def",
+      "parentId": "module/Circle.class",
+      "line": 42,
+      "endLine": 43,
+      "col": 4,
+      "endCol": 42,
+      "name": "area",
+      "params": [
+        "self"
+      ],
+      "docstring": null,
+      "decorators": [],
+      "isAsync": false,
+      "returns": null
+    },
+    {
+      "id": "module/Circle.class/area.fn/return@0",
+      "type": "return_stmt",
+      "parentId": "module/Circle.class/area.fn",
+      "line": 43,
+      "endLine": 43,
+      "col": 8,
+      "endCol": 42,
+      "value": "calculate_area(self.radius)",
+      "callTarget": "calculate_area"
+    },
+    {
+      "id": "module/for@0",
+      "type": "for_loop",
+      "parentId": null,
+      "line": 46,
+      "endLine": 47,
+      "col": 0,
+      "endCol": 15,
+      "target": "item",
+      "iterName": "my_list"
+    },
+    {
+      "id": "module/for@0/print.call",
+      "type": "call",
+      "parentId": "module/for@0",
+      "line": 47,
+      "endLine": 47,
+      "col": 4,
+      "endCol": 15,
+      "funcName": "print",
+      "args": [
+        "item"
+      ],
+      "isEffect": true
+    },
+    {
+      "id": "module/for@1",
+      "type": "for_loop",
+      "parentId": null,
+      "line": 49,
+      "endLine": 50,
+      "col": 0,
+      "endCol": 15,
+      "target": "name",
+      "iterName": "names"
+    },
+    {
+      "id": "module/for@1/greet.call",
+      "type": "call",
+      "parentId": "module/for@1",
+      "line": 50,
+      "endLine": 50,
+      "col": 4,
+      "endCol": 15,
+      "funcName": "greet",
+      "args": [
+        "name"
+      ],
+      "isEffect": false
+    },
+    {
+      "id": "module/result.assign",
+      "type": "assignment",
+      "parentId": null,
+      "line": 52,
+      "endLine": 52,
+      "col": 0,
+      "endCol": 27,
+      "name": "result",
+      "valueKind": "call",
+      "preview": "calculate_area(10)",
+      "callTarget": "calculate_area",
+      "args": [
+        "10"
+      ]
+    },
+    {
+      "id": "module/print.call",
+      "type": "call",
+      "parentId": null,
+      "line": 53,
+      "endLine": 53,
+      "col": 0,
+      "endCol": 13,
+      "funcName": "print",
+      "args": [
+        "result"
+      ],
+      "isEffect": true
+    }
+  ],
+  "edges": [
+    {
+      "source": "module/calculate_area.fn",
+      "target": "module/calculate_area.fn/return@0",
+      "type": "contains"
+    },
+    {
+      "source": "module/greet.fn",
+      "target": "module/greet.fn/msg.assign",
+      "type": "contains"
+    },
+    {
+      "source": "module/greet.fn",
+      "target": "module/greet.fn/if@0",
+      "type": "contains"
+    },
+    {
+      "source": "module/greet.fn/if@0",
+      "target": "module/greet.fn/if@0/msg.assign",
+      "type": "contains"
+    },
+    {
+      "source": "module/greet.fn",
+      "target": "module/greet.fn/print.call",
+      "type": "contains"
+    },
+    {
+      "source": "module/greet.fn",
+      "target": "module/greet.fn/return@0",
+      "type": "contains"
+    },
+    {
+      "source": "module/Shape.class",
+      "target": "module/Shape.class/kind.assign",
+      "type": "contains"
+    },
+    {
+      "source": "module/Shape.class",
+      "target": "module/Shape.class/__init__.fn",
+      "type": "contains"
+    },
+    {
+      "source": "module/Shape.class/__init__.fn",
+      "target": "module/Shape.class/__init__.fn/self_name.assign",
+      "type": "contains"
+    },
+    {
+      "source": "module/Shape.class/__init__.fn",
+      "target": "module/Shape.class/__init__.fn/self_sides.assign",
+      "type": "contains"
+    },
+    {
+      "source": "module/Shape.class",
+      "target": "module/Shape.class/describe.fn",
+      "type": "contains"
+    },
+    {
+      "source": "module/Shape.class/describe.fn",
+      "target": "module/Shape.class/describe.fn/return@0",
+      "type": "contains"
+    },
+    {
+      "source": "module/Shape.class",
+      "target": "module/Shape.class/area.fn",
+      "type": "contains"
+    },
+    {
+      "source": "module/Shape.class/area.fn",
+      "target": "module/Shape.class/area.fn/raise@0",
+      "type": "contains"
+    },
+    {
+      "source": "module/Circle.class",
+      "target": "module/Shape.class",
+      "type": "reference"
+    },
+    {
+      "source": "module/Circle.class",
+      "target": "module/Circle.class/__init__.fn",
+      "type": "contains"
+    },
+    {
+      "source": "module/Circle.class/__init__.fn",
+      "target": "module/Circle.class/__init__.fn/super___init__.call",
+      "type": "contains"
+    },
+    {
+      "source": "module/Circle.class/__init__.fn",
+      "target": "module/Circle.class/__init__.fn/self_radius.assign",
+      "type": "contains"
+    },
+    {
+      "source": "module/Circle.class",
+      "target": "module/Circle.class/area.fn",
+      "type": "contains"
+    },
+    {
+      "source": "module/Circle.class/area.fn",
+      "target": "module/Circle.class/area.fn/return@0",
+      "type": "contains"
+    },
+    {
+      "source": "module/Circle.class/area.fn/return@0",
+      "target": "module/calculate_area.fn",
+      "type": "reference"
+    },
+    {
+      "source": "module/my_list.assign",
+      "target": "module/for@0",
+      "type": "data"
+    },
+    {
+      "source": "module/for@0",
+      "target": "module/for@0/print.call",
+      "type": "contains"
+    },
+    {
+      "source": "module/names.assign",
+      "target": "module/for@1",
+      "type": "data"
+    },
+    {
+      "source": "module/for@1",
+      "target": "module/for@1/greet.call",
+      "type": "contains"
+    },
+    {
+      "source": "module/for@1/greet.call",
+      "target": "module/greet.fn",
+      "type": "reference"
+    },
+    {
+      "source": "module/result.assign",
+      "target": "module/calculate_area.fn",
+      "type": "reference"
+    }
+  ],
+  "symbolIndex": [
+    {
+      "sym": "function:calculate_area",
+      "kind": "function",
+      "name": "calculate_area",
+      "scope": "module",
+      "loc": {
+        "line": 10,
+        "endLine": 12,
+        "col": 0,
+        "endCol": 25
+      },
+      "signature": "def calculate_area(radius)",
+      "docstring": "Calculate the area of a circle.",
+      "source": "\n\ndef calculate_area(radius):\n    \"\"\"Calculate the area of a circle.\"\"\"\n    return PI * radius**2\n"
+    },
+    {
+      "sym": "function:greet",
+      "kind": "function",
+      "name": "greet",
+      "scope": "module",
+      "loc": {
+        "line": 15,
+        "endLine": 20,
+        "col": 0,
+        "endCol": 14
+      },
+      "signature": "def greet(name, loud=False)",
+      "docstring": null,
+      "source": "\n\ndef greet(name, loud=False):\n    msg = f\"{greeting}, {name}!\"\n    if loud:\n        msg = msg.upper()\n    print(msg)\n    return msg\n"
+    },
+    {
+      "sym": "class:Shape",
+      "kind": "class",
+      "name": "Shape",
+      "scope": "module",
+      "loc": {
+        "line": 23,
+        "endLine": 34,
+        "col": 0,
+        "endCol": 33
+      },
+      "bases": [],
+      "docstring": null,
+      "source": "\n\nclass Shape:\n    kind = \"generic\"\n\n    def __init__(self, name):\n        self.name = name\n        self.sides = 0\n\n    def describe(self):\n        return f\"{self.name} with {self.sides} sides\"\n\n    def area(self):\n        raise NotImplementedError\n"
+    },
+    {
+      "sym": "function:__init__",
+      "kind": "function",
+      "name": "__init__",
+      "scope": "module/Shape.class",
+      "loc": {
+        "line": 26,
+        "endLine": 28,
+        "col": 4,
+        "endCol": 22
+      },
+      "signature": "def __init__(self, name)",
+      "docstring": null,
+      "source": "\ndef __init__(self, name):\n    self.name = name\n    self.sides = 0\n"
+    },
+    {
+      "sym": "function:describe",
+      "kind": "function",
+      "name": "describe",
+      "scope": "module/Shape.class",
+      "loc": {
+        "line": 30,
+        "endLine": 31,
+        "col": 4,
+        "endCol": 53
+      },
+      "signature": "def describe(self)",
+      "docstring": null,
+      "source": "\ndef describe(self):\n    return f\"{self.name} with {self.sides} sides\"\n"
+    },
+    {
+      "sym": "function:area",
+      "kind": "function",
+      "name": "area",
+      "scope": "module/Shape.class",
+      "loc": {
+        "line": 33,
+        "endLine": 34,
+        "col": 4,
+        "endCol": 33
+      },
+      "signature": "def area(self)",
+      "docstring": null,
+      "source": "\ndef area(self):\n    raise NotImplementedError\n"
+    },
+    {
+      "sym": "class:Circle",
+      "kind": "class",
+      "name": "Circle",
+      "scope": "module",
+      "loc": {
+        "line": 37,
+        "endLine": 43,
+        "col": 0,
+        "endCol": 42
+      },
+      "bases": [
+        "Shape"
+      ],
+      "docstring": null,
+      "source": "\n\nclass Circle(Shape):\n    def __init__(self, radius):\n        super().__init__(\"circle\")\n        self.radius = radius\n\n    def area(self):\n        return calculate_area(self.radius)\n"
+    },
+    {
+      "sym": "function:__init__",
+      "kind": "function",
+      "name": "__init__",
+      "scope": "module/Circle.class",
+      "loc": {
+        "line": 38,
+        "endLine": 40,
+        "col": 4,
+        "endCol": 28
+      },
+      "signature": "def __init__(self, radius)",
+      "docstring": null,
+      "source": "def __init__(self, radius):\n    super().__init__(\"circle\")\n    self.radius = radius\n"
+    },
+    {
+      "sym": "function:area",
+      "kind": "function",
+      "name": "area",
+      "scope": "module/Circle.class",
+      "loc": {
+        "line": 42,
+        "endLine": 43,
+        "col": 4,
+        "endCol": 42
+      },
+      "signature": "def area(self)",
+      "docstring": null,
+      "source": "\ndef area(self):\n    return calculate_area(self.radius)\n"
+    }
+  ]
+}

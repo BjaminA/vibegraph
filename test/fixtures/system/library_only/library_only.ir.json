@@ -1,0 +1,2763 @@
+{
+  "model.py": {
+    "version": "1.3",
+    "nodes": [
+      {
+        "id": "module/__future__.import_from",
+        "type": "import_from",
+        "parentId": null,
+        "line": 8,
+        "endLine": 8,
+        "col": 0,
+        "endCol": 34,
+        "module": "__future__",
+        "names": [
+          "annotations"
+        ]
+      },
+      {
+        "id": "module/torch.import",
+        "type": "import",
+        "parentId": null,
+        "line": 10,
+        "endLine": 10,
+        "col": 0,
+        "endCol": 12,
+        "names": [
+          "torch"
+        ]
+      },
+      {
+        "id": "module/torch.nn.import",
+        "type": "import",
+        "parentId": null,
+        "line": 11,
+        "endLine": 11,
+        "col": 0,
+        "endCol": 21,
+        "names": [
+          "torch.nn as nn"
+        ]
+      },
+      {
+        "id": "module/torch.nn.functional.import",
+        "type": "import",
+        "parentId": null,
+        "line": 12,
+        "endLine": 12,
+        "col": 0,
+        "endCol": 31,
+        "names": [
+          "torch.nn.functional as F"
+        ]
+      },
+      {
+        "id": "module/CNNClassifier.class",
+        "type": "class_def",
+        "parentId": null,
+        "line": 15,
+        "endLine": 58,
+        "col": 0,
+        "endCol": 26,
+        "name": "CNNClassifier",
+        "bases": [
+          "nn.Module"
+        ],
+        "decorators": [],
+        "docstring": "Two conv layers -> two linear layers -> per-class logits.\n\n    The spatial dimensions are halved by a 2x2 max-pool after each conv,\n    so the flattened feature size is derived from ``image_size`` and known\n    at construction time (no lazy layers)."
+      },
+      {
+        "id": "module/CNNClassifier.class/__init__.fn",
+        "type": "function_def",
+        "parentId": "module/CNNClassifier.class",
+        "line": 23,
+        "endLine": 50,
+        "col": 4,
+        "endCol": 58,
+        "name": "__init__",
+        "params": [
+          "self",
+          "in_channels=3",
+          "num_classes=10",
+          "image_size=32",
+          "conv1_channels=16",
+          "conv2_channels=32",
+          "hidden_features=128"
+        ],
+        "docstring": null,
+        "decorators": [],
+        "isAsync": false,
+        "returns": "None"
+      },
+      {
+        "id": "module/CNNClassifier.class/__init__.fn/super___init__.call",
+        "type": "call",
+        "parentId": "module/CNNClassifier.class/__init__.fn",
+        "line": 32,
+        "endLine": 32,
+        "col": 8,
+        "endCol": 26,
+        "funcName": "super().__init__",
+        "args": [],
+        "isEffect": false,
+        "nestsInnerCalls": true,
+        "nestExtracted": false
+      },
+      {
+        "id": "module/CNNClassifier.class/__init__.fn/if@0",
+        "type": "if_stmt",
+        "parentId": "module/CNNClassifier.class/__init__.fn",
+        "line": 34,
+        "endLine": 37,
+        "col": 8,
+        "endCol": 13,
+        "condition": "image_size % 4 != 0",
+        "hasElse": false
+      },
+      {
+        "id": "module/CNNClassifier.class/__init__.fn/if@0/raise@0",
+        "type": "raise_stmt",
+        "parentId": "module/CNNClassifier.class/__init__.fn/if@0",
+        "line": 35,
+        "endLine": 37,
+        "col": 12,
+        "endCol": 13,
+        "exc": "ValueError(\n    f\"image_size must be div",
+        "callTarget": "ValueError"
+      },
+      {
+        "id": "module/CNNClassifier.class/__init__.fn/self_conv1.assign",
+        "type": "assignment",
+        "parentId": "module/CNNClassifier.class/__init__.fn",
+        "line": 40,
+        "endLine": 40,
+        "col": 8,
+        "endCol": 85,
+        "name": "self.conv1",
+        "valueKind": "call",
+        "preview": "nn.Conv2d(in_channels, conv1_channels, kernel_size=3, padding=1)",
+        "callTarget": "nn.Conv2d",
+        "args": [
+          "in_channels",
+          "conv1_channels"
+        ],
+        "kwargs": [
+          {
+            "name": "kernel_size",
+            "value": "3"
+          },
+          {
+            "name": "padding",
+            "value": "1"
+          }
+        ]
+      },
+      {
+        "id": "module/CNNClassifier.class/__init__.fn/self_conv2.assign",
+        "type": "assignment",
+        "parentId": "module/CNNClassifier.class/__init__.fn",
+        "line": 41,
+        "endLine": 41,
+        "col": 8,
+        "endCol": 88,
+        "name": "self.conv2",
+        "valueKind": "call",
+        "preview": "nn.Conv2d(conv1_channels, conv2_channels, kernel_size=3, padding=1)",
+        "callTarget": "nn.Conv2d",
+        "args": [
+          "conv1_channels",
+          "conv2_channels"
+        ],
+        "kwargs": [
+          {
+            "name": "kernel_size",
+            "value": "3"
+          },
+          {
+            "name": "padding",
+            "value": "1"
+          }
+        ]
+      },
+      {
+        "id": "module/CNNClassifier.class/__init__.fn/self_pool.assign",
+        "type": "assignment",
+        "parentId": "module/CNNClassifier.class/__init__.fn",
+        "line": 42,
+        "endLine": 42,
+        "col": 8,
+        "endCol": 57,
+        "name": "self.pool",
+        "valueKind": "call",
+        "preview": "nn.MaxPool2d(kernel_size=2, stride=2)",
+        "callTarget": "nn.MaxPool2d",
+        "kwargs": [
+          {
+            "name": "kernel_size",
+            "value": "2"
+          },
+          {
+            "name": "stride",
+            "value": "2"
+          }
+        ]
+      },
+      {
+        "id": "module/CNNClassifier.class/__init__.fn/pooled.assign",
+        "type": "assignment",
+        "parentId": "module/CNNClassifier.class/__init__.fn",
+        "line": 45,
+        "endLine": 45,
+        "col": 8,
+        "endCol": 32,
+        "name": "pooled",
+        "valueKind": "other",
+        "preview": "image_size // 4"
+      },
+      {
+        "id": "module/CNNClassifier.class/__init__.fn/self__flat_features.assign",
+        "type": "assignment",
+        "parentId": "module/CNNClassifier.class/__init__.fn",
+        "line": 46,
+        "endLine": 46,
+        "col": 8,
+        "endCol": 62,
+        "name": "self._flat_features",
+        "valueKind": "other",
+        "preview": "conv2_channels * pooled * pooled"
+      },
+      {
+        "id": "module/CNNClassifier.class/__init__.fn/self_fc1.assign",
+        "type": "assignment",
+        "parentId": "module/CNNClassifier.class/__init__.fn",
+        "line": 49,
+        "endLine": 49,
+        "col": 8,
+        "endCol": 66,
+        "name": "self.fc1",
+        "valueKind": "call",
+        "preview": "nn.Linear(self._flat_features, hidden_features)",
+        "callTarget": "nn.Linear",
+        "args": [
+          "self._flat_features",
+          "hidden_features"
+        ]
+      },
+      {
+        "id": "module/CNNClassifier.class/__init__.fn/self_fc2.assign",
+        "type": "assignment",
+        "parentId": "module/CNNClassifier.class/__init__.fn",
+        "line": 50,
+        "endLine": 50,
+        "col": 8,
+        "endCol": 58,
+        "name": "self.fc2",
+        "valueKind": "call",
+        "preview": "nn.Linear(hidden_features, num_classes)",
+        "callTarget": "nn.Linear",
+        "args": [
+          "hidden_features",
+          "num_classes"
+        ]
+      },
+      {
+        "id": "module/CNNClassifier.class/forward.fn",
+        "type": "function_def",
+        "parentId": "module/CNNClassifier.class",
+        "line": 52,
+        "endLine": 58,
+        "col": 4,
+        "endCol": 26,
+        "name": "forward",
+        "params": [
+          "self",
+          "x"
+        ],
+        "docstring": "Map an image batch ``(N, C, H, W)`` to logits ``(N, num_classes)``.",
+        "decorators": [],
+        "isAsync": false,
+        "returns": "torch.Tensor"
+      },
+      {
+        "id": "module/CNNClassifier.class/forward.fn/x.assign",
+        "type": "assignment",
+        "parentId": "module/CNNClassifier.class/forward.fn",
+        "line": 54,
+        "endLine": 54,
+        "col": 8,
+        "endCol": 44,
+        "name": "x",
+        "valueKind": "call",
+        "preview": "self.pool(F.relu(self.conv1(x)))",
+        "callTarget": "self.pool",
+        "args": [
+          "F.relu(self.conv1(x))"
+        ],
+        "nestsInnerCalls": true,
+        "nestExtracted": true
+      },
+      {
+        "id": "module/CNNClassifier.class/forward.fn/x.assign/F_relu.call",
+        "type": "call",
+        "parentId": "module/CNNClassifier.class/forward.fn/x.assign",
+        "line": 54,
+        "endLine": 54,
+        "col": 22,
+        "endCol": 43,
+        "funcName": "F.relu",
+        "args": [
+          "self.conv1(x)"
+        ],
+        "isEffect": false,
+        "callTarget": "F.relu",
+        "preview": "F.relu(self.conv1(x))",
+        "nested": true,
+        "nestedDepth": 1
+      },
+      {
+        "id": "module/CNNClassifier.class/forward.fn/x.assign/F_relu.call/self_conv1.call",
+        "type": "call",
+        "parentId": "module/CNNClassifier.class/forward.fn/x.assign/F_relu.call",
+        "line": 54,
+        "endLine": 54,
+        "col": 29,
+        "endCol": 42,
+        "funcName": "self.conv1",
+        "args": [
+          "x"
+        ],
+        "isEffect": false,
+        "callTarget": "self.conv1",
+        "preview": "self.conv1(x)",
+        "nested": true,
+        "nestedDepth": 2
+      },
+      {
+        "id": "module/CNNClassifier.class/forward.fn/x.assign@1",
+        "type": "assignment",
+        "parentId": "module/CNNClassifier.class/forward.fn",
+        "line": 55,
+        "endLine": 55,
+        "col": 8,
+        "endCol": 44,
+        "name": "x",
+        "valueKind": "call",
+        "preview": "self.pool(F.relu(self.conv2(x)))",
+        "callTarget": "self.pool",
+        "args": [
+          "F.relu(self.conv2(x))"
+        ],
+        "nestsInnerCalls": true,
+        "nestExtracted": true
+      },
+      {
+        "id": "module/CNNClassifier.class/forward.fn/x.assign@1/F_relu.call",
+        "type": "call",
+        "parentId": "module/CNNClassifier.class/forward.fn/x.assign@1",
+        "line": 55,
+        "endLine": 55,
+        "col": 22,
+        "endCol": 43,
+        "funcName": "F.relu",
+        "args": [
+          "self.conv2(x)"
+        ],
+        "isEffect": false,
+        "callTarget": "F.relu",
+        "preview": "F.relu(self.conv2(x))",
+        "nested": true,
+        "nestedDepth": 1
+      },
+      {
+        "id": "module/CNNClassifier.class/forward.fn/x.assign@1/F_relu.call/self_conv2.call",
+        "type": "call",
+        "parentId": "module/CNNClassifier.class/forward.fn/x.assign@1/F_relu.call",
+        "line": 55,
+        "endLine": 55,
+        "col": 29,
+        "endCol": 42,
+        "funcName": "self.conv2",
+        "args": [
+          "x"
+        ],
+        "isEffect": false,
+        "callTarget": "self.conv2",
+        "preview": "self.conv2(x)",
+        "nested": true,
+        "nestedDepth": 2
+      },
+      {
+        "id": "module/CNNClassifier.class/forward.fn/x.assign@2",
+        "type": "assignment",
+        "parentId": "module/CNNClassifier.class/forward.fn",
+        "line": 56,
+        "endLine": 56,
+        "col": 8,
+        "endCol": 41,
+        "name": "x",
+        "valueKind": "call",
+        "preview": "torch.flatten(x, start_dim=1)",
+        "callTarget": "torch.flatten",
+        "args": [
+          "x"
+        ],
+        "kwargs": [
+          {
+            "name": "start_dim",
+            "value": "1"
+          }
+        ]
+      },
+      {
+        "id": "module/CNNClassifier.class/forward.fn/x.assign@3",
+        "type": "assignment",
+        "parentId": "module/CNNClassifier.class/forward.fn",
+        "line": 57,
+        "endLine": 57,
+        "col": 8,
+        "endCol": 31,
+        "name": "x",
+        "valueKind": "call",
+        "preview": "F.relu(self.fc1(x))",
+        "callTarget": "F.relu",
+        "args": [
+          "self.fc1(x)"
+        ],
+        "nestsInnerCalls": true,
+        "nestExtracted": true
+      },
+      {
+        "id": "module/CNNClassifier.class/forward.fn/x.assign@3/self_fc1.call",
+        "type": "call",
+        "parentId": "module/CNNClassifier.class/forward.fn/x.assign@3",
+        "line": 57,
+        "endLine": 57,
+        "col": 19,
+        "endCol": 30,
+        "funcName": "self.fc1",
+        "args": [
+          "x"
+        ],
+        "isEffect": false,
+        "callTarget": "self.fc1",
+        "preview": "self.fc1(x)",
+        "nested": true,
+        "nestedDepth": 1
+      },
+      {
+        "id": "module/CNNClassifier.class/forward.fn/return@0",
+        "type": "return_stmt",
+        "parentId": "module/CNNClassifier.class/forward.fn",
+        "line": 58,
+        "endLine": 58,
+        "col": 8,
+        "endCol": 26,
+        "value": "self.fc2(x)",
+        "callTarget": "self.fc2"
+      }
+    ],
+    "edges": [
+      {
+        "source": "module/CNNClassifier.class",
+        "target": "module/CNNClassifier.class/__init__.fn",
+        "type": "contains"
+      },
+      {
+        "source": "module/CNNClassifier.class/__init__.fn",
+        "target": "module/CNNClassifier.class/__init__.fn/super___init__.call",
+        "type": "contains"
+      },
+      {
+        "source": "module/CNNClassifier.class/__init__.fn",
+        "target": "module/CNNClassifier.class/__init__.fn/if@0",
+        "type": "contains"
+      },
+      {
+        "source": "module/CNNClassifier.class/__init__.fn/if@0",
+        "target": "module/CNNClassifier.class/__init__.fn/if@0/raise@0",
+        "type": "contains"
+      },
+      {
+        "source": "module/CNNClassifier.class/__init__.fn",
+        "target": "module/CNNClassifier.class/__init__.fn/self_conv1.assign",
+        "type": "contains"
+      },
+      {
+        "source": "module/CNNClassifier.class/__init__.fn",
+        "target": "module/CNNClassifier.class/__init__.fn/self_conv2.assign",
+        "type": "contains"
+      },
+      {
+        "source": "module/CNNClassifier.class/__init__.fn",
+        "target": "module/CNNClassifier.class/__init__.fn/self_pool.assign",
+        "type": "contains"
+      },
+      {
+        "source": "module/CNNClassifier.class/__init__.fn",
+        "target": "module/CNNClassifier.class/__init__.fn/pooled.assign",
+        "type": "contains"
+      },
+      {
+        "source": "module/CNNClassifier.class/__init__.fn",
+        "target": "module/CNNClassifier.class/__init__.fn/self__flat_features.assign",
+        "type": "contains"
+      },
+      {
+        "source": "module/CNNClassifier.class/__init__.fn",
+        "target": "module/CNNClassifier.class/__init__.fn/self_fc1.assign",
+        "type": "contains"
+      },
+      {
+        "source": "module/CNNClassifier.class/__init__.fn",
+        "target": "module/CNNClassifier.class/__init__.fn/self_fc2.assign",
+        "type": "contains"
+      },
+      {
+        "source": "module/CNNClassifier.class",
+        "target": "module/CNNClassifier.class/forward.fn",
+        "type": "contains"
+      },
+      {
+        "source": "module/CNNClassifier.class/forward.fn",
+        "target": "module/CNNClassifier.class/forward.fn/x.assign",
+        "type": "contains"
+      },
+      {
+        "source": "module/CNNClassifier.class/forward.fn/x.assign",
+        "target": "module/CNNClassifier.class/forward.fn/x.assign/F_relu.call",
+        "type": "contains"
+      },
+      {
+        "source": "module/CNNClassifier.class/forward.fn/x.assign/F_relu.call",
+        "target": "module/CNNClassifier.class/forward.fn/x.assign/F_relu.call/self_conv1.call",
+        "type": "contains"
+      },
+      {
+        "source": "module/CNNClassifier.class/forward.fn",
+        "target": "module/CNNClassifier.class/forward.fn/x.assign@1",
+        "type": "contains"
+      },
+      {
+        "source": "module/CNNClassifier.class/forward.fn/x.assign@1",
+        "target": "module/CNNClassifier.class/forward.fn/x.assign@1/F_relu.call",
+        "type": "contains"
+      },
+      {
+        "source": "module/CNNClassifier.class/forward.fn/x.assign@1/F_relu.call",
+        "target": "module/CNNClassifier.class/forward.fn/x.assign@1/F_relu.call/self_conv2.call",
+        "type": "contains"
+      },
+      {
+        "source": "module/CNNClassifier.class/forward.fn",
+        "target": "module/CNNClassifier.class/forward.fn/x.assign@2",
+        "type": "contains"
+      },
+      {
+        "source": "module/CNNClassifier.class/forward.fn",
+        "target": "module/CNNClassifier.class/forward.fn/x.assign@3",
+        "type": "contains"
+      },
+      {
+        "source": "module/CNNClassifier.class/forward.fn/x.assign@3",
+        "target": "module/CNNClassifier.class/forward.fn/x.assign@3/self_fc1.call",
+        "type": "contains"
+      },
+      {
+        "source": "module/CNNClassifier.class/forward.fn",
+        "target": "module/CNNClassifier.class/forward.fn/return@0",
+        "type": "contains"
+      }
+    ],
+    "symbolIndex": [
+      {
+        "sym": "class:CNNClassifier",
+        "kind": "class",
+        "name": "CNNClassifier",
+        "scope": "module",
+        "loc": {
+          "line": 15,
+          "endLine": 58,
+          "col": 0,
+          "endCol": 26
+        },
+        "bases": [
+          "nn.Module"
+        ],
+        "docstring": "Two conv layers -> two linear layers -> per-class logits.\n\n    The spatial dimensions are halved by a 2x2 max-pool after each conv,\n    so the flattened feature size is derived from ``image_size`` and known\n    at construction time (no lazy layers).",
+        "source": "\n\nclass CNNClassifier(nn.Module):\n    \"\"\"Two conv layers -> two linear layers -> per-class logits.\n\n    The spatial dimensions are halved by a 2x2 max-pool after each conv,\n    so the flattened feature size is derived from ``image_size`` and known\n    at construction time (no lazy layers).\n    \"\"\"\n\n    def __init__(\n        self,\n        in_channels: int = 3,\n        num_classes: int = 10,\n        image_size: int = 32,\n        conv1_channels: int = 16,\n        conv2_channels: int = 32,\n        hidden_features: int = 128,\n    ) -> None:\n        super().__init__()\n\n        if image_size % 4 != 0:\n            raise ValueError(\n                f\"image_size must be divisible by 4 (two 2x2 pools), got {image_size}\"\n            )\n\n        # --- convolutional stack (2 layers, each followed by a 2x2 pool) ---\n        self.conv1 = nn.Conv2d(in_channels, conv1_channels, kernel_size=3, padding=1)\n        self.conv2 = nn.Conv2d(conv1_channels, conv2_channels, kernel_size=3, padding=1)\n        self.pool = nn.MaxPool2d(kernel_size=2, stride=2)\n\n        # after two 2x2 pools the H,W are quartered\n        pooled = image_size // 4\n        self._flat_features = conv2_channels * pooled * pooled\n\n        # --- fully-connected stack (2 layers) ---\n        self.fc1 = nn.Linear(self._flat_features, hidden_features)\n        self.fc2 = nn.Linear(hidden_features, num_classes)\n\n    def forward(self, x: torch.Tensor) -> torch.Tensor:\n        \"\"\"Map an image batch ``(N, C, H, W)`` to logits ``(N, num_classes)``.\"\"\"\n        x = self.pool(F.relu(self.conv1(x)))\n        x = self.pool(F.relu(self.conv2(x)))\n        x = torch.flatten(x, start_dim=1)\n        x = F.relu(self.fc1(x))\n        return self.fc2(x)\n"
+      },
+      {
+        "sym": "function:__init__",
+        "kind": "function",
+        "name": "__init__",
+        "scope": "module/CNNClassifier.class",
+        "loc": {
+          "line": 23,
+          "endLine": 50,
+          "col": 4,
+          "endCol": 58
+        },
+        "signature": "def __init__(self, in_channels=3, num_classes=10, image_size=32, conv1_channels=16, conv2_channels=32, hidden_features=128)",
+        "docstring": null,
+        "source": "\ndef __init__(\n    self,\n    in_channels: int = 3,\n    num_classes: int = 10,\n    image_size: int = 32,\n    conv1_channels: int = 16,\n    conv2_channels: int = 32,\n    hidden_features: int = 128,\n) -> None:\n    super().__init__()\n\n    if image_size % 4 != 0:\n        raise ValueError(\n            f\"image_size must be divisible by 4 (two 2x2 pools), got {image_size}\"\n        )\n\n    # --- convolutional stack (2 layers, each followed by a 2x2 pool) ---\n    self.conv1 = nn.Conv2d(in_channels, conv1_channels, kernel_size=3, padding=1)\n    self.conv2 = nn.Conv2d(conv1_channels, conv2_channels, kernel_size=3, padding=1)\n    self.pool = nn.MaxPool2d(kernel_size=2, stride=2)\n\n    # after two 2x2 pools the H,W are quartered\n    pooled = image_size // 4\n    self._flat_features = conv2_channels * pooled * pooled\n\n    # --- fully-connected stack (2 layers) ---\n    self.fc1 = nn.Linear(self._flat_features, hidden_features)\n    self.fc2 = nn.Linear(hidden_features, num_classes)\n"
+      },
+      {
+        "sym": "function:forward",
+        "kind": "function",
+        "name": "forward",
+        "scope": "module/CNNClassifier.class",
+        "loc": {
+          "line": 52,
+          "endLine": 58,
+          "col": 4,
+          "endCol": 26
+        },
+        "signature": "def forward(self, x)",
+        "docstring": "Map an image batch ``(N, C, H, W)`` to logits ``(N, num_classes)``.",
+        "source": "\ndef forward(self, x: torch.Tensor) -> torch.Tensor:\n    \"\"\"Map an image batch ``(N, C, H, W)`` to logits ``(N, num_classes)``.\"\"\"\n    x = self.pool(F.relu(self.conv1(x)))\n    x = self.pool(F.relu(self.conv2(x)))\n    x = torch.flatten(x, start_dim=1)\n    x = F.relu(self.fc1(x))\n    return self.fc2(x)\n"
+      }
+    ],
+    "modulePath": "model"
+  },
+  "synthetic_data.py": {
+    "version": "1.3",
+    "nodes": [
+      {
+        "id": "module/__future__.import_from",
+        "type": "import_from",
+        "parentId": null,
+        "line": 8,
+        "endLine": 8,
+        "col": 0,
+        "endCol": 34,
+        "module": "__future__",
+        "names": [
+          "annotations"
+        ]
+      },
+      {
+        "id": "module/typing.import_from",
+        "type": "import_from",
+        "parentId": null,
+        "line": 10,
+        "endLine": 10,
+        "col": 0,
+        "endCol": 24,
+        "module": "typing",
+        "names": [
+          "Tuple"
+        ]
+      },
+      {
+        "id": "module/torch.import",
+        "type": "import",
+        "parentId": null,
+        "line": 12,
+        "endLine": 12,
+        "col": 0,
+        "endCol": 12,
+        "names": [
+          "torch"
+        ]
+      },
+      {
+        "id": "module/generate_batch.fn",
+        "type": "function_def",
+        "parentId": null,
+        "line": 15,
+        "endLine": 49,
+        "col": 0,
+        "endCol": 25,
+        "name": "generate_batch",
+        "params": [
+          "batch_size=32",
+          "channels=3",
+          "height=28",
+          "width=28",
+          "num_classes=10",
+          "generator=None"
+        ],
+        "docstring": "Generate one batch of random images and matching class labels.\n\n    Returns a tuple ``(images, labels)`` where ``images`` is a float tensor of\n    shape ``(batch_size, channels, height, width)`` with values in ``[0, 1)``\n    and ``labels`` is a 1-D int64 tensor of shape ``(batch_size,)`` with each\n    entry in ``[0, num_classes)``.\n\n    An optional ``generator`` makes the draw reproducible without touching\n    global RNG state.",
+        "decorators": [],
+        "isAsync": false,
+        "returns": "Tuple[torch.Tensor, torch.Tensor]"
+      },
+      {
+        "id": "module/generate_batch.fn/_validate_shape.call",
+        "type": "call",
+        "parentId": "module/generate_batch.fn",
+        "line": 33,
+        "endLine": 33,
+        "col": 4,
+        "endCol": 69,
+        "funcName": "_validate_shape",
+        "args": [
+          "batch_size",
+          "channels",
+          "height",
+          "width",
+          "num_classes"
+        ],
+        "isEffect": false
+      },
+      {
+        "id": "module/generate_batch.fn/images.assign",
+        "type": "assignment",
+        "parentId": "module/generate_batch.fn",
+        "line": 35,
+        "endLine": 41,
+        "col": 4,
+        "endCol": 5,
+        "name": "images",
+        "valueKind": "call",
+        "preview": "torch.rand(\n    batch_size,\n    channels,\n    height,\n    width,\n    generator=generator,\n)",
+        "callTarget": "torch.rand",
+        "args": [
+          "batch_size",
+          "channels",
+          "height",
+          "width"
+        ],
+        "kwargs": [
+          {
+            "name": "generator",
+            "value": "generator"
+          }
+        ]
+      },
+      {
+        "id": "module/generate_batch.fn/labels.assign",
+        "type": "assignment",
+        "parentId": "module/generate_batch.fn",
+        "line": 42,
+        "endLine": 48,
+        "col": 4,
+        "endCol": 5,
+        "name": "labels",
+        "valueKind": "call",
+        "preview": "torch.randint(\n    low=0,\n    high=num_classes,\n    size=(batch_size,),\n    generator=generator,\n    dtype=torch.int64,\n)",
+        "callTarget": "torch.randint",
+        "kwargs": [
+          {
+            "name": "low",
+            "value": "0"
+          },
+          {
+            "name": "high",
+            "value": "num_classes"
+          },
+          {
+            "name": "size",
+            "value": "(batch_size,)"
+          },
+          {
+            "name": "generator",
+            "value": "generator"
+          },
+          {
+            "name": "dtype",
+            "value": "torch.int64"
+          }
+        ]
+      },
+      {
+        "id": "module/generate_batch.fn/return@0",
+        "type": "return_stmt",
+        "parentId": "module/generate_batch.fn",
+        "line": 49,
+        "endLine": 49,
+        "col": 4,
+        "endCol": 25,
+        "value": "images, labels"
+      },
+      {
+        "id": "module/_validate_shape.fn",
+        "type": "function_def",
+        "parentId": null,
+        "line": 52,
+        "endLine": 69,
+        "col": 0,
+        "endCol": 81,
+        "name": "_validate_shape",
+        "params": [
+          "batch_size",
+          "channels",
+          "height",
+          "width",
+          "num_classes"
+        ],
+        "docstring": "Reject non-positive dimensions before any tensor is allocated.",
+        "decorators": [],
+        "isAsync": false,
+        "returns": "None"
+      },
+      {
+        "id": "module/_validate_shape.fn/dims.assign",
+        "type": "assignment",
+        "parentId": "module/_validate_shape.fn",
+        "line": 60,
+        "endLine": 66,
+        "col": 4,
+        "endCol": 5,
+        "name": "dims",
+        "valueKind": "dict",
+        "preview": "{\n    \"batch_size\": batch_size,\n    \"channels\": channels,\n    \"height\": height,\n    \"width\": width,\n    \"num_classes\": num_classes,\n}"
+      },
+      {
+        "id": "module/_validate_shape.fn/for@0",
+        "type": "for_loop",
+        "parentId": "module/_validate_shape.fn",
+        "line": 67,
+        "endLine": 69,
+        "col": 4,
+        "endCol": 81,
+        "target": "name, value",
+        "iterName": "dims.items()"
+      },
+      {
+        "id": "module/_validate_shape.fn/for@0/if@0",
+        "type": "if_stmt",
+        "parentId": "module/_validate_shape.fn/for@0",
+        "line": 68,
+        "endLine": 69,
+        "col": 8,
+        "endCol": 81,
+        "condition": "not isinstance(value, int) or value < 1",
+        "hasElse": false
+      },
+      {
+        "id": "module/_validate_shape.fn/for@0/if@0/raise@0",
+        "type": "raise_stmt",
+        "parentId": "module/_validate_shape.fn/for@0/if@0",
+        "line": 69,
+        "endLine": 69,
+        "col": 12,
+        "endCol": 81,
+        "exc": "ValueError(f\"{name} must be a positive i",
+        "callTarget": "ValueError"
+      }
+    ],
+    "edges": [
+      {
+        "source": "module/generate_batch.fn",
+        "target": "module/generate_batch.fn/_validate_shape.call",
+        "type": "contains"
+      },
+      {
+        "source": "module/generate_batch.fn",
+        "target": "module/generate_batch.fn/images.assign",
+        "type": "contains"
+      },
+      {
+        "source": "module/generate_batch.fn",
+        "target": "module/generate_batch.fn/labels.assign",
+        "type": "contains"
+      },
+      {
+        "source": "module/generate_batch.fn",
+        "target": "module/generate_batch.fn/return@0",
+        "type": "contains"
+      },
+      {
+        "source": "module/_validate_shape.fn",
+        "target": "module/_validate_shape.fn/dims.assign",
+        "type": "contains"
+      },
+      {
+        "source": "module/_validate_shape.fn",
+        "target": "module/_validate_shape.fn/for@0",
+        "type": "contains"
+      },
+      {
+        "source": "module/_validate_shape.fn/for@0",
+        "target": "module/_validate_shape.fn/for@0/if@0",
+        "type": "contains"
+      },
+      {
+        "source": "module/_validate_shape.fn/for@0/if@0",
+        "target": "module/_validate_shape.fn/for@0/if@0/raise@0",
+        "type": "contains"
+      }
+    ],
+    "symbolIndex": [
+      {
+        "sym": "function:generate_batch",
+        "kind": "function",
+        "name": "generate_batch",
+        "scope": "module",
+        "loc": {
+          "line": 15,
+          "endLine": 49,
+          "col": 0,
+          "endCol": 25
+        },
+        "signature": "def generate_batch(batch_size=32, channels=3, height=28, width=28, num_classes=10, generator=None)",
+        "docstring": "Generate one batch of random images and matching class labels.\n\n    Returns a tuple ``(images, labels)`` where ``images`` is a float tensor of\n    shape ``(batch_size, channels, height, width)`` with values in ``[0, 1)``\n    and ``labels`` is a 1-D int64 tensor of shape ``(batch_size,)`` with each\n    entry in ``[0, num_classes)``.\n\n    An optional ``generator`` makes the draw reproducible without touching\n    global RNG state.",
+        "source": "\n\ndef generate_batch(\n    batch_size: int = 32,\n    channels: int = 3,\n    height: int = 28,\n    width: int = 28,\n    num_classes: int = 10,\n    generator: torch.Generator | None = None,\n) -> Tuple[torch.Tensor, torch.Tensor]:\n    \"\"\"Generate one batch of random images and matching class labels.\n\n    Returns a tuple ``(images, labels)`` where ``images`` is a float tensor of\n    shape ``(batch_size, channels, height, width)`` with values in ``[0, 1)``\n    and ``labels`` is a 1-D int64 tensor of shape ``(batch_size,)`` with each\n    entry in ``[0, num_classes)``.\n\n    An optional ``generator`` makes the draw reproducible without touching\n    global RNG state.\n    \"\"\"\n    _validate_shape(batch_size, channels, height, width, num_classes)\n\n    images = torch.rand(\n        batch_size,\n        channels,\n        height,\n        width,\n        generator=generator,\n    )\n    labels = torch.randint(\n        low=0,\n        high=num_classes,\n        size=(batch_size,),\n        generator=generator,\n        dtype=torch.int64,\n    )\n    return images, labels\n"
+      },
+      {
+        "sym": "function:_validate_shape",
+        "kind": "function",
+        "name": "_validate_shape",
+        "scope": "module",
+        "loc": {
+          "line": 52,
+          "endLine": 69,
+          "col": 0,
+          "endCol": 81
+        },
+        "signature": "def _validate_shape(batch_size, channels, height, width, num_classes)",
+        "docstring": "Reject non-positive dimensions before any tensor is allocated.",
+        "source": "\n\ndef _validate_shape(\n    batch_size: int,\n    channels: int,\n    height: int,\n    width: int,\n    num_classes: int,\n) -> None:\n    \"\"\"Reject non-positive dimensions before any tensor is allocated.\"\"\"\n    dims = {\n        \"batch_size\": batch_size,\n        \"channels\": channels,\n        \"height\": height,\n        \"width\": width,\n        \"num_classes\": num_classes,\n    }\n    for name, value in dims.items():\n        if not isinstance(value, int) or value < 1:\n            raise ValueError(f\"{name} must be a positive integer, got {value!r}\")\n"
+      }
+    ],
+    "modulePath": "synthetic_data"
+  },
+  "train.py": {
+    "version": "1.4",
+    "nodes": [
+      {
+        "id": "module/__future__.import_from",
+        "type": "import_from",
+        "parentId": null,
+        "line": 13,
+        "endLine": 13,
+        "col": 0,
+        "endCol": 34,
+        "module": "__future__",
+        "names": [
+          "annotations"
+        ]
+      },
+      {
+        "id": "module/dataclasses.import_from",
+        "type": "import_from",
+        "parentId": null,
+        "line": 15,
+        "endLine": 15,
+        "col": 0,
+        "endCol": 33,
+        "module": "dataclasses",
+        "names": [
+          "dataclass"
+        ]
+      },
+      {
+        "id": "module/typing.import_from",
+        "type": "import_from",
+        "parentId": null,
+        "line": 16,
+        "endLine": 16,
+        "col": 0,
+        "endCol": 33,
+        "module": "typing",
+        "names": [
+          "List",
+          "Optional"
+        ]
+      },
+      {
+        "id": "module/torch.import",
+        "type": "import",
+        "parentId": null,
+        "line": 18,
+        "endLine": 18,
+        "col": 0,
+        "endCol": 12,
+        "names": [
+          "torch"
+        ]
+      },
+      {
+        "id": "module/torch.nn.functional.import",
+        "type": "import",
+        "parentId": null,
+        "line": 19,
+        "endLine": 19,
+        "col": 0,
+        "endCol": 31,
+        "names": [
+          "torch.nn.functional as F"
+        ]
+      },
+      {
+        "id": "module/model.import_from",
+        "type": "import_from",
+        "parentId": null,
+        "line": 21,
+        "endLine": 21,
+        "col": 0,
+        "endCol": 31,
+        "module": "model",
+        "names": [
+          "CNNClassifier"
+        ]
+      },
+      {
+        "id": "module/synthetic_data.import_from",
+        "type": "import_from",
+        "parentId": null,
+        "line": 22,
+        "endLine": 22,
+        "col": 0,
+        "endCol": 41,
+        "module": "synthetic_data",
+        "names": [
+          "generate_batch"
+        ]
+      },
+      {
+        "id": "module/evaluate.import_from",
+        "type": "import_from",
+        "parentId": null,
+        "line": 23,
+        "endLine": 23,
+        "col": 0,
+        "endCol": 29,
+        "module": "evaluate",
+        "names": [
+          "evaluate"
+        ]
+      },
+      {
+        "id": "module/TrainingReport.class",
+        "type": "class_def",
+        "parentId": null,
+        "line": 27,
+        "endLine": 36,
+        "col": 0,
+        "endCol": 25,
+        "name": "TrainingReport",
+        "bases": [],
+        "decorators": [
+          "dataclass"
+        ],
+        "docstring": "Outcome of a training run.\n\n    ``epoch_losses`` holds the mean cross-entropy loss for each epoch (one\n    entry per epoch, in order). ``final_accuracy`` is the post-training top-1\n    accuracy in ``[0.0, 1.0]`` reported by :func:`evaluate.evaluate`."
+      },
+      {
+        "id": "module/TrainingReport.class/epoch_losses.assign",
+        "type": "assignment",
+        "parentId": "module/TrainingReport.class",
+        "line": 35,
+        "endLine": 35,
+        "col": 4,
+        "endCol": 29,
+        "name": "epoch_losses",
+        "annotation": "List[float]",
+        "valueKind": "other",
+        "preview": ""
+      },
+      {
+        "id": "module/TrainingReport.class/final_accuracy.assign",
+        "type": "assignment",
+        "parentId": "module/TrainingReport.class",
+        "line": 36,
+        "endLine": 36,
+        "col": 4,
+        "endCol": 25,
+        "name": "final_accuracy",
+        "annotation": "float",
+        "valueKind": "other",
+        "preview": ""
+      },
+      {
+        "id": "module/_make_generator.fn",
+        "type": "function_def",
+        "parentId": null,
+        "line": 39,
+        "endLine": 45,
+        "col": 0,
+        "endCol": 20,
+        "name": "_make_generator",
+        "params": [
+          "seed"
+        ],
+        "docstring": "Build a seeded RNG for reproducible batches, or ``None`` for global RNG.",
+        "decorators": [],
+        "isAsync": false,
+        "returns": "Optional[torch.Generator]"
+      },
+      {
+        "id": "module/_make_generator.fn/if@0",
+        "type": "if_stmt",
+        "parentId": "module/_make_generator.fn",
+        "line": 41,
+        "endLine": 42,
+        "col": 4,
+        "endCol": 19,
+        "condition": "seed is None",
+        "hasElse": false
+      },
+      {
+        "id": "module/_make_generator.fn/if@0/return@0",
+        "type": "return_stmt",
+        "parentId": "module/_make_generator.fn/if@0",
+        "line": 42,
+        "endLine": 42,
+        "col": 8,
+        "endCol": 19,
+        "value": "None"
+      },
+      {
+        "id": "module/_make_generator.fn/generator.assign",
+        "type": "assignment",
+        "parentId": "module/_make_generator.fn",
+        "line": 43,
+        "endLine": 43,
+        "col": 4,
+        "endCol": 33,
+        "name": "generator",
+        "valueKind": "call",
+        "preview": "torch.Generator()",
+        "callTarget": "torch.Generator"
+      },
+      {
+        "id": "module/_make_generator.fn/generator_manual_seed.call",
+        "type": "call",
+        "parentId": "module/_make_generator.fn",
+        "line": 44,
+        "endLine": 44,
+        "col": 4,
+        "endCol": 31,
+        "funcName": "generator.manual_seed",
+        "args": [
+          "seed"
+        ],
+        "isEffect": false
+      },
+      {
+        "id": "module/_make_generator.fn/return@0",
+        "type": "return_stmt",
+        "parentId": "module/_make_generator.fn",
+        "line": 45,
+        "endLine": 45,
+        "col": 4,
+        "endCol": 20,
+        "value": "generator"
+      },
+      {
+        "id": "module/train_epoch.fn",
+        "type": "function_def",
+        "parentId": null,
+        "line": 48,
+        "endLine": 88,
+        "col": 0,
+        "endCol": 41,
+        "name": "train_epoch",
+        "params": [
+          "model",
+          "optimizer",
+          "steps_per_epoch",
+          "batch_size",
+          "in_channels",
+          "image_size",
+          "num_classes",
+          "generator=None"
+        ],
+        "docstring": "Run one epoch of ``steps_per_epoch`` optimizer steps; return mean loss.\n\n    Each step draws a fresh synthetic batch, computes cross-entropy loss\n    against the integer labels, backpropagates, and steps the optimizer.",
+        "decorators": [],
+        "isAsync": false,
+        "returns": "float"
+      },
+      {
+        "id": "module/train_epoch.fn/if@0",
+        "type": "if_stmt",
+        "parentId": "module/train_epoch.fn",
+        "line": 63,
+        "endLine": 66,
+        "col": 4,
+        "endCol": 9,
+        "condition": "steps_per_epoch < 1",
+        "hasElse": false
+      },
+      {
+        "id": "module/train_epoch.fn/if@0/raise@0",
+        "type": "raise_stmt",
+        "parentId": "module/train_epoch.fn/if@0",
+        "line": 64,
+        "endLine": 66,
+        "col": 8,
+        "endCol": 9,
+        "exc": "ValueError(\n    f\"steps_per_epoch must b",
+        "callTarget": "ValueError"
+      },
+      {
+        "id": "module/train_epoch.fn/model_train.call",
+        "type": "call",
+        "parentId": "module/train_epoch.fn",
+        "line": 68,
+        "endLine": 68,
+        "col": 4,
+        "endCol": 17,
+        "funcName": "model.train",
+        "args": [],
+        "isEffect": false
+      },
+      {
+        "id": "module/train_epoch.fn/running_loss.assign",
+        "type": "assignment",
+        "parentId": "module/train_epoch.fn",
+        "line": 69,
+        "endLine": 69,
+        "col": 4,
+        "endCol": 22,
+        "name": "running_loss",
+        "valueKind": "scalar",
+        "preview": "0.0"
+      },
+      {
+        "id": "module/train_epoch.fn/for@0",
+        "type": "for_loop",
+        "parentId": "module/train_epoch.fn",
+        "line": 70,
+        "endLine": 86,
+        "col": 4,
+        "endCol": 42,
+        "target": "_",
+        "iterName": "range(steps_per_epoch)"
+      },
+      {
+        "id": "module/train_epoch.fn/for@0/?.assign",
+        "type": "assignment",
+        "parentId": "module/train_epoch.fn/for@0",
+        "line": 71,
+        "endLine": 78,
+        "col": 8,
+        "endCol": 9,
+        "name": "?",
+        "valueKind": "call",
+        "preview": "generate_batch(\n    batch_size=batch_size,\n    channels=in_channels,\n    height=image_size,\n    width=image_size,\n    num_classes=num_classes,\n    generator=generator,\n)",
+        "callTarget": "generate_batch",
+        "kwargs": [
+          {
+            "name": "batch_size",
+            "value": "batch_size"
+          },
+          {
+            "name": "channels",
+            "value": "in_channels"
+          },
+          {
+            "name": "height",
+            "value": "image_size"
+          },
+          {
+            "name": "width",
+            "value": "image_size"
+          },
+          {
+            "name": "num_classes",
+            "value": "num_classes"
+          },
+          {
+            "name": "generator",
+            "value": "generator"
+          }
+        ]
+      },
+      {
+        "id": "module/train_epoch.fn/for@0/optimizer_zero_grad.call",
+        "type": "call",
+        "parentId": "module/train_epoch.fn/for@0",
+        "line": 80,
+        "endLine": 80,
+        "col": 8,
+        "endCol": 29,
+        "funcName": "optimizer.zero_grad",
+        "args": [],
+        "isEffect": false
+      },
+      {
+        "id": "module/train_epoch.fn/for@0/logits.assign",
+        "type": "assignment",
+        "parentId": "module/train_epoch.fn/for@0",
+        "line": 81,
+        "endLine": 81,
+        "col": 8,
+        "endCol": 30,
+        "name": "logits",
+        "valueKind": "call",
+        "preview": "model(images)",
+        "callTarget": "model",
+        "args": [
+          "images"
+        ]
+      },
+      {
+        "id": "module/train_epoch.fn/for@0/loss.assign",
+        "type": "assignment",
+        "parentId": "module/train_epoch.fn/for@0",
+        "line": 82,
+        "endLine": 82,
+        "col": 8,
+        "endCol": 46,
+        "name": "loss",
+        "valueKind": "call",
+        "preview": "F.cross_entropy(logits, labels)",
+        "callTarget": "F.cross_entropy",
+        "args": [
+          "logits",
+          "labels"
+        ]
+      },
+      {
+        "id": "module/train_epoch.fn/for@0/loss_backward.call",
+        "type": "call",
+        "parentId": "module/train_epoch.fn/for@0",
+        "line": 83,
+        "endLine": 83,
+        "col": 8,
+        "endCol": 23,
+        "funcName": "loss.backward",
+        "args": [],
+        "isEffect": false
+      },
+      {
+        "id": "module/train_epoch.fn/for@0/optimizer_step.call",
+        "type": "call",
+        "parentId": "module/train_epoch.fn/for@0",
+        "line": 84,
+        "endLine": 84,
+        "col": 8,
+        "endCol": 24,
+        "funcName": "optimizer.step",
+        "args": [],
+        "isEffect": false
+      },
+      {
+        "id": "module/train_epoch.fn/return@0",
+        "type": "return_stmt",
+        "parentId": "module/train_epoch.fn",
+        "line": 88,
+        "endLine": 88,
+        "col": 4,
+        "endCol": 41,
+        "value": "running_loss / steps_per_epoch"
+      },
+      {
+        "id": "module/train_model.fn",
+        "type": "function_def",
+        "parentId": null,
+        "line": 91,
+        "endLine": 155,
+        "col": 0,
+        "endCol": 83,
+        "name": "train_model",
+        "params": [
+          "epochs=3",
+          "steps_per_epoch=8",
+          "batch_size=16",
+          "num_classes=10",
+          "image_size=32",
+          "in_channels=3",
+          "learning_rate=1e-3",
+          "eval_batches=5",
+          "seed=None"
+        ],
+        "docstring": "Instantiate, train, and evaluate the CNN; return a :class:`TrainingReport`.\n\n    A fresh ``CNNClassifier`` is trained for ``epochs`` epochs (each of\n    ``steps_per_epoch`` batches) with an Adam optimizer on cross-entropy loss,\n    then scored with :func:`evaluate.evaluate` over ``eval_batches`` held-out\n    synthetic batches. Passing ``seed`` makes weight init, training batches,\n    and evaluation batches reproducible.",
+        "decorators": [],
+        "isAsync": false,
+        "returns": "TrainingReport"
+      },
+      {
+        "id": "module/train_model.fn/if@0",
+        "type": "if_stmt",
+        "parentId": "module/train_model.fn",
+        "line": 110,
+        "endLine": 111,
+        "col": 4,
+        "endCol": 78,
+        "condition": "epochs < 1",
+        "hasElse": false
+      },
+      {
+        "id": "module/train_model.fn/if@0/raise@0",
+        "type": "raise_stmt",
+        "parentId": "module/train_model.fn/if@0",
+        "line": 111,
+        "endLine": 111,
+        "col": 8,
+        "endCol": 78,
+        "exc": "ValueError(f\"epochs must be a positive i",
+        "callTarget": "ValueError"
+      },
+      {
+        "id": "module/train_model.fn/if@1",
+        "type": "if_stmt",
+        "parentId": "module/train_model.fn",
+        "line": 112,
+        "endLine": 115,
+        "col": 4,
+        "endCol": 9,
+        "condition": "eval_batches < 1",
+        "hasElse": false
+      },
+      {
+        "id": "module/train_model.fn/if@1/raise@0",
+        "type": "raise_stmt",
+        "parentId": "module/train_model.fn/if@1",
+        "line": 113,
+        "endLine": 115,
+        "col": 8,
+        "endCol": 9,
+        "exc": "ValueError(\n    f\"eval_batches must be a",
+        "callTarget": "ValueError"
+      },
+      {
+        "id": "module/train_model.fn/if@2",
+        "type": "if_stmt",
+        "parentId": "module/train_model.fn",
+        "line": 117,
+        "endLine": 119,
+        "col": 4,
+        "endCol": 31,
+        "condition": "seed is not None",
+        "hasElse": false
+      },
+      {
+        "id": "module/train_model.fn/if@2/torch_manual_seed.call",
+        "type": "call",
+        "parentId": "module/train_model.fn/if@2",
+        "line": 119,
+        "endLine": 119,
+        "col": 8,
+        "endCol": 31,
+        "funcName": "torch.manual_seed",
+        "args": [
+          "seed"
+        ],
+        "isEffect": false
+      },
+      {
+        "id": "module/train_model.fn/model.assign",
+        "type": "assignment",
+        "parentId": "module/train_model.fn",
+        "line": 121,
+        "endLine": 125,
+        "col": 4,
+        "endCol": 5,
+        "name": "model",
+        "valueKind": "call",
+        "preview": "CNNClassifier(\n    in_channels=in_channels,\n    num_classes=num_classes,\n    image_size=image_size,\n)",
+        "callTarget": "CNNClassifier",
+        "kwargs": [
+          {
+            "name": "in_channels",
+            "value": "in_channels"
+          },
+          {
+            "name": "num_classes",
+            "value": "num_classes"
+          },
+          {
+            "name": "image_size",
+            "value": "image_size"
+          }
+        ]
+      },
+      {
+        "id": "module/train_model.fn/optimizer.assign",
+        "type": "assignment",
+        "parentId": "module/train_model.fn",
+        "line": 126,
+        "endLine": 126,
+        "col": 4,
+        "endCol": 70,
+        "name": "optimizer",
+        "valueKind": "call",
+        "preview": "torch.optim.Adam(model.parameters(), lr=learning_rate)",
+        "callTarget": "torch.optim.Adam",
+        "args": [
+          "model.parameters()"
+        ],
+        "kwargs": [
+          {
+            "name": "lr",
+            "value": "learning_rate"
+          }
+        ],
+        "nestsInnerCalls": true,
+        "nestExtracted": true
+      },
+      {
+        "id": "module/train_model.fn/optimizer.assign/model_parameters.call",
+        "type": "call",
+        "parentId": "module/train_model.fn/optimizer.assign",
+        "line": 126,
+        "endLine": 126,
+        "col": 33,
+        "endCol": 51,
+        "funcName": "model.parameters",
+        "args": [],
+        "isEffect": false,
+        "callTarget": "model.parameters",
+        "preview": "model.parameters()",
+        "nested": true,
+        "nestedDepth": 1
+      },
+      {
+        "id": "module/train_model.fn/train_gen.assign",
+        "type": "assignment",
+        "parentId": "module/train_model.fn",
+        "line": 128,
+        "endLine": 128,
+        "col": 4,
+        "endCol": 67,
+        "name": "train_gen",
+        "valueKind": "call",
+        "preview": "_make_generator(None if seed is None else seed + 1)",
+        "callTarget": "_make_generator",
+        "args": [
+          "None if seed is None else seed + 1"
+        ]
+      },
+      {
+        "id": "module/train_model.fn/epoch_losses.assign",
+        "type": "assignment",
+        "parentId": "module/train_model.fn",
+        "line": 129,
+        "endLine": 129,
+        "col": 4,
+        "endCol": 34,
+        "name": "epoch_losses",
+        "annotation": "List[float]",
+        "valueKind": "list",
+        "preview": "[]"
+      },
+      {
+        "id": "module/train_model.fn/for@0",
+        "type": "for_loop",
+        "parentId": "module/train_model.fn",
+        "line": 130,
+        "endLine": 142,
+        "col": 4,
+        "endCol": 9,
+        "target": "_",
+        "iterName": "range(epochs)"
+      },
+      {
+        "id": "module/train_model.fn/for@0/epoch_losses_append.call",
+        "type": "call",
+        "parentId": "module/train_model.fn/for@0",
+        "line": 131,
+        "endLine": 142,
+        "col": 8,
+        "endCol": 9,
+        "funcName": "epoch_losses.append",
+        "args": [
+          "train_epoch(\n        model=model,\n        optimizer=optimizer,\n        steps_per_epoch=steps_per_epoch,\n        batch_size=batch_size,\n        in_channels=in_channels,\n        image_size=image_size,\n        num_classes=num_classes,\n        generator=train_gen,\n    )"
+        ],
+        "isEffect": false,
+        "nestsInnerCalls": true,
+        "nestExtracted": true
+      },
+      {
+        "id": "module/train_model.fn/for@0/epoch_losses_append.call/train_epoch.call",
+        "type": "call",
+        "parentId": "module/train_model.fn/for@0/epoch_losses_append.call",
+        "line": 132,
+        "endLine": 141,
+        "col": 12,
+        "endCol": 13,
+        "funcName": "train_epoch",
+        "args": [
+          "model",
+          "optimizer",
+          "steps_per_epoch",
+          "batch_size",
+          "in_channels",
+          "image_size",
+          "num_classes",
+          "train_gen"
+        ],
+        "isEffect": false,
+        "callTarget": "train_epoch",
+        "preview": "train_epoch(\n        model=model,\n        optimizer=optimizer,\n        steps_per_epoch=steps_per_epoch,\n        batch_size=batch_size,\n        in_channels=in_channels,\n        image_size=image_size,\n        num_classes=num_classes,\n        generator=train_gen,\n    )",
+        "nested": true,
+        "nestedDepth": 1
+      },
+      {
+        "id": "module/train_model.fn/eval_gen.assign",
+        "type": "assignment",
+        "parentId": "module/train_model.fn",
+        "line": 144,
+        "endLine": 144,
+        "col": 4,
+        "endCol": 66,
+        "name": "eval_gen",
+        "valueKind": "call",
+        "preview": "_make_generator(None if seed is None else seed + 2)",
+        "callTarget": "_make_generator",
+        "args": [
+          "None if seed is None else seed + 2"
+        ]
+      },
+      {
+        "id": "module/train_model.fn/final_accuracy.assign",
+        "type": "assignment",
+        "parentId": "module/train_model.fn",
+        "line": 145,
+        "endLine": 153,
+        "col": 4,
+        "endCol": 5,
+        "name": "final_accuracy",
+        "valueKind": "call",
+        "preview": "evaluate(\n    model,\n    num_batches=eval_batches,\n    batch_size=batch_size,\n    num_classes=num_classes,\n    image_size=image_size,\n    in_channels=in_channels,\n    generator=eval_gen,\n)",
+        "callTarget": "evaluate",
+        "args": [
+          "model"
+        ],
+        "kwargs": [
+          {
+            "name": "num_batches",
+            "value": "eval_batches"
+          },
+          {
+            "name": "batch_size",
+            "value": "batch_size"
+          },
+          {
+            "name": "num_classes",
+            "value": "num_classes"
+          },
+          {
+            "name": "image_size",
+            "value": "image_size"
+          },
+          {
+            "name": "in_channels",
+            "value": "in_channels"
+          },
+          {
+            "name": "generator",
+            "value": "eval_gen"
+          }
+        ]
+      },
+      {
+        "id": "module/train_model.fn/return@0",
+        "type": "return_stmt",
+        "parentId": "module/train_model.fn",
+        "line": 155,
+        "endLine": 155,
+        "col": 4,
+        "endCol": 83,
+        "value": "TrainingReport(epoch_losses=epoch_losses, final_accuracy=final_accuracy)",
+        "callTarget": "TrainingReport"
+      },
+      {
+        "id": "module/main.fn",
+        "type": "function_def",
+        "parentId": null,
+        "line": 158,
+        "endLine": 163,
+        "col": 0,
+        "endCol": 57,
+        "name": "main",
+        "params": [],
+        "docstring": "Train with default settings and print per-epoch loss and final accuracy.",
+        "decorators": [],
+        "isAsync": false,
+        "returns": "None"
+      },
+      {
+        "id": "module/main.fn/report.assign",
+        "type": "assignment",
+        "parentId": "module/main.fn",
+        "line": 160,
+        "endLine": 160,
+        "col": 4,
+        "endCol": 32,
+        "name": "report",
+        "valueKind": "call",
+        "preview": "train_model(seed=0)",
+        "callTarget": "train_model",
+        "kwargs": [
+          {
+            "name": "seed",
+            "value": "0"
+          }
+        ]
+      },
+      {
+        "id": "module/main.fn/for@0",
+        "type": "for_loop",
+        "parentId": "module/main.fn",
+        "line": 161,
+        "endLine": 162,
+        "col": 4,
+        "endCol": 53,
+        "target": "epoch, loss",
+        "iterName": "enumerate(report.epoch_losses, start=1)"
+      },
+      {
+        "id": "module/main.fn/for@0/print.call",
+        "type": "call",
+        "parentId": "module/main.fn/for@0",
+        "line": 162,
+        "endLine": 162,
+        "col": 8,
+        "endCol": 53,
+        "funcName": "print",
+        "args": [
+          "f\"epoch {epoch}: mean loss {loss:.4f}\""
+        ],
+        "isEffect": true
+      },
+      {
+        "id": "module/main.fn/print.call",
+        "type": "call",
+        "parentId": "module/main.fn",
+        "line": 163,
+        "endLine": 163,
+        "col": 4,
+        "endCol": 57,
+        "funcName": "print",
+        "args": [
+          "f\"final accuracy: {report.final_accuracy:.4f}\""
+        ],
+        "isEffect": true
+      },
+      {
+        "id": "module/if@0",
+        "type": "if_stmt",
+        "parentId": null,
+        "line": 166,
+        "endLine": 167,
+        "col": 0,
+        "endCol": 10,
+        "condition": "__name__ == \"__main__\"",
+        "hasElse": false
+      },
+      {
+        "id": "module/if@0/main.call",
+        "type": "call",
+        "parentId": "module/if@0",
+        "line": 167,
+        "endLine": 167,
+        "col": 4,
+        "endCol": 10,
+        "funcName": "main",
+        "args": [],
+        "isEffect": false
+      }
+    ],
+    "edges": [
+      {
+        "source": "module/TrainingReport.class",
+        "target": "module/TrainingReport.class/epoch_losses.assign",
+        "type": "contains"
+      },
+      {
+        "source": "module/TrainingReport.class",
+        "target": "module/TrainingReport.class/final_accuracy.assign",
+        "type": "contains"
+      },
+      {
+        "source": "module/_make_generator.fn",
+        "target": "module/_make_generator.fn/if@0",
+        "type": "contains"
+      },
+      {
+        "source": "module/_make_generator.fn/if@0",
+        "target": "module/_make_generator.fn/if@0/return@0",
+        "type": "contains"
+      },
+      {
+        "source": "module/_make_generator.fn",
+        "target": "module/_make_generator.fn/generator.assign",
+        "type": "contains"
+      },
+      {
+        "source": "module/_make_generator.fn",
+        "target": "module/_make_generator.fn/generator_manual_seed.call",
+        "type": "contains"
+      },
+      {
+        "source": "module/_make_generator.fn",
+        "target": "module/_make_generator.fn/return@0",
+        "type": "contains"
+      },
+      {
+        "source": "module/train_epoch.fn",
+        "target": "module/train_epoch.fn/if@0",
+        "type": "contains"
+      },
+      {
+        "source": "module/train_epoch.fn/if@0",
+        "target": "module/train_epoch.fn/if@0/raise@0",
+        "type": "contains"
+      },
+      {
+        "source": "module/train_epoch.fn",
+        "target": "module/train_epoch.fn/model_train.call",
+        "type": "contains"
+      },
+      {
+        "source": "module/train_epoch.fn",
+        "target": "module/train_epoch.fn/running_loss.assign",
+        "type": "contains"
+      },
+      {
+        "source": "module/train_epoch.fn",
+        "target": "module/train_epoch.fn/for@0",
+        "type": "contains"
+      },
+      {
+        "source": "module/train_epoch.fn/for@0",
+        "target": "module/train_epoch.fn/for@0/?.assign",
+        "type": "contains"
+      },
+      {
+        "source": "module/train_epoch.fn/for@0",
+        "target": "module/train_epoch.fn/for@0/optimizer_zero_grad.call",
+        "type": "contains"
+      },
+      {
+        "source": "module/train_epoch.fn/for@0",
+        "target": "module/train_epoch.fn/for@0/logits.assign",
+        "type": "contains"
+      },
+      {
+        "source": "module/train_epoch.fn/for@0",
+        "target": "module/train_epoch.fn/for@0/loss.assign",
+        "type": "contains"
+      },
+      {
+        "source": "module/train_epoch.fn/for@0",
+        "target": "module/train_epoch.fn/for@0/loss_backward.call",
+        "type": "contains"
+      },
+      {
+        "source": "module/train_epoch.fn/for@0",
+        "target": "module/train_epoch.fn/for@0/optimizer_step.call",
+        "type": "contains"
+      },
+      {
+        "source": "module/train_epoch.fn",
+        "target": "module/train_epoch.fn/return@0",
+        "type": "contains"
+      },
+      {
+        "source": "module/train_model.fn",
+        "target": "module/train_model.fn/if@0",
+        "type": "contains"
+      },
+      {
+        "source": "module/train_model.fn/if@0",
+        "target": "module/train_model.fn/if@0/raise@0",
+        "type": "contains"
+      },
+      {
+        "source": "module/train_model.fn",
+        "target": "module/train_model.fn/if@1",
+        "type": "contains"
+      },
+      {
+        "source": "module/train_model.fn/if@1",
+        "target": "module/train_model.fn/if@1/raise@0",
+        "type": "contains"
+      },
+      {
+        "source": "module/train_model.fn",
+        "target": "module/train_model.fn/if@2",
+        "type": "contains"
+      },
+      {
+        "source": "module/train_model.fn/if@2",
+        "target": "module/train_model.fn/if@2/torch_manual_seed.call",
+        "type": "contains"
+      },
+      {
+        "source": "module/train_model.fn",
+        "target": "module/train_model.fn/model.assign",
+        "type": "contains"
+      },
+      {
+        "source": "module/train_model.fn",
+        "target": "module/train_model.fn/optimizer.assign",
+        "type": "contains"
+      },
+      {
+        "source": "module/train_model.fn/optimizer.assign",
+        "target": "module/train_model.fn/optimizer.assign/model_parameters.call",
+        "type": "contains"
+      },
+      {
+        "source": "module/train_model.fn",
+        "target": "module/train_model.fn/train_gen.assign",
+        "type": "contains"
+      },
+      {
+        "source": "module/train_model.fn/train_gen.assign",
+        "target": "module/_make_generator.fn",
+        "type": "reference"
+      },
+      {
+        "source": "module/train_model.fn",
+        "target": "module/train_model.fn/epoch_losses.assign",
+        "type": "contains"
+      },
+      {
+        "source": "module/train_model.fn",
+        "target": "module/train_model.fn/for@0",
+        "type": "contains"
+      },
+      {
+        "source": "module/train_model.fn/for@0",
+        "target": "module/train_model.fn/for@0/epoch_losses_append.call",
+        "type": "contains"
+      },
+      {
+        "source": "module/train_model.fn/for@0/epoch_losses_append.call",
+        "target": "module/train_model.fn/for@0/epoch_losses_append.call/train_epoch.call",
+        "type": "contains"
+      },
+      {
+        "source": "module/train_model.fn/for@0/epoch_losses_append.call/train_epoch.call",
+        "target": "module/train_epoch.fn",
+        "type": "reference"
+      },
+      {
+        "source": "module/train_model.fn",
+        "target": "module/train_model.fn/eval_gen.assign",
+        "type": "contains"
+      },
+      {
+        "source": "module/train_model.fn/eval_gen.assign",
+        "target": "module/_make_generator.fn",
+        "type": "reference"
+      },
+      {
+        "source": "module/train_model.fn",
+        "target": "module/train_model.fn/final_accuracy.assign",
+        "type": "contains"
+      },
+      {
+        "source": "module/train_model.fn",
+        "target": "module/train_model.fn/return@0",
+        "type": "contains"
+      },
+      {
+        "source": "module/train_model.fn/return@0",
+        "target": "module/TrainingReport.class",
+        "type": "reference"
+      },
+      {
+        "source": "module/main.fn",
+        "target": "module/main.fn/report.assign",
+        "type": "contains"
+      },
+      {
+        "source": "module/main.fn/report.assign",
+        "target": "module/train_model.fn",
+        "type": "reference"
+      },
+      {
+        "source": "module/main.fn",
+        "target": "module/main.fn/for@0",
+        "type": "contains"
+      },
+      {
+        "source": "module/main.fn/for@0",
+        "target": "module/main.fn/for@0/print.call",
+        "type": "contains"
+      },
+      {
+        "source": "module/main.fn",
+        "target": "module/main.fn/print.call",
+        "type": "contains"
+      },
+      {
+        "source": "module/if@0",
+        "target": "module/if@0/main.call",
+        "type": "contains"
+      },
+      {
+        "source": "module/if@0/main.call",
+        "target": "module/main.fn",
+        "type": "reference"
+      },
+      {
+        "source": "module/_make_generator.fn/generator_manual_seed.call",
+        "target": "module/_make_generator.fn/generator.assign",
+        "type": "reference",
+        "qualifiedTarget": "torch:Generator.manual_seed",
+        "viaLocal": "generator"
+      },
+      {
+        "source": "module/train_epoch.fn/for@0/?.assign",
+        "target": "module/generate_batch.fn",
+        "type": "reference",
+        "targetFile": "synthetic_data.py",
+        "qualifiedTarget": "synthetic_data:generate_batch"
+      },
+      {
+        "source": "module/train_model.fn/model.assign",
+        "target": "module/CNNClassifier.class",
+        "type": "reference",
+        "targetFile": "model.py",
+        "qualifiedTarget": "model:CNNClassifier"
+      },
+      {
+        "source": "module/train_model.fn/optimizer.assign/model_parameters.call",
+        "target": "module/train_model.fn/model.assign",
+        "type": "reference",
+        "qualifiedTarget": "model:CNNClassifier.parameters",
+        "viaLocal": "model"
+      },
+      {
+        "source": "module/train_model.fn/final_accuracy.assign",
+        "target": "module/evaluate.fn",
+        "type": "reference",
+        "targetFile": "evaluate.py",
+        "qualifiedTarget": "evaluate:evaluate"
+      }
+    ],
+    "symbolIndex": [
+      {
+        "sym": "class:TrainingReport",
+        "kind": "class",
+        "name": "TrainingReport",
+        "scope": "module",
+        "loc": {
+          "line": 27,
+          "endLine": 36,
+          "col": 0,
+          "endCol": 25
+        },
+        "bases": [],
+        "docstring": "Outcome of a training run.\n\n    ``epoch_losses`` holds the mean cross-entropy loss for each epoch (one\n    entry per epoch, in order). ``final_accuracy`` is the post-training top-1\n    accuracy in ``[0.0, 1.0]`` reported by :func:`evaluate.evaluate`.",
+        "source": "\n\n@dataclass\nclass TrainingReport:\n    \"\"\"Outcome of a training run.\n\n    ``epoch_losses`` holds the mean cross-entropy loss for each epoch (one\n    entry per epoch, in order). ``final_accuracy`` is the post-training top-1\n    accuracy in ``[0.0, 1.0]`` reported by :func:`evaluate.evaluate`.\n    \"\"\"\n\n    epoch_losses: List[float]\n    final_accuracy: float\n"
+      },
+      {
+        "sym": "function:_make_generator",
+        "kind": "function",
+        "name": "_make_generator",
+        "scope": "module",
+        "loc": {
+          "line": 39,
+          "endLine": 45,
+          "col": 0,
+          "endCol": 20
+        },
+        "signature": "def _make_generator(seed)",
+        "docstring": "Build a seeded RNG for reproducible batches, or ``None`` for global RNG.",
+        "source": "\n\ndef _make_generator(seed: Optional[int]) -> Optional[torch.Generator]:\n    \"\"\"Build a seeded RNG for reproducible batches, or ``None`` for global RNG.\"\"\"\n    if seed is None:\n        return None\n    generator = torch.Generator()\n    generator.manual_seed(seed)\n    return generator\n"
+      },
+      {
+        "sym": "function:train_epoch",
+        "kind": "function",
+        "name": "train_epoch",
+        "scope": "module",
+        "loc": {
+          "line": 48,
+          "endLine": 88,
+          "col": 0,
+          "endCol": 41
+        },
+        "signature": "def train_epoch(model, optimizer, steps_per_epoch, batch_size, in_channels, image_size, num_classes, generator=None)",
+        "docstring": "Run one epoch of ``steps_per_epoch`` optimizer steps; return mean loss.\n\n    Each step draws a fresh synthetic batch, computes cross-entropy loss\n    against the integer labels, backpropagates, and steps the optimizer.",
+        "source": "\n\ndef train_epoch(\n    model: CNNClassifier,\n    optimizer: torch.optim.Optimizer,\n    steps_per_epoch: int,\n    batch_size: int,\n    in_channels: int,\n    image_size: int,\n    num_classes: int,\n    generator: Optional[torch.Generator] = None,\n) -> float:\n    \"\"\"Run one epoch of ``steps_per_epoch`` optimizer steps; return mean loss.\n\n    Each step draws a fresh synthetic batch, computes cross-entropy loss\n    against the integer labels, backpropagates, and steps the optimizer.\n    \"\"\"\n    if steps_per_epoch < 1:\n        raise ValueError(\n            f\"steps_per_epoch must be a positive integer, got {steps_per_epoch!r}\"\n        )\n\n    model.train()\n    running_loss = 0.0\n    for _ in range(steps_per_epoch):\n        images, labels = generate_batch(\n            batch_size=batch_size,\n            channels=in_channels,\n            height=image_size,\n            width=image_size,\n            num_classes=num_classes,\n            generator=generator,\n        )\n\n        optimizer.zero_grad()\n        logits = model(images)\n        loss = F.cross_entropy(logits, labels)\n        loss.backward()\n        optimizer.step()\n\n        running_loss += float(loss.item())\n\n    return running_loss / steps_per_epoch\n"
+      },
+      {
+        "sym": "function:train_model",
+        "kind": "function",
+        "name": "train_model",
+        "scope": "module",
+        "loc": {
+          "line": 91,
+          "endLine": 155,
+          "col": 0,
+          "endCol": 83
+        },
+        "signature": "def train_model(epochs=3, steps_per_epoch=8, batch_size=16, num_classes=10, image_size=32, in_channels=3, learning_rate=1e-3, eval_batches=5, seed=None)",
+        "docstring": "Instantiate, train, and evaluate the CNN; return a :class:`TrainingReport`.\n\n    A fresh ``CNNClassifier`` is trained for ``epochs`` epochs (each of\n    ``steps_per_epoch`` batches) with an Adam optimizer on cross-entropy loss,\n    then scored with :func:`evaluate.evaluate` over ``eval_batches`` held-out\n    synthetic batches. Passing ``seed`` makes weight init, training batches,\n    and evaluation batches reproducible.",
+        "source": "\n\ndef train_model(\n    epochs: int = 3,\n    steps_per_epoch: int = 8,\n    batch_size: int = 16,\n    num_classes: int = 10,\n    image_size: int = 32,\n    in_channels: int = 3,\n    learning_rate: float = 1e-3,\n    eval_batches: int = 5,\n    seed: Optional[int] = None,\n) -> TrainingReport:\n    \"\"\"Instantiate, train, and evaluate the CNN; return a :class:`TrainingReport`.\n\n    A fresh ``CNNClassifier`` is trained for ``epochs`` epochs (each of\n    ``steps_per_epoch`` batches) with an Adam optimizer on cross-entropy loss,\n    then scored with :func:`evaluate.evaluate` over ``eval_batches`` held-out\n    synthetic batches. Passing ``seed`` makes weight init, training batches,\n    and evaluation batches reproducible.\n    \"\"\"\n    if epochs < 1:\n        raise ValueError(f\"epochs must be a positive integer, got {epochs!r}\")\n    if eval_batches < 1:\n        raise ValueError(\n            f\"eval_batches must be a positive integer, got {eval_batches!r}\"\n        )\n\n    if seed is not None:\n        # deterministic weight initialisation (global RNG, no I/O)\n        torch.manual_seed(seed)\n\n    model = CNNClassifier(\n        in_channels=in_channels,\n        num_classes=num_classes,\n        image_size=image_size,\n    )\n    optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)\n\n    train_gen = _make_generator(None if seed is None else seed + 1)\n    epoch_losses: List[float] = []\n    for _ in range(epochs):\n        epoch_losses.append(\n            train_epoch(\n                model=model,\n                optimizer=optimizer,\n                steps_per_epoch=steps_per_epoch,\n                batch_size=batch_size,\n                in_channels=in_channels,\n                image_size=image_size,\n                num_classes=num_classes,\n                generator=train_gen,\n            )\n        )\n\n    eval_gen = _make_generator(None if seed is None else seed + 2)\n    final_accuracy = evaluate(\n        model,\n        num_batches=eval_batches,\n        batch_size=batch_size,\n        num_classes=num_classes,\n        image_size=image_size,\n        in_channels=in_channels,\n        generator=eval_gen,\n    )\n\n    return TrainingReport(epoch_losses=epoch_losses, final_accuracy=final_accuracy)\n"
+      },
+      {
+        "sym": "function:main",
+        "kind": "function",
+        "name": "main",
+        "scope": "module",
+        "loc": {
+          "line": 158,
+          "endLine": 163,
+          "col": 0,
+          "endCol": 57
+        },
+        "signature": "def main()",
+        "docstring": "Train with default settings and print per-epoch loss and final accuracy.",
+        "source": "\n\ndef main() -> None:\n    \"\"\"Train with default settings and print per-epoch loss and final accuracy.\"\"\"\n    report = train_model(seed=0)\n    for epoch, loss in enumerate(report.epoch_losses, start=1):\n        print(f\"epoch {epoch}: mean loss {loss:.4f}\")\n    print(f\"final accuracy: {report.final_accuracy:.4f}\")\n"
+      }
+    ],
+    "modulePath": "train"
+  },
+  "evaluate.py": {
+    "version": "1.5",
+    "nodes": [
+      {
+        "id": "module/__future__.import_from",
+        "type": "import_from",
+        "parentId": null,
+        "line": 12,
+        "endLine": 12,
+        "col": 0,
+        "endCol": 34,
+        "module": "__future__",
+        "names": [
+          "annotations"
+        ]
+      },
+      {
+        "id": "module/torch.import",
+        "type": "import",
+        "parentId": null,
+        "line": 14,
+        "endLine": 14,
+        "col": 0,
+        "endCol": 12,
+        "names": [
+          "torch"
+        ]
+      },
+      {
+        "id": "module/model.import_from",
+        "type": "import_from",
+        "parentId": null,
+        "line": 16,
+        "endLine": 16,
+        "col": 0,
+        "endCol": 31,
+        "module": "model",
+        "names": [
+          "CNNClassifier"
+        ]
+      },
+      {
+        "id": "module/synthetic_data.import_from",
+        "type": "import_from",
+        "parentId": null,
+        "line": 17,
+        "endLine": 17,
+        "col": 0,
+        "endCol": 41,
+        "module": "synthetic_data",
+        "names": [
+          "generate_batch"
+        ]
+      },
+      {
+        "id": "module/accuracy_from_logits.fn",
+        "type": "function_def",
+        "parentId": null,
+        "line": 20,
+        "endLine": 44,
+        "col": 0,
+        "endCol": 26,
+        "name": "accuracy_from_logits",
+        "params": [
+          "logits",
+          "labels"
+        ],
+        "docstring": "Fraction of rows whose argmax-over-classes matches the label.\n\n    ``logits`` is ``(N, num_classes)`` and ``labels`` is a 1-D int tensor of\n    shape ``(N,)``. Returns a Python float in ``[0.0, 1.0]``; an empty batch\n    scores ``0.0`` rather than dividing by zero.",
+        "decorators": [],
+        "isAsync": false,
+        "returns": "float"
+      },
+      {
+        "id": "module/accuracy_from_logits.fn/if@0",
+        "type": "if_stmt",
+        "parentId": "module/accuracy_from_logits.fn",
+        "line": 27,
+        "endLine": 30,
+        "col": 4,
+        "endCol": 9,
+        "condition": "logits.dim() != 2",
+        "hasElse": false
+      },
+      {
+        "id": "module/accuracy_from_logits.fn/if@0/raise@0",
+        "type": "raise_stmt",
+        "parentId": "module/accuracy_from_logits.fn/if@0",
+        "line": 28,
+        "endLine": 30,
+        "col": 8,
+        "endCol": 9,
+        "exc": "ValueError(\n    f\"logits must be 2-D (N,",
+        "callTarget": "ValueError",
+        "nestsInnerCalls": true,
+        "nestExtracted": false
+      },
+      {
+        "id": "module/accuracy_from_logits.fn/if@1",
+        "type": "if_stmt",
+        "parentId": "module/accuracy_from_logits.fn",
+        "line": 31,
+        "endLine": 32,
+        "col": 4,
+        "endCol": 85,
+        "condition": "labels.dim() != 1",
+        "hasElse": false
+      },
+      {
+        "id": "module/accuracy_from_logits.fn/if@1/raise@0",
+        "type": "raise_stmt",
+        "parentId": "module/accuracy_from_logits.fn/if@1",
+        "line": 32,
+        "endLine": 32,
+        "col": 8,
+        "endCol": 85,
+        "exc": "ValueError(f\"labels must be 1-D (N,), go",
+        "callTarget": "ValueError",
+        "nestsInnerCalls": true,
+        "nestExtracted": false
+      },
+      {
+        "id": "module/accuracy_from_logits.fn/if@2",
+        "type": "if_stmt",
+        "parentId": "module/accuracy_from_logits.fn",
+        "line": 33,
+        "endLine": 36,
+        "col": 4,
+        "endCol": 9,
+        "condition": "logits.shape[0] != labels.shape[0]",
+        "hasElse": false
+      },
+      {
+        "id": "module/accuracy_from_logits.fn/if@2/raise@0",
+        "type": "raise_stmt",
+        "parentId": "module/accuracy_from_logits.fn/if@2",
+        "line": 34,
+        "endLine": 36,
+        "col": 8,
+        "endCol": 9,
+        "exc": "ValueError(\n    f\"batch mismatch: {logit",
+        "callTarget": "ValueError"
+      },
+      {
+        "id": "module/accuracy_from_logits.fn/total.assign",
+        "type": "assignment",
+        "parentId": "module/accuracy_from_logits.fn",
+        "line": 38,
+        "endLine": 38,
+        "col": 4,
+        "endCol": 27,
+        "name": "total",
+        "valueKind": "other",
+        "preview": "labels.shape[0]"
+      },
+      {
+        "id": "module/accuracy_from_logits.fn/if@3",
+        "type": "if_stmt",
+        "parentId": "module/accuracy_from_logits.fn",
+        "line": 39,
+        "endLine": 40,
+        "col": 4,
+        "endCol": 18,
+        "condition": "total == 0",
+        "hasElse": false
+      },
+      {
+        "id": "module/accuracy_from_logits.fn/if@3/return@0",
+        "type": "return_stmt",
+        "parentId": "module/accuracy_from_logits.fn/if@3",
+        "line": 40,
+        "endLine": 40,
+        "col": 8,
+        "endCol": 18,
+        "value": "0.0"
+      },
+      {
+        "id": "module/accuracy_from_logits.fn/predictions.assign",
+        "type": "assignment",
+        "parentId": "module/accuracy_from_logits.fn",
+        "line": 42,
+        "endLine": 42,
+        "col": 4,
+        "endCol": 45,
+        "name": "predictions",
+        "valueKind": "call",
+        "preview": "torch.argmax(logits, dim=1)",
+        "callTarget": "torch.argmax",
+        "args": [
+          "logits"
+        ],
+        "kwargs": [
+          {
+            "name": "dim",
+            "value": "1"
+          }
+        ]
+      },
+      {
+        "id": "module/accuracy_from_logits.fn/correct.assign",
+        "type": "assignment",
+        "parentId": "module/accuracy_from_logits.fn",
+        "line": 43,
+        "endLine": 43,
+        "col": 4,
+        "endCol": 50,
+        "name": "correct",
+        "valueKind": "call",
+        "preview": "(predictions == labels).sum().item()",
+        "callTarget": "?.sum().item",
+        "nestsInnerCalls": true,
+        "nestExtracted": false
+      },
+      {
+        "id": "module/accuracy_from_logits.fn/return@0",
+        "type": "return_stmt",
+        "parentId": "module/accuracy_from_logits.fn",
+        "line": 44,
+        "endLine": 44,
+        "col": 4,
+        "endCol": 26,
+        "value": "correct / total"
+      },
+      {
+        "id": "module/evaluate.fn",
+        "type": "function_def",
+        "parentId": null,
+        "line": 47,
+        "endLine": 91,
+        "col": 0,
+        "endCol": 37,
+        "name": "evaluate",
+        "params": [
+          "model",
+          "num_batches=10",
+          "batch_size=32",
+          "num_classes=10",
+          "image_size=32",
+          "in_channels=3",
+          "generator=None"
+        ],
+        "docstring": "Run ``model`` over ``num_batches`` synthetic batches and return accuracy.\n\n    Evaluation happens in ``model.eval()`` under ``torch.no_grad()`` so no\n    gradients are tracked. Accuracy is aggregated across every sample of every\n    batch (not averaged per-batch), so uneven final batches would still weight\n    correctly. Returns a Python float in ``[0.0, 1.0]``.",
+        "decorators": [],
+        "isAsync": false,
+        "returns": "float"
+      },
+      {
+        "id": "module/evaluate.fn/if@0",
+        "type": "if_stmt",
+        "parentId": "module/evaluate.fn",
+        "line": 63,
+        "endLine": 64,
+        "col": 4,
+        "endCol": 88,
+        "condition": "num_batches < 1",
+        "hasElse": false
+      },
+      {
+        "id": "module/evaluate.fn/if@0/raise@0",
+        "type": "raise_stmt",
+        "parentId": "module/evaluate.fn/if@0",
+        "line": 64,
+        "endLine": 64,
+        "col": 8,
+        "endCol": 88,
+        "exc": "ValueError(f\"num_batches must be a posit",
+        "callTarget": "ValueError"
+      },
+      {
+        "id": "module/evaluate.fn/was_training.assign",
+        "type": "assignment",
+        "parentId": "module/evaluate.fn",
+        "line": 66,
+        "endLine": 66,
+        "col": 4,
+        "endCol": 33,
+        "name": "was_training",
+        "valueKind": "other",
+        "preview": "model.training"
+      },
+      {
+        "id": "module/evaluate.fn/model_eval.call",
+        "type": "call",
+        "parentId": "module/evaluate.fn",
+        "line": 67,
+        "endLine": 67,
+        "col": 4,
+        "endCol": 16,
+        "funcName": "model.eval",
+        "args": [],
+        "isEffect": false
+      },
+      {
+        "id": "module/evaluate.fn/total_correct.assign",
+        "type": "assignment",
+        "parentId": "module/evaluate.fn",
+        "line": 69,
+        "endLine": 69,
+        "col": 4,
+        "endCol": 21,
+        "name": "total_correct",
+        "valueKind": "scalar",
+        "preview": "0"
+      },
+      {
+        "id": "module/evaluate.fn/total_seen.assign",
+        "type": "assignment",
+        "parentId": "module/evaluate.fn",
+        "line": 70,
+        "endLine": 70,
+        "col": 4,
+        "endCol": 18,
+        "name": "total_seen",
+        "valueKind": "scalar",
+        "preview": "0"
+      },
+      {
+        "id": "module/evaluate.fn/try@0",
+        "type": "try_stmt",
+        "parentId": "module/evaluate.fn",
+        "line": 71,
+        "endLine": 87,
+        "col": 4,
+        "endCol": 33
+      },
+      {
+        "id": "module/evaluate.fn/try@0/torch_no_grad.call",
+        "type": "call",
+        "parentId": "module/evaluate.fn/try@0",
+        "line": 72,
+        "endLine": 72,
+        "col": 13,
+        "endCol": 28,
+        "funcName": "torch.no_grad",
+        "args": [],
+        "isEffect": false
+      },
+      {
+        "id": "module/evaluate.fn/try@0/for@0",
+        "type": "for_loop",
+        "parentId": "module/evaluate.fn/try@0",
+        "line": 73,
+        "endLine": 85,
+        "col": 12,
+        "endCol": 45,
+        "target": "_",
+        "iterName": "range(num_batches)"
+      },
+      {
+        "id": "module/evaluate.fn/try@0/for@0/?.assign",
+        "type": "assignment",
+        "parentId": "module/evaluate.fn/try@0/for@0",
+        "line": 74,
+        "endLine": 81,
+        "col": 16,
+        "endCol": 17,
+        "name": "?",
+        "valueKind": "call",
+        "preview": "generate_batch(\n    batch_size=batch_size,\n    channels=in_channels,\n    height=image_size,\n    width=image_size,\n    num_classes=num_classes,\n    generator=generator,\n)",
+        "callTarget": "generate_batch",
+        "kwargs": [
+          {
+            "name": "batch_size",
+            "value": "batch_size"
+          },
+          {
+            "name": "channels",
+            "value": "in_channels"
+          },
+          {
+            "name": "height",
+            "value": "image_size"
+          },
+          {
+            "name": "width",
+            "value": "image_size"
+          },
+          {
+            "name": "num_classes",
+            "value": "num_classes"
+          },
+          {
+            "name": "generator",
+            "value": "generator"
+          }
+        ]
+      },
+      {
+        "id": "module/evaluate.fn/try@0/for@0/logits.assign",
+        "type": "assignment",
+        "parentId": "module/evaluate.fn/try@0/for@0",
+        "line": 82,
+        "endLine": 82,
+        "col": 16,
+        "endCol": 38,
+        "name": "logits",
+        "valueKind": "call",
+        "preview": "model(images)",
+        "callTarget": "model",
+        "args": [
+          "images"
+        ]
+      },
+      {
+        "id": "module/evaluate.fn/try@0/for@0/predictions.assign",
+        "type": "assignment",
+        "parentId": "module/evaluate.fn/try@0/for@0",
+        "line": 83,
+        "endLine": 83,
+        "col": 16,
+        "endCol": 57,
+        "name": "predictions",
+        "valueKind": "call",
+        "preview": "torch.argmax(logits, dim=1)",
+        "callTarget": "torch.argmax",
+        "args": [
+          "logits"
+        ],
+        "kwargs": [
+          {
+            "name": "dim",
+            "value": "1"
+          }
+        ]
+      },
+      {
+        "id": "module/evaluate.fn/finally@0",
+        "type": "finally_block",
+        "parentId": "module/evaluate.fn",
+        "line": 86,
+        "endLine": 87,
+        "col": 4,
+        "endCol": 33
+      },
+      {
+        "id": "module/evaluate.fn/finally@0/model_train.call",
+        "type": "call",
+        "parentId": "module/evaluate.fn/finally@0",
+        "line": 87,
+        "endLine": 87,
+        "col": 8,
+        "endCol": 33,
+        "funcName": "model.train",
+        "args": [
+          "was_training"
+        ],
+        "isEffect": false
+      },
+      {
+        "id": "module/evaluate.fn/if@1",
+        "type": "if_stmt",
+        "parentId": "module/evaluate.fn",
+        "line": 89,
+        "endLine": 90,
+        "col": 4,
+        "endCol": 18,
+        "condition": "total_seen == 0",
+        "hasElse": false
+      },
+      {
+        "id": "module/evaluate.fn/if@1/return@0",
+        "type": "return_stmt",
+        "parentId": "module/evaluate.fn/if@1",
+        "line": 90,
+        "endLine": 90,
+        "col": 8,
+        "endCol": 18,
+        "value": "0.0"
+      },
+      {
+        "id": "module/evaluate.fn/return@0",
+        "type": "return_stmt",
+        "parentId": "module/evaluate.fn",
+        "line": 91,
+        "endLine": 91,
+        "col": 4,
+        "endCol": 37,
+        "value": "total_correct / total_seen"
+      }
+    ],
+    "edges": [
+      {
+        "source": "module/accuracy_from_logits.fn",
+        "target": "module/accuracy_from_logits.fn/if@0",
+        "type": "contains"
+      },
+      {
+        "source": "module/accuracy_from_logits.fn/if@0",
+        "target": "module/accuracy_from_logits.fn/if@0/raise@0",
+        "type": "contains"
+      },
+      {
+        "source": "module/accuracy_from_logits.fn",
+        "target": "module/accuracy_from_logits.fn/if@1",
+        "type": "contains"
+      },
+      {
+        "source": "module/accuracy_from_logits.fn/if@1",
+        "target": "module/accuracy_from_logits.fn/if@1/raise@0",
+        "type": "contains"
+      },
+      {
+        "source": "module/accuracy_from_logits.fn",
+        "target": "module/accuracy_from_logits.fn/if@2",
+        "type": "contains"
+      },
+      {
+        "source": "module/accuracy_from_logits.fn/if@2",
+        "target": "module/accuracy_from_logits.fn/if@2/raise@0",
+        "type": "contains"
+      },
+      {
+        "source": "module/accuracy_from_logits.fn",
+        "target": "module/accuracy_from_logits.fn/total.assign",
+        "type": "contains"
+      },
+      {
+        "source": "module/accuracy_from_logits.fn",
+        "target": "module/accuracy_from_logits.fn/if@3",
+        "type": "contains"
+      },
+      {
+        "source": "module/accuracy_from_logits.fn/if@3",
+        "target": "module/accuracy_from_logits.fn/if@3/return@0",
+        "type": "contains"
+      },
+      {
+        "source": "module/accuracy_from_logits.fn",
+        "target": "module/accuracy_from_logits.fn/predictions.assign",
+        "type": "contains"
+      },
+      {
+        "source": "module/accuracy_from_logits.fn",
+        "target": "module/accuracy_from_logits.fn/correct.assign",
+        "type": "contains"
+      },
+      {
+        "source": "module/accuracy_from_logits.fn",
+        "target": "module/accuracy_from_logits.fn/return@0",
+        "type": "contains"
+      },
+      {
+        "source": "module/evaluate.fn",
+        "target": "module/evaluate.fn/if@0",
+        "type": "contains"
+      },
+      {
+        "source": "module/evaluate.fn/if@0",
+        "target": "module/evaluate.fn/if@0/raise@0",
+        "type": "contains"
+      },
+      {
+        "source": "module/evaluate.fn",
+        "target": "module/evaluate.fn/was_training.assign",
+        "type": "contains"
+      },
+      {
+        "source": "module/evaluate.fn",
+        "target": "module/evaluate.fn/model_eval.call",
+        "type": "contains"
+      },
+      {
+        "source": "module/evaluate.fn",
+        "target": "module/evaluate.fn/total_correct.assign",
+        "type": "contains"
+      },
+      {
+        "source": "module/evaluate.fn",
+        "target": "module/evaluate.fn/total_seen.assign",
+        "type": "contains"
+      },
+      {
+        "source": "module/evaluate.fn",
+        "target": "module/evaluate.fn/try@0",
+        "type": "contains"
+      },
+      {
+        "source": "module/evaluate.fn/try@0",
+        "target": "module/evaluate.fn/try@0/torch_no_grad.call",
+        "type": "contains"
+      },
+      {
+        "source": "module/evaluate.fn/try@0",
+        "target": "module/evaluate.fn/try@0/for@0",
+        "type": "contains"
+      },
+      {
+        "source": "module/evaluate.fn/try@0/for@0",
+        "target": "module/evaluate.fn/try@0/for@0/?.assign",
+        "type": "contains"
+      },
+      {
+        "source": "module/evaluate.fn/try@0/for@0",
+        "target": "module/evaluate.fn/try@0/for@0/logits.assign",
+        "type": "contains"
+      },
+      {
+        "source": "module/evaluate.fn/try@0/for@0",
+        "target": "module/evaluate.fn/try@0/for@0/predictions.assign",
+        "type": "contains"
+      },
+      {
+        "source": "module/evaluate.fn",
+        "target": "module/evaluate.fn/finally@0",
+        "type": "contains"
+      },
+      {
+        "source": "module/evaluate.fn/finally@0",
+        "target": "module/evaluate.fn/finally@0/model_train.call",
+        "type": "contains"
+      },
+      {
+        "source": "module/evaluate.fn",
+        "target": "module/evaluate.fn/if@1",
+        "type": "contains"
+      },
+      {
+        "source": "module/evaluate.fn/if@1",
+        "target": "module/evaluate.fn/if@1/return@0",
+        "type": "contains"
+      },
+      {
+        "source": "module/evaluate.fn",
+        "target": "module/evaluate.fn/return@0",
+        "type": "contains"
+      },
+      {
+        "source": "module/evaluate.fn/try@0/for@0/?.assign",
+        "target": "module/generate_batch.fn",
+        "type": "reference",
+        "targetFile": "synthetic_data.py",
+        "qualifiedTarget": "synthetic_data:generate_batch"
+      }
+    ],
+    "symbolIndex": [
+      {
+        "sym": "function:accuracy_from_logits",
+        "kind": "function",
+        "name": "accuracy_from_logits",
+        "scope": "module",
+        "loc": {
+          "line": 20,
+          "endLine": 44,
+          "col": 0,
+          "endCol": 26
+        },
+        "signature": "def accuracy_from_logits(logits, labels)",
+        "docstring": "Fraction of rows whose argmax-over-classes matches the label.\n\n    ``logits`` is ``(N, num_classes)`` and ``labels`` is a 1-D int tensor of\n    shape ``(N,)``. Returns a Python float in ``[0.0, 1.0]``; an empty batch\n    scores ``0.0`` rather than dividing by zero.",
+        "source": "\n\ndef accuracy_from_logits(logits: torch.Tensor, labels: torch.Tensor) -> float:\n    \"\"\"Fraction of rows whose argmax-over-classes matches the label.\n\n    ``logits`` is ``(N, num_classes)`` and ``labels`` is a 1-D int tensor of\n    shape ``(N,)``. Returns a Python float in ``[0.0, 1.0]``; an empty batch\n    scores ``0.0`` rather than dividing by zero.\n    \"\"\"\n    if logits.dim() != 2:\n        raise ValueError(\n            f\"logits must be 2-D (N, num_classes), got shape {tuple(logits.shape)}\"\n        )\n    if labels.dim() != 1:\n        raise ValueError(f\"labels must be 1-D (N,), got shape {tuple(labels.shape)}\")\n    if logits.shape[0] != labels.shape[0]:\n        raise ValueError(\n            f\"batch mismatch: {logits.shape[0]} logit rows vs {labels.shape[0]} labels\"\n        )\n\n    total = labels.shape[0]\n    if total == 0:\n        return 0.0\n\n    predictions = torch.argmax(logits, dim=1)\n    correct = (predictions == labels).sum().item()\n    return correct / total\n"
+      },
+      {
+        "sym": "function:evaluate",
+        "kind": "function",
+        "name": "evaluate",
+        "scope": "module",
+        "loc": {
+          "line": 47,
+          "endLine": 91,
+          "col": 0,
+          "endCol": 37
+        },
+        "signature": "def evaluate(model, num_batches=10, batch_size=32, num_classes=10, image_size=32, in_channels=3, generator=None)",
+        "docstring": "Run ``model`` over ``num_batches`` synthetic batches and return accuracy.\n\n    Evaluation happens in ``model.eval()`` under ``torch.no_grad()`` so no\n    gradients are tracked. Accuracy is aggregated across every sample of every\n    batch (not averaged per-batch), so uneven final batches would still weight\n    correctly. Returns a Python float in ``[0.0, 1.0]``.",
+        "source": "\n\ndef evaluate(\n    model: CNNClassifier,\n    num_batches: int = 10,\n    batch_size: int = 32,\n    num_classes: int = 10,\n    image_size: int = 32,\n    in_channels: int = 3,\n    generator: torch.Generator | None = None,\n) -> float:\n    \"\"\"Run ``model`` over ``num_batches`` synthetic batches and return accuracy.\n\n    Evaluation happens in ``model.eval()`` under ``torch.no_grad()`` so no\n    gradients are tracked. Accuracy is aggregated across every sample of every\n    batch (not averaged per-batch), so uneven final batches would still weight\n    correctly. Returns a Python float in ``[0.0, 1.0]``.\n    \"\"\"\n    if num_batches < 1:\n        raise ValueError(f\"num_batches must be a positive integer, got {num_batches!r}\")\n\n    was_training = model.training\n    model.eval()\n\n    total_correct = 0\n    total_seen = 0\n    try:\n        with torch.no_grad():\n            for _ in range(num_batches):\n                images, labels = generate_batch(\n                    batch_size=batch_size,\n                    channels=in_channels,\n                    height=image_size,\n                    width=image_size,\n                    num_classes=num_classes,\n                    generator=generator,\n                )\n                logits = model(images)\n                predictions = torch.argmax(logits, dim=1)\n                total_correct += int((predictions == labels).sum().item())\n                total_seen += labels.shape[0]\n    finally:\n        model.train(was_training)\n\n    if total_seen == 0:\n        return 0.0\n    return total_correct / total_seen\n"
+      }
+    ],
+    "modulePath": "evaluate"
+  }
+}

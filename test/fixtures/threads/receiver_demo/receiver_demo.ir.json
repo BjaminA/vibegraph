@@ -1,0 +1,481 @@
+{
+  "main.py": {
+    "version": "1.4",
+    "nodes": [
+      {
+        "id": "module/engine.import_from",
+        "type": "import_from",
+        "parentId": null,
+        "line": 8,
+        "endLine": 8,
+        "col": 0,
+        "endCol": 25,
+        "module": "engine",
+        "names": [
+          "Engine"
+        ]
+      },
+      {
+        "id": "module/main.fn",
+        "type": "function_def",
+        "parentId": null,
+        "line": 11,
+        "endLine": 14,
+        "col": 0,
+        "endCol": 33,
+        "name": "main",
+        "params": [],
+        "docstring": null,
+        "decorators": [],
+        "isAsync": false,
+        "returns": null
+      },
+      {
+        "id": "module/main.fn/engine.assign",
+        "type": "assignment",
+        "parentId": "module/main.fn",
+        "line": 12,
+        "endLine": 12,
+        "col": 4,
+        "endCol": 22,
+        "name": "engine",
+        "valueKind": "call",
+        "preview": "Engine(4)",
+        "callTarget": "Engine",
+        "args": [
+          "4"
+        ]
+      },
+      {
+        "id": "module/main.fn/rpm.assign",
+        "type": "assignment",
+        "parentId": "module/main.fn",
+        "line": 13,
+        "endLine": 13,
+        "col": 4,
+        "endCol": 28,
+        "name": "rpm",
+        "valueKind": "call",
+        "preview": "engine.ignite(0.5)",
+        "callTarget": "engine.ignite",
+        "args": [
+          "0.5"
+        ]
+      },
+      {
+        "id": "module/main.fn/print.call",
+        "type": "call",
+        "parentId": "module/main.fn",
+        "line": 14,
+        "endLine": 14,
+        "col": 4,
+        "endCol": 33,
+        "funcName": "print",
+        "args": [
+          "f\"engine at {rpm} rpm\""
+        ],
+        "isEffect": true
+      },
+      {
+        "id": "module/if@0",
+        "type": "if_stmt",
+        "parentId": null,
+        "line": 17,
+        "endLine": 18,
+        "col": 0,
+        "endCol": 10,
+        "condition": "__name__ == \"__main__\"",
+        "hasElse": false
+      },
+      {
+        "id": "module/if@0/main.call",
+        "type": "call",
+        "parentId": "module/if@0",
+        "line": 18,
+        "endLine": 18,
+        "col": 4,
+        "endCol": 10,
+        "funcName": "main",
+        "args": [],
+        "isEffect": false
+      }
+    ],
+    "edges": [
+      {
+        "source": "module/main.fn",
+        "target": "module/main.fn/engine.assign",
+        "type": "contains"
+      },
+      {
+        "source": "module/main.fn",
+        "target": "module/main.fn/rpm.assign",
+        "type": "contains"
+      },
+      {
+        "source": "module/main.fn",
+        "target": "module/main.fn/print.call",
+        "type": "contains"
+      },
+      {
+        "source": "module/if@0",
+        "target": "module/if@0/main.call",
+        "type": "contains"
+      },
+      {
+        "source": "module/if@0/main.call",
+        "target": "module/main.fn",
+        "type": "reference"
+      },
+      {
+        "source": "module/main.fn/engine.assign",
+        "target": "module/Engine.class",
+        "type": "reference",
+        "targetFile": "engine.py",
+        "qualifiedTarget": "engine:Engine"
+      },
+      {
+        "source": "module/main.fn/rpm.assign",
+        "target": "module/main.fn/engine.assign",
+        "type": "reference",
+        "qualifiedTarget": "engine:Engine.ignite",
+        "viaLocal": "engine"
+      }
+    ],
+    "symbolIndex": [
+      {
+        "sym": "function:main",
+        "kind": "function",
+        "name": "main",
+        "scope": "module",
+        "loc": {
+          "line": 11,
+          "endLine": 14,
+          "col": 0,
+          "endCol": 33
+        },
+        "signature": "def main()",
+        "docstring": null,
+        "source": "\n\ndef main():\n    engine = Engine(4)\n    rpm = engine.ignite(0.5)\n    print(f\"engine at {rpm} rpm\")\n"
+      }
+    ],
+    "modulePath": "main"
+  },
+  "engine.py": {
+    "version": "1.3",
+    "nodes": [
+      {
+        "id": "module/Engine.class",
+        "type": "class_def",
+        "parentId": null,
+        "line": 4,
+        "endLine": 22,
+        "col": 0,
+        "endCol": 34,
+        "name": "Engine",
+        "bases": [],
+        "decorators": [],
+        "docstring": "Combustion model with a two-phase ignition sequence."
+      },
+      {
+        "id": "module/Engine.class/__init__.fn",
+        "type": "function_def",
+        "parentId": "module/Engine.class",
+        "line": 7,
+        "endLine": 9,
+        "col": 4,
+        "endCol": 28,
+        "name": "__init__",
+        "params": [
+          "self",
+          "cylinders"
+        ],
+        "docstring": null,
+        "decorators": [],
+        "isAsync": false,
+        "returns": null
+      },
+      {
+        "id": "module/Engine.class/__init__.fn/self_cylinders.assign",
+        "type": "assignment",
+        "parentId": "module/Engine.class/__init__.fn",
+        "line": 8,
+        "endLine": 8,
+        "col": 8,
+        "endCol": 34,
+        "name": "self.cylinders",
+        "valueKind": "other",
+        "preview": "cylinders"
+      },
+      {
+        "id": "module/Engine.class/__init__.fn/self_running.assign",
+        "type": "assignment",
+        "parentId": "module/Engine.class/__init__.fn",
+        "line": 9,
+        "endLine": 9,
+        "col": 8,
+        "endCol": 28,
+        "name": "self.running",
+        "valueKind": "other",
+        "preview": "False"
+      },
+      {
+        "id": "module/Engine.class/ignite.fn",
+        "type": "function_def",
+        "parentId": "module/Engine.class",
+        "line": 11,
+        "endLine": 19,
+        "col": 4,
+        "endCol": 18,
+        "name": "ignite",
+        "params": [
+          "self",
+          "throttle"
+        ],
+        "docstring": "Spin up; returns the achieved rpm.",
+        "decorators": [],
+        "isAsync": false,
+        "returns": null
+      },
+      {
+        "id": "module/Engine.class/ignite.fn/if@0",
+        "type": "if_stmt",
+        "parentId": "module/Engine.class/ignite.fn",
+        "line": 13,
+        "endLine": 14,
+        "col": 8,
+        "endCol": 57,
+        "condition": "throttle <= 0",
+        "hasElse": false
+      },
+      {
+        "id": "module/Engine.class/ignite.fn/if@0/raise@0",
+        "type": "raise_stmt",
+        "parentId": "module/Engine.class/ignite.fn/if@0",
+        "line": 14,
+        "endLine": 14,
+        "col": 12,
+        "endCol": 57,
+        "exc": "ValueError(\"throttle must be positive\")",
+        "callTarget": "ValueError"
+      },
+      {
+        "id": "module/Engine.class/ignite.fn/rpm.assign",
+        "type": "assignment",
+        "parentId": "module/Engine.class/ignite.fn",
+        "line": 15,
+        "endLine": 15,
+        "col": 8,
+        "endCol": 15,
+        "name": "rpm",
+        "valueKind": "scalar",
+        "preview": "0"
+      },
+      {
+        "id": "module/Engine.class/ignite.fn/for@0",
+        "type": "for_loop",
+        "parentId": "module/Engine.class/ignite.fn",
+        "line": 16,
+        "endLine": 17,
+        "col": 8,
+        "endCol": 47,
+        "target": "_",
+        "iterName": "range(self.cylinders)"
+      },
+      {
+        "id": "module/Engine.class/ignite.fn/for@0/rpm.assign",
+        "type": "assignment",
+        "parentId": "module/Engine.class/ignite.fn/for@0",
+        "line": 17,
+        "endLine": 17,
+        "col": 12,
+        "endCol": 47,
+        "name": "rpm",
+        "valueKind": "other",
+        "preview": "rpm + self.step_rpm(throttle)",
+        "nestsInnerCalls": true,
+        "nestExtracted": false
+      },
+      {
+        "id": "module/Engine.class/ignite.fn/self_running.assign",
+        "type": "assignment",
+        "parentId": "module/Engine.class/ignite.fn",
+        "line": 18,
+        "endLine": 18,
+        "col": 8,
+        "endCol": 27,
+        "name": "self.running",
+        "valueKind": "other",
+        "preview": "True"
+      },
+      {
+        "id": "module/Engine.class/ignite.fn/return@0",
+        "type": "return_stmt",
+        "parentId": "module/Engine.class/ignite.fn",
+        "line": 19,
+        "endLine": 19,
+        "col": 8,
+        "endCol": 18,
+        "value": "rpm"
+      },
+      {
+        "id": "module/Engine.class/step_rpm.fn",
+        "type": "function_def",
+        "parentId": "module/Engine.class",
+        "line": 21,
+        "endLine": 22,
+        "col": 4,
+        "endCol": 34,
+        "name": "step_rpm",
+        "params": [
+          "self",
+          "throttle"
+        ],
+        "docstring": null,
+        "decorators": [],
+        "isAsync": false,
+        "returns": null
+      },
+      {
+        "id": "module/Engine.class/step_rpm.fn/return@0",
+        "type": "return_stmt",
+        "parentId": "module/Engine.class/step_rpm.fn",
+        "line": 22,
+        "endLine": 22,
+        "col": 8,
+        "endCol": 34,
+        "value": "int(120 * throttle)",
+        "callTarget": "int"
+      }
+    ],
+    "edges": [
+      {
+        "source": "module/Engine.class",
+        "target": "module/Engine.class/__init__.fn",
+        "type": "contains"
+      },
+      {
+        "source": "module/Engine.class/__init__.fn",
+        "target": "module/Engine.class/__init__.fn/self_cylinders.assign",
+        "type": "contains"
+      },
+      {
+        "source": "module/Engine.class/__init__.fn",
+        "target": "module/Engine.class/__init__.fn/self_running.assign",
+        "type": "contains"
+      },
+      {
+        "source": "module/Engine.class",
+        "target": "module/Engine.class/ignite.fn",
+        "type": "contains"
+      },
+      {
+        "source": "module/Engine.class/ignite.fn",
+        "target": "module/Engine.class/ignite.fn/if@0",
+        "type": "contains"
+      },
+      {
+        "source": "module/Engine.class/ignite.fn/if@0",
+        "target": "module/Engine.class/ignite.fn/if@0/raise@0",
+        "type": "contains"
+      },
+      {
+        "source": "module/Engine.class/ignite.fn",
+        "target": "module/Engine.class/ignite.fn/rpm.assign",
+        "type": "contains"
+      },
+      {
+        "source": "module/Engine.class/ignite.fn",
+        "target": "module/Engine.class/ignite.fn/for@0",
+        "type": "contains"
+      },
+      {
+        "source": "module/Engine.class/ignite.fn/for@0",
+        "target": "module/Engine.class/ignite.fn/for@0/rpm.assign",
+        "type": "contains"
+      },
+      {
+        "source": "module/Engine.class/ignite.fn",
+        "target": "module/Engine.class/ignite.fn/self_running.assign",
+        "type": "contains"
+      },
+      {
+        "source": "module/Engine.class/ignite.fn",
+        "target": "module/Engine.class/ignite.fn/return@0",
+        "type": "contains"
+      },
+      {
+        "source": "module/Engine.class",
+        "target": "module/Engine.class/step_rpm.fn",
+        "type": "contains"
+      },
+      {
+        "source": "module/Engine.class/step_rpm.fn",
+        "target": "module/Engine.class/step_rpm.fn/return@0",
+        "type": "contains"
+      }
+    ],
+    "symbolIndex": [
+      {
+        "sym": "class:Engine",
+        "kind": "class",
+        "name": "Engine",
+        "scope": "module",
+        "loc": {
+          "line": 4,
+          "endLine": 22,
+          "col": 0,
+          "endCol": 34
+        },
+        "bases": [],
+        "docstring": "Combustion model with a two-phase ignition sequence.",
+        "source": "\n\nclass Engine:\n    \"\"\"Combustion model with a two-phase ignition sequence.\"\"\"\n\n    def __init__(self, cylinders):\n        self.cylinders = cylinders\n        self.running = False\n\n    def ignite(self, throttle):\n        \"\"\"Spin up; returns the achieved rpm.\"\"\"\n        if throttle <= 0:\n            raise ValueError(\"throttle must be positive\")\n        rpm = 0\n        for _ in range(self.cylinders):\n            rpm = rpm + self.step_rpm(throttle)\n        self.running = True\n        return rpm\n\n    def step_rpm(self, throttle):\n        return int(120 * throttle)\n"
+      },
+      {
+        "sym": "function:__init__",
+        "kind": "function",
+        "name": "__init__",
+        "scope": "module/Engine.class",
+        "loc": {
+          "line": 7,
+          "endLine": 9,
+          "col": 4,
+          "endCol": 28
+        },
+        "signature": "def __init__(self, cylinders)",
+        "docstring": null,
+        "source": "\ndef __init__(self, cylinders):\n    self.cylinders = cylinders\n    self.running = False\n"
+      },
+      {
+        "sym": "function:ignite",
+        "kind": "function",
+        "name": "ignite",
+        "scope": "module/Engine.class",
+        "loc": {
+          "line": 11,
+          "endLine": 19,
+          "col": 4,
+          "endCol": 18
+        },
+        "signature": "def ignite(self, throttle)",
+        "docstring": "Spin up; returns the achieved rpm.",
+        "source": "\ndef ignite(self, throttle):\n    \"\"\"Spin up; returns the achieved rpm.\"\"\"\n    if throttle <= 0:\n        raise ValueError(\"throttle must be positive\")\n    rpm = 0\n    for _ in range(self.cylinders):\n        rpm = rpm + self.step_rpm(throttle)\n    self.running = True\n    return rpm\n"
+      },
+      {
+        "sym": "function:step_rpm",
+        "kind": "function",
+        "name": "step_rpm",
+        "scope": "module/Engine.class",
+        "loc": {
+          "line": 21,
+          "endLine": 22,
+          "col": 4,
+          "endCol": 34
+        },
+        "signature": "def step_rpm(self, throttle)",
+        "docstring": null,
+        "source": "\ndef step_rpm(self, throttle):\n    return int(120 * throttle)\n"
+      }
+    ],
+    "modulePath": "engine"
+  }
+}

@@ -1,0 +1,289 @@
+{
+  "jobs.py": {
+    "version": "1.5",
+    "nodes": [
+      {
+        "id": "module/run_job.fn",
+        "type": "function_def",
+        "parentId": null,
+        "line": 10,
+        "endLine": 19,
+        "col": 0,
+        "endCol": 21,
+        "name": "run_job",
+        "params": [
+          "payload",
+          "store"
+        ],
+        "docstring": null,
+        "decorators": [],
+        "isAsync": false,
+        "returns": null
+      },
+      {
+        "id": "module/run_job.fn/store_begin.call",
+        "type": "call",
+        "parentId": "module/run_job.fn",
+        "line": 11,
+        "endLine": 11,
+        "col": 4,
+        "endCol": 17,
+        "funcName": "store.begin",
+        "args": [],
+        "isEffect": false
+      },
+      {
+        "id": "module/run_job.fn/try@0",
+        "type": "try_stmt",
+        "parentId": "module/run_job.fn",
+        "line": 12,
+        "endLine": 19,
+        "col": 4,
+        "endCol": 21
+      },
+      {
+        "id": "module/run_job.fn/try@0/record.assign",
+        "type": "assignment",
+        "parentId": "module/run_job.fn/try@0",
+        "line": 13,
+        "endLine": 13,
+        "col": 8,
+        "endCol": 37,
+        "name": "record",
+        "valueKind": "call",
+        "preview": "store.write(payload)",
+        "callTarget": "store.write",
+        "args": [
+          "payload"
+        ]
+      },
+      {
+        "id": "module/run_job.fn/try@0/return@0",
+        "type": "return_stmt",
+        "parentId": "module/run_job.fn/try@0",
+        "line": 14,
+        "endLine": 14,
+        "col": 8,
+        "endCol": 21,
+        "value": "record"
+      },
+      {
+        "id": "module/run_job.fn/except@0",
+        "type": "except_handler",
+        "parentId": "module/run_job.fn",
+        "line": 15,
+        "endLine": 17,
+        "col": 4,
+        "endCol": 19,
+        "exceptType": "ValueError"
+      },
+      {
+        "id": "module/run_job.fn/except@0/store_rollback.call",
+        "type": "call",
+        "parentId": "module/run_job.fn/except@0",
+        "line": 16,
+        "endLine": 16,
+        "col": 8,
+        "endCol": 24,
+        "funcName": "store.rollback",
+        "args": [],
+        "isEffect": false
+      },
+      {
+        "id": "module/run_job.fn/except@0/return@0",
+        "type": "return_stmt",
+        "parentId": "module/run_job.fn/except@0",
+        "line": 17,
+        "endLine": 17,
+        "col": 8,
+        "endCol": 19,
+        "value": "None"
+      },
+      {
+        "id": "module/run_job.fn/finally@0",
+        "type": "finally_block",
+        "parentId": "module/run_job.fn",
+        "line": 18,
+        "endLine": 19,
+        "col": 4,
+        "endCol": 21
+      },
+      {
+        "id": "module/run_job.fn/finally@0/store_close.call",
+        "type": "call",
+        "parentId": "module/run_job.fn/finally@0",
+        "line": 19,
+        "endLine": 19,
+        "col": 8,
+        "endCol": 21,
+        "funcName": "store.close",
+        "args": [],
+        "isEffect": false
+      }
+    ],
+    "edges": [
+      {
+        "source": "module/run_job.fn",
+        "target": "module/run_job.fn/store_begin.call",
+        "type": "contains"
+      },
+      {
+        "source": "module/run_job.fn",
+        "target": "module/run_job.fn/try@0",
+        "type": "contains"
+      },
+      {
+        "source": "module/run_job.fn/try@0",
+        "target": "module/run_job.fn/try@0/record.assign",
+        "type": "contains"
+      },
+      {
+        "source": "module/run_job.fn/try@0",
+        "target": "module/run_job.fn/try@0/return@0",
+        "type": "contains"
+      },
+      {
+        "source": "module/run_job.fn",
+        "target": "module/run_job.fn/except@0",
+        "type": "contains"
+      },
+      {
+        "source": "module/run_job.fn/except@0",
+        "target": "module/run_job.fn/except@0/store_rollback.call",
+        "type": "contains"
+      },
+      {
+        "source": "module/run_job.fn/except@0",
+        "target": "module/run_job.fn/except@0/return@0",
+        "type": "contains"
+      },
+      {
+        "source": "module/run_job.fn",
+        "target": "module/run_job.fn/finally@0",
+        "type": "contains"
+      },
+      {
+        "source": "module/run_job.fn/finally@0",
+        "target": "module/run_job.fn/finally@0/store_close.call",
+        "type": "contains"
+      }
+    ],
+    "symbolIndex": [
+      {
+        "sym": "function:run_job",
+        "kind": "function",
+        "name": "run_job",
+        "scope": "module",
+        "loc": {
+          "line": 10,
+          "endLine": 19,
+          "col": 0,
+          "endCol": 21
+        },
+        "signature": "def run_job(payload, store)",
+        "docstring": null,
+        "source": "\n\ndef run_job(payload, store):\n    store.begin()\n    try:\n        record = store.write(payload)\n        return record\n    except ValueError:\n        store.rollback()\n        return None\n    finally:\n        store.close()\n"
+      }
+    ],
+    "modulePath": "jobs"
+  },
+  "app.py": {
+    "version": "1.3",
+    "nodes": [
+      {
+        "id": "module/jobs.import_from",
+        "type": "import_from",
+        "parentId": null,
+        "line": 3,
+        "endLine": 3,
+        "col": 0,
+        "endCol": 24,
+        "module": "jobs",
+        "names": [
+          "run_job"
+        ]
+      },
+      {
+        "id": "module/main.fn",
+        "type": "function_def",
+        "parentId": null,
+        "line": 6,
+        "endLine": 8,
+        "col": 0,
+        "endCol": 17,
+        "name": "main",
+        "params": [
+          "store"
+        ],
+        "docstring": null,
+        "decorators": [],
+        "isAsync": false,
+        "returns": null
+      },
+      {
+        "id": "module/main.fn/result.assign",
+        "type": "assignment",
+        "parentId": "module/main.fn",
+        "line": 7,
+        "endLine": 7,
+        "col": 4,
+        "endCol": 38,
+        "name": "result",
+        "valueKind": "call",
+        "preview": "run_job({\"id\": 1}, store)",
+        "callTarget": "run_job",
+        "args": [
+          "{\"id\": 1}",
+          "store"
+        ]
+      },
+      {
+        "id": "module/main.fn/return@0",
+        "type": "return_stmt",
+        "parentId": "module/main.fn",
+        "line": 8,
+        "endLine": 8,
+        "col": 4,
+        "endCol": 17,
+        "value": "result"
+      }
+    ],
+    "edges": [
+      {
+        "source": "module/main.fn",
+        "target": "module/main.fn/result.assign",
+        "type": "contains"
+      },
+      {
+        "source": "module/main.fn",
+        "target": "module/main.fn/return@0",
+        "type": "contains"
+      },
+      {
+        "source": "module/main.fn/result.assign",
+        "target": "module/run_job.fn",
+        "type": "reference",
+        "targetFile": "jobs.py",
+        "qualifiedTarget": "jobs:run_job"
+      }
+    ],
+    "symbolIndex": [
+      {
+        "sym": "function:main",
+        "kind": "function",
+        "name": "main",
+        "scope": "module",
+        "loc": {
+          "line": 6,
+          "endLine": 8,
+          "col": 0,
+          "endCol": 17
+        },
+        "signature": "def main(store)",
+        "docstring": null,
+        "source": "\n\ndef main(store):\n    result = run_job({\"id\": 1}, store)\n    return result\n"
+      }
+    ],
+    "modulePath": "app"
+  }
+}

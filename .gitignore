@@ -1,0 +1,36 @@
+# Dependencies and build output.
+# No trailing slash: these are also ignored when they are SYMLINKS to a
+# shared install, which a trailing-slash pattern would not match.
+node_modules
+dist
+.pydeps
+
+# Test / benchmark output
+playwright-report/
+test-results/
+reviews/
+**/__pycache__/
+*.pyc
+
+# Runtime artifacts VibeGraph writes into the project it is analyzing.
+# Dynamic READMEs and thread-skills are regenerable; skills are ratified
+# per-project by a human and are not portable between checkouts.
+**/.vibegraph/readmes/
+**/.vibegraph/thread-skills/
+
+# Trained weights produced by the examples — regenerate with `python3 train.py`
+**/model.pt
+
+# Example inputs that the walkthrough asks you to create
+examples/*/data/holdout.csv
+
+# Editor / OS noise
+.DS_Store
+*.swp
+.idea/
+.vscode/
+
+# Local agent tooling and machine-specific config — not part of the project
+.claude/
+.mcp.json
+CLAUDE.md

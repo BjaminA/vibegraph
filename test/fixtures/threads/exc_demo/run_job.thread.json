@@ -1,0 +1,186 @@
+{
+  "version": "1.0",
+  "seed": {
+    "file": "jobs.py",
+    "irNodeId": "module/run_job.fn",
+    "qualifiedName": "jobs:run_job"
+  },
+  "nodes": [
+    {
+      "id": "jobs:run_job",
+      "kind": "seed",
+      "label": "run_job",
+      "file": "jobs.py",
+      "irNodeId": "module/run_job.fn",
+      "preview": null
+    },
+    {
+      "id": "dynamic:store.rollback",
+      "kind": "dynamic",
+      "label": "store.rollback",
+      "file": null,
+      "irNodeId": "module/run_job.fn/except@0/store_rollback.call",
+      "preview": "store.rollback",
+      "receiverBoundKind": "param"
+    },
+    {
+      "id": "jobs:run_job.fn/except@0",
+      "kind": "container",
+      "containerKind": "except",
+      "label": "except ValueError",
+      "file": "jobs.py",
+      "irNodeId": "module/run_job.fn/except@0",
+      "preview": null
+    },
+    {
+      "id": "dynamic:store.close",
+      "kind": "dynamic",
+      "label": "store.close",
+      "file": null,
+      "irNodeId": "module/run_job.fn/finally@0/store_close.call",
+      "preview": "store.close",
+      "receiverBoundKind": "param"
+    },
+    {
+      "id": "jobs:run_job.fn/finally@0",
+      "kind": "container",
+      "containerKind": "finally",
+      "label": "finally",
+      "file": "jobs.py",
+      "irNodeId": "module/run_job.fn/finally@0",
+      "preview": null
+    },
+    {
+      "id": "dynamic:store.begin",
+      "kind": "dynamic",
+      "label": "store.begin",
+      "file": null,
+      "irNodeId": "module/run_job.fn/store_begin.call",
+      "preview": "store.begin",
+      "receiverBoundKind": "param"
+    },
+    {
+      "id": "dynamic:store.write",
+      "kind": "dynamic",
+      "label": "store.write",
+      "file": null,
+      "irNodeId": "module/run_job.fn/try@0/record.assign",
+      "preview": "store.write(payload)",
+      "receiverBoundKind": "param"
+    },
+    {
+      "id": "jobs:run_job.fn/try@0",
+      "kind": "container",
+      "containerKind": "try",
+      "label": "try",
+      "file": "jobs.py",
+      "irNodeId": "module/run_job.fn/try@0",
+      "preview": null
+    },
+    {
+      "id": "jobs:run_job:return@0",
+      "kind": "return",
+      "label": "return",
+      "file": "jobs.py",
+      "irNodeId": "module/run_job.fn/try@0/return@0",
+      "preview": "record"
+    },
+    {
+      "id": "jobs:run_job:return@1",
+      "kind": "return",
+      "label": "return",
+      "file": "jobs.py",
+      "irNodeId": "module/run_job.fn/except@0/return@0",
+      "preview": "None"
+    }
+  ],
+  "edges": [
+    {
+      "from": "jobs:run_job",
+      "to": "dynamic:store.rollback",
+      "kind": "direct",
+      "irSource": "module/run_job.fn/except@0/store_rollback.call"
+    },
+    {
+      "from": "jobs:run_job.fn/except@0",
+      "to": "dynamic:store.rollback",
+      "kind": "contains",
+      "irSource": "module/run_job.fn/except@0"
+    },
+    {
+      "from": "jobs:run_job",
+      "to": "dynamic:store.close",
+      "kind": "direct",
+      "irSource": "module/run_job.fn/finally@0/store_close.call"
+    },
+    {
+      "from": "jobs:run_job.fn/finally@0",
+      "to": "dynamic:store.close",
+      "kind": "contains",
+      "irSource": "module/run_job.fn/finally@0"
+    },
+    {
+      "from": "jobs:run_job",
+      "to": "dynamic:store.begin",
+      "kind": "direct",
+      "irSource": "module/run_job.fn/store_begin.call"
+    },
+    {
+      "from": "jobs:run_job",
+      "to": "dynamic:store.write",
+      "kind": "direct",
+      "irSource": "module/run_job.fn/try@0/record.assign"
+    },
+    {
+      "from": "jobs:run_job.fn/try@0",
+      "to": "dynamic:store.write",
+      "kind": "contains",
+      "irSource": "module/run_job.fn/try@0"
+    },
+    {
+      "from": "dynamic:store.write",
+      "to": "jobs:run_job:return@0",
+      "kind": "direct",
+      "irSource": "module/run_job.fn/try@0/return@0"
+    },
+    {
+      "from": "jobs:run_job.fn/try@0",
+      "to": "jobs:run_job:return@0",
+      "kind": "contains",
+      "irSource": "module/run_job.fn/try@0"
+    },
+    {
+      "from": "dynamic:store.rollback",
+      "to": "jobs:run_job:return@1",
+      "kind": "direct",
+      "irSource": "module/run_job.fn/except@0/return@0"
+    },
+    {
+      "from": "jobs:run_job.fn/except@0",
+      "to": "jobs:run_job:return@1",
+      "kind": "contains",
+      "irSource": "module/run_job.fn/except@0"
+    },
+    {
+      "from": "jobs:run_job.fn/try@0",
+      "to": "jobs:run_job.fn/finally@0",
+      "kind": "flow",
+      "irSource": "module/run_job.fn/finally@0",
+      "label": "always"
+    },
+    {
+      "from": "jobs:run_job.fn/try@0",
+      "to": "jobs:run_job.fn/except@0",
+      "kind": "conditional",
+      "irSource": "module/run_job.fn/except@0",
+      "label": "on error"
+    },
+    {
+      "from": "jobs:run_job.fn/except@0",
+      "to": "jobs:run_job.fn/finally@0",
+      "kind": "flow",
+      "irSource": "module/run_job.fn/finally@0",
+      "label": "always"
+    }
+  ]
+}

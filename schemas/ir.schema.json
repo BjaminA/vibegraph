@@ -1,0 +1,442 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibegraph.dev/schemas/ir/1.5.json",
+  "title": "VibeGraph IR",
+  "description": "Intermediate representation emitted by scripts/parse_cst.py for a single Python source file. Pins the existing { version, nodes, edges, symbolIndex } shape and per-construct discriminated fields. See PLAN.md §1.1.\n\nv1.1 adds optional `modulePath` on root + optional `targetFile` and `qualifiedTarget` on edges (cross-file references, emitted by scripts/cross_file_link.py in project mode) + optional `callTarget` on assignment nodes.\n\nv1.2 (M8.2 — pulled forward from M9.1) adds optional `decorators: string[]` on FunctionDefNode and ClassDefNode (decorator source text, used by discover_entry_points.py for Flask/FastAPI route detection and M9's semantic icon system).\n\nv1.3 (M9.1) adds optional `effectKind` enum (db|http|fs|subprocess|log) on CallNode + AssignmentNode (when valueKind=='call') for the M9 icon system + thread external-effects panel, and `isAsync` boolean on FunctionDefNode (always present) for the async function variant.\n\nv1.4 (M17.1) adds optional `viaLocal` on reference edges — set when a method call's receiver is a local variable rather than an imported module (e.g. `parser.add_subparsers()` where `parser = argparse.ArgumentParser(...)` three lines up). The edge's `target` then points at the receiver's assignment node (same file); `qualifiedTarget` carries the fully resolved external/project symbol (e.g. `argparse:ArgumentParser.add_subparsers`); `viaLocal` records the receiver name for display.\n\nv1.5 (M17.2) extends the `NodeType` enum with four control-flow container kinds — `try_stmt`, `except_handler`, `finally_block`, `while_loop` — so the thread renderer can group call sites by their enclosing control-flow construct. Statements inside a `try` / `except` / `finally` / `while` arm have their `parentId` pointing at the container, not the enclosing function. This is a non-additive enum extension: consumers that switch on `node.type` may encounter unknown values. Per-arm shape: try_stmt has no extras; except_handler carries `exceptType: string | null`; finally_block has no extras; while_loop carries `condition: string` (mirroring IfStmt). All v1.0 → v1.4 IRs still validate. v1.5 IRs validate as long as consumers tolerate the four new enum members.\n\nAdditions through v1.4 are field-additive and backwards-compatible — v1.0 / v1.1 / v1.2 / v1.3 IRs still validate. v1.5 is enum-additive: structurally backwards-compatible (no required field changes), but consumers must accept the four new NodeType values to render M17.2 IRs.",
+  "type": "object",
+  "required": ["version", "nodes", "edges", "symbolIndex"],
+  "additionalProperties": true,
+  "properties": {
+    "version": {
+      "description": "IR schema version. v1.0 = M1 baseline; v1.1 = M4a (cross-file refs); v1.2 = M8.2 (decorators on FunctionDef/ClassDef); v1.3 = M9.1 (effectKind on call/assignment, isAsync on FunctionDef); v1.4 = M17.1 (viaLocal on reference edges for local-variable receivers); v1.5 = M17.2 (control-flow container nodes: try_stmt, except_handler, finally_block, while_loop — parentId-shifts children inside their arms).",
+      "enum": ["1.0", "1.1", "1.2", "1.3", "1.4", "1.5"]
+    },
+    "modulePath": {
+      "description": "Dotted module path relative to project root (e.g. 'main', 'pkg.sub.mod'). Present only in project mode; absent in single-file mode.",
+      "type": "string"
+    },
+    "filePath": {
+      "description": "Optional source path attached by the server when emitting an AstPayload. Not produced by the bare parser.",
+      "type": "string"
+    },
+    "nodes": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/Node" }
+    },
+    "edges": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/Edge" }
+    },
+    "symbolIndex": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/Symbol" }
+    }
+  },
+  "$defs": {
+    "NodeId": {
+      "description": "Structural-path ID. Always starts with 'module'. Subsequent segments are either '<name>.<kind>' (import|import_from|assign|fn|class|call) or '<kind>@<n>' for nameless statements (for|if|return|raise|call|try|except|finally|while). Slashes separate parents from children. Never contains line numbers.",
+      "type": "string",
+      "pattern": "^module(/[^/]+)*$"
+    },
+    "Line": {
+      "description": "1-indexed source line number.",
+      "type": "integer",
+      "minimum": 1
+    },
+    "Col": {
+      "description": "0-indexed source column number.",
+      "type": "integer",
+      "minimum": 0
+    },
+    "Position": {
+      "description": "Source range. Lines are 1-indexed; columns are 0-indexed. parse_cst.py always emits numeric values for every field.",
+      "type": "object",
+      "required": ["line", "endLine", "col", "endCol"],
+      "properties": {
+        "line": { "$ref": "#/$defs/Line" },
+        "endLine": { "$ref": "#/$defs/Line" },
+        "col": { "$ref": "#/$defs/Col" },
+        "endCol": { "$ref": "#/$defs/Col" }
+      }
+    },
+    "NodeType": {
+      "description": "Closed enum of structural node kinds emitted by parse_cst.py. Adding a kind is a schema change. v1.5 (M17.2) added try_stmt / except_handler / finally_block / while_loop as control-flow container kinds — statements inside their arms have `parentId` pointing at the container, not the enclosing function.",
+      "type": "string",
+      "enum": [
+        "import",
+        "import_from",
+        "assignment",
+        "function_def",
+        "class_def",
+        "for_loop",
+        "if_stmt",
+        "return_stmt",
+        "raise_stmt",
+        "call",
+        "try_stmt",
+        "except_handler",
+        "finally_block",
+        "while_loop"
+      ]
+    },
+    "EdgeType": {
+      "description": "Closed enum of edge kinds. 'contains' is emitted automatically by _emit() for parent-child relationships; 'reference' is emitted at call sites and inheritance; 'data' is emitted on iterable->for_loop flow; 'control' is reserved for branch flow (not currently emitted but reserved by protocol.ts).",
+      "type": "string",
+      "enum": ["contains", "data", "reference", "control"]
+    },
+    "EffectKind": {
+      "description": "v1.3+: classifies an external-system call. String-match heuristic per PLAN-v2.md §2.1; false positives expected (the icon system is for scanning, not correctness claims).",
+      "type": "string",
+      "enum": ["db", "http", "fs", "subprocess", "log"]
+    },
+    "NestsInnerCalls": {
+      "description": "M-NEST (field-additive, no version bump): true when this statement's expression hides at least one call beyond its outermost call — covering ALL nest forms (arg-nests, method chains, comprehensions, literal-embedded calls). This is the honesty signal the view badges. Absent (treated as false) when the expression has no nested call.",
+      "type": "boolean"
+    },
+    "NestExtracted": {
+      "description": "M-NEST (field-additive, no version bump): present only alongside nestsInnerCalls. true when v1 actually minted child `call` nodes (the nesting was inside call ARGUMENTS); false when the nesting was detected but deferred (chains/comprehensions/literals) — those are honestly badged but not yet decomposed into nodes. This false case IS the documented stopping rule.",
+      "type": "boolean"
+    },
+    "ValueKind": {
+      "description": "Discriminator for assignment value shape. Maps to libcst expression types in _value_kind().",
+      "type": "string",
+      "enum": [
+        "scalar",
+        "string",
+        "fstring",
+        "list",
+        "tuple",
+        "dict",
+        "set",
+        "call",
+        "other"
+      ]
+    },
+    "SymbolKind": {
+      "description": "Closed enum of symbol kinds. 'method' is reserved for future class-aware emission; current parser uses 'function' for both module-level and class-level defs.",
+      "type": "string",
+      "enum": ["function", "method", "class", "variable", "import"]
+    },
+    "BaseNode": {
+      "description": "Common fields on every node. Per-type extras are pinned by the discriminated union in Node.",
+      "type": "object",
+      "required": ["id", "type", "parentId", "line", "endLine", "col", "endCol"],
+      "properties": {
+        "id": { "$ref": "#/$defs/NodeId" },
+        "type": { "$ref": "#/$defs/NodeType" },
+        "parentId": {
+          "description": "Parent node ID, or null at module scope.",
+          "anyOf": [
+            { "$ref": "#/$defs/NodeId" },
+            { "type": "null" }
+          ]
+        },
+        "line": { "$ref": "#/$defs/Line" },
+        "endLine": { "$ref": "#/$defs/Line" },
+        "col": { "$ref": "#/$defs/Col" },
+        "endCol": { "$ref": "#/$defs/Col" }
+      }
+    },
+    "ImportNode": {
+      "description": "`import x` / `import x as y`. Aliases are encoded in-string as 'x as y'.",
+      "type": "object",
+      "allOf": [{ "$ref": "#/$defs/BaseNode" }],
+      "properties": {
+        "type": { "const": "import" },
+        "names": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string" }
+        }
+      },
+      "required": ["names"]
+    },
+    "ImportFromNode": {
+      "description": "`from x.y import a, b`. `module` is empty string for relative-only imports (`from . import …`).",
+      "type": "object",
+      "allOf": [{ "$ref": "#/$defs/BaseNode" }],
+      "properties": {
+        "type": { "const": "import_from" },
+        "module": { "type": "string" },
+        "names": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      },
+      "required": ["module", "names"]
+    },
+    "AssignmentNode": {
+      "description": "Single-target assignment. Multi-target tuple-destructure currently records only the first target. `name` may be dotted (e.g. 'self.name'); `preview` is truncated source. `callTarget` is present iff valueKind=='call' (v1.1+) and is the dotted callee name — used by cross_file_link.py to resolve assignment-RHS calls. `effectKind` (v1.3+) classifies the call's external-system effect when valueKind=='call'. `annotation` (field-additive, no version bump) carries the type-annotation source text for annotated assignments (`x: int`, dataclass fields); the declaration-only form (`uid: int`, no RHS) has an empty `preview` and `valueKind='other'`. `args` / `kwargs` (field-additive, no version bump) carry the structured constructor arguments when valueKind=='call' — positional arg source strings and {name,value} keyword pairs, full (untruncated, unlike `preview`). Star-args (`*x`/`**y`) are omitted from both. Used by the architecture view to read individual layer args (e.g. nn.Conv2d(3,64,3) → args ['3','64','3']) and compute per-layer param counts from literal values.",
+      "type": "object",
+      "allOf": [{ "$ref": "#/$defs/BaseNode" }],
+      "properties": {
+        "type": { "const": "assignment" },
+        "name": { "type": "string" },
+        "valueKind": { "$ref": "#/$defs/ValueKind" },
+        "preview": { "type": "string" },
+        "annotation": { "type": "string" },
+        "callTarget": { "type": "string" },
+        "effectKind": { "$ref": "#/$defs/EffectKind" },
+        "args": { "type": "array", "items": { "type": "string" } },
+        "kwargs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": { "name": { "type": "string" }, "value": { "type": "string" } },
+            "required": ["name", "value"]
+          }
+        },
+        "nestsInnerCalls": { "$ref": "#/$defs/NestsInnerCalls" },
+        "nestExtracted": { "$ref": "#/$defs/NestExtracted" }
+      },
+      "required": ["name", "valueKind", "preview"]
+    },
+    "FunctionDefNode": {
+      "description": "`def name(...)`. Methods are emitted with type='function_def' too — distinguish via parentId pointing at a class_def. `docstring` is null when absent (always present as a key). `decorators` (v1.2+) is the source-text list of decorator expressions, e.g. ['app.route(\"/\")', 'login_required']; empty array when bare. `isAsync` (v1.3+) is true for `async def`, false for sync; always present. `returns` (§5.5, field-additive, no version bump — mirrors `annotation` on AssignmentNode) is the return-type annotation source text (the expression after `->`, e.g. 'sqlite3.Connection'), or null when unannotated; consumed by cross_file_link.py for one-hop return-type inference of lowercase-bound receivers (`conn = _get_conn()` where `_get_conn` is annotated → `conn.execute` resolves to honest-external `sqlite3.Connection.execute` instead of `dynamic`).",
+      "type": "object",
+      "allOf": [{ "$ref": "#/$defs/BaseNode" }],
+      "properties": {
+        "type": { "const": "function_def" },
+        "name": { "type": "string" },
+        "params": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "docstring": {
+          "type": ["string", "null"]
+        },
+        "decorators": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "isAsync": { "type": "boolean" },
+        "returns": { "type": ["string", "null"] }
+      },
+      "required": ["name", "params", "docstring"]
+    },
+    "ClassDefNode": {
+      "description": "`class Name(Base, ...)`. `bases` is always present (empty array if no bases). `decorators` (v1.2+) is the source-text list of decorator expressions, empty when bare. `docstring` (M-FS6, field-additive, no version bump — mirrors function_def) is the class docstring or null; consumed by entry-point discovery so class entries carry a summary like function entries do.",
+      "type": "object",
+      "allOf": [{ "$ref": "#/$defs/BaseNode" }],
+      "properties": {
+        "type": { "const": "class_def" },
+        "name": { "type": "string" },
+        "bases": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "decorators": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "docstring": {
+          "type": ["string", "null"]
+        }
+      },
+      "required": ["name", "bases"]
+    },
+    "ForLoopNode": {
+      "description": "`for target in iter:`. `iterName` is the source text of the iterable expression.",
+      "type": "object",
+      "allOf": [{ "$ref": "#/$defs/BaseNode" }],
+      "properties": {
+        "type": { "const": "for_loop" },
+        "target": { "type": "string" },
+        "iterName": { "type": "string" }
+      },
+      "required": ["target", "iterName"]
+    },
+    "IfStmtNode": {
+      "description": "`if cond:` with optional else/elif arm. `condition` is the source text of the test. `elseLine` (M17.3, field-additive — no version bump, mirrors the v1.1–v1.4 additive convention) is present whenever the if has a trailing arm (`hasElse: true`); it's the start line of that arm (the `else:` block, or the nested `elif` If). The thread extractor uses it to split call sites into if_then (line < elseLine) vs if_else (line >= elseLine) containers. For `elif`, the nested If sits in the outer if's else arm, so a call reached through it lands in if_else and the elif's own if_stmt nests inside that else container.",
+      "type": "object",
+      "allOf": [{ "$ref": "#/$defs/BaseNode" }],
+      "properties": {
+        "type": { "const": "if_stmt" },
+        "condition": { "type": "string" },
+        "hasElse": { "type": "boolean" },
+        "elseLine": { "$ref": "#/$defs/Line" }
+      },
+      "required": ["condition", "hasElse"]
+    },
+    "ReturnStmtNode": {
+      "description": "`return [value]`. `value` is the truncated source of the returned expression, or null for bare `return`. M-NEST: when the returned expression is a direct call (`return self.fc(x)`), `callTarget` carries the dotted callee (so the architecture forwardSeq surfaces the layer it applies) and `effectKind` classifies any external effect. `nestsInnerCalls`/`nestExtracted` flag nested calls inside the returned expression.",
+      "type": "object",
+      "allOf": [{ "$ref": "#/$defs/BaseNode" }],
+      "properties": {
+        "type": { "const": "return_stmt" },
+        "value": {
+          "type": ["string", "null"]
+        },
+        "callTarget": { "type": "string" },
+        "effectKind": { "$ref": "#/$defs/EffectKind" },
+        "nestsInnerCalls": { "$ref": "#/$defs/NestsInnerCalls" },
+        "nestExtracted": { "$ref": "#/$defs/NestExtracted" }
+      },
+      "required": ["value"]
+    },
+    "RaiseStmtNode": {
+      "description": "`raise [exc]`. `exc` is the truncated source of the raised expression, or null for bare `raise`. M-NEST: when the raised expression is a direct call (`raise ValueError(msg)`), `callTarget`/`effectKind` mirror the return_stmt fields; `nestsInnerCalls`/`nestExtracted` flag nested calls in the raised expression.",
+      "type": "object",
+      "allOf": [{ "$ref": "#/$defs/BaseNode" }],
+      "properties": {
+        "type": { "const": "raise_stmt" },
+        "exc": {
+          "type": ["string", "null"]
+        },
+        "callTarget": { "type": "string" },
+        "effectKind": { "$ref": "#/$defs/EffectKind" },
+        "nestsInnerCalls": { "$ref": "#/$defs/NestsInnerCalls" },
+        "nestExtracted": { "$ref": "#/$defs/NestExtracted" }
+      },
+      "required": ["exc"]
+    },
+    "CallNode": {
+      "description": "Bare expression-statement call (e.g. `print(x)`) OR (M-NEST) a call nested inside another call's arguments. Top-level statement calls carry just funcName/args/isEffect. Nested calls (minted by the M-NEST arg-walk) additionally carry `nested: true`, `nestedDepth` (1 for a direct arg-nest, higher for multi-level), `callTarget` (mirrors funcName so the architecture forwardSeq surfaces nested layer applications), and a `preview`. Their parentId points at the enclosing call/assignment/return node, with a `contains` edge wiring outer→inner. `effectKind` (v1.3+) classifies the external-system effect when the funcName matches one of the §2.1 detection rules.",
+      "type": "object",
+      "allOf": [{ "$ref": "#/$defs/BaseNode" }],
+      "properties": {
+        "type": { "const": "call" },
+        "funcName": { "type": "string" },
+        "args": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "isEffect": { "type": "boolean" },
+        "effectKind": { "$ref": "#/$defs/EffectKind" },
+        "callTarget": { "type": "string" },
+        "preview": { "type": "string" },
+        "nested": { "type": "boolean" },
+        "nestedDepth": { "type": "integer", "minimum": 1 },
+        "nestsInnerCalls": { "$ref": "#/$defs/NestsInnerCalls" },
+        "nestExtracted": { "$ref": "#/$defs/NestExtracted" }
+      },
+      "required": ["funcName", "args", "isEffect"]
+    },
+    "TryStmtNode": {
+      "description": "v1.5 (M17.2): `try:` container. Statements directly inside the try body have parentId pointing at this node. The matching `except_handler` / `finally_block` nodes are emitted as siblings (parented at the same scope as the try_stmt), not children — keeping the IR's parent chain a clean structural tree without arm-specific traversal logic. The relationship between `try_stmt` and its arms is positional (line proximity in source order).",
+      "type": "object",
+      "allOf": [{ "$ref": "#/$defs/BaseNode" }],
+      "properties": {
+        "type": { "const": "try_stmt" }
+      }
+    },
+    "ExceptHandlerNode": {
+      "description": "v1.5 (M17.2): `except [Type [as name]]:` arm of a try. `exceptType` is the source text of the caught exception (e.g. 'ValueError', 'Exception'), or null for bare `except:`. Statements inside the handler have parentId pointing at this node.",
+      "type": "object",
+      "allOf": [{ "$ref": "#/$defs/BaseNode" }],
+      "properties": {
+        "type": { "const": "except_handler" },
+        "exceptType": {
+          "type": ["string", "null"]
+        }
+      },
+      "required": ["exceptType"]
+    },
+    "FinallyBlockNode": {
+      "description": "v1.5 (M17.2): `finally:` arm of a try. Statements inside the finally have parentId pointing at this node.",
+      "type": "object",
+      "allOf": [{ "$ref": "#/$defs/BaseNode" }],
+      "properties": {
+        "type": { "const": "finally_block" }
+      }
+    },
+    "WhileLoopNode": {
+      "description": "v1.5 (M17.2): `while cond:` container. `condition` is the source text of the test (mirrors IfStmt). Statements inside the loop body have parentId pointing at this node.",
+      "type": "object",
+      "allOf": [{ "$ref": "#/$defs/BaseNode" }],
+      "properties": {
+        "type": { "const": "while_loop" },
+        "condition": { "type": "string" }
+      },
+      "required": ["condition"]
+    },
+    "Node": {
+      "description": "Discriminated union over node types. The `type` field selects which extra fields are required.",
+      "oneOf": [
+        { "$ref": "#/$defs/ImportNode" },
+        { "$ref": "#/$defs/ImportFromNode" },
+        { "$ref": "#/$defs/AssignmentNode" },
+        { "$ref": "#/$defs/FunctionDefNode" },
+        { "$ref": "#/$defs/ClassDefNode" },
+        { "$ref": "#/$defs/ForLoopNode" },
+        { "$ref": "#/$defs/IfStmtNode" },
+        { "$ref": "#/$defs/ReturnStmtNode" },
+        { "$ref": "#/$defs/RaiseStmtNode" },
+        { "$ref": "#/$defs/CallNode" },
+        { "$ref": "#/$defs/TryStmtNode" },
+        { "$ref": "#/$defs/ExceptHandlerNode" },
+        { "$ref": "#/$defs/FinallyBlockNode" },
+        { "$ref": "#/$defs/WhileLoopNode" }
+      ]
+    },
+    "Edge": {
+      "description": "Directed edge between two node IDs. `contains` is auto-emitted by _emit(); other kinds are emitted by specific visitors. v1.1+: edges may carry `targetFile` (absolute path) and `qualifiedTarget` (e.g. 'models:User') when the edge crosses files — `target` then refers to a NodeId inside the foreign file's IR. v1.4+: edges may carry `viaLocal` (the receiver-variable name) for reference edges where the call's receiver is a local variable bound to an external class — `target` points at the receiver's assignment node (same file), `qualifiedTarget` resolves through the binding to the external symbol.",
+      "type": "object",
+      "required": ["source", "target", "type"],
+      "additionalProperties": false,
+      "properties": {
+        "source": { "$ref": "#/$defs/NodeId" },
+        "target": { "$ref": "#/$defs/NodeId" },
+        "type": { "$ref": "#/$defs/EdgeType" },
+        "targetFile": {
+          "description": "Absolute path of the file containing the target node. Absent for intra-file edges.",
+          "type": "string"
+        },
+        "qualifiedTarget": {
+          "description": "Qualified symbol path of the target (e.g. 'models:User', 'pkg.sub.mod:fn'). Display/debugging hint; resolution is via {targetFile, target}.",
+          "type": "string"
+        },
+        "viaLocal": {
+          "description": "v1.4+: name of the local variable through which this edge resolves. Present when a call like `parser.add_subparsers()` was resolved via `parser = argparse.ArgumentParser(...)` — `target` then points at the assignment node, `qualifiedTarget` at the resolved method (e.g. `argparse:ArgumentParser.add_subparsers`).",
+          "type": "string"
+        },
+        "viaReturnType": {
+          "description": "§5.5 (field-additive, no version bump): true ONLY when a viaLocal edge resolved through one-hop return-type inference — the receiver was bound from a function call whose return annotation named the type (`conn = _get_conn()` where `def _get_conn() -> sqlite3.Connection:`), NOT a direct class instantiation. The run-to-node effect scan (scan_effects.py) reads this to refuse conservatively: the external method's purity is unprovable and the parse-time effectKind heuristic (receiver-name based) can miss non-conventional names.",
+          "type": "boolean"
+        }
+      }
+    },
+    "SymbolLoc": {
+      "description": "Symbol location. Matches Position but `endCol` is nullable per protocol.ts:SymbolEntry — kept for forward compatibility even though the current parser always emits a number.",
+      "type": "object",
+      "required": ["line", "endLine", "col", "endCol"],
+      "properties": {
+        "line": { "$ref": "#/$defs/Line" },
+        "endLine": { "$ref": "#/$defs/Line" },
+        "col": { "$ref": "#/$defs/Col" },
+        "endCol": {
+          "anyOf": [
+            { "$ref": "#/$defs/Col" },
+            { "type": "null" }
+          ]
+        }
+      }
+    },
+    "Symbol": {
+      "description": "Entry in symbolIndex. Pinned by protocol.ts:SymbolEntry. `sym` is a stable key like 'function:foo' / 'class:Bar'; `scope` is either 'module' or a parent node ID.",
+      "type": "object",
+      "required": ["sym", "kind", "name", "scope", "loc", "source"],
+      "properties": {
+        "sym": { "type": "string" },
+        "kind": { "$ref": "#/$defs/SymbolKind" },
+        "name": { "type": "string" },
+        "scope": {
+          "description": "'module' for top-level symbols, otherwise a NodeId (e.g. 'module/Shape.class' for a method).",
+          "type": "string"
+        },
+        "loc": { "$ref": "#/$defs/SymbolLoc" },
+        "signature": { "type": "string" },
+        "docstring": {
+          "type": ["string", "null"]
+        },
+        "valueType": { "type": "string" },
+        "bases": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "module": { "type": "string" },
+        "source": { "type": "string" }
+      }
+    }
+  }
+}

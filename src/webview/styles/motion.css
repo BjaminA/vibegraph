@@ -1,0 +1,549 @@
+/* VibeGraph motion — the four specs from PLAN.md Aesthetic Appendix.
+   No bounce, no spring physics, no infinite loops. Easings/durations exact. */
+
+/* ── node-enter (240ms) ────────────────────────────────────────────────────
+   Applied to the inner div of a React Flow node on first render after the
+   node ID first appears in the graph. useNodeMotion tracks the diff. */
+@keyframes vg-node-enter-kf {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.vg-node-enter > * {
+  animation: vg-node-enter-kf var(--motion-node-enter-dur) var(--motion-node-enter-ease) both;
+}
+
+/* ── thread enter-stagger (M17.3-polish) ───────────────────────────────────
+   Thread-view nodes fade in on first paint, but staggered by containment
+   depth so the structure reads before its contents: a try/finally/if/for
+   container appears first (delay 0), the call sites inside it 50ms later,
+   a container nested one level deeper 50ms after that, and so on. The
+   delay is fed per-node as --vg-enter-delay by ThreadCanvas (depth * 50ms).
+
+   Reuses the M3 node-enter keyframe (opacity + 8px rise, 240ms,
+   cubic-bezier(0.2,0,0,1)) but with `backwards` fill rather than `both`:
+   backwards holds the `from` (invisible) state through the delay window,
+   then releases after the animation completes so the node's resting
+   transform reverts to base — leaving the .vg-thread-node hover-lift
+   transform free to take over. (`both` would pin transform:none and
+   block hover.) */
+.vg-thread-enter > * {
+  animation: vg-node-enter-kf var(--motion-node-enter-dur) var(--motion-node-enter-ease) backwards;
+  animation-delay: var(--vg-enter-delay, 0ms);
+}
+
+/* ── node-exit (160ms) ─────────────────────────────────────────────────────
+   React Flow drops nodes synchronously, so we render ghosts in a sibling
+   overlay layer (not inside RF's node tree). useNodeMotion produces the
+   ghost list; ghosts auto-remove via setTimeout(160) in the hook. */
+@keyframes vg-node-exit-kf {
+  from { opacity: 1; transform: translateY(0); }
+  to   { opacity: 0; transform: translateY(-8px); }
+}
+.vg-node-exit-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+}
+.vg-node-exit-ghost {
+  position: absolute;
+  background: var(--bg-node);
+  border: 1px solid var(--border-edge);
+  border-radius: 6px;
+  animation: vg-node-exit-kf var(--motion-node-exit-dur) var(--motion-node-exit-ease) both;
+}
+
+/* ── edge-draw (320ms) ─────────────────────────────────────────────────────
+   MotionEdge sets --vg-edge-length and stroke-dasharray on first paint, then
+   animates dashoffset to 0. A second render skips re-applying via useRef. */
+@keyframes vg-edge-draw-kf {
+  from { stroke-dashoffset: var(--vg-edge-length); }
+  to   { stroke-dashoffset: 0; }
+}
+.vg-edge-draw {
+  stroke-dasharray: var(--vg-edge-length);
+  animation: vg-edge-draw-kf var(--motion-edge-draw-dur) ease-out both;
+}
+
+/* ── view-transition (280ms) ───────────────────────────────────────────────
+   ViewTransition wrapper applies these classes to its root. Enter on mount,
+   exit on `show=false` (kept in DOM for 280ms). */
+@keyframes vg-view-enter-kf {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes vg-view-exit-kf {
+  from { opacity: 1; transform: translateY(0); }
+  to   { opacity: 0; transform: translateY(6px); }
+}
+.vg-view-enter {
+  animation: vg-view-enter-kf var(--motion-view-dur) var(--motion-view-ease) both;
+}
+.vg-view-exit {
+  animation: vg-view-exit-kf var(--motion-view-dur) var(--motion-view-ease) both;
+  pointer-events: none;
+}
+
+/* M9.4 — effects-panel edit-context highlight. Static whole-line tint
+   in --accent-thread @ 14% mix on the Monaco line wrapper. Matches the
+   pulse hue (also --accent-thread) so the panel reads as "this is the
+   slice you're editing on the canvas". No animation — the panel is
+   context, not a callout. */
+.monaco-editor .vg-effects-panel-highlight {
+  background-color: color-mix(in oklab, var(--accent-thread) 14%, transparent);
+}
+
+/* M5 wave 4: pulse-highlight on the code view's selected range.
+   600ms total: fast in (150ms), brief hold, gentle out (450ms). The
+   colour is `--accent-thread` mixed at 22% over the existing
+   line-highlight background so it reads as accent without flashing.
+   Applied via Monaco's deltaDecorations -- the className is set on
+   the editor's per-line `linesContent` row, so we have to target
+   Monaco's structure directly. */
+@keyframes vg-pulse-kf {
+  0%   { background-color: color-mix(in oklab, var(--accent-thread) 0%,  transparent); }
+  25%  { background-color: color-mix(in oklab, var(--accent-thread) 22%, transparent); }
+  100% { background-color: color-mix(in oklab, var(--accent-thread) 0%,  transparent); }
+}
+.monaco-editor .vg-pulse-line {
+  animation: vg-pulse-kf 600ms cubic-bezier(0.2, 0, 0, 1) both;
+}
+
+/* ── U2 — thread edges (PLAN.md updateUI §3, vibegraph-aesthetic skill) ──
+   Glow via drop-shadow (4px blur, accent-thread @ 60% opacity), three-tier
+   stroke-width by call-frequency, dashed for cross-file boundaries, gentle
+   pulse on the active path. Drives the "alive code, not Visio" feel:
+   bright connections breathe on near-black; nodes stay dim at rest.
+
+   Tier rule:
+     thin  = terminal target (external / dynamic / return)
+     thick = shared callee (>1 incoming edge in the thread)
+     medium = default
+
+   The pulse is a tokenised exception to the Aesthetic Appendix's
+   "no infinite loops" rule — same exception M3's data-edge stroke-
+   dashoffset takes. 1600ms cycle is the defaulted feel (the skill's
+   200ms reads as a flicker at this density). Push back if a different
+   amplitude / period is preferred. */
+.vg-thread-edge .react-flow__edge-path {
+  stroke: var(--accent-thread);
+  stroke-width: 1.5px;
+  fill: none;
+  filter: drop-shadow(0 0 4px color-mix(in oklab, var(--accent-thread) 60%, transparent));
+  animation: vg-thread-edge-pulse 1600ms ease-in-out infinite;
+  transition: opacity var(--motion-fade-dur) ease;
+}
+.vg-thread-edge-thin .react-flow__edge-path  { stroke-width: 1px; }
+.vg-thread-edge-thick .react-flow__edge-path { stroke-width: 2.5px; }
+
+/* M-FV.3 (W3) — file-view flow edges share the thread edge's luminous
+   accent + glow for cross-view parity, but NOT the infinite pulse (the file
+   view is static; the pulse is the thread view's deliberate exception to the
+   no-infinite-loops rule). */
+.vg-flow-edge.react-flow__edge-path,
+.vg-flow-edge .react-flow__edge-path {
+  filter: drop-shadow(0 0 4px color-mix(in oklab, var(--accent-thread) 55%, transparent));
+}
+.vg-thread-edge-conditional .react-flow__edge-path {
+  stroke-dasharray: 4 2;
+  /* No pulse on conditional edges — uncertainty isn't "alive". */
+  animation: none;
+}
+.vg-thread-edge-cross-file .react-flow__edge-path {
+  stroke-dasharray: 6 3;
+  filter: drop-shadow(0 0 6px color-mix(in oklab, var(--accent-thread) 35%, transparent));
+}
+/* §5.6a — return: the function's EXIT, not a live current. Solid teal
+   (Family 1), thin (the "thin" tier already set it 1px), directional
+   arrow, but NO pulse — a return doesn't carry running energy, it caps
+   the thread. Reads as a quiet curved terminal, distinct from the
+   pulsing call edges. Curves, not corners (no orthogonal L-bend). */
+.vg-thread-edge-return .react-flow__edge-path {
+  animation: none;
+  stroke-opacity: 0.8;
+}
+/* §5.6a — error path into an except band: the only red edge. Dashed
+   (conditional entry — taken on error, never "always"), no pulse. */
+.vg-thread-edge-error .react-flow__edge-path {
+  stroke: var(--accent-error);
+  stroke-dasharray: 4 2;
+  filter: drop-shadow(0 0 4px color-mix(in oklab, var(--accent-error) 55%, transparent));
+  animation: none;
+}
+@keyframes vg-thread-edge-pulse {
+  0%, 100% { stroke-opacity: 0.85; }
+  50%      { stroke-opacity: 1.0; }
+}
+
+/* U3.3 — mid-edge arg labels. Set in JetBrains Mono so parens / commas
+   read as code. The original 10px/--text-secondary "code-density
+   exception" was reviewed out at M24: with flow joins ("always") and
+   fork arrows joining the args labels mid-edge, the translucent text
+   was unreadable at fit zoom. Now 12px (the mono scale floor),
+   --text-primary, on a near-opaque pill so the text reads against
+   edges crossing behind it. Inferred-from-params (vs literal call
+   args) still drops opacity so the user can tell at a glance which
+   edges carry real data. */
+.vg-thread-edge-label {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-primary);
+  background: color-mix(in oklab, var(--bg-canvas) 94%, transparent);
+  padding: 1px 6px;
+  border-radius: 4px;
+  border: 1px solid color-mix(in oklab, var(--border-edge) 90%, transparent);
+  white-space: nowrap;
+  cursor: default;
+  user-select: none;
+  /* nodrag/nopan so dragging the label doesn't pan the canvas. RF
+     exposes these as documented escape hatches. */
+}
+.vg-thread-edge-label-inferred {
+  opacity: 0.6;
+  font-style: italic;
+}
+
+/* U5 — cross-file boundary halo. A thread step whose file differs
+   from the thread's seed.file picks up this class so the user can
+   see "I'm crossing into another module here." Dashed outline kept
+   subtle: 1px @ 40% --accent-thread, 3px gap from the card so the
+   solid card border doesn't compete with the dashed indicator. */
+.vg-thread-node-cross-file {
+  outline: 1px dashed color-mix(in oklab, var(--accent-thread) 40%, transparent);
+  outline-offset: 3px;
+}
+
+/* ── M9.3 — per-file colour wash ───────────────────────────────────────
+   The wash is a *grouping* cue, not a semantic one — it tells the eye
+   "these nodes share a file" without overriding the per-kind accent
+   (which is already painted on border + bg via accentVar). A ::before
+   layer sits behind the card's content at 0.04 alpha so the per-kind
+   colour stays dominant; the file hue reads as a soft tint.
+
+   Hue plumbing: ThreadView passes data-file-hue="0..7" on the node
+   wrapper, and inline-styles --vg-file-hue to the matching token
+   (var(--thread-file-hue-N)). CSS does the rest. Seed file is always
+   hue-0 (teal), so seed nodes look identical to before M9.3. */
+.vg-thread-node[data-file-hue] {
+  isolation: isolate;
+}
+.vg-thread-node[data-file-hue]::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: var(--vg-file-hue);
+  opacity: 0.04;
+  pointer-events: none;
+  z-index: -1;
+}
+.vg-thread-node[data-file-hue]:hover::before {
+  opacity: 0.07;
+}
+
+/* M9.3 — same-file edge tint. Edges whose source and target sit in the
+   same file pick up the file hue at 50% alpha; cross-file edges keep
+   --accent-thread (already in the .vg-thread-edge default). The hue
+   inheritance flows through --vg-edge-file-hue, set inline by
+   ThreadView when both endpoints share a file.
+
+   Cross-depth cross-file edges get 2px stroke (M9.3 primitive 3) —
+   same-depth stay at the tier-default 1.5px. The plan's intent is
+   "depth deserves visible emphasis", so cross-depth wins over the
+   tier's medium default; thick (>1 incoming) stays at 2.5px because
+   that signal pre-dates M9.3 and outranks depth. */
+.vg-thread-edge[data-edge-file-hue] .react-flow__edge-path {
+  stroke: var(--vg-edge-file-hue);
+  filter: drop-shadow(0 0 4px color-mix(in oklab, var(--vg-edge-file-hue) 50%, transparent));
+}
+.vg-thread-edge-cross-depth .react-flow__edge-path {
+  stroke-width: 2px;
+}
+.vg-thread-edge-cross-depth.vg-thread-edge-thick .react-flow__edge-path {
+  stroke-width: 2.5px;
+}
+.vg-thread-edge-cross-depth.vg-thread-edge-thin .react-flow__edge-path {
+  stroke-width: 1.5px;
+}
+
+/* ── U2 — dim non-focus on hover (Obsidian binary-attention) ─────────
+   Hover any thread node → siblings drop to --attention-fade-opacity;
+   edges drop to --attention-fade-edge-opacity. Tokens are 0.35 / 0.18
+   (existing); the skill suggests stricter 0.2 / 0.18 — flagged for
+   pushback. Pure CSS via :has() — no JS hovered-id state to sync.
+   Future refinement (U5+): keep edges touching the hovered node at
+   full opacity. Today, all edges dim uniformly. */
+[data-thread-view]:has(.vg-thread-node:hover) .vg-thread-node:not(:hover) {
+  opacity: var(--attention-fade-opacity);
+  transition: opacity var(--motion-fade-dur) ease;
+}
+[data-thread-view]:has(.vg-thread-node:hover) .vg-thread-edge .react-flow__edge-path {
+  opacity: var(--attention-fade-edge-opacity);
+}
+
+/* Hover bloom on a thread node — outer ring + M3 lift. Reuses
+   --hover-lift-y / --hover-lift-scale so the cue rhymes with the
+   diagram view. */
+.vg-thread-node {
+  transition:
+    transform var(--motion-hover-dur) var(--motion-hover-ease),
+    box-shadow var(--motion-hover-dur) var(--motion-hover-ease);
+}
+.vg-thread-node:hover {
+  transform: translateY(var(--hover-lift-y)) scale(var(--hover-lift-scale));
+  box-shadow:
+    0 0 16px color-mix(in oklab, var(--accent-thread) 40%, transparent),
+    var(--shadow-panel);
+}
+
+/* ── Reduced motion: short-circuit all four to instant snap ────────────────
+   No partial easing — the spec requires hard fall-through. */
+@media (prefers-reduced-motion: reduce) {
+  .vg-node-enter > *,
+  .vg-thread-enter > *,
+  .vg-node-exit-ghost,
+  .vg-edge-draw,
+  .vg-view-enter,
+  .vg-view-exit,
+  .monaco-editor .vg-pulse-line,
+  .vg-thread-edge .react-flow__edge-path,
+  .vg-thread-node,
+  .vg-subsystem-node {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+/* ── M12.2 — drop-target affordance during add-component drag ────────────
+   While body[data-add-component-dragging="true"] is set by
+   useAddComponentDrag, thread nodes that opted in via
+   data-add-component-droppable show a glowing ring so the user can see
+   where their drop will land. M12.2 marks every thread node droppable
+   so the ring shows on everything during a drag; M12.3's legal-target
+   inference will flip droppable to "false" on illegal (kind, irType)
+   pairs and the second selector below will fade those nodes (U2
+   dim-non-focus pattern). */
+body[data-add-component-dragging="true"] .vg-thread-node[data-add-component-droppable="true"] {
+  box-shadow:
+    0 0 0 2px color-mix(in oklab, var(--accent-thread) 65%, transparent),
+    0 0 14px color-mix(in oklab, var(--accent-thread) 35%, transparent),
+    var(--shadow-control);
+  transition: box-shadow var(--motion-hover-dur) var(--motion-hover-ease);
+}
+body[data-add-component-dragging="true"] .vg-thread-node[data-add-component-droppable="false"] {
+  opacity: 0.35;
+  transition: opacity var(--motion-fade-dur) ease;
+}
+
+/* ── M12.3 — hover preview line on the candidate target ─────────────────────
+   App.tsx sets data-resolved-position on the hovered node while a drag is
+   active. CSS turns it into a 2px line that lands above/below or at the
+   inside-top/inside-end of the node, so the user sees where the drop will
+   commit before releasing. Lines are rendered via outline + box-shadow
+   (no pseudo-elements — react-flow nodes have nested DOM that pseudos
+   would clash with). */
+[data-resolved-position] {
+  position: relative;
+}
+[data-resolved-position="before"] {
+  box-shadow:
+    0 -2px 0 0 var(--accent-thread),
+    0 0 12px color-mix(in oklab, var(--accent-thread) 35%, transparent),
+    var(--shadow-control);
+}
+[data-resolved-position="after"] {
+  box-shadow:
+    0 2px 0 0 var(--accent-thread),
+    0 0 12px color-mix(in oklab, var(--accent-thread) 35%, transparent),
+    var(--shadow-control);
+}
+[data-resolved-position="inside_top"] {
+  box-shadow:
+    inset 0 2px 0 0 var(--accent-thread),
+    0 0 12px color-mix(in oklab, var(--accent-thread) 35%, transparent),
+    var(--shadow-control);
+}
+[data-resolved-position="inside_end"] {
+  box-shadow:
+    inset 0 -2px 0 0 var(--accent-thread),
+    0 0 12px color-mix(in oklab, var(--accent-thread) 35%, transparent),
+    var(--shadow-control);
+}
+[data-resolved-position="rejected"] {
+  box-shadow:
+    0 0 0 2px var(--accent-error),
+    0 0 10px color-mix(in oklab, var(--accent-error) 35%, transparent);
+  opacity: 0.6;
+}
+
+/* ── M14 — statement-gap snap preview ──────────────────────────────────────
+   When a file-view drag is over a function_def's body, App.tsx's mousemove
+   handler tags the snapped-to anchor child with data-gap-active-position
+   ("before" → line above; "after" → line below). The line shows where the
+   new statement will land relative to the existing child.
+
+   M16.1 visual tune: thicker sharp line + a wider halo whose positive
+   spread pushes the glow past the child's left/right edges so the
+   indicator reads as a *gap-spanning bar*, not a node outline. A gentle
+   brightness pulse (Aesthetic Appendix's "edge pulse on active path"
+   motif) confirms the live, currently-snapped state without ever
+   moving the line. Reduced-motion users see the static stronger line. */
+[data-gap-active-position="before"] {
+  box-shadow:
+    0 -4px 0 0 var(--accent-thread),
+    0 -4px 24px 6px color-mix(in oklab, var(--accent-thread) 65%, transparent),
+    var(--shadow-control);
+  animation: vg-gap-snap-pulse-before 1400ms ease-in-out infinite;
+}
+[data-gap-active-position="after"] {
+  box-shadow:
+    0 4px 0 0 var(--accent-thread),
+    0 4px 24px 6px color-mix(in oklab, var(--accent-thread) 65%, transparent),
+    var(--shadow-control);
+  animation: vg-gap-snap-pulse-after 1400ms ease-in-out infinite;
+}
+
+/* Box-shadow-only pulse — no filter/transform/opacity, so layout and
+   hit-test stay rock-stable for the snap algorithm (filter creates a
+   stacking context that breaks the M14 e2e snap-position read). */
+@keyframes vg-gap-snap-pulse-before {
+  0%, 100% {
+    box-shadow:
+      0 -4px 0 0 var(--accent-thread),
+      0 -4px 24px 6px color-mix(in oklab, var(--accent-thread) 55%, transparent),
+      var(--shadow-control);
+  }
+  50% {
+    box-shadow:
+      0 -4px 0 0 var(--accent-thread),
+      0 -4px 28px 8px color-mix(in oklab, var(--accent-thread) 80%, transparent),
+      var(--shadow-control);
+  }
+}
+@keyframes vg-gap-snap-pulse-after {
+  0%, 100% {
+    box-shadow:
+      0 4px 0 0 var(--accent-thread),
+      0 4px 24px 6px color-mix(in oklab, var(--accent-thread) 55%, transparent),
+      var(--shadow-control);
+  }
+  50% {
+    box-shadow:
+      0 4px 0 0 var(--accent-thread),
+      0 4px 28px 8px color-mix(in oklab, var(--accent-thread) 80%, transparent),
+      var(--shadow-control);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-gap-active-position] { animation: none; }
+}
+
+/* ── M26.4 — graph-refresh affordance (PLAN-M26 §M26.4) ──────────────────
+   A muted dot in the TopToolbar pulses between graph-refresh started and
+   done WS events while the server re-links / re-extracts after an edit.
+   State-driven: the element unmounts on "done", so the loop is bounded
+   by real pipeline activity — same tokenised exception to "no infinite
+   loops" the thread-edge pulse takes. Muted family value shift only;
+   re-linking is housekeeping, never an alert. */
+@keyframes vg-relink-dot-kf {
+  0%, 100% { opacity: 0.35; }
+  50%      { opacity: 0.9; }
+}
+.vg-relink-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  animation: vg-relink-dot-kf 1600ms ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .vg-relink-dot { animation: none; opacity: 0.7; }
+}
+
+/* ── PLAN-v7 Stage 5: roadmap drafting spinner ─────────────────────────
+   The Loader2 glyph on a roadmap item in `drafting` status rotates while
+   the builder works. State-driven: the element swaps out on the next
+   status transition, so the loop is bounded by real pipeline activity —
+   the same tokenised exception the relink dot takes. */
+@keyframes vg-spin-kf {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+.vg-spin {
+  animation: vg-spin-kf 1200ms linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .vg-spin { animation: none; }
+}
+
+/* ── M-CHAT-POLISH.1 — tool-card resolve settle ─────────────────────────
+   The spinner→check/error swap on a chat tool card gets one bounded
+   enter beat (node-enter tokens) so the resolution reads as an arrival,
+   not a flicker. Runs once; no loop. */
+@keyframes vg-tool-settle-kf {
+  from { opacity: 0; transform: scale(0.8); }
+  to   { opacity: 1; transform: scale(1); }
+}
+.vg-tool-settle {
+  animation: vg-tool-settle-kf var(--motion-node-enter-dur) var(--motion-node-enter-ease);
+}
+@media (prefers-reduced-motion: reduce) {
+  .vg-tool-settle { animation: none; }
+}
+
+/* ── M-GF3.2 — drafting working-state (describe + roadmap) ──────────────
+   The dead-air fix: while `claude -p` drafts an architecture or roadmap,
+   a placeholder in the --proposed-* ghost language shows the plan being
+   DRAWN — marching dashes on an SVG border (the edge-draw vocabulary,
+   looped) plus a soft glow breathe, and pulsing skeleton rows in the
+   roadmap panel. State-driven: every carrier unmounts when the proposal
+   (or error) arrives, so the loops are bounded by real pipeline activity
+   — the same tokenised exception to "no infinite loops" the relink dot
+   and vg-spin take. Muted amplitudes; working is housekeeping, never an
+   alert. */
+@keyframes vg-drafting-ants-kf {
+  from { stroke-dashoffset: 24; }
+  to   { stroke-dashoffset: 0; }
+}
+.vg-drafting-ants {
+  stroke: var(--proposed-accent);
+  stroke-width: 1.5;
+  stroke-dasharray: 6 6;
+  fill: none;
+  animation: vg-drafting-ants-kf 1600ms linear infinite;
+}
+@keyframes vg-drafting-breathe-kf {
+  0%, 100% { box-shadow: 0 0 14px var(--proposed-glow); }
+  50%      { box-shadow: 0 0 22px var(--proposed-glow); }
+}
+.vg-drafting-card {
+  animation: vg-drafting-breathe-kf 1600ms ease-in-out infinite;
+}
+@keyframes vg-skeleton-pulse-kf {
+  0%, 100% { opacity: 0.35; }
+  50%      { opacity: 0.7; }
+}
+.vg-skeleton-pulse {
+  animation: vg-skeleton-pulse-kf 1600ms ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .vg-drafting-ants { animation: none; }
+  .vg-drafting-card { animation: none; box-shadow: 0 0 14px var(--proposed-glow); }
+  .vg-skeleton-pulse { animation: none; opacity: 0.5; }
+}
+
+/* ── Sitting-2 — gate-button press cue ──────────────────────────────────
+   The immediate half of click feedback (the pending spinner is the
+   round-trip half): a 1px settle on :active. Inevitability, not flash —
+   no scale, no bounce. */
+.vg-gate-btn {
+  transition: transform 120ms cubic-bezier(0.2, 0, 0, 1), opacity 120ms ease-out;
+}
+.vg-gate-btn:active:not(:disabled) {
+  transform: translateY(1px);
+}
+@media (prefers-reduced-motion: reduce) {
+  .vg-gate-btn { transition: none; }
+  .vg-gate-btn:active:not(:disabled) { transform: none; }
+}

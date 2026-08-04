@@ -1,0 +1,100 @@
+/* VibeGraph 2D depth language — see PLAN.md Aesthetic Appendix §"Depth (2D)".
+   Three primitives, all CSS-only:
+     1. Hover-lift  — motion is the depth cue (Rauno).
+     2. Attention-fade on selection — Obsidian "fade unrelated", driven by
+        :has(.selected). No JS wiring needed.
+     3. Panel shadow — one --shadow-panel token for floating UI only.
+   Node "glow" halos are aesthetic, not elevation — handled per-node-kind. */
+
+/* ── 1. Hover-lift ────────────────────────────────────────────────────────
+   React Flow positions nodes via transform on .react-flow__node, so we must
+   apply the hover transform to the inner div (same target as vg-node-enter,
+   `.react-flow__node > *`) to avoid fighting the position transform. */
+.react-flow__node > * {
+  transition:
+    transform var(--motion-hover-dur) var(--motion-hover-ease),
+    filter   var(--motion-hover-dur) var(--motion-hover-ease);
+  will-change: transform;
+}
+.react-flow__node:hover > * {
+  transform: translateY(var(--hover-lift-y)) scale(var(--hover-lift-scale));
+}
+
+/* ── 2. Attention-fade on selection ──────────────────────────────────────
+   When ANY node inside the canvas has `.selected` (added by React Flow),
+   every other node fades and every edge dims. The selected node stays
+   fully opaque. Pure CSS — no listener, no state, no React re-render. */
+.react-flow:has(.react-flow__node.selected) .react-flow__node:not(.selected) {
+  opacity: var(--attention-fade-opacity);
+  transition: opacity var(--motion-fade-dur) var(--motion-hover-ease);
+}
+.react-flow:has(.react-flow__node.selected) .react-flow__edge {
+  opacity: var(--attention-fade-edge-opacity);
+  transition: opacity var(--motion-fade-dur) var(--motion-hover-ease);
+}
+.react-flow__node, .react-flow__edge {
+  transition: opacity var(--motion-fade-dur) var(--motion-hover-ease);
+}
+
+/* ── 3. NodeActionStrip hover-reveal ─────────────────────────────────────
+   Bug #2 in the post-M7 cleanup pass: the four-button action strip was
+   always at full opacity and crowded the right edge of dense nodes
+   (especially call nodes like `models.DateTimeField(...)` where the
+   visible text was already being ellipsis-clipped). Linear/Obsidian
+   precedent — secondary actions appear on hover, vanish at rest.
+   Idle:   strip is invisible and non-interactive.
+   Reveal: parent .react-flow__node hover, parent .selected (so a click
+           reveals + locks), or focus-within (so keyboard tabbing works). */
+[data-action-strip] {
+  opacity: 0;
+  transform: translateY(-2px);
+  transition:
+    opacity var(--motion-hover-dur) var(--motion-hover-ease),
+    transform var(--motion-hover-dur) var(--motion-hover-ease);
+  pointer-events: none;
+}
+.react-flow__node:hover [data-action-strip],
+.react-flow__node.selected [data-action-strip],
+[data-action-strip]:focus-within {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
+/* ── M-GF3.6 — roadmap rows read as clickable ───────────────────────────
+   The row → overview affordance was invisible (Ben's sitting): give rows a
+   hover wash + the chevron brightens, so "this opens something" is felt
+   before it's clicked. */
+.vg-roadmap-row {
+  transition: background var(--motion-hover-dur) var(--motion-hover-ease);
+}
+.vg-roadmap-row:hover {
+  background: color-mix(in oklab, var(--proposed-accent) 8%, transparent);
+}
+.vg-roadmap-row .vg-roadmap-row-chevron {
+  opacity: 0.35;
+  transition: opacity var(--motion-hover-dur) var(--motion-hover-ease);
+}
+.vg-roadmap-row:hover .vg-roadmap-row-chevron {
+  opacity: 0.9;
+}
+
+/* ── Reduced motion ──────────────────────────────────────────────────────
+   Hard fall-through, matching motion.css. Hover-lift becomes a snap; the
+   fade still fires but instantly. */
+@media (prefers-reduced-motion: reduce) {
+  .react-flow__node > *,
+  .react-flow:has(.react-flow__node.selected) .react-flow__node:not(.selected),
+  .react-flow:has(.react-flow__node.selected) .react-flow__edge,
+  .react-flow__node,
+  .react-flow__edge {
+    transition: none !important;
+  }
+  .react-flow__node:hover > * {
+    transform: none !important;
+  }
+  [data-action-strip] {
+    transition: none !important;
+    transform: none !important;
+  }
+}

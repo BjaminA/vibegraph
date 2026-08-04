@@ -1,0 +1,586 @@
+{
+  "main.py": {
+    "version": "1.3",
+    "nodes": [
+      {
+        "id": "module/utils.import_from",
+        "type": "import_from",
+        "parentId": null,
+        "line": 1,
+        "endLine": 1,
+        "col": 0,
+        "endCol": 36,
+        "module": "utils",
+        "names": [
+          "greet",
+          "format_name"
+        ]
+      },
+      {
+        "id": "module/models.import_from",
+        "type": "import_from",
+        "parentId": null,
+        "line": 2,
+        "endLine": 2,
+        "col": 0,
+        "endCol": 23,
+        "module": "models",
+        "names": [
+          "User"
+        ]
+      },
+      {
+        "id": "module/run.fn",
+        "type": "function_def",
+        "parentId": null,
+        "line": 4,
+        "endLine": 8,
+        "col": 0,
+        "endCol": 19,
+        "name": "run",
+        "params": [],
+        "docstring": null,
+        "decorators": [],
+        "isAsync": false,
+        "returns": null
+      },
+      {
+        "id": "module/run.fn/users.assign",
+        "type": "assignment",
+        "parentId": "module/run.fn",
+        "line": 5,
+        "endLine": 5,
+        "col": 4,
+        "endCol": 57,
+        "name": "users",
+        "valueKind": "list",
+        "preview": "[User(\"Alice\"), User(\"Bob\"), User(\"Charlie\")]",
+        "nestsInnerCalls": true,
+        "nestExtracted": false
+      },
+      {
+        "id": "module/run.fn/for@0",
+        "type": "for_loop",
+        "parentId": "module/run.fn",
+        "line": 6,
+        "endLine": 8,
+        "col": 4,
+        "endCol": 19,
+        "target": "user",
+        "iterName": "users"
+      },
+      {
+        "id": "module/run.fn/for@0/name.assign",
+        "type": "assignment",
+        "parentId": "module/run.fn/for@0",
+        "line": 7,
+        "endLine": 7,
+        "col": 8,
+        "endCol": 37,
+        "name": "name",
+        "valueKind": "call",
+        "preview": "format_name(user.name)",
+        "callTarget": "format_name",
+        "args": [
+          "user.name"
+        ]
+      },
+      {
+        "id": "module/run.fn/for@0/greet.call",
+        "type": "call",
+        "parentId": "module/run.fn/for@0",
+        "line": 8,
+        "endLine": 8,
+        "col": 8,
+        "endCol": 19,
+        "funcName": "greet",
+        "args": [
+          "name"
+        ],
+        "isEffect": false
+      },
+      {
+        "id": "module/if@0",
+        "type": "if_stmt",
+        "parentId": null,
+        "line": 10,
+        "endLine": 11,
+        "col": 0,
+        "endCol": 9,
+        "condition": "__name__ == \"__main__\"",
+        "hasElse": false
+      },
+      {
+        "id": "module/if@0/run.call",
+        "type": "call",
+        "parentId": "module/if@0",
+        "line": 11,
+        "endLine": 11,
+        "col": 4,
+        "endCol": 9,
+        "funcName": "run",
+        "args": [],
+        "isEffect": false
+      }
+    ],
+    "edges": [
+      {
+        "source": "module/run.fn",
+        "target": "module/run.fn/users.assign",
+        "type": "contains"
+      },
+      {
+        "source": "module/run.fn",
+        "target": "module/run.fn/for@0",
+        "type": "contains"
+      },
+      {
+        "source": "module/run.fn/for@0",
+        "target": "module/run.fn/for@0/name.assign",
+        "type": "contains"
+      },
+      {
+        "source": "module/run.fn/for@0",
+        "target": "module/run.fn/for@0/greet.call",
+        "type": "contains"
+      },
+      {
+        "source": "module/if@0",
+        "target": "module/if@0/run.call",
+        "type": "contains"
+      },
+      {
+        "source": "module/if@0/run.call",
+        "target": "module/run.fn",
+        "type": "reference"
+      },
+      {
+        "source": "module/run.fn/for@0/name.assign",
+        "target": "module/format_name.fn",
+        "type": "reference",
+        "targetFile": "utils.py",
+        "qualifiedTarget": "utils:format_name"
+      },
+      {
+        "source": "module/run.fn/for@0/greet.call",
+        "target": "module/greet.fn",
+        "type": "reference",
+        "targetFile": "utils.py",
+        "qualifiedTarget": "utils:greet"
+      }
+    ],
+    "symbolIndex": [
+      {
+        "sym": "function:run",
+        "kind": "function",
+        "name": "run",
+        "scope": "module",
+        "loc": {
+          "line": 4,
+          "endLine": 8,
+          "col": 0,
+          "endCol": 19
+        },
+        "signature": "def run()",
+        "docstring": null,
+        "source": "\ndef run():\n    users = [User(\"Alice\"), User(\"Bob\"), User(\"Charlie\")]\n    for user in users:\n        name = format_name(user.name)\n        greet(name)\n"
+      }
+    ],
+    "modulePath": "main"
+  },
+  "models.py": {
+    "version": "1.3",
+    "nodes": [
+      {
+        "id": "module/User.class",
+        "type": "class_def",
+        "parentId": null,
+        "line": 1,
+        "endLine": 13,
+        "col": 0,
+        "endCol": 47,
+        "name": "User",
+        "bases": [],
+        "decorators": [],
+        "docstring": "Simple user model."
+      },
+      {
+        "id": "module/User.class/__init__.fn",
+        "type": "function_def",
+        "parentId": "module/User.class",
+        "line": 4,
+        "endLine": 6,
+        "col": 4,
+        "endCol": 26,
+        "name": "__init__",
+        "params": [
+          "self",
+          "name"
+        ],
+        "docstring": null,
+        "decorators": [],
+        "isAsync": false,
+        "returns": "None"
+      },
+      {
+        "id": "module/User.class/__init__.fn/self_name.assign",
+        "type": "assignment",
+        "parentId": "module/User.class/__init__.fn",
+        "line": 5,
+        "endLine": 5,
+        "col": 8,
+        "endCol": 24,
+        "name": "self.name",
+        "valueKind": "other",
+        "preview": "name"
+      },
+      {
+        "id": "module/User.class/__init__.fn/self_active.assign",
+        "type": "assignment",
+        "parentId": "module/User.class/__init__.fn",
+        "line": 6,
+        "endLine": 6,
+        "col": 8,
+        "endCol": 26,
+        "name": "self.active",
+        "valueKind": "other",
+        "preview": "True"
+      },
+      {
+        "id": "module/User.class/deactivate.fn",
+        "type": "function_def",
+        "parentId": "module/User.class",
+        "line": 8,
+        "endLine": 9,
+        "col": 4,
+        "endCol": 27,
+        "name": "deactivate",
+        "params": [
+          "self"
+        ],
+        "docstring": null,
+        "decorators": [],
+        "isAsync": false,
+        "returns": "None"
+      },
+      {
+        "id": "module/User.class/deactivate.fn/self_active.assign",
+        "type": "assignment",
+        "parentId": "module/User.class/deactivate.fn",
+        "line": 9,
+        "endLine": 9,
+        "col": 8,
+        "endCol": 27,
+        "name": "self.active",
+        "valueKind": "other",
+        "preview": "False"
+      },
+      {
+        "id": "module/User.class/__repr__.fn",
+        "type": "function_def",
+        "parentId": "module/User.class",
+        "line": 11,
+        "endLine": 13,
+        "col": 4,
+        "endCol": 47,
+        "name": "__repr__",
+        "params": [
+          "self"
+        ],
+        "docstring": null,
+        "decorators": [],
+        "isAsync": false,
+        "returns": "str"
+      },
+      {
+        "id": "module/User.class/__repr__.fn/status.assign",
+        "type": "assignment",
+        "parentId": "module/User.class/__repr__.fn",
+        "line": 12,
+        "endLine": 12,
+        "col": 8,
+        "endCol": 56,
+        "name": "status",
+        "valueKind": "other",
+        "preview": "\"active\" if self.active else \"inactive\""
+      },
+      {
+        "id": "module/User.class/__repr__.fn/return@0",
+        "type": "return_stmt",
+        "parentId": "module/User.class/__repr__.fn",
+        "line": 13,
+        "endLine": 13,
+        "col": 8,
+        "endCol": 47,
+        "value": "f\"User({self.name!r}, {status})\""
+      }
+    ],
+    "edges": [
+      {
+        "source": "module/User.class",
+        "target": "module/User.class/__init__.fn",
+        "type": "contains"
+      },
+      {
+        "source": "module/User.class/__init__.fn",
+        "target": "module/User.class/__init__.fn/self_name.assign",
+        "type": "contains"
+      },
+      {
+        "source": "module/User.class/__init__.fn",
+        "target": "module/User.class/__init__.fn/self_active.assign",
+        "type": "contains"
+      },
+      {
+        "source": "module/User.class",
+        "target": "module/User.class/deactivate.fn",
+        "type": "contains"
+      },
+      {
+        "source": "module/User.class/deactivate.fn",
+        "target": "module/User.class/deactivate.fn/self_active.assign",
+        "type": "contains"
+      },
+      {
+        "source": "module/User.class",
+        "target": "module/User.class/__repr__.fn",
+        "type": "contains"
+      },
+      {
+        "source": "module/User.class/__repr__.fn",
+        "target": "module/User.class/__repr__.fn/status.assign",
+        "type": "contains"
+      },
+      {
+        "source": "module/User.class/__repr__.fn",
+        "target": "module/User.class/__repr__.fn/return@0",
+        "type": "contains"
+      }
+    ],
+    "symbolIndex": [
+      {
+        "sym": "class:User",
+        "kind": "class",
+        "name": "User",
+        "scope": "module",
+        "loc": {
+          "line": 1,
+          "endLine": 13,
+          "col": 0,
+          "endCol": 47
+        },
+        "bases": [],
+        "docstring": "Simple user model.",
+        "source": "class User:\n    \"\"\"Simple user model.\"\"\"\n\n    def __init__(self, name: str) -> None:\n        self.name = name\n        self.active = True\n\n    def deactivate(self) -> None:\n        self.active = False\n\n    def __repr__(self) -> str:\n        status = \"active\" if self.active else \"inactive\"\n        return f\"User({self.name!r}, {status})\"\n"
+      },
+      {
+        "sym": "function:__init__",
+        "kind": "function",
+        "name": "__init__",
+        "scope": "module/User.class",
+        "loc": {
+          "line": 4,
+          "endLine": 6,
+          "col": 4,
+          "endCol": 26
+        },
+        "signature": "def __init__(self, name)",
+        "docstring": null,
+        "source": "\ndef __init__(self, name: str) -> None:\n    self.name = name\n    self.active = True\n"
+      },
+      {
+        "sym": "function:deactivate",
+        "kind": "function",
+        "name": "deactivate",
+        "scope": "module/User.class",
+        "loc": {
+          "line": 8,
+          "endLine": 9,
+          "col": 4,
+          "endCol": 27
+        },
+        "signature": "def deactivate(self)",
+        "docstring": null,
+        "source": "\ndef deactivate(self) -> None:\n    self.active = False\n"
+      },
+      {
+        "sym": "function:__repr__",
+        "kind": "function",
+        "name": "__repr__",
+        "scope": "module/User.class",
+        "loc": {
+          "line": 11,
+          "endLine": 13,
+          "col": 4,
+          "endCol": 47
+        },
+        "signature": "def __repr__(self)",
+        "docstring": null,
+        "source": "\ndef __repr__(self) -> str:\n    status = \"active\" if self.active else \"inactive\"\n    return f\"User({self.name!r}, {status})\"\n"
+      }
+    ],
+    "modulePath": "models"
+  },
+  "utils.py": {
+    "version": "1.3",
+    "nodes": [
+      {
+        "id": "module/greet.fn",
+        "type": "function_def",
+        "parentId": null,
+        "line": 1,
+        "endLine": 3,
+        "col": 0,
+        "endCol": 28,
+        "name": "greet",
+        "params": [
+          "name"
+        ],
+        "docstring": "Print a greeting for the given name.",
+        "decorators": [],
+        "isAsync": false,
+        "returns": "None"
+      },
+      {
+        "id": "module/greet.fn/print.call",
+        "type": "call",
+        "parentId": "module/greet.fn",
+        "line": 3,
+        "endLine": 3,
+        "col": 4,
+        "endCol": 28,
+        "funcName": "print",
+        "args": [
+          "f\"Hello, {name}!\""
+        ],
+        "isEffect": true
+      },
+      {
+        "id": "module/format_name.fn",
+        "type": "function_def",
+        "parentId": null,
+        "line": 5,
+        "endLine": 7,
+        "col": 0,
+        "endCol": 31,
+        "name": "format_name",
+        "params": [
+          "name"
+        ],
+        "docstring": "Capitalize and strip whitespace.",
+        "decorators": [],
+        "isAsync": false,
+        "returns": "str"
+      },
+      {
+        "id": "module/format_name.fn/return@0",
+        "type": "return_stmt",
+        "parentId": "module/format_name.fn",
+        "line": 7,
+        "endLine": 7,
+        "col": 4,
+        "endCol": 31,
+        "value": "name.strip().title()",
+        "callTarget": "name.strip().title",
+        "nestsInnerCalls": true,
+        "nestExtracted": false
+      },
+      {
+        "id": "module/farewell.fn",
+        "type": "function_def",
+        "parentId": null,
+        "line": 9,
+        "endLine": 10,
+        "col": 0,
+        "endCol": 30,
+        "name": "farewell",
+        "params": [
+          "name"
+        ],
+        "docstring": null,
+        "decorators": [],
+        "isAsync": false,
+        "returns": "None"
+      },
+      {
+        "id": "module/farewell.fn/print.call",
+        "type": "call",
+        "parentId": "module/farewell.fn",
+        "line": 10,
+        "endLine": 10,
+        "col": 4,
+        "endCol": 30,
+        "funcName": "print",
+        "args": [
+          "f\"Goodbye, {name}!\""
+        ],
+        "isEffect": true
+      }
+    ],
+    "edges": [
+      {
+        "source": "module/greet.fn",
+        "target": "module/greet.fn/print.call",
+        "type": "contains"
+      },
+      {
+        "source": "module/format_name.fn",
+        "target": "module/format_name.fn/return@0",
+        "type": "contains"
+      },
+      {
+        "source": "module/farewell.fn",
+        "target": "module/farewell.fn/print.call",
+        "type": "contains"
+      }
+    ],
+    "symbolIndex": [
+      {
+        "sym": "function:greet",
+        "kind": "function",
+        "name": "greet",
+        "scope": "module",
+        "loc": {
+          "line": 1,
+          "endLine": 3,
+          "col": 0,
+          "endCol": 28
+        },
+        "signature": "def greet(name)",
+        "docstring": "Print a greeting for the given name.",
+        "source": "def greet(name: str) -> None:\n    \"\"\"Print a greeting for the given name.\"\"\"\n    print(f\"Hello, {name}!\")\n"
+      },
+      {
+        "sym": "function:format_name",
+        "kind": "function",
+        "name": "format_name",
+        "scope": "module",
+        "loc": {
+          "line": 5,
+          "endLine": 7,
+          "col": 0,
+          "endCol": 31
+        },
+        "signature": "def format_name(name)",
+        "docstring": "Capitalize and strip whitespace.",
+        "source": "\ndef format_name(name: str) -> str:\n    \"\"\"Capitalize and strip whitespace.\"\"\"\n    return name.strip().title()\n"
+      },
+      {
+        "sym": "function:farewell",
+        "kind": "function",
+        "name": "farewell",
+        "scope": "module",
+        "loc": {
+          "line": 9,
+          "endLine": 10,
+          "col": 0,
+          "endCol": 30
+        },
+        "signature": "def farewell(name)",
+        "docstring": null,
+        "source": "\ndef farewell(name: str) -> None:\n    print(f\"Goodbye, {name}!\")\n"
+      }
+    ],
+    "modulePath": "utils"
+  }
+}

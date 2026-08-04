@@ -1,0 +1,224 @@
+/* VibeGraph design tokens — single source of truth for colour, type, spacing.
+   Defined in PLAN.md "Aesthetic Appendix". M3 enforces these. */
+
+:root {
+  /* ── Colour (HSL, semantic role names — no raw hex anywhere else) ───────── */
+  --bg-canvas:        hsl(220 14% 8%);
+  --bg-node:          hsl(220 12% 12%);
+  --bg-node-hover:    hsl(220 12% 16%);
+  --border-edge:      hsl(220 10% 22%);
+  --text-primary:     hsl(220 14% 92%);
+  --text-secondary:   hsl(220 10% 64%);
+  --text-muted:       hsl(220 8% 44%);
+  --accent-thread:    hsl(168 60% 56%);
+  --accent-warning:   hsl(38 80% 60%);
+  --accent-error:     hsl(358 70% 60%);
+
+  /* U3.2 revised — three-family semantic palette.
+     Family 1 (logic/control): --accent-thread above; function_def,
+       class_def, if_stmt, return_stmt, raise_stmt, for_loop. Decision
+       points stay teal because they ARE the user's program.
+     Family 2 (I/O / external boundary): the blue cluster below.
+       Within-family value variation carries write-vs-read-vs-muted:
+         --accent-io-write  brightest; mutation (commit/insert/...)
+         --accent-io        regular DB / HTTP / FS reads + receivers
+         --accent-io-muted  least bright; print / log / stderr / I/O sinks
+       Hue 212 sits well clear of the teal (168) and amber (38) so a
+       blue cluster reads as "this column talks to the outside world".
+     Family 3 (configuration / setup): --accent-config below.
+       argparse, click, framework registration (Flask add_url_rule,
+       FastAPI router, Django urlpatterns), setUp/tearDown fixtures.
+       Hue 38 (same family as --accent-warning) but desaturated and
+       darker so genuine warnings still pop.
+     Errors keep --accent-error (358) as the only red. */
+  --accent-io:        hsl(212 60% 60%);
+  --accent-io-write:  hsl(212 75% 68%);
+  --accent-io-muted:  hsl(212 35% 50%);
+  --accent-config:    hsl(38 35% 50%);
+
+  /* ── Panel accents — chat (lavender) and compose (peach) ──────────────── */
+  --accent-chat:      hsl(267 84% 81%);
+  --accent-compose:   hsl(20 92% 75%);
+
+  /* ── PLAN-v7 proposed/ghost state — planned-vs-built honesty ───────────
+     A ghost node is a PROPOSAL (dry-run parse of an unwritten edit), not
+     honest IR. This is a STATE overlay, not a new hue family: the node keeps
+     its kind-accent; the muted dashed ring + dimmed body signal "not real
+     yet". Bind here, never hardcode. See PLAN-v7.md Stage 1. */
+  /* "Pending/becoming", not "greyed/disabled": distinctness comes from the
+     dashed border + a subtle teal pending-glow (on-brand logic accent — never
+     amber/red, which mean dispatch/error). Legibility over recession: barely
+     dimmed, so the label reads. */
+  --proposed-accent:  var(--accent-thread);
+  --proposed-border:  color-mix(in oklab, var(--accent-thread) 48%, var(--text-muted));
+  --proposed-glow:    color-mix(in oklab, var(--accent-thread) 16%, transparent);
+  --proposed-opacity: 0.96;
+
+  /* ── Type-discriminator accents (icons.tsx) ────────────────────────────
+     Preserve per-Python-type colour identity for the bespoke value-kind
+     icons. Float=orange, list=green, dict=violet, tuple=light green,
+     set=light violet, call=blue. String/fstring reuse --accent-warning,
+     function/class/package reuse --accent-thread, none reuses
+     --text-secondary, terminal reuses --accent-error.                   */
+  --type-float:       hsl(20 91% 53%);
+  --type-list:        hsl(160 64% 52%);
+  --type-tuple:       hsl(141 79% 73%);
+  --type-dict:        hsl(257 90% 76%);
+  --type-set:         hsl(272 95% 75%);
+  --type-call:        hsl(213 94% 68%);
+
+  /* ── Typography ────────────────────────────────────────────────────────── */
+  --font-ui:   "Inter Variable", "Inter", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono Variable", "JetBrains Mono", ui-monospace, monospace;
+
+  /* UI sizes (the only permitted values) */
+  --fs-11: 11px;
+  --fs-12: 12px;
+  --fs-13: 13px;
+  --fs-14: 14px;
+  --fs-16: 16px;
+  --fs-20: 20px;
+  --fs-24: 24px;
+
+  /* Code sizes */
+  --fsm-12: 12px;
+  --fsm-13: 13px;
+  --fsm-14: 14px;
+
+  /* ── Motion (Aesthetic Appendix — exact durations/easings, no negotiation) */
+  --motion-node-enter-dur:  240ms;
+  --motion-node-enter-ease: cubic-bezier(0.2, 0, 0, 1);
+  --motion-node-exit-dur:   160ms;
+  --motion-node-exit-ease:  cubic-bezier(0.4, 0, 1, 1);
+  --motion-edge-draw-dur:   320ms;
+  --motion-view-dur:        280ms;
+  --motion-view-ease:       cubic-bezier(0.2, 0, 0, 1);
+  --motion-hover-dur:       120ms;
+  --motion-hover-ease:      cubic-bezier(0.2, 0, 0, 1);
+  --motion-fade-dur:        200ms;
+
+  /* ── Depth language (2D — Obsidian / Linear / Rauno / tldraw) ────────────
+     We do NOT use multi-level elevation shadow scales — that's Material
+     drift. One panel-shadow token (floating UI only), motion-based hover
+     lift (Rauno), and CSS :has()-driven attention-fade (Obsidian). Node
+     "glow" shadows live inline per node-kind and are aesthetic halos, not
+     elevation — leave them alone. */
+  --shadow-panel:           0 12px 32px hsl(0 0% 0% / 0.45);
+  --shadow-control:         0 2px 10px hsl(0 0% 0% / 0.35);
+  --hover-lift-y:           -2px;
+  --hover-lift-scale:       1.02;
+  --attention-fade-opacity:       0.35;
+  --attention-fade-edge-opacity:  0.18;
+
+  /* ── Spacing scale (4px base — only these values, ever) ─────────────────── */
+  --sp-1:  4px;
+  --sp-2:  8px;
+  --sp-3:  12px;
+  --sp-4:  16px;
+  --sp-5:  20px;
+  --sp-6:  24px;
+  --sp-8:  32px;
+  --sp-12: 48px;
+  --sp-16: 64px;
+  --sp-24: 96px;
+
+  /* ── Node rhythm (Phase 1 — one rhythm, applied everywhere) ─────────────
+     Replaces ad-hoc 5/6/7/10/14/16/22/100px values across node components.
+     Every node card now uses these — small horizontal nodes reserve space
+     on the right for the absolutely-positioned NodeActionStrip via
+     --node-action-reserve, large multi-section nodes use --node-pad-x. */
+  --node-pad-y:           var(--sp-2);   /*  8px — top/bottom inside cards   */
+  --node-pad-x:           var(--sp-3);   /* 12px — left/right inside cards   */
+  --node-meta-pad-y:      var(--sp-1);   /*  4px — meta sections (e.g. fn params) */
+  --node-row-gap:         var(--sp-1);   /*  4px — between sibling rows */
+  --node-inline-gap:      var(--sp-2);   /*  8px — between icon/text/badge inline */
+  --node-action-reserve:  108px;         /* right-pad hack for absolute NodeActionStrip (4 buttons × 22px + gaps) */
+
+  /* ── Thread view (U4 — top-down layered layout) ─────────────────────────
+     Row height drives BFS-depth → y mapping in useThreadLayout. Gap is the
+     min vertical breathing space between rows — currently informational
+     (layout uses row height directly), reserved for future "gap between
+     layer-bands when the renderer adds layer rails". 4px multiples. */
+  --thread-row-height:    var(--sp-24);  /* 96px — parent → child vertical step */
+  --thread-row-gap:       var(--sp-8);   /* 32px — reserved future use */
+
+  /* ── M9.3 — per-file colour wash (cross-file depth cue) ────────────────
+     Eight HSL variants off --accent-thread (hue 168), each at saturation
+     60% lightness 56% — the same values that make --accent-thread feel
+     "alive". 20° hue steps walk through teal → blue → indigo → violet →
+     magenta and back. Files in a thread are assigned an index in BFS
+     order; seed file always lands on hue-0 so it inherits --accent-thread.
+     Used at low alpha (~0.04) on node backdrops and ~0.5 on same-file
+     edges — the wash is a soft grouping cue, never the dominant signal. */
+  --thread-file-hue-0: hsl(168 60% 56%);  /* seed — matches --accent-thread */
+  --thread-file-hue-1: hsl(188 60% 56%);
+  --thread-file-hue-2: hsl(208 60% 56%);
+  --thread-file-hue-3: hsl(228 60% 56%);
+  --thread-file-hue-4: hsl(248 60% 56%);
+  --thread-file-hue-5: hsl(268 60% 56%);
+  --thread-file-hue-6: hsl(288 60% 56%);
+  --thread-file-hue-7: hsl(308 60% 56%);
+}
+
+/* ── Document defaults ─────────────────────────────────────────────────────
+   Replaces the inline system-font fallback chain that was in server.ts. */
+
+html, body, #root {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg-canvas);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-size: var(--fs-13);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+code, pre, kbd {
+  font-family: var(--font-mono);
+}
+
+/* Code/preformatted text never runs off-screen — long lines wrap instead of
+   hiding behind a horizontal scrollbar. The CSS half of the wrapping rule;
+   the Monaco editor half is CODE_WRAP_OPTIONS in monaco_options.ts. Apply to
+   any <pre>/code block whose content can be wide (tracebacks, captured
+   values, snippets). */
+.vg-code-wrap {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+/* M-CHAT-POLISH.3 — inline-code chip for rendered markdown (chat replies,
+   skill bodies). Promotes the de-facto chip styling AddComponentModal
+   hand-rolled: code artifacts are Family 1, so the teal accent is right.
+   break-word lets long structural node paths
+   (module/train_model.fn/for@0/if@3) wrap instead of overflowing. */
+.vg-inline-code {
+  font-family: var(--font-mono);
+  background: color-mix(in oklab, var(--accent-thread) 10%, transparent);
+  color: var(--accent-thread);
+  padding: 1px 6px;
+  border-radius: 4px;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+/* W1 — node-card code/arg text: WRAP, never silently clip with an ellipsis.
+   The previous `text-overflow:ellipsis; white-space:nowrap` idiom hid args
+   (the information) off the right edge. This wraps to up to 3 lines, then
+   clamps with the full text reachable via the element's `title=` (hover) —
+   so a cut is always reachable + visibly marked, never silent. Shared rule:
+   applied to every React-Flow node card / arch glyph code span. */
+.vg-node-code {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}

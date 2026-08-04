@@ -1,0 +1,9 @@
+{
+  "seeds": [
+    {
+      "file": "app.py",
+      "irNodeId": "module/get_user.fn",
+      "comment": "Same-file helper, not auto-detected (no cross-file callers). Pinned manually to exercise the library/internal subsystem bucket (PLAN-v5 §1.5): a manual-seed thread that reaches cache + db rolls its effects under `library`, not `backend`."
+    }
+  ]
+}

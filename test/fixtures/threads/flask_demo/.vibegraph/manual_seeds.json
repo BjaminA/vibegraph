@@ -1,0 +1,9 @@
+{
+  "seeds": [
+    {
+      "file": "db.py",
+      "irNodeId": "module/_get_conn.fn",
+      "comment": "Module-private helper. Not auto-detected (no cross-file edges); user pinned manually so the thread index can show 'connection lifecycle' even when no caller is in scope."
+    }
+  ]
+}
