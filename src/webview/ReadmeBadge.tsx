@@ -19,9 +19,12 @@ export interface ReadmeStatus {
 interface Props {
   status: ReadmeStatus | null;
   onRefresh: () => void;
+  /** Open the README in a readable panel. Without this the body was only
+   *  ever a native `title` tooltip — truncated, unscrollable, uncopyable. */
+  onOpen?: () => void;
 }
 
-export function ReadmeBadge({ status, onRefresh }: Props) {
+export function ReadmeBadge({ status, onRefresh, onOpen }: Props) {
   if (!status) return null;
 
   const state = status.generating ? "generating"
@@ -50,11 +53,16 @@ export function ReadmeBadge({ status, onRefresh }: Props) {
     <div
       data-readme-badge
       data-readme-state={state}
-      title={status.body ?? status.error ?? undefined}
+      onClick={onOpen}
+      role={onOpen ? "button" : undefined}
+      // The body is no longer crammed into `title` — the chip says what state
+      // the document is in, and the panel is where you read it.
+      title={onOpen ? "Open the README" : undefined}
       style={{
         // Position + stacking belong to ChipStrip (see ChipStrip.tsx) — this
         // is a flow child of that column, first row.
         pointerEvents: "auto",
+        cursor: onOpen ? "pointer" : "default",
         display: "flex",
         alignItems: "center",
         gap: 8,

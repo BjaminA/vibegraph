@@ -60,7 +60,10 @@ test.describe("thread chrome overlaps", () => {
     // The bug only exists when the strip is at full height — three chips.
     await expect(page.locator("[data-artifact-chip]")).toBeVisible();
     await expect(page.locator("[data-skill-badge]")).toBeVisible();
-    await expect(page.locator("[data-readme-badge]")).toBeVisible();
+    // The README chip was retired 2026-08-04 (thread skills supersede it),
+    // so the strip is skill + artifact. The bug this guards was about the
+    // strip OVERHANGING the canvas row below it, which is unchanged by how
+    // many chips it holds.
 
     const measured = await page.evaluate(() => {
       const R = (el: Element): { x: number; y: number; w: number; h: number } => {
@@ -72,7 +75,7 @@ test.describe("thread chrome overlaps", () => {
         return el ? { sel, box: R(el) } : null;
       };
       const strip = [...document.querySelectorAll("[data-chip-strip] > *")]
-        .map((el, i) => ({ sel: `strip[${i}]:${el.getAttribute("data-readme-badge") !== null ? "readme" : el.getAttribute("data-skill-badge") !== null ? "skill" : "artifact"}`, box: R(el) }));
+        .map((el, i) => ({ sel: `strip[${i}]:${el.getAttribute("data-skill-badge") !== null ? "skill" : "artifact"}`, box: R(el) }));
       const canvas = [named("[data-thread-nests-toggle]")]
         .filter((v): v is { sel: string; box: { x: number; y: number; w: number; h: number } } => !!v);
       // The invariant the sitting-3 fix installed: the strip PUBLISHES its
@@ -108,7 +111,7 @@ test.describe("thread chrome overlaps", () => {
       return { strip, canvas, toggleOwnsCentre, stripBottom, published, row0Top };
     });
 
-    expect(measured.strip.length).toBe(3);
+    expect(measured.strip.length, "strip is skill + artifact since the README chip retired").toBe(2);
     // The strip must publish a height at least as tall as it actually is —
     // an under-measured value is exactly what let a chip overhang row 0.
     expect(measured.published, "--vg-chipstrip-h must be published").toBeGreaterThan(0);

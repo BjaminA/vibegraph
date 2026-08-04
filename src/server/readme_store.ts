@@ -13,7 +13,14 @@ import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
-export type ReadmeScope = "thread" | "file";
+// "project" (2026-08-04) is the whole-application VibeReadme — one per
+// project, shaped by vibereadme_contract.ts. Thread and file READMEs stay
+// per-id; project has a single well-known id ("project") so the existing
+// key/store plumbing carries it unchanged.
+export type ReadmeScope = "thread" | "file" | "project";
+
+/** The single id a project-scope README is ever stored under. */
+export const PROJECT_README_ID = "project";
 
 export interface StoredReadme {
   key: string;
@@ -68,6 +75,11 @@ function slug(id: string): string {
 }
 
 export function readmePath(root: string, scope: ReadmeScope, id: string): string {
+  // The project README lands at .vibegraph/VibeReadme.md — named, not
+  // slugged, because it is THE document for the project and a human will
+  // open it directly. Deliberately not README.md: that file belongs to
+  // whoever wrote it, and regenerating over it would destroy their work.
+  if (scope === "project") return join(root, ".vibegraph", "VibeReadme.md");
   const dir = scope === "thread" ? "threads" : "files";
   return join(root, ".vibegraph", "readmes", dir, `${slug(id)}.md`);
 }

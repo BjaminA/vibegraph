@@ -23,6 +23,7 @@ import {
   Network,
   ChevronRight,
   BookDashed,
+  BookText,
   Loader2,
 } from "lucide-react";
 import { bridge, type EntryPoint, type ProjectThread, type ThreadSkillRecord, type ExtensionMessage } from "../types";
@@ -222,9 +223,13 @@ export interface ThreadIndexProps {
   /** M-SKILL.3 — skill lifecycle per entryPointId, for the coverage dots. */
   threadSkills?: Record<string, ThreadSkillRecord>;
   onSelectEntry: (entry: EntryPoint) => void;
+  /** Open the whole-project VibeReadme panel (omit to hide the action). */
+  onOpenVibeReadme?: () => void;
+  /** none | fresh | stale — mirrors the README badge's own state. */
+  vibeReadmeState?: "none" | "fresh" | "stale";
 }
 
-export function ThreadIndex({ entryPoints, threads, threadSkills, onSelectEntry }: ThreadIndexProps) {
+export function ThreadIndex({ entryPoints, threads, threadSkills, onSelectEntry, onOpenVibeReadme, vibeReadmeState }: ThreadIndexProps) {
   // Group while preserving the discovery script's sort order.
   const grouped = React.useMemo(() => {
     const order: EntryPoint["kind"][] = ["route", "model", "cli", "test", "public_api", "manual"];
@@ -335,6 +340,32 @@ export function ThreadIndex({ entryPoints, threads, threadSkills, onSelectEntry 
             </span>
           ) : (
             <>
+              {/* 2026-08-04 — the whole-project VibeReadme belongs HERE: the
+                  launchpad is where you land not knowing what the project is,
+                  and the chip strip that carried READMEs only exists inside a
+                  thread. Chip state comes from the same readme-status the
+                  badge uses. */}
+              {onOpenVibeReadme && (
+                <button
+                  data-vibereadme-open
+                  data-vibereadme-state={vibeReadmeState ?? "none"}
+                  onClick={onOpenVibeReadme}
+                  title="What this project is and how it is organised — written by VibeGraph from the code"
+                  style={{
+                    display: "flex", alignItems: "center", gap: 6,
+                    background: "none",
+                    border: `1px solid ${vibeReadmeState === "stale" ? "var(--accent-warning)" : "var(--border-edge)"}`,
+                    borderRadius: 6, padding: "4px 12px", cursor: "pointer",
+                    color: vibeReadmeState === "fresh" ? "var(--accent-thread)" : "var(--text-secondary)",
+                    fontFamily: "var(--font-ui)", fontSize: "var(--fs-12)",
+                  }}
+                >
+                  <BookText size={14} strokeWidth={1.5} />
+                  {vibeReadmeState === "fresh" ? "VibeReadme"
+                    : vibeReadmeState === "stale" ? "VibeReadme · stale"
+                    : "VibeReadme"}
+                </button>
+              )}
               {sweepCount > 0 && (
                 <button
                   data-skill-sweep

@@ -16,7 +16,8 @@ import { buildArtifactIndex, detectMissingArtifacts, missingArtifactFor, isArtif
 import { planSweep, runSweep } from "./src/server/skill_sweep";
 import { parseReviseStageBlock, applyItemRevision } from "./src/server/build_plan_modify";
 import { makeRunSandbox } from "./src/server/run/sandbox";
-import { getReadme as readReadmeFromStore, writeReadme, sourceHashOf } from "./src/server/readme_store";
+import { getReadme as readReadmeFromStore, writeReadme, sourceHashOf, PROJECT_README_ID, type ReadmeScope } from "./src/server/readme_store";
+import { VIBEREADME_REQUIRED_SECTIONS, validateVibeReadmeBody } from "./src/server/vibereadme_contract";
 import {
   getThreadSkill as readThreadSkillFromStore,
   writeThreadSkill,
@@ -4066,9 +4067,70 @@ function readmeRootDir(): string {
   return isDirectory ? inputPath : path.dirname(resolvedPyFile);
 }
 
-function readmeIrFor(scope: "thread" | "file", id: string): any | null {
+function readmeIrFor(scope: ReadmeScope, id: string): any | null {
   if (scope === "thread") return latestThreads.find((t: any) => t.entryPointId === id) ?? null;
+  // A project VibeReadme is derived from the WHOLE map plus the entry points
+  // and threads, so its staleness hash moves when any file does.
+  if (scope === "project") {
+    const files = isDirectory ? relativeProjectFiles() : { single: lastParse };
+    if (!files || Object.keys(files).length === 0) return null;
+    return { files, entryPoints: latestEntryPoints ?? [], threads: (latestThreads ?? []).map((t: any) => ({
+      entryPointId: t.entryPointId, filesReached: t.filesReached ?? [],
+    })) };
+  }
   return isDirectory ? relativeProjectFiles()[id] ?? null : lastParse;
+}
+
+// The whole-project VibeReadme. Structured (vibereadme_contract.ts) rather
+// than free prose, for the reason thread-skills are: a document with known
+// sections can be rendered, checked and diffed. Everything handed to the
+// model here is IR fact — file list, entry points by kind, the effects the
+// scan actually found — so the prose has something real to be grounded in.
+function _vibeReadmePrompt(ir: any): string {
+  const files: Record<string, any> = ir.files ?? {};
+  const fileLines = Object.entries(files).slice(0, 60).map(([path, fir]: [string, any]) => {
+    const defs = (fir?.symbolIndex ?? [])
+      .filter((sym: any) => sym?.kind === "function" || sym?.kind === "class")
+      .map((sym: any) => sym.name).filter(Boolean).slice(0, 12).join(", ");
+    return `- ${path}: ${defs || "(no top-level defs)"}`;
+  }).join("\n");
+
+  const eps = (ir.entryPoints ?? []).slice(0, 40)
+    .map((e: any) => `- [${e.kind}] ${e.id}${e.summary ? ` — ${e.summary}` : ""}`).join("\n");
+
+  const effects = new Set<string>();
+  for (const fir of Object.values(files)) {
+    for (const n of ((fir as any)?.nodes ?? [])) {
+      if (typeof n?.effectKind === "string") effects.add(n.effectKind);
+    }
+  }
+
+  return [
+    "Write a VibeReadme: a map of THIS application for someone who has never seen it.",
+    "Describe what it is and how it is organised. Ground every claim in the facts below —",
+    "if something is not in them, do not assert it.",
+    "",
+    "Output ONLY markdown with EXACTLY these sections, in this order, each exactly once,",
+    "starting immediately with the first heading and no preamble:",
+    ...VIBEREADME_REQUIRED_SECTIONS.map((h) => `  ${h}`),
+    "",
+    "  ## What this is — 2-4 sentences: the application's purpose and shape.",
+    "  ## How it is organised — the modules and what each is responsible for.",
+    "  ## Entry points — the ways execution starts, grouped as given below.",
+    "  ## External surface — what it touches outside itself (files, db, http, processes).",
+    "    Say 'none detected' if the effect list is empty rather than inventing one.",
+    "  ## Not statically known — what a reader must NOT conclude from this document:",
+    "    dynamic dispatch, unresolved calls, anything the file list cannot show.",
+    "    This section is required and must never be empty.",
+    "",
+    `Files and their top-level definitions (${Object.keys(files).length} files):`,
+    fileLines || "(none)",
+    "",
+    "Entry points discovered:",
+    eps || "(none discovered)",
+    "",
+    `External effect kinds found by the parser: ${effects.size ? [...effects].join(", ") : "(none)"}`,
+  ].join("\n");
 }
 
 function _readmePrompt(scope: "thread" | "file", id: string, ir: any): string {
@@ -4157,19 +4219,53 @@ function _runReadmeLlm(prompt: string, tier: ModelTier = "thinking"): Promise<st
 }
 
 async function runGenerateReadme(
-  scope: "thread" | "file", id: string,
+  scope: ReadmeScope, id: string,
 ): Promise<{ ok: boolean; body?: string; error?: string }> {
   const ir = readmeIrFor(scope, id);
   if (!ir) return { ok: false, error: `No ${scope} IR for "${id}"` };
   if (!claudeCliAvailable) return { ok: false, error: "claude CLI unavailable for README generation" };
   // Routine: a prose README has no citation floor to fail.
-  const body = await _runReadmeLlm(_readmePrompt(scope, id, ir), "routine");
+  if (scope === "project") {
+    // Structured, so it goes through the shape gate before it is persisted —
+    // a VibeReadme missing its honesty section would be worse than none.
+    // "thinking" tier, not "routine": this one is read as the map of the
+    // whole application, and every section makes claims about it.
+    const prose = await _runReadmeLlm(_vibeReadmePrompt(ir), "thinking");
+    if (!prose) return { ok: false, error: "VibeReadme generation returned nothing" };
+    const check = validateVibeReadmeBody(prose);
+    if (!check.ok) {
+      return { ok: false, error: `VibeReadme did not meet its structure: ${check.problems.join("; ")}` };
+    }
+    writeReadme(readmeRootDir(), scope, id, prose.trim(), sourceHashOf(ir), new Date().toISOString());
+    return { ok: true, body: prose.trim() };
+  }
+  const body = await _runReadmeLlm(_readmePrompt(scope as "thread" | "file", id, ir), "routine");
   if (!body) return { ok: false, error: "README generation returned nothing" };
   writeReadme(readmeRootDir(), scope, id, body, sourceHashOf(ir), new Date().toISOString());
   return { ok: true, body };
 }
 
-function handleGetReadme(payload: { scope: "thread" | "file"; id: string }, ws: WebSocket): void {
+// Boundary validation: `scope` reaches readmePath, which builds a file path
+// from it. An unrecognised value must be refused here, not normalised
+// downstream into a directory nobody meant.
+const README_SCOPES: readonly ReadmeScope[] = ["thread", "file", "project"];
+function badReadmeScope(payload: { scope?: unknown; id?: unknown }, ws: WebSocket): boolean {
+  const ok = typeof payload?.scope === "string"
+    && README_SCOPES.includes(payload.scope as ReadmeScope)
+    && typeof payload?.id === "string" && payload.id.length > 0;
+  if (!ok) {
+    ws.send(JSON.stringify({
+      type: "readme-status",
+      payload: { exists: false, scope: String(payload?.scope), id: String(payload?.id),
+        key: `${String(payload?.scope)}:${String(payload?.id)}`,
+        error: `unknown README scope (expected one of ${README_SCOPES.join(", ")})` },
+    }));
+  }
+  return !ok;
+}
+
+function handleGetReadme(payload: { scope: ReadmeScope; id: string }, ws: WebSocket): void {
+  if (badReadmeScope(payload, ws)) return;
   const ir = readmeIrFor(payload.scope, payload.id);
   const currentHash = ir ? sourceHashOf(ir) : "";
   const result = readReadmeFromStore(readmeRootDir(), payload.scope, payload.id, currentHash);
@@ -4177,8 +4273,9 @@ function handleGetReadme(payload: { scope: "thread" | "file"; id: string }, ws: 
 }
 
 async function handleGenerateReadme(
-  payload: { scope: "thread" | "file"; id: string }, ws: WebSocket,
+  payload: { scope: ReadmeScope; id: string }, ws: WebSocket,
 ): Promise<void> {
+  if (badReadmeScope(payload, ws)) return;
   const gen = await runGenerateReadme(payload.scope, payload.id);
   if (!gen.ok) {
     ws.send(JSON.stringify({

@@ -68,7 +68,10 @@ import { ThreadView, ThreadIndex, ThreadContainerNode, SkillBadge, ThreadSkillCa
 import type { ThreadSkillRecord, ArtifactRecordWire } from "./types";
 import { SystemView } from "./system";
 import { ArchitectureView, deriveModels, type ArchModel } from "./architecture";
-import { ReadmeBadge, type ReadmeStatus } from "./ReadmeBadge";
+// ReadmeBadge itself is parked (see the ChipStrip note); its status type
+// still describes what the server sends.
+import { type ReadmeStatus } from "./ReadmeBadge";
+import { ReadmePanel } from "./ReadmePanel";
 import { ChipStrip } from "./ChipStrip";
 // M18-Add-deprecate: the 9-kind Add palette + its drag/insertion flow is
 // parked (superseded by Mode A "type code → Save → node appears"). Source
@@ -222,6 +225,7 @@ function Graph() {
   const [roadmapDrafting, setRoadmapDrafting] = useState(false);
   // M20.2 — README status for the active thread's badge (PLAN-v5 §2).
   const [readmeStatus, setReadmeStatus] = useState<ReadmeStatus | null>(null);
+  const [readmePanelOpen, setReadmePanelOpen] = useState(false);
   // M-SKILL.3 — thread-skill lifecycle states (badge + card + launchpad dots).
   const [threadSkills, setThreadSkills] = useState<Record<string, ThreadSkillRecord>>({});
   // M-TRAINED.2 — the artifact index + card-open state.
@@ -783,17 +787,24 @@ function Graph() {
   // M20.2 — fetch the active thread's README status (pull-on-demand) when
   // the thread view opens or the thread changes. The badge renders the
   // result; generation stays on-request (the Refresh button).
+  // 2026-08-04 — scope follows what you are looking at: inside a thread the
+  // badge is that thread's README; anywhere else it is the whole-project
+  // VibeReadme (what the application is and how it is organised). Standing
+  // on the launchpad and being offered only a per-thread README was why the
+  // project-level document had nowhere to live.
+  // README UI is PROJECT scope only now: per-thread READMEs were retired in
+  // favour of thread skills, which carry the same intent with a grounding
+  // gate, human ratification and actual delivery to an agent. The thread and
+  // file scopes remain fully supported server-side and over MCP.
   useEffect(() => {
-    if (viewMode !== "thread" || !activeEntryPointId) { setReadmeStatus(null); return; }
     setReadmeStatus(null);
-    bridge.postMessage({ type: "get-readme", payload: { scope: "thread", id: activeEntryPointId } });
-  }, [viewMode, activeEntryPointId]);
+    bridge.postMessage({ type: "get-readme", payload: { scope: "project", id: "project" } });
+  }, [entryPoints.length]);
 
   const handleRefreshReadme = useCallback(() => {
-    if (!activeEntryPointId) return;
     setReadmeStatus({ exists: false, generating: true });
-    bridge.postMessage({ type: "generate-readme", payload: { scope: "thread", id: activeEntryPointId } });
-  }, [activeEntryPointId]);
+    bridge.postMessage({ type: "generate-readme", payload: { scope: "project", id: "project" } });
+  }, []);
 
   // M-SKILL.3 — pull every thread's skill state whenever the entry-point set
   // changes (boot + each project re-parse): the launchpad dots and the badge
@@ -995,6 +1006,10 @@ function Graph() {
             threads={projectThreads}
             threadSkills={threadSkills}
             onSelectEntry={handleSelectEntry}
+            onOpenVibeReadme={() => setReadmePanelOpen(true)}
+            vibeReadmeState={
+              readmeStatus?.exists ? (readmeStatus.stale ? "stale" : "fresh") : "none"
+            }
           />
         ) : viewMode === "system" ? (
           <SystemView
@@ -1037,8 +1052,20 @@ function Graph() {
                 step back to the whole thread. */}
             {!regionOpen && (
               <ChipStrip>
-                <ReadmeBadge status={readmeStatus} onRefresh={handleRefreshReadme} />
-                {/* M-SKILL.3 — skill lifecycle chip, sibling to the README badge. */}
+                {/* The per-thread README chip was UNMOUNTED 2026-08-04. Its
+                    own prompt called it "a context anchor for a coding agent"
+                    — which is exactly what the thread SKILL is, and the skill
+                    does it strictly better: shape-gated sections, citations
+                    checked against real IR nodes, human ratification, and it
+                    actually reaches an agent through remit routing. The
+                    README reached nothing. Two chips side by side doing one
+                    job, at different quality bars, is worse than one.
+
+                    Park, don't delete: readme_store, the generation path and
+                    the MCP resources (vibegraph://thread/{id}/readme) all
+                    stay — external consumers read them, and the PROJECT-scope
+                    VibeReadme shares that machinery. Only this chip is gone.
+                    M-SKILL.3 — skill lifecycle chip. */}
                 {activeEntryPointId && (
                   <SkillBadge
                     record={threadSkills[activeEntryPointId] ?? null}
@@ -1636,6 +1663,16 @@ function Graph() {
           tiers={modelTiers}
           onChange={setModelTiers}
           onClose={() => setModelsOpen(false)}
+        />
+      )}
+
+      {/* ── README / VibeReadme viewer ── */}
+      {readmePanelOpen && (
+        <ReadmePanel
+          title="VibeReadme — this project"
+          status={readmeStatus}
+          onRefresh={handleRefreshReadme}
+          onClose={() => setReadmePanelOpen(false)}
         />
       )}
 

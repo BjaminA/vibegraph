@@ -26,9 +26,19 @@ if ! PYTHONPATH="$PYDEPS_DIR" python3 -c "from libcst import native" 2>/dev/null
 fi
 export PYTHONPATH="$PYDEPS_DIR${PYTHONPATH:+:$PYTHONPATH}"
 
-# Build if dist doesn't exist or is stale
-if [ ! -f "$SCRIPT_DIR/dist/server.js" ]; then
-  echo "Building VibeGraph..."
+# Build if dist is missing OR older than any source it is built from.
+# The condition used to be existence ONLY, while the comment claimed
+# staleness — so after editing or pulling, this script happily served a
+# stale bundle and every fix looked like it had not landed. That cost real
+# debugging time more than once.
+NEWEST_SRC="$(find "$SCRIPT_DIR/src" "$SCRIPT_DIR/server.ts" "$SCRIPT_DIR/esbuild.mjs" \
+  -type f -newer "$SCRIPT_DIR/dist/webview.js" -print -quit 2>/dev/null || true)"
+if [ ! -f "$SCRIPT_DIR/dist/server.js" ] || [ ! -f "$SCRIPT_DIR/dist/webview.js" ] || [ -n "$NEWEST_SRC" ]; then
+  if [ -n "$NEWEST_SRC" ]; then
+    echo "Rebuilding VibeGraph (source newer than dist: ${NEWEST_SRC#$SCRIPT_DIR/})..."
+  else
+    echo "Building VibeGraph..."
+  fi
   (cd "$SCRIPT_DIR" && node esbuild.mjs)
 fi
 
