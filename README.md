@@ -14,6 +14,12 @@ human has to approve.
 > a human accept — but run it on a **git repo with a clean working tree**, so
 > anything it does is one `git diff` from review.
 
+![The launchpad — entry points grouped by what they are](docs/screenshots/01-launchpad.png)
+
+*Open a project and VibeGraph finds its entry points, grouped by what they
+are — models, CLI entries, the public API — each with its docstring summary
+and how many files its thread reaches.*
+
 ---
 
 ## What it is
@@ -159,6 +165,21 @@ others.
 | **Thread** | One logic thread traced statically forward from a seed function, across files, branch-stacked left-to-right. Conditional calls are dashed; scope boundaries end in explicit "external" terminals. |
 | **System** | Subsystems and how they relate — the project above the file level. |
 | **Arch** | PyTorch models as layer schematics with parameter counts. Needs layers declared literally; `nn.Sequential(*layers)` cannot be enumerated statically and honestly collapses to a single card. |
+
+![Thread view — one execution path traced across files](docs/screenshots/02-thread.png)
+
+*Thread view: `evaluate_holdout` traced across `predict.py`, `data.py` and
+`model.py`, with the arguments on each edge and a `model.pt · missing` chip
+that says the artifact has not been produced yet.*
+
+![Arch view — the layer stack with parameter counts](docs/screenshots/03-arch.png)
+
+*Arch view: the model as a schematic, per-layer parameter counts included.*
+
+![Diagram view — one file as structure](docs/screenshots/04-fileview.png)
+
+*Diagram view: one file as structure — the class container, its `__init__`
+with the whole `nn.Sequential` visible, and `forward`.*
 
 ## Development
 

@@ -159,7 +159,11 @@ function longestLineLen(s: string): number {
 function previewLines(n: AstNode): number {
   const text = n.type === "assignment"
     ? (n.preview && n.preview.length > 0 ? n.preview : (n.annotation ?? ""))
-    : n.type === "return_stmt" ? (n.value ?? "") : "";
+    : n.type === "return_stmt" ? (n.value ?? "")
+    // raise carries source newlines exactly like a return value does
+    // (`raise ValueError(\n    f"..."\n)`); without this the node is sized
+    // for ONE line and the rest is clipped by the 3-line clamp.
+    : n.type === "raise_stmt" ? (n.exc ?? "") : "";
   return text.length === 0 ? 1 : text.split("\n").length;
 }
 const PREVIEW_LINE_H = 15; // fontSize-11 monospace line + breathing room
@@ -200,7 +204,10 @@ function contentLen(n: AstNode): number {
     case "return_stmt":
       return 7 + longestLineLen(n.value ?? "None");
     case "raise_stmt":
-      return 6 + (n.exc?.length ?? 0);
+      // longestLineLen, not raw length: a multi-line raise would otherwise
+      // demand width for every line concatenated and hit MAX_NODE_W, while
+      // still clipping vertically. Same contract as return_stmt above.
+      return 6 + longestLineLen(n.exc ?? "");
     case "try_stmt":
       return 3; // "TRY" chip — real width comes from the nested children
     case "finally_block":

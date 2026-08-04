@@ -122,7 +122,7 @@
         "endLine": 37,
         "col": 12,
         "endCol": 13,
-        "exc": "ValueError(\n    f\"image_size must be div",
+        "exc": "ValueError(\n    f\"image_size must be divisible by 4 (two 2x2 pools), got {image_size}\"\n)",
         "callTarget": "ValueError"
       },
       {
@@ -833,7 +833,7 @@
         "endLine": 69,
         "col": 12,
         "endCol": 81,
-        "exc": "ValueError(f\"{name} must be a positive i",
+        "exc": "ValueError(f\"{name} must be a positive integer, got {value!r}\")",
         "callTarget": "ValueError"
       }
     ],
@@ -1178,7 +1178,7 @@
         "endLine": 66,
         "col": 8,
         "endCol": 9,
-        "exc": "ValueError(\n    f\"steps_per_epoch must b",
+        "exc": "ValueError(\n    f\"steps_per_epoch must be a positive integer, got {steps_per_epoch!r}\"\n)",
         "callTarget": "ValueError"
       },
       {
@@ -1378,7 +1378,7 @@
         "endLine": 111,
         "col": 8,
         "endCol": 78,
-        "exc": "ValueError(f\"epochs must be a positive i",
+        "exc": "ValueError(f\"epochs must be a positive integer, got {epochs!r}\")",
         "callTarget": "ValueError"
       },
       {
@@ -1400,7 +1400,7 @@
         "endLine": 115,
         "col": 8,
         "endCol": 9,
-        "exc": "ValueError(\n    f\"eval_batches must be a",
+        "exc": "ValueError(\n    f\"eval_batches must be a positive integer, got {eval_batches!r}\"\n)",
         "callTarget": "ValueError"
       },
       {
@@ -2184,7 +2184,7 @@
         "endLine": 30,
         "col": 8,
         "endCol": 9,
-        "exc": "ValueError(\n    f\"logits must be 2-D (N,",
+        "exc": "ValueError(\n    f\"logits must be 2-D (N, num_classes), got shape {tuple(logits.shape)}\"\n)",
         "callTarget": "ValueError",
         "nestsInnerCalls": true,
         "nestExtracted": false
@@ -2208,7 +2208,7 @@
         "endLine": 32,
         "col": 8,
         "endCol": 85,
-        "exc": "ValueError(f\"labels must be 1-D (N,), go",
+        "exc": "ValueError(f\"labels must be 1-D (N,), got shape {tuple(labels.shape)}\")",
         "callTarget": "ValueError",
         "nestsInnerCalls": true,
         "nestExtracted": false
@@ -2232,7 +2232,7 @@
         "endLine": 36,
         "col": 8,
         "endCol": 9,
-        "exc": "ValueError(\n    f\"batch mismatch: {logit",
+        "exc": "ValueError(\n    f\"batch mismatch: {logits.shape[0]} logit rows vs {labels.shape[0]} labels\"\n)",
         "callTarget": "ValueError"
       },
       {
@@ -2357,7 +2357,7 @@
         "endLine": 64,
         "col": 8,
         "endCol": 88,
-        "exc": "ValueError(f\"num_batches must be a posit",
+        "exc": "ValueError(f\"num_batches must be a positive integer, got {num_batches!r}\")",
         "callTarget": "ValueError"
       },
       {

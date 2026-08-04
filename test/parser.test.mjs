@@ -10,6 +10,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync, writeFileSync, unlinkSync } from "node:fs";
 import { spawnSync } from "node:child_process";
+import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import Ajv2020 from "ajv/dist/2020.js";
@@ -398,4 +399,35 @@ test("third-party / unresolvable calls emit no cross-file edge", () => {
   const targets = new Set(mainXfile.map((e) => e.qualifiedTarget));
   assert.ok(targets.has("utils:format_name"), "missing utils:format_name edge");
   assert.ok(targets.has("utils:greet"), "missing utils:greet edge");
+});
+
+// A `raise` carried a bespoke 40-char cap while every other preview-bearing
+// node used PREVIEW_MAX, so a routine `raise ValueError(f"...")` reached the
+// file view cut mid-expression — `ValueError(\n    f"length mismatch: {len(`
+// — with nothing marking that a cut had happened.
+test("raise keeps its full exception text, not a bespoke 40-char cut", () => {
+  const src = [
+    "def check(preds, targs):",
+    "    if len(preds) != len(targs):",
+    "        raise ValueError(",
+    '            f"length mismatch: {len(preds)} predictions vs {len(targs)} targets"',
+    "        )",
+    "",
+  ].join("\n");
+  const tmp = join(tmpdir(), `vg-raise-${process.pid}.py`);
+  writeFileSync(tmp, src, "utf-8");
+  let ir;
+  try {
+    const r = spawnSync("python3", [PARSER, tmp],
+      { env: { ...process.env, PYTHONPATH: PYDEPS }, encoding: "utf-8", cwd: ROOT });
+    assert.equal(r.status, 0, `parser failed: ${r.stderr}`);
+    ir = JSON.parse(r.stdout);
+  } finally { unlinkSync(tmp); }
+  const raised = ir.nodes.find((n) => n.type === "raise_stmt");
+  assert.ok(raised, "expected a raise_stmt node");
+  assert.ok(raised.exc.includes("targets"),
+    `the tail of the message must survive; got ${JSON.stringify(raised.exc)}`);
+  assert.ok(raised.exc.length > 40, "the old 40-char cap must be gone");
+  assert.equal(raised.exc.split("\n").length, 3,
+    "source newlines are preserved so the view can size the node to them");
 });

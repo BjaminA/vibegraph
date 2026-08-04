@@ -35,6 +35,10 @@ export function RaiseNode({ data }: Props) {
           <TextLine
             text={data.exc ?? ""}
             maxChars={data.charBudget ?? 28}
+            // The layout sizes this node to the full line count (previewLines
+            // covers raise_stmt), so the default 3-line clamp must not cut
+            // what the box already fits — same contract as ReturnNode.
+            clampLines={Math.max(3, (data.exc ?? "").split("\n").length)}
             style={{ color: "var(--accent-error)", fontSize: 11, fontFamily: "monospace", opacity: 0.85, display: "block" }}
           />
         </div>

@@ -769,7 +769,13 @@ class GraphBuilder(cst.CSTVisitor):
             self._stamp_nests(node.value, ret_id, self.nodes[-1])
 
     def visit_Raise(self, node: cst.Raise) -> None:
-        exc_text = self._code(node.exc)[:40] if node.exc else None
+        # PREVIEW_MAX, not a bespoke 40: every other preview-bearing node
+        # (assignment RHS, return value, call source) uses the shared cap, and
+        # 40 chars cut a routine `raise ValueError(f"...")` mid-expression —
+        # `ValueError(\n    f"length mismatch: {len(` — with nothing to show a
+        # cut had happened. The view already wraps and clamps, so the honest
+        # place to bound this is the same place as everything else.
+        exc_text = self._code(node.exc)[:PREVIEW_MAX] if node.exc else None
         raise_id = self._make_id("raise", "")
         extras: dict = {"exc": exc_text}
         if node.exc is not None and isinstance(node.exc, cst.Call):
