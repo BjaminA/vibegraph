@@ -905,6 +905,22 @@ function Graph() {
   // M-FV.3 (W3) — edges are hidden by default; the Filters panel's edge
   // toggles reveal the flow (call/reference) and/or structure (contains)
   // families. Filter by the family stamped on each edge's data.
+  // What the flow toggle can actually draw for this file, so the panel can
+  // say so. An edge whose target node is not in the current graph is dropped
+  // by react-flow with no trace — on a single-file view that is every
+  // cross-file call, which is most of the interesting flow.
+  const flowStats = React.useMemo(() => {
+    const present = new Set(nodes.map((n) => n.id));
+    let drawable = 0, offFile = 0;
+    for (const e of edges) {
+      const fam = (e.data as { family?: string } | undefined)?.family;
+      if (fam === "structure") continue;
+      if (present.has(e.source) && present.has(e.target)) drawable++;
+      else offFile++;
+    }
+    return { drawable, offFile };
+  }, [edges, nodes]);
+
   const displayedEdges = React.useMemo(
     () => {
       const base = edges.filter((e) => {
@@ -1629,6 +1645,9 @@ function Graph() {
           filters={nodeFilters}
           onChange={setNodeFilters}
           onClose={() => setFiltersOpen(false)}
+          // Only meaningful in the file/diagram view — the edge toggles do
+          // not apply to thread / system / arch, so no counts are claimed there.
+          flowStats={viewMode === "diagram" && zoomLevel === "file" ? flowStats : undefined}
         />
       </ViewTransition>
 

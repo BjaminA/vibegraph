@@ -4892,6 +4892,16 @@ const mcpHandler = createMcpHttpHandler(mcpContext);
 
 // ── HTTP server ───────────────────────────────────────────────────────────────
 
+// 2026-08-04 — dist assets were served with a Content-Type and NOTHING else:
+// no Cache-Control, no ETag, no Last-Modified. With no freshness information
+// a browser is free to heuristically cache, so a rebuilt bundle could keep
+// serving the OLD app from cache and a fix would look like it had not landed.
+// The bundle comes from localhost and is rebuilt constantly, so there is
+// nothing to gain by caching it and a whole class of phantom bugs to lose.
+// (A tab that is never reloaded still runs the old JS — nothing server-side
+// can fix that; this makes a plain reload sufficient, no hard-refresh.)
+const NO_STORE = "no-store, no-cache, must-revalidate";
+
 const MIME: Record<string, string> = {
   ".html": "text/html",
   ".js": "application/javascript",
@@ -4902,7 +4912,7 @@ const MIME: Record<string, string> = {
 
 const server = http.createServer((req, res) => {
   if (req.url === "/" || req.url === "/index.html") {
-    res.writeHead(200, { "Content-Type": "text/html" });
+    res.writeHead(200, { "Content-Type": "text/html", "Cache-Control": NO_STORE });
     res.end(getIndexHtml());
     return;
   }
@@ -4951,7 +4961,10 @@ const server = http.createServer((req, res) => {
   const filePath = path.join(DIST_DIR, req.url || "");
   if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
     const ext = path.extname(filePath);
-    res.writeHead(200, { "Content-Type": MIME[ext] || "application/octet-stream" });
+    res.writeHead(200, {
+      "Content-Type": MIME[ext] || "application/octet-stream",
+      "Cache-Control": NO_STORE,
+    });
     fs.createReadStream(filePath).pipe(res);
     return;
   }

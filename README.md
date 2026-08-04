@@ -111,6 +111,62 @@ an example and binds your consent to its content hash.
   process, so a Claude Code session in your shell and the built-in chat panel
   take exactly the same code path.
 
+## Threads as the unit of knowledge — and of agent scope
+
+This is the part that only works because the IR exists, and it is the reason
+the thread abstraction earns its keep beyond being a nice view.
+
+**A skill is attached to a thread, not to the repo.** VibeGraph drafts a
+short document describing what one thread does, grounded in its real
+function names and explicit about what is *not* statically knowable. You read
+it and **ratify** it — drafting is automatic, ratifying is always human. Only
+a ratified skill is ever treated as authoritative.
+
+**Questions route to the thread that owns them.** A deterministic remit index
+matches the symbols in your question against the threads that contain them —
+lexical, no model in the loop — and injects that thread's ratified skill into
+the turn, with a muted `routed:` line naming the thread and the token that
+matched. Ask from a node and it dispatches on that node's IR id alone.
+
+When a skill is *not* shared, the line says why — and distinguishes two cases
+that are easy to conflate: a ratified skill **withheld** this turn (stale,
+over budget, or already in context) versus one that **never existed** (never
+drafted, or drafted and still awaiting ratification). "No skill exists" is
+never said about a skill that does exist.
+
+**Skills go stale honestly.** Each one stamps a snapshot of its thread's
+steps. When the code moves, the skill is marked stale and the card shows the
+diff. Re-affirm re-stamps it without regenerating; opt into auto-reaffirm and
+it keeps injecting *with* a stated caveat rather than silently going quiet.
+
+### What that enables for agents
+
+Because a thread is a real boundary in the IR, an agent can be scoped to
+exactly one — and that scope can be enforced rather than requested.
+
+`vibegraph_spawn_thread_agent` runs a **one-shot agent bounded to a single
+thread**. Its whole context is that thread's compact execution projection,
+its ratified skill, its blind-spot roll-up (what the IR says is *not*
+statically knowable here), and the adjacent threads it can see but is not
+scoped to. Two rules make it honest rather than merely small:
+
+- It must answer `ESCALATE:` when a task needs anything outside its thread,
+  instead of guessing across the boundary.
+- It is told plainly that it cannot run, test or grep anything, and is
+  forbidden from *claiming* it did. An unverified answer marked unverified is
+  a good answer; an invented verification is a failure.
+
+`vibegraph_plan_work` decomposes a task the same way: it maps the task onto
+the threads that own it, orders them dependencies-first from the call graph,
+and annotates each packet with its boundary counts, its escalation surface
+and its skill state. It spawns nothing — the human ratifies and the driving
+agent dispatches.
+
+The whole surface is exposed over MCP (`vibegraph_extract_thread`,
+`vibegraph_blast_radius`, `vibegraph_thread_blind_spots`,
+`vibegraph_run_thread_to_node`, `vibegraph_rewrite_node`, …), so a Claude
+Code session in your terminal drives exactly what the built-in chat drives.
+
 ## Run it
 
 ```bash
@@ -223,6 +279,41 @@ test/                    fixtures, snapshots, Playwright specs
 Design references: [`design/COLOURS.md`](design/COLOURS.md),
 [`design/ICONS.md`](design/ICONS.md), and
 [`schemas/ir.schema.json`](schemas/ir.schema.json) for the IR contract.
+
+## Where this is going
+
+Two strands, deliberately separate.
+
+### 1. More languages
+
+The IR is Python-only today and honestly says so: `libcst` is the parser, and
+some Python-isms are baked into the node grammar. The intent is to widen it
+to **TypeScript / JavaScript, Bash, C++ and Rust**.
+
+That is a language *frontend* pass plus a new IR major version, not a plugin
+drop-in — the structural node-ID grammar, the effect floor and the edit
+chokepoint all have to mean something in each language before a view can be
+trusted. Bash and TS/JS are the near end of that (interpreters, dynamic
+dispatch, an existing CST story); C++ and Rust are the far end, where the
+build graph matters as much as the syntax tree. The rule stays the same
+whatever lands: if a construct cannot be resolved statically, the view says
+so rather than guessing.
+
+### 2. A control panel for agent orchestration
+
+The pieces above — bounded per-thread agents, deterministic routing,
+ratification gates, blast radius, an effect floor — are the primitives for
+running *many* agents against one codebase. What is missing is the surface
+that lets a human see and steer it: which agents are live and on which
+threads, what each was scoped to, where they escalated, which proposals are
+waiting on a gate, and what a fleet of them is about to touch before it
+touches it.
+
+The graph is already the natural display for that. A thread is where an agent
+lives, blast radius is what its change would reach, and the ratification gate
+is the place a human says yes. The intent is to make agent orchestration
+something you **watch and control on the canvas**, rather than something you
+infer from a scrolling log.
 
 ## Limits worth knowing
 

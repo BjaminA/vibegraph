@@ -115,7 +115,12 @@ export function DiagramCanvas({
         elementsSelectable={true}
         onNodeClick={onNodeClick}
       >
-        <FitOnReflow trigger={nodes.length} />
+        {/* 2026-08-04 — the trigger was `nodes.length` alone, so revealing an
+            edge family re-fit NOTHING: the edge toggles change edges, not
+            nodes. On predict.py both flow edges landed above the viewport
+            (y = -290 and -375) and the toggle looked dead. Edge count is part
+            of what the fit has to cover, so it is part of the trigger. */}
+        <FitOnReflow trigger={`${nodes.length}:${edges.length}`} />
         <Background color="var(--border-edge)" gap={24} size={1} />
         <Controls style={{ background: "var(--bg-node)", borderColor: "var(--border-edge)" }} />
         {!hideMinimap && <VgMiniMap nodeColor={fileNodeColor} />}

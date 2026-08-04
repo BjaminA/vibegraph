@@ -35,10 +35,21 @@ const EDGE_ITEMS: Array<{ key: keyof NodeFilters; label: string; hint?: string }
   { key: "showStructureEdges", label: "Structure lines", hint: "contains / nesting" },
 ];
 
+/** What the flow toggle can and cannot draw for the CURRENT file. */
+export interface FlowEdgeStats {
+  /** flow edges whose endpoints are both in this file — drawable here. */
+  drawable: number;
+  /** flow edges leaving this file — the target node is in another file, so
+   *  react-flow silently drops them. Reported, never silently swallowed. */
+  offFile: number;
+}
+
 interface Props {
   filters: NodeFilters;
   onChange: (next: NodeFilters) => void;
   onClose: () => void;
+  /** Omitted outside the file view, where the edge toggles do not apply. */
+  flowStats?: FlowEdgeStats;
 }
 
 const ITEMS: Array<{ key: keyof NodeFilters; label: string; hint?: string }> = [
@@ -50,7 +61,7 @@ const ITEMS: Array<{ key: keyof NodeFilters; label: string; hint?: string }> = [
   { key: "showDocstrings", label: "Docstrings" },
 ];
 
-export function FiltersPanel({ filters, onChange, onClose }: Props) {
+export function FiltersPanel({ filters, onChange, onClose, flowStats }: Props) {
   const toggle = (key: keyof NodeFilters) => {
     onChange({ ...filters, [key]: !filters[key] });
   };
@@ -153,6 +164,31 @@ export function FiltersPanel({ filters, onChange, onClose }: Props) {
           {filters.showFlowEdges || filters.showStructureEdges ? "all off" : "all on"}
         </button>
       </div>
+      {/* 2026-08-04 — the flow toggle looked broken because it often draws
+          little or nothing: a single-file view cannot draw an edge whose
+          target lives in ANOTHER file, and react-flow drops those silently.
+          On metrics.py it drew zero and said nothing. State what is here and
+          what cannot be drawn here, and point at the view that does show it. */}
+      {flowStats && (
+        <div data-flow-edge-note style={{
+          padding: "0 12px 6px", color: "var(--text-muted)", fontSize: 9, lineHeight: 1.5,
+        }}>
+          {flowStats.drawable === 0 && flowStats.offFile === 0
+            ? "No flow edges in this file — nothing for the toggle to draw."
+            : <>
+                {flowStats.drawable} drawable here
+                {flowStats.offFile > 0 && (
+                  <>
+                    {" · "}
+                    <span style={{ color: "var(--accent-warning)" }}>
+                      {flowStats.offFile} leave this file
+                    </span>
+                    {" — open the Thread view to follow them"}
+                  </>
+                )}
+              </>}
+        </div>
+      )}
       <div style={{ padding: "4px 4px 6px" }}>
         {EDGE_ITEMS.map((item) => (
           <label
