@@ -11,9 +11,10 @@
  *   3. container chips read like Rust (`for … in …`, `if let`, `match`),
  *      never another language's separator;
  *   4. Monaco holds a `rust` model;
- *   5. NO run/edit affordances — Rust has no edit or run floor;
- *   6. the tooltip on a seed and on a container shows source read-only,
- *      each for its own stated reason.
+ *   5. NO run affordance — Rust has no run floor; EDIT is on since the
+ *      Rust edit floor (2026-09-25; test/e2e/cpp-rust-edit.spec.ts saves);
+ *   6. the tooltip on a seed shows editable source; on a container,
+ *      read-only source for the container reason.
  *
  * Boot:
  *   VG_FIXTURE=test/fixtures/rust/router_demo VG_PORT=4283 PORT=4283 \
@@ -78,16 +79,15 @@ test.describe("M-RUST — Rust read-only experience", () => {
     mkdirSync(REVIEW_DIR, { recursive: true });
     await page.screenshot({ path: join(REVIEW_DIR, "rust-thread.png"), fullPage: false });
 
-    // The hover tooltip on the seed: source read-only, no Save, and never
-    // the "no source" placeholder.
+    // The hover tooltip on the seed: its source, EDITABLE since the Rust edit
+    // floor (2026-09-25: rewrite_rust.mjs) — no read-only note, a Save — and
+    // never the "no source" placeholder.
     await page.locator(".vg-thread-node-seed").first().hover();
     const tip = page.locator("[data-thread-tooltip]");
     await expect(tip).toBeVisible({ timeout: 5_000 });
     await expect(tip.locator(".monaco-editor")).toBeVisible({ timeout: 10_000 });
-    await expect(tip.locator("[data-readonly-language]")).toBeVisible();
-    await expect(tip.locator("[data-readonly-language]"))
-      .toHaveAttribute("data-readonly-reason", "language");
-    await expect(tip.locator("button[title^='Save edits']")).toHaveCount(0);
+    await expect(tip.locator("[data-readonly-language]")).toHaveCount(0);
+    await expect(tip.locator("button[title^='Save edits']")).toHaveCount(1);
     expect((await tip.textContent()) ?? "").not.toContain("No source available");
     await page.mouse.move(5, 5);
     await page.waitForTimeout(700);

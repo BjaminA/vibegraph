@@ -88,3 +88,23 @@ export function reindent(text, indent) {
     .map((l) => (l.trim() ? indent + l : l))
     .join("\n");
 }
+
+/** Strip the indentation every non-blank line shares (2026-09-25). A payload
+ *  arrives either RELATIVE (an agent writes `if (x) {` at column 0) or
+ *  ABSOLUTE (the editor shows the node's lines as they sit in the file, so a
+ *  nested node comes back already indented). Both reduce to the same relative
+ *  text; spliced unreduced, an absolute payload doubled the node's indent. */
+export function dedent(text) {
+  const lines = text.replace(/\s+$/, "").split("\n");
+  const indents = lines.filter((l) => l.trim()).map((l) => l.match(/^[ \t]*/)[0].length);
+  const cut = indents.length ? Math.min(...indents) : 0;
+  return lines.map((l) => (l.trim() ? l.slice(cut) : "")).join("\n");
+}
+
+/** A replacement for the node whose span starts at `spanStart`: dedented, its
+ *  first line placed where the node starts (the file's own indent before it
+ *  is kept), every later line at the indent of the node's first line. */
+export function fitToSpan(pre, spanStart, text) {
+  const base = indentAt(pre, spanStart);
+  return dedent(text).split("\n").map((l, i) => (i === 0 || !l ? l : base + l)).join("\n");
+}

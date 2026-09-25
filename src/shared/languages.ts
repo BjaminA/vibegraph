@@ -125,14 +125,16 @@ export const LANGUAGES: readonly LanguageInfo[] = [
     // compile_commands.json: linking follows the header convention
     // (include "x.h" → x.h + companion x.cpp/.cc), overloads refuse to
     // link (unresolved — a named resolution gap), template dispatch is
-    // dynamic. Edit floor: clang-format is the named formatter when a
-    // milestone picks it up; until then read-only.
+    // dynamic. Edit floor (2026-09-25): rewrite_cpp.mjs — the span-splice
+    // core with this frontend's builder, clang-format scoped to the edited
+    // lines when installed, the raw verified splice otherwise; run stays off
+    // (a compiled language needs a build and its own consent story).
     id: "cpp",
     label: "C++",
     extensions: [".cpp", ".cc", ".cxx", ".hpp", ".hh", ".hxx", ".h"],
     monacoLanguage: "cpp",
     fenceTag: "cpp",
-    capabilities: { edit: false, run: false, trace: false, architecture: false },
+    capabilities: { edit: true, run: false, trace: false, architecture: false },
   },
   {
     // M-RUST — read-only frontend (tree-sitter-rust). Linking follows
@@ -142,17 +144,19 @@ export const LANGUAGES: readonly LanguageInfo[] = [
     // resolve to real files. Rust has no overloading, so a PATH call
     // (`Router::new`) links; a METHOD call needs the receiver's type and
     // stays `dynamic`; a turbofish is compile-time dispatch and stays
-    // `dynamic`. Capabilities all false: rustfmt is the named formatter
-    // if an edit milestone ever picks Rust up, and a run floor for a
-    // COMPILED language needs a build plus a consent story for build.rs
-    // (which executes arbitrary code at build time — the import-time
-    // effects class), so it is its own design conversation.
+    // `dynamic`. Edit floor (2026-09-25): rewrite_rust.mjs — the
+    // span-splice core with this frontend's builder, whole-file rustfmt when
+    // installed (stable rustfmt cannot scope to lines, so confinement rejects
+    // it on a file that is not rustfmt-clean), the raw verified splice
+    // otherwise. A run floor for a COMPILED language needs a build plus a
+    // consent story for build.rs (which executes arbitrary code at build
+    // time — the import-time effects class), so it is its own conversation.
     id: "rust",
     label: "Rust",
     extensions: [".rs"],
     monacoLanguage: "rust",
     fenceTag: "rust",
-    capabilities: { edit: false, run: false, trace: false, architecture: false },
+    capabilities: { edit: true, run: false, trace: false, architecture: false },
   },
 ];
 

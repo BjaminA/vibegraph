@@ -140,8 +140,12 @@ your editor shows it, in the same grouping — more compact, every line whole.
 Every edit goes through one **chokepoint**: the change becomes a CST patch,
 is formatted, and is diffed against the original. **If the diff touches any
 line outside the node you targeted, it is rejected and nothing is written**,
-with the reason. Editing is available for Python, TypeScript and bash; C++
-and Rust are read-only.
+with the reason. Editing works in all five languages. Each is formatted by
+its own formatter when one is installed — `black` (Python), `prettier`
+(TypeScript), `shfmt` (bash), `clang-format` (C++, scoped to the lines you
+changed), `rustfmt` (Rust) — and every formatted result must pass the same
+check; if none is installed, or its output would touch other lines, the edit
+is written exactly as you typed it and the result says it was not formatted.
 
 - **Edit** — click a node (or open the node editor from the toolbar), change
   its code in the editor, **Save**. The file on disk changes; the views

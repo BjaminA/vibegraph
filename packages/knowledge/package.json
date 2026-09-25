@@ -1,6 +1,6 @@
 {
   "name": "vibegraph-knowledge",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "description": "VibeGraph from npm: the visualisation (vibegraph-knowledge view) and the commands that crystallise what VibeGraph derives from a codebase (thread contracts, stack facts, a dependency-ordered plan) and what its operators stated (constraints with their reasons, stack policies) into files a plain Claude reads before it edits, plus a checker that verifies the stated rules against the code. Zero tokens.",
   "license": "MIT",
   "type": "module",

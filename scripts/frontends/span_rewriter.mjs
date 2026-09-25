@@ -1,80 +1,36 @@
-#!/usr/bin/env node
-// M-LANG5b (PLAN-M-LANG.md) — the JS/TS edit floor. Same contracts as
-// cst_rewrite.py and rewrite_bash.mjs (file-first argv, stdin source,
-// --dry-run prints raw new source, JSON envelope, the closed errorKind
-// taxonomy), same pipeline shape (vibegraph-cst-ops, never weakened):
+// The span-splice edit floor as ONE core, for the C++ and Rust rewriters
+// (2026-09-25). It is the pipeline rewrite_bash.mjs (M-LANG4) and
+// rewrite_jsts.mjs (M-LANG5b) each carry — at a third and fourth consumer
+// the repo's rule says extract it; bash and TS keep their own copies for
+// now, and would move here unchanged. Same contracts as cst_rewrite.py
+// (file-first argv, stdin source, --dry-run prints the raw new source, one
+// JSON envelope, the closed errorKind taxonomy), same stages, never weakened
+// (vibegraph-cst-ops):
 //
-//   resolve structural id via the SHARED builder → splice the byte
-//   span → RE-PARSE (ERROR ⇒ parse_error, nothing written) → format
-//   candidates, best first, each verified by the SHARED confinement
-//   check (scripts/frontends/confinement.mjs — pinned to the same
-//   vectors as cst_rewrite.py and rewrite_bash.mjs):
-//     1. SPAN-SCOPED prettier (rangeStart/rangeEnd — the M-DIRTY win
-//        black has and shfmt lacks; the project's own .prettierrc is
-//        respected via resolveConfig);
-//     2. whole-file prettier (correctly REJECTED by confinement on a
-//        non-prettier-clean file — the ladder falls through);
-//     3. the raw splice, verified, {"formatted": false} — the
-//        formatter-unavailable precedent.
-//   prettier loads IN-PROCESS (devDependency); if the import fails the
-//   ladder starts at candidate 3. ts-morph remains the NAMED FALLBACK
-//   if span-splice ever proves lossy around decorators/JSX.
+//   resolve the structural id through the language's OWN builder (the parser
+//   and the rewriter mint ids from one code path) → splice the byte span →
+//   RE-PARSE (any ERROR/MISSING ⇒ parse_error, nothing written) → formatter
+//   candidates, best first, each verified by the SHARED confinement check
+//   (confinement.mjs, pinned to the same vectors as the other three) →
+//   the raw splice, verified, {"formatted": false} when no formatter helps.
 //
-// Op set v1 (mirrors M-LANG4): replace_node, insert_before,
-// insert_after, delete_node, replace_function_body (whole-function
-// buffer + signature-parity guard), replace_module_body.
+// A language supplies: build(source) → { builder: { nodes, spans } },
+// hasErrors(source), formatCandidates(out, file, region) (an async iterable
+// of { text, formatted }, WITHOUT the raw fallback — the core adds it), and
+// its name for messages.
 
 import { readFileSync, writeFileSync } from "node:fs";
-import { buildFromSource, sourceHasParseErrors, dialectForPath } from "./builder.mjs";
 import {
   OpError, verifyDiffConfined, simpleDiff,
   lineStartIndex, lineEndIndex, indentAt, reindent, dedent, fitToSpan,
-} from "../confinement.mjs";
-
-export { verifyDiffConfined, simpleDiff };
+} from "./confinement.mjs";
 
 const SOURCE_CONSUMING = new Set([
   "replace_node", "insert_before", "insert_after",
   "replace_function_body", "replace_module_body",
 ]);
-const OPS = new Set([...SOURCE_CONSUMING, "delete_node"]);
+export const OPS = new Set([...SOURCE_CONSUMING, "delete_node"]);
 const SELF_PIPELINE = new Set(["replace_function_body", "replace_module_body"]);
-
-// ── formatting ladder (prettier in-process) ──────────────────────────────
-
-let prettierMod = null;
-let prettierTried = false;
-async function getPrettier() {
-  if (!prettierTried) {
-    prettierTried = true;
-    try {
-      prettierMod = (await import("prettier")).default;
-    } catch {
-      prettierMod = null;
-    }
-  }
-  return prettierMod;
-}
-
-async function* formatCandidates(out, file, span, doFormat) {
-  const prettier = doFormat ? await getPrettier() : null;
-  if (prettier) {
-    const config = (await prettier.resolveConfig(file).catch(() => null)) ?? {};
-    const opts = { ...config, parser: "typescript" };
-    try {
-      yield {
-        text: await prettier.format(out, { ...opts, rangeStart: span.start, rangeEnd: span.end }),
-        formatted: true,
-      };
-    } catch { /* fall through */ }
-    try {
-      yield { text: await prettier.format(out, opts), formatted: true };
-    } catch { /* fall through */ }
-  }
-  yield { text: out, formatted: false };
-}
-
-// ── op application (pure: pre source → post source) ──────────────────────
 
 function applyOp(pre, op, span, node, newSource, allowSignatureChange, newFnName) {
   switch (op) {
@@ -117,7 +73,17 @@ function applyOp(pre, op, span, node, newSource, allowSignatureChange, newFnName
   }
 }
 
-// ── main ──────────────────────────────────────────────────────────────────
+/** The lines of `post` that differ from `pre` (1-indexed inclusive), anchored
+ *  on the unchanged head and tail — what a span-scoped formatter may touch. */
+export function changedRegion(pre, post) {
+  const a = pre.split("\n"), b = post.split("\n");
+  let h = 0;
+  while (h < a.length && h < b.length && a[h] === b[h]) h++;
+  let t = 0;
+  while (t < a.length - h && t < b.length - h && a[a.length - 1 - t] === b[b.length - 1 - t]) t++;
+  const first = Math.min(h + 1, b.length);
+  return { first, last: Math.max(first, b.length - t) };
+}
 
 async function readStdin() {
   let raw = "";
@@ -126,8 +92,8 @@ async function readStdin() {
   return raw;
 }
 
-async function main() {
-  const argv = process.argv.slice(2);
+/** Run one rewrite with a language's adapter; prints the JSON envelope. */
+export async function runSpanRewriter(lang, argv = process.argv.slice(2)) {
   const flags = new Set(argv.filter((a) => a.startsWith("--")));
   const positional = argv.filter((a) => !a.startsWith("--"));
   const [file, op, nodeId] = positional;
@@ -138,16 +104,11 @@ async function main() {
   if (!file || !op || !OPS.has(op)) {
     process.stdout.write(JSON.stringify({
       success: false,
-      error: `usage: rewrite_jsts.mjs <file> <op ∈ ${[...OPS].join("|")}> [node_id]`,
+      error: `usage: ${lang.script} <file> <op ∈ ${[...OPS].join("|")}> [node_id]`,
       errorKind: "target_not_found",
     }));
-    process.exit(0);
+    return;
   }
-
-  // A .tsx file must be re-parsed with the JSX dialect, or the
-  // confinement check would be proving its claim against a tree of
-  // ERROR nodes rather than against the file.
-  const dialect = dialectForPath(file);
 
   try {
     const pre = readFileSync(file, "utf-8");
@@ -159,27 +120,22 @@ async function main() {
         throw new OpError("empty_source", `${op}: empty source payload (use delete_node to delete)`);
       }
     }
-
-    if (await sourceHasParseErrors(pre, dialect)) {
+    if (await lang.hasErrors(pre)) {
       throw new OpError("parse_error", `${file} does not parse cleanly before the edit`);
     }
 
-    const { builder } = await buildFromSource(pre, undefined, dialect);
+    const { builder } = await lang.build(pre);
     let span = null;
     let irNode = null;
     let targetLines = null;
-    const preLineCount = pre.split("\n").length;
-
     if (op === "replace_module_body") {
       span = { start: 0, end: pre.length };
-      targetLines = [1, preLineCount];
+      targetLines = [1, pre.split("\n").length];
     } else {
       if (!nodeId) throw new OpError("target_not_found", `${op}: node_id required`);
       span = builder.spans.get(nodeId) ?? null;
       irNode = builder.nodes.find((n) => n.id === nodeId) ?? null;
-      if (!span || !irNode) {
-        throw new OpError("target_not_found", `no node with id ${nodeId} in ${file}`);
-      }
+      if (!span || !irNode) throw new OpError("target_not_found", `no node with id ${nodeId} in ${file}`);
       targetLines = [irNode.line, irNode.endLine];
       if (op === "replace_function_body" && irNode.type !== "function_def") {
         throw new OpError("wrong_node_kind", `replace_function_body target must be a function_def, got ${irNode.type}`);
@@ -188,30 +144,28 @@ async function main() {
 
     let newFnName = null;
     if (op === "replace_function_body") {
-      const { builder: nb } = await buildFromSource(newSource, undefined, dialect);
+      const { builder: nb } = await lang.build(newSource);
       const fns = nb.nodes.filter((n) => n.type === "function_def" && n.parentId === null);
       if (fns.length !== 1) {
-        throw new OpError("wrong_node_kind",
-          `replace_function_body: new source must define exactly one function (got ${fns.length})`);
+        throw new OpError("wrong_node_kind", `replace_function_body: new source must define exactly one function (got ${fns.length})`);
       }
       newFnName = fns[0].name;
     }
 
     const out = applyOp(pre, op, span, irNode, newSource, allowSignatureChange, newFnName);
+    if (await lang.hasErrors(out)) throw new OpError("parse_error", `${op}: result does not parse — edit rejected`);
 
-    if (await sourceHasParseErrors(out, dialect)) {
-      throw new OpError("parse_error", `${op}: result does not parse — edit rejected`);
-    }
-
+    const candidates = async function* () {
+      if (doFormat) yield* lang.formatCandidates(out, file, changedRegion(pre, out));
+      yield { text: out, formatted: false };
+    };
     let written = null;
     let formatted = true;
     let lastErr = null;
-    for await (const cand of formatCandidates(out, file, span, doFormat)) {
+    for await (const cand of candidates()) {
       try {
-        if (await sourceHasParseErrors(cand.text, dialect)) throw new OpError("parse_error", "formatter broke the parse");
-        if (!SELF_PIPELINE.has(op) || op === "replace_function_body") {
-          verifyDiffConfined(pre, cand.text, targetLines, op);
-        }
+        if (await lang.hasErrors(cand.text)) throw new OpError("parse_error", "formatter broke the parse");
+        if (!SELF_PIPELINE.has(op) || op === "replace_function_body") verifyDiffConfined(pre, cand.text, targetLines, op);
         written = cand.text;
         formatted = cand.formatted;
         break;
@@ -220,15 +174,9 @@ async function main() {
       }
     }
     if (written === null) {
-      throw lastErr instanceof OpError
-        ? lastErr
-        : new OpError("diff_confinement_failed", String(lastErr?.message ?? lastErr));
+      throw lastErr instanceof OpError ? lastErr : new OpError("diff_confinement_failed", String(lastErr?.message ?? lastErr));
     }
-
-    if (dryRun) {
-      process.stdout.write(written);
-      return;
-    }
+    if (dryRun) { process.stdout.write(written); return; }
     writeFileSync(file, written, "utf-8");
     const extra = {};
     if (SELF_PIPELINE.has(op)) {
@@ -246,8 +194,4 @@ async function main() {
       process.stdout.write(JSON.stringify({ success: false, error: `${e.constructor?.name}: ${e.message}` }));
     }
   }
-}
-
-if (process.argv[1] && import.meta.url.endsWith(process.argv[1].split("/").pop())) {
-  await main();
 }

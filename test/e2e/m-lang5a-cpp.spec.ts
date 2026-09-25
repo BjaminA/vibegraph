@@ -8,7 +8,8 @@
  *      headline — distinct from dynamic), dynamic template/receiver
  *      markers, effect terminals;
  *   3. Monaco holds a `cpp` model;
- *   4. NO run/edit affordances — C++ has no edit/run floor.
+ *   4. NO run affordance — C++ has no run floor; EDIT is on since the C++
+ *      edit floor (2026-09-25; test/e2e/cpp-rust-edit.spec.ts saves).
  *   5. the hover tooltip on a C++ seed shows its SOURCE read-only
  *      (Monaco + the read-only note, no Save): a node with a file and
  *      an IR id has source whatever its language — only the Save floor
@@ -61,15 +62,15 @@ test.describe("M-LANG5a — C++ read-only experience", () => {
     expect(viewText).toContain("int i = 0; i < count; i++");
     expect(viewText).not.toContain("in i < count");
 
-    // The hover tooltip on the seed: source read-only, no Save, and never
-    // the "no source" placeholder — that copy is for nodes WITHOUT source.
+    // The hover tooltip on the seed: its source, EDITABLE since the C++ edit
+    // floor (2026-09-25: rewrite_cpp.mjs) — no read-only note, a Save — and
+    // never the "no source" placeholder, which is for nodes WITHOUT source.
     await page.locator(".vg-thread-node-seed").first().hover();
     const tip = page.locator("[data-thread-tooltip]");
     await expect(tip).toBeVisible({ timeout: 5_000 });
     await expect(tip.locator(".monaco-editor")).toBeVisible({ timeout: 10_000 });
-    await expect(tip.locator("[data-readonly-language]")).toBeVisible();
-    await expect(tip.locator("[data-readonly-language]")).toHaveAttribute("data-readonly-reason", "language");
-    await expect(tip.locator("button[title^='Save edits']")).toHaveCount(0);
+    await expect(tip.locator("[data-readonly-language]")).toHaveCount(0);
+    await expect(tip.locator("button[title^='Save edits']")).toHaveCount(1);
     expect((await tip.textContent()) ?? "").not.toContain("No source available");
     await page.mouse.move(5, 5);
     await page.waitForTimeout(700);

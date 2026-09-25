@@ -83,6 +83,11 @@ const OPERATOR_WORD = {
 class CppGraphBuilder {
   constructor(source) {
     this.source = source;
+    /** 2026-09-25 (the edit floor) — IR node id → its byte span, for the
+     *  rewriter's splice. Recorded from the SAME tree-sitter node pos() read,
+     *  keyed by position, so no call site changes and no IR field is added. */
+    this.spans = new Map();
+    this.posIndex = new Map();
     this.nodes = [];
     this.edges = [];
     this.symbolIndex = [];
@@ -116,17 +121,21 @@ class CppGraphBuilder {
   }
 
   emit(node, parentId) {
+    const span = this.posIndex.get(`${node.line}:${node.col}:${node.endLine}:${node.endCol}`);
+    if (span) this.spans.set(node.id, span);
     this.nodes.push(node);
     if (parentId) this.edges.push({ source: parentId, target: node.id, type: "contains" });
   }
 
   pos(n) {
-    return {
+    const p = {
       line: n.startPosition.row + 1,
       endLine: n.endPosition.row + 1,
       col: n.startPosition.column,
       endCol: n.endPosition.column,
     };
+    this.posIndex.set(`${p.line}:${p.col}:${p.endLine}:${p.endCol}`, { start: n.startIndex, end: n.endIndex });
+    return p;
   }
 
   safeName(name) {
@@ -695,13 +704,27 @@ class CppGraphBuilder {
   }
 }
 
-async function parseFile(filePath, moduleId) {
-  const source = readFileSync(filePath, "utf-8");
+/** Build the IR of `source` — shared by parseFile and the rewriter (the
+ *  edit floor mints and resolves ids through this one path). */
+export async function buildFromSource(source) {
   const p = await getParser();
   const tree = p.parse(source);
   const b = new CppGraphBuilder(source);
   b.visit(tree.rootNode, null);
   b.resolveLocalReferences();
+  return { builder: b, tree };
+}
+
+/** True when the parsed tree of `source` contains any ERROR/MISSING. */
+export async function sourceHasParseErrors(source) {
+  const p = await getParser();
+  const tree = p.parse(source);
+  return tree.rootNode.hasError;
+}
+
+async function parseFile(filePath, moduleId) {
+  const source = readFileSync(filePath, "utf-8");
+  const { builder: b } = await buildFromSource(source);
   const ir = {
     version: "2.0",
     language: "cpp",
@@ -755,8 +778,11 @@ async function runBatch() {
   process.stdout.write(JSON.stringify({ files, errors }));
 }
 
-const argv = process.argv.slice(2);
-if (argv[0] === "--batch") {
+const IS_MAIN = !!process.argv[1] && fileURLToPath(import.meta.url).split(/[\\/]/).pop() === process.argv[1].split(/[\\/]/).pop();
+const argv = IS_MAIN ? process.argv.slice(2) : [];
+if (!IS_MAIN) {
+  // imported (the rewriter): no command line to run
+} else if (argv[0] === "--batch") {
   await runBatch();
 } else {
   const file = argv.find((a) => !a.startsWith("--"));

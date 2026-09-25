@@ -108,7 +108,10 @@ test("the tarball ships the bundle, the python scripts, the frontends and gramma
   // The visualisation: the server and web app bundles, the scripts only the
   // app spawns, the bundled Ollama shim, the generic skills.
   for (const f of ["vendor/dist/server.js", "vendor/dist/webview.js", "vendor/dist/webview.css", "vendor/dist/package.json",
-    "vendor/scripts/trace_bash.mjs", "vendor/scripts/vg_ollama_shim.mjs"]) {
+    "vendor/scripts/trace_bash.mjs", "vendor/scripts/vg_ollama_shim.mjs",
+    // the C++ / Rust edit floors and their shared core (2026-09-25)
+    "vendor/scripts/frontends/span_rewriter.mjs", "vendor/scripts/frontends/cpp/rewrite_cpp.mjs",
+    "vendor/scripts/frontends/rust/rewrite_rust.mjs"]) {
     assert.ok(files.includes(f), `tarball has ${f}`);
   }
   for (const py of APP_PYTHON_SCRIPTS) assert.ok(files.includes(`vendor/scripts/${py}`), `tarball has ${py}`);

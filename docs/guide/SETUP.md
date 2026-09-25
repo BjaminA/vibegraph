@@ -122,8 +122,8 @@ Languages, by file extension:
 | Python | `.py` | yes | yes | yes / yes |
 | TypeScript / JavaScript modules | `.ts` `.tsx` `.mjs` `.cjs` | yes | yes | — |
 | Bash | `.sh`, and extensionless scripts with a `#!` line | yes | yes | — / yes (with a fake `PATH`, nothing external runs) |
-| C++ | `.cpp` `.cc` `.cxx` `.hpp` `.hh` `.hxx` `.h` | yes | — | — |
-| Rust | `.rs` (Cargo layout) | yes | — | — |
+| C++ | `.cpp` `.cc` `.cxx` `.hpp` `.hh` `.hxx` `.h` | yes | yes | — |
+| Rust | `.rs` (Cargo layout) | yes | yes | — |
 
 Plain `.js`/`.jsx` files are deliberately not parsed yet.
 

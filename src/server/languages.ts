@@ -233,6 +233,12 @@ export function rewriteCommand(lang: LanguageInfo, scriptsDir: string): ParseCom
       return { bin: process.execPath, argv: [path.join(scriptsDir, "frontends", "bash", "rewrite_bash.mjs")], needsPythonEnv: false };
     case "jsts":
       return { bin: process.execPath, argv: [path.join(scriptsDir, "frontends", "jsts", "rewrite_jsts.mjs")], needsPythonEnv: false };
+    // 2026-09-25 — the span-splice core (frontends/span_rewriter.mjs) with
+    // each language's own builder; clang-format / rustfmt when installed.
+    case "cpp":
+      return { bin: process.execPath, argv: [path.join(scriptsDir, "frontends", "cpp", "rewrite_cpp.mjs")], needsPythonEnv: false };
+    case "rust":
+      return { bin: process.execPath, argv: [path.join(scriptsDir, "frontends", "rust", "rewrite_rust.mjs")], needsPythonEnv: false };
     default:
       return null;
   }

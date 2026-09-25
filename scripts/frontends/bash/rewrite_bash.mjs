@@ -52,7 +52,7 @@ import { buildFromSource, sourceHasParseErrors } from "./builder.mjs";
 // bash suite's imports (and the shared-vector pinning) stay put.
 import {
   OpError, verifyDiffConfined, simpleDiff,
-  lineStartIndex, lineEndIndex, indentAt, reindent,
+  lineStartIndex, lineEndIndex, indentAt, reindent, dedent, fitToSpan,
 } from "../confinement.mjs";
 
 export { verifyDiffConfined, simpleDiff };
@@ -100,16 +100,16 @@ function* formatCandidates(out, doFormat) {
 function applyOp(pre, op, span, node, newSource, allowSignatureChange, newFnName) {
   switch (op) {
     case "replace_node":
-      return pre.slice(0, span.start) + newSource.trimEnd() + pre.slice(span.end);
+      return pre.slice(0, span.start) + fitToSpan(pre, span.start, newSource) + pre.slice(span.end);
     case "insert_before": {
       const at = lineStartIndex(pre, span.start);
       const indent = indentAt(pre, span.start);
-      return pre.slice(0, at) + reindent(newSource.trimEnd(), indent) + "\n" + pre.slice(at);
+      return pre.slice(0, at) + reindent(dedent(newSource), indent) + "\n" + pre.slice(at);
     }
     case "insert_after": {
       const at = lineEndIndex(pre, span.end === 0 ? 0 : span.end - 1);
       const indent = indentAt(pre, span.start);
-      return pre.slice(0, at) + "\n" + reindent(newSource.trimEnd(), indent) + pre.slice(at);
+      return pre.slice(0, at) + "\n" + reindent(dedent(newSource), indent) + pre.slice(at);
     }
     case "delete_node": {
       // Remove the byte span; if its line(s) end up whitespace-only,
@@ -135,7 +135,7 @@ function applyOp(pre, op, span, node, newSource, allowSignatureChange, newFnName
           `replace_function_body: new source defines '${newFnName}' but the target is '${node.name}' (signature changes need --allow-signature-change)`,
         );
       }
-      return pre.slice(0, span.start) + newSource.trimEnd() + pre.slice(span.end);
+      return pre.slice(0, span.start) + fitToSpan(pre, span.start, newSource) + pre.slice(span.end);
     }
     case "replace_module_body":
       return newSource.endsWith("\n") ? newSource : newSource + "\n";

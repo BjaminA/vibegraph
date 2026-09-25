@@ -234,8 +234,8 @@ source files ──parse──▶ IR {nodes, edges, symbolIndex} ──▶ threa
 | Python | yes | yes | yes / yes |
 | TypeScript (`.ts` `.tsx` `.mjs` `.cjs`) | yes | yes | — |
 | Bash (`.sh`, `#!` scripts) | yes | yes | — / yes, with nothing external executed |
-| C++ | yes | — | — |
-| Rust | yes | — | — |
+| C++ | yes | yes (clang-format if installed) | — |
+| Rust | yes | yes (rustfmt if installed) | — |
 
 Plain `.js`/`.jsx` are not parsed yet. Anything skipped is counted and
 reported, never dropped silently.
@@ -282,8 +282,9 @@ test/                        fixtures, snapshots, Playwright specs
 - **A green check proves self-consistency, not correctness.** A builder given
   a vague data format invents one and checks against its own invention.
   Specify formats, not just field names.
-- **C++ and Rust are read-only**, and C++ linking follows header conventions
-  (no build graph).
+- **C++ and Rust can be edited but not run.** Running a compiled language
+  needs a build and its own consent story. C++ linking follows header
+  conventions (no build graph).
 - **The server has no authentication.** It binds to `127.0.0.1`; keep it
   there.
 
