@@ -22,6 +22,9 @@ and `skills draft` — and each says so in its usage line.
 
 The full guide, with every command and a team workflow, is
 [docs/guide/CLI.md](https://github.com/BjaminA/vibegraph/blob/main/docs/guide/CLI.md).
+Every command, and every file VibeGraph can write with what each is for, is
+in two tables:
+[Commands and files](https://github.com/BjaminA/vibegraph#commands-and-files).
 
 **Install** (Node 20+ and Python 3.10+ on your PATH):
 
