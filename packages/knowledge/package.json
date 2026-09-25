@@ -1,6 +1,6 @@
 {
   "name": "vibegraph-knowledge",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "Crystallise what VibeGraph derives from a codebase (thread contracts, stack facts, a dependency-ordered plan) and what its operators stated (constraints with their reasons, stack policies) into files a plain Claude reads before it edits, plus a checker that verifies the stated rules against the code. Zero tokens.",
   "license": "MIT",
   "type": "module",

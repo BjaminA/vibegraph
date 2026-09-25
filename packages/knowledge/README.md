@@ -10,18 +10,15 @@ and `skills draft` — and each says so in its usage line.
 The full guide, with every command and a team workflow, is
 [docs/guide/CLI.md](https://github.com/BjaminA/vibegraph/blob/main/docs/guide/CLI.md).
 
-**Install.** Until the package is published to npm, build it from a
-VibeGraph checkout and install the tarball:
+**Install** (Node 20+ and Python 3.10+ on your PATH):
 
 ```
-git clone https://github.com/BjaminA/vibegraph.git && cd vibegraph && npm install
-npm run build:cli
-cd packages/knowledge && npm pack && npm install -g ./vibegraph-knowledge-*.tgz
+npm install -g vibegraph-knowledge
 vibegraph-knowledge --version        # also installed as `vgk`
 ```
 
-The examples below use `npx vibegraph-knowledge`; with the global install,
-drop the `npx`.
+The examples below use `npx vibegraph-knowledge`, which runs it without
+installing; with the global install, drop the `npx`.
 
 ```
 npx vibegraph-knowledge init              # one marked block in CLAUDE.md pointing at the folder, + the gitignore line

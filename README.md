@@ -29,25 +29,48 @@ same knowledge is exported as plain files a Claude Code session reads first.
 | **[docs/guide/VISUALISATION.md](docs/guide/VISUALISATION.md)** | Using the web app on your codebase: the architecture map and its lenses, threads, running code, editing, rules, skills, agents, MCP. |
 | **[docs/guide/CLI.md](docs/guide/CLI.md)** | The node commands (`vibegraph-knowledge`): every command, what it writes, what costs tokens, a team workflow. |
 
-The short version:
+### The node way — one install, no clone
+
+[`vibegraph-knowledge`](https://www.npmjs.com/package/vibegraph-knowledge) on
+npm (also installed as `vgk`) derives everything from your code and writes it
+where Claude Code reads it:
+
+```bash
+npm install -g vibegraph-knowledge
+
+cd /path/to/your/project
+vibegraph-knowledge init                     # point CLAUDE.md at .vibegraph/knowledge/
+vibegraph-knowledge export                   # the architecture map, one contract per thread, the rules
+vibegraph-knowledge constraints add --kind invariant --all \
+  --text "Every outbound HTTP call goes through lib/http_client.py: it routes via the egress proxy."
+vibegraph-knowledge check                    # verify the stated rules against the code
+vibegraph-knowledge architecture             # the system map as .md, .json and a self-contained .html
+```
+
+Then open Claude Code in the project as usual: `CLAUDE.md` now tells it to
+read the knowledge first. It needs Node 20+ and Python 3.10+ on your PATH;
+the first `export` installs the Python parser (`libcst`) into
+`~/.cache/vibegraph-knowledge` by itself.
+Every command, and which three spend tokens: [docs/guide/CLI.md](docs/guide/CLI.md).
+
+### The visualisation — from a clone
+
+The browser app is not on npm yet; run it from a clone:
 
 ```bash
 git clone https://github.com/BjaminA/vibegraph.git
 cd vibegraph
 npm install
-
-# the visualisation
 ./runVis.sh /path/to/your/project            # then open http://localhost:4200
-
-# the node commands
-npm run build:cli
-(cd packages/knowledge && npm pack && npm install -g ./vibegraph-knowledge-*.tgz)
-cd /path/to/your/project
-vibegraph-knowledge init && vibegraph-knowledge export
 ```
 
-You need Node 20+, Python 3.10+ and git. Claude Code (`claude`) is optional:
-everything deterministic works without it. On Windows, use WSL2.
+The first launch installs `libcst` and `black` into `vibegraph/.pydeps/` and
+builds the app (about a minute). Walkthrough:
+[docs/guide/VISUALISATION.md](docs/guide/VISUALISATION.md).
+
+You need Node 20+ and Python 3.10+ (and git for the clone). Claude Code
+(`claude`, logged in) is optional: everything deterministic works without it.
+On Windows, use WSL2.
 
 ## What it is
 

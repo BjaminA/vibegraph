@@ -13,7 +13,13 @@ that could not broke them — while scoring the same on the task itself. The
 rules are not in the code; this puts them, and the map of the code, where
 Claude looks.
 
-Install it first: [SETUP.md §4](SETUP.md#4-point-it-at-your-own-codebase).
+Install it (Node 20+ and Python 3.10+ on your PATH):
+
+```bash
+npm install -g vibegraph-knowledge       # or: npx vibegraph-knowledge <command>
+```
+
+More in [SETUP.md §2](SETUP.md#2-the-node-commands--install-from-npm).
 
 ---
 

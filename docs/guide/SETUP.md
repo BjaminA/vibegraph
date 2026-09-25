@@ -27,7 +27,7 @@ VibeGraph derives from your source. Neither needs the other.
 | **Node.js** | 20 or newer (24 is what VibeGraph is developed on) | everything |
 | **npm** | the one that ships with Node | installing |
 | **Python 3** | 3.10 or newer, as `python3` on your PATH | parsing Python, the edit chokepoint, runs |
-| **git** | any recent | cloning; commit stamps in exports |
+| **git** | any recent | cloning (the visualisation only); commit stamps in exports |
 | **Claude Code** (`claude` CLI) | logged in (`claude` works in a terminal) | *optional* — chat, drafting, proposals, agent runs. Everything else works without it. |
 | **curl** | any | only the first run, if your Python has no `pip` |
 
@@ -47,7 +47,41 @@ git --version
 claude --version    # optional
 ```
 
-## 2. Get VibeGraph
+## 2. The node commands — install from npm
+
+No clone needed:
+
+```bash
+npm install -g vibegraph-knowledge
+vibegraph-knowledge --version            # 0.7.0 or later; also installed as `vgk`
+```
+
+(Or run it without installing: `npx vibegraph-knowledge <command>`.)
+
+The package carries its own parsers. The one thing it needs from your system
+is `python3` (3.10+): the first `export` installs `libcst`, the Python parser,
+into `~/.cache/vibegraph-knowledge` — no `sudo`, nothing added to your system
+Python. Point it elsewhere with `VIBEGRAPH_KNOWLEDGE_HOME`, or at an
+environment that already has `libcst` with `VIBEGRAPH_PYDEPS`.
+
+### Use it on your project
+
+```bash
+cd /path/to/your/project
+vibegraph-knowledge init                 # one marked block in CLAUDE.md, + .gitignore line
+vibegraph-knowledge export               # writes .vibegraph/knowledge/
+ls .vibegraph/knowledge/                 # README.md, architecture.md, threads/, constraints.md, …
+```
+
+Now open Claude Code in the project as you normally would: `CLAUDE.md` tells
+it to read `.vibegraph/knowledge/README.md` first. Add the rules your team
+knows (`vibegraph-knowledge constraints add …`), re-run `export` when the code
+or the rules change, and run `vibegraph-knowledge check` before committing.
+Everything else is in [CLI.md](CLI.md).
+
+## 3. The visualisation — run it from a clone
+
+The browser app is not on npm yet. Clone VibeGraph once, anywhere:
 
 ```bash
 git clone https://github.com/BjaminA/vibegraph.git
@@ -56,41 +90,26 @@ npm install
 ```
 
 `npm install` fetches the web app's dependencies and the pinned tree-sitter
-grammars VibeGraph uses for TypeScript, bash, C++ and Rust.
+grammars VibeGraph uses for TypeScript, bash, C++ and Rust. The Python side —
+`libcst` (the parser and rewriter) and `black` (the formatter every edit is
+checked through) — installs itself on the first launch into
+`vibegraph/.pydeps/`, inside the clone. (If your Python has no `pip`, the
+launcher fetches `get-pip.py` into the same folder first.)
 
-The Python side needs two packages, `libcst` (the Python parser and
-rewriter) and `black` (the formatter every edit is checked through). You do
-not install them yourself: the first time you launch the visualisation,
-`runVis.sh` installs them into `vibegraph/.pydeps/` — inside the clone, no
-`sudo`, nothing added to your system Python. (If your Python has no `pip`,
-it fetches `get-pip.py` into the same folder first.)
-
-## 3. Check it works — on an example
-
-Before pointing it at your code, run it on the bundled example:
+### Check it on an example
 
 ```bash
 ./runVis.sh examples/pump-wear
 ```
 
 The first launch installs the Python packages and builds the web app, which
-takes a minute; later launches start in a few seconds. When you see the
-server listening, open **<http://localhost:4200>**.
+takes about a minute; later launches start in a few seconds. Open
+**<http://localhost:4200>**. You should see a boot animation, then the
+**architecture map** of the example. Stop it with `Ctrl-C`.
 
-You should see a boot animation, then the **architecture map** of the example.
-If you do, the visualisation is working. Stop it with `Ctrl-C`.
+## 4. Point the visualisation at your own codebase
 
-To check the node commands too:
-
-```bash
-npm run build:cli
-node packages/knowledge/dist/cli.mjs export examples/pump-wear
-ls examples/pump-wear/.vibegraph/knowledge/        # README.md, threads/, architecture.md, …
-```
-
-## 4. Point it at your own codebase
-
-### The visualisation
+From the `vibegraph` clone:
 
 ```bash
 ./runVis.sh /path/to/your/project        # a whole project (a directory)
@@ -99,29 +118,13 @@ ls examples/pump-wear/.vibegraph/knowledge/        # README.md, threads/, archit
 
 Then open <http://localhost:4200>. Continue with [VISUALISATION.md](VISUALISATION.md).
 
-### The node commands
+Both tools read and write the same `.vibegraph/` folder in your project, so
+rules you state in the browser are what `vibegraph-knowledge export` hands to
+Claude, and rules you add with the node commands appear in the browser.
 
-Install them once as a real command (until the package is on npm, from a
-tarball you build here):
-
-```bash
-npm run build:cli                        # packages/knowledge/dist/cli.mjs + the vendored parsers
-cd packages/knowledge && npm pack        # → vibegraph-knowledge-0.6.0.tgz
-npm install -g ./vibegraph-knowledge-0.6.0.tgz
-cd ../..
-vibegraph-knowledge --version            # also installed as `vgk`
-```
-
-Then, in your project:
-
-```bash
-cd /path/to/your/project
-vibegraph-knowledge init                 # points CLAUDE.md at the knowledge folder
-vibegraph-knowledge export               # writes .vibegraph/knowledge/
-```
-
-Continue with [CLI.md](CLI.md). (You can skip the global install and call
-`node /path/to/vibegraph/packages/knowledge/dist/cli.mjs …` directly.)
+(Contributors working on VibeGraph itself can build the node commands from
+the clone instead: `npm run build:cli`, then
+`node packages/knowledge/dist/cli.mjs …`.)
 
 ## 5. What VibeGraph reads
 
