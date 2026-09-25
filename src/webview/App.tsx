@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import {
   ReactFlowProvider,
   type Node,
@@ -33,12 +33,18 @@ import { useAutoGrow } from "./useAutoGrow";
 import { ComposePalette } from "./ComposePalette";
 import { FiltersPanel, DEFAULT_FILTERS, type NodeFilters } from "./FiltersPanel";
 import { ModelTiersPanel } from "./ModelTiersPanel";
+// M-STACK.3 — what the project is built on, and the policies stated about it.
+import { StackPanel } from "./StackPanel";
+// M-SKILLS.2 — generic direction skills, enabled per project.
+import { SkillsPanel } from "./SkillsPanel";
+import type { SkillsConfigPayload } from "../shared/generic_skills_wire";
 import { DEFAULT_TIERS, sanitiseTiers, type TierSettings } from "../shared/model_tiers";
 
 const MODEL_TIERS_KEY = "vg-model-tiers";
 import { TopToolbar } from "./TopToolbar";
 import { ChangesetGate } from "./ChangesetGate";
 import { RoadmapPanel } from "./RoadmapPanel";
+import { WorkRunPanel } from "./WorkRunPanel";
 import { AnalysisCard } from "./AnalysisCard";
 import { NodeExpandedOverlay } from "./NodeExpandedOverlay";
 import { DiagramCanvas } from "./DiagramCanvas";
@@ -62,6 +68,8 @@ import {
   type PendingProposal,
 } from "./types";
 import { buildLayout, buildProjectLayout, basename, applyFilters } from "./layout";
+import { useFileCodeMode, useFileCodeView } from "./layout/useFileCodeView";
+import { CodeBlockNode } from "./nodes/CodeBlockNode";
 import { useWebSocketHandler, useEventBus, useSelectionBus, type EditState } from "./messaging";
 import { ViewTransition, MotionEdge, useNodeMotion } from "./motion";
 import { ThreadView, ThreadIndex, ThreadContainerNode, SkillBadge, ThreadSkillCard, ArtifactChip, ArtifactCard, artifactsForThread, type Thread } from "./threads";
@@ -80,7 +88,7 @@ import { ChipStrip } from "./ChipStrip";
 // imports from this host. (M14-deprecate then deleted the gap-snapper, which
 // was reachable only through this drag flow.)
 import { SidePanel } from "./sidepanel";
-import { NodeEditorPanel } from "./editor";
+import { NodeEditorPanel, resolveEditTarget } from "./editor";
 
 // ── React Flow node-type registry ─────────────────────────────────────────────
 
@@ -101,6 +109,9 @@ const nodeTypes = {
   // try / finally regions in the file view reuse the thread-view container
   // shell (bordered region + chip) — see buildLayout.typeToNodeType.
   threadContainer: ThreadContainerNode,
+  // 2026-09-24 — the file view's CODE mode: one block of source per
+  // top-level statement (layout/code_layout.ts).
+  codeBlock: CodeBlockNode,
 };
 
 const edgeTypes = {
@@ -163,10 +174,12 @@ function Graph() {
   const [expandedNodeId, setExpandedNodeId] = useState<string | null>(null);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [modelsOpen, setModelsOpen] = useState(false);
-  // Model tiers live client-side and are pushed to the server, which is the
-  // applier. Persisted so a reload doesn't silently revert to defaults —
-  // and re-sent on mount, because the server resets to defaults on restart
-  // and a stale UI claiming "Haiku" while Opus runs would be a lie.
+  // Model tiers. M-PROVIDER: the SERVER owns them now (.vibegraph/models.json,
+  // loaded at boot, sent on connect as `model-tiers`) — a headless driver and
+  // the board must route the same way, and a page load must not overwrite a
+  // saved route with a stale localStorage copy. localStorage is only the
+  // pre-connect placeholder; the panel's edits post `set-model-tiers` and the
+  // server echoes the sanitised result back to every client.
   const [modelTiers, setModelTiers] = useState<TierSettings>(() => {
     try {
       const raw = window.localStorage.getItem(MODEL_TIERS_KEY);
@@ -175,8 +188,26 @@ function Graph() {
   });
   useEffect(() => {
     try { window.localStorage.setItem(MODEL_TIERS_KEY, JSON.stringify(modelTiers)); } catch { /* private mode */ }
-    bridge.postMessage({ type: "set-model-tiers", payload: modelTiers });
   }, [modelTiers]);
+  const changeModelTiers = (next: TierSettings) => {
+    setModelTiers(next);
+    bridge.postMessage({ type: "set-model-tiers", payload: next });
+  };
+  // M-SKILLS.2 — the server owns the enable file (.vibegraph/skills.json)
+  // and sends it with the catalogue on connect; the panel posts the enabled
+  // list and renders the echoed, sanitised result. No localStorage copy: a
+  // stale placeholder could show a skill as on that the server has off.
+  const [skillsOpen, setSkillsOpen] = useState(false);
+  const [skillsState, setSkillsState] = useState<SkillsConfigPayload | null>(null);
+  const changeSkills = (enabled: string[]) => {
+    bridge.postMessage({ type: "set-skills-config", payload: { version: "1.0", enabled } });
+  };
+  const [endpointProbe, setEndpointProbe] = useState<import("./ModelTiersPanel").EndpointProbeResult | null>(null);
+  const [endpointProbing, setEndpointProbing] = useState(false);
+  const probeEndpoint = (endpoint: string, model?: string) => {
+    setEndpointProbing(true);
+    bridge.postMessage({ type: "probe-model-endpoint", payload: { endpoint, ...(model ? { model } : {}) } });
+  };
   const [analysisOpen, setAnalysisOpen] = useState(false);
   const [zoomLevel, setZoomLevel] = useState<ZoomLevel>("file");
   const [activeFilePath, setActiveFilePath] = useState<string | null>(null);
@@ -223,6 +254,33 @@ function Graph() {
   const [pendingBuildPlan, setPendingBuildPlan] = useState<BuildPlan | null>(null);
   const [buildRunState, setBuildRunState] = useState<BuildRunState>({ active: false, runItemId: null });
   const [roadmapDrafting, setRoadmapDrafting] = useState(false);
+  // M-AGENT2 — the Agent Manager run (envelope sibling) + its board.
+  const [workRun, setWorkRun] = useState<import("../shared/protocol").WorkRun | null>(null);
+  const [workRunOpen, setWorkRunOpen] = useState(false);
+  // M-CONTRACT.3 — stated constraints (envelope sibling), listed on the board.
+  const [constraints, setConstraints] = useState<import("../shared/protocol").ConstraintRecord[]>([]);
+  // M-STACK — the stack FACTS (envelope sibling) + the Stack panel, and
+  // the one-shot prefill its "state a policy" button hands the constraint
+  // form (facts and policies stay separate; the human writes the policy).
+  const [stack, setStack] = useState<import("../shared/protocol").StackIndexRecord | null>(null);
+  // M-XLANG.1 - where a thread leaves its own language over HTTP.
+  const [crossings, setCrossings] = useState<import("../shared/protocol").CrossingIndexRecord | null>(null);
+  const [architecture, setArchitecture] = useState<import("../shared/protocol").ArchModelRecord | null>(null);
+  // M-ARCH.4 — the architecture proposal's round trip.
+  // `working` says a MODEL is drafting (propose / revise) — what the map animates;
+  // ratify and reject are local writes and only set `busy`.
+  const [archPropose, setArchPropose] = useState<{ busy: boolean; error: string | null; working?: "propose" | "revise" | null }>({ busy: false, error: null, working: null });
+  const handleArchAction = useCallback((action: "propose" | "ratify" | "reject", guidance?: string) => {
+    setArchPropose({ busy: true, error: null, working: action === "propose" ? (guidance ? "revise" : "propose") : null });
+    if (action === "propose") bridge.postMessage({ type: "arch-propose", payload: guidance ? { guidance } : {} });
+    else bridge.postMessage({ type: action === "ratify" ? "arch-ratify" : "arch-reject" });
+  }, [bridge]);
+  // PLAN-M-RUNTIME phase 3 — the trace overlay, when a run has produced one.
+  const [observations, setObservations] = useState<import("../shared/protocol").ObservationStoreRecord | null>(null);
+  const [stackOpen, setStackOpen] = useState(false);
+  // M-ZOOM - the thread the reader zoomed OUT of, highlighted on arrival.
+  const [zoomFocusEntry, setZoomFocusEntry] = useState<string | null>(null);
+  const [policyPrefill, setPolicyPrefill] = useState<{ tool: string; role?: string } | null>(null);
   // M20.2 — README status for the active thread's badge (PLAN-v5 §2).
   const [readmeStatus, setReadmeStatus] = useState<ReadmeStatus | null>(null);
   const [readmePanelOpen, setReadmePanelOpen] = useState(false);
@@ -255,6 +313,11 @@ function Graph() {
   // M5 wave 2 — code view state. The panel toggles open via the toolbar
   // Code button; source is requested per activeFilePath.
   const [codeOpen, setCodeOpen] = useState(false);
+  // The vg-selection listener is mounted once and must not re-subscribe on
+  // every panel toggle, so it reads these through refs rather than closing
+  // over the state.
+  const codeOpenRef = useRef(false);
+  const activeFilePathRef = useRef<string | null>(null);
   const [fileSource, setFileSource] = useState<string | null>(null);
   const [fileSourceError, setFileSourceError] = useState<string | null>(null);
   // M18.1 — node editor panel. Opens via the toolbar Edit toggle or
@@ -293,7 +356,12 @@ function Graph() {
       setEntryPoints, setProjectThreads, setSystem, setSystemPlan,
       setPendingSystemPlan, setProjectMode, setPendingChangeset,
       setBuildPlan, setPendingBuildPlan, setBuildRunState, setRefreshesInFlight,
-      setReadmeStatus, setThreadSkills, setArtifacts, setViewMode,
+      setReadmeStatus, setThreadSkills, setArtifacts, setViewMode, setWorkRun, setConstraints, setStack, setCrossings, setArchitecture,
+      setArchPropose,
+      setObservations,
+      setModelTiers, setEndpointProbe: (p) => { setEndpointProbe(p); setEndpointProbing(false); },
+      // M-SKILLS.2 — the enable file + catalogue, server-owned.
+      setSkillsState,
     },
     { zoomLevel, activeFilePath, hiddenNodeIds, nodeFilters },
   );
@@ -553,13 +621,49 @@ function Graph() {
   // open via handleNodeClick — they don't go through vg-selection.)
   useEffect(() => {
     const handler = (e: Event) => {
-      const detail = (e as CustomEvent).detail as { source?: string } | undefined;
+      const detail = (e as CustomEvent).detail as
+        { source?: string; filePath?: string; irNodeId?: string } | undefined;
       if (!detail || detail.source === "external") return;
+      // Never open the editor on what the CODE panel is already showing.
+      // Clicking a top-level line (an include, a constant) resolves to no
+      // enclosing function, so the target is the whole MODULE — and the
+      // panel then loaded the same file, giving two identical editors side
+      // by side. Clicking a FUNCTION still opens it beside the file, which
+      // is the path this exists for; only the redundant case is dropped.
+      if (detail.source === "code" && codeOpenRef.current) {
+        const file = detail.filePath ?? null;
+        if (file && file === activeFilePathRef.current) {
+          const node = (projectDataRef.current[file]?.nodes ?? astNodesRef.current)
+            .find((n) => n.id === detail.irNodeId) ?? null;
+          const target = resolveEditTarget(node, file, projectDataRef.current, astNodesRef.current);
+          if (!target || target.isModule) return;
+        }
+      }
       setEditorOpen(true);
     };
     document.addEventListener("vg-selection", handler);
     return () => document.removeEventListener("vg-selection", handler);
   }, []);
+  useEffect(() => { codeOpenRef.current = codeOpen; }, [codeOpen]);
+  useEffect(() => { activeFilePathRef.current = activeFilePath; }, [activeFilePath]);
+
+  // What the EDIT panel targets. Normally the selection — but never the
+  // MODULE of the file the CODE panel is already showing: that put the same
+  // file in two Monacos side by side, which is what a top-level click (an
+  // include, a constant) resolves to, since it has no enclosing function.
+  // The panel keeps whatever function it had instead of flipping to the
+  // whole file; clicking a function still retargets it normally.
+  const lastEditorNodeRef = useRef<AstNode | null>(null);
+  const editorNode = useMemo(() => {
+    const redundant = codeOpen
+      && activeFilePath
+      && (() => {
+        const t = resolveEditTarget(chatContextNode, activeFilePath, projectDataRef.current, astNodesRef.current);
+        return !t || t.isModule;
+      })();
+    if (!redundant) lastEditorNodeRef.current = chatContextNode;
+    return redundant ? lastEditorNodeRef.current : chatContextNode;
+  }, [chatContextNode, codeOpen, activeFilePath]);
 
   // M28.3 — opening a code panel surfaces the chat docked beneath it with no
   // extra click. We track that the *region* (not the star toggle) opened the
@@ -833,6 +937,23 @@ function Graph() {
     return () => document.removeEventListener("vg-open-thread", onOpen);
   }, [entryPoints, handleSelectEntry]);
 
+  // M-ZOOM (PLAN-v5 5.2) - thread and system are one continuum, not two
+  // views. Zooming out past the last band leaves the thread for the
+  // system plane, carrying the thread's identity so the plane opens with
+  // it highlighted rather than dumping the reader at the top of a map.
+  useEffect(() => {
+    const onZoomOut = (e: Event) => {
+      const d = (e as CustomEvent).detail as { entryPointId?: string | null };
+      setZoomFocusEntry(d?.entryPointId ?? null);
+      setViewMode("system");
+    };
+    document.addEventListener("vg-zoom-to-system", onZoomOut);
+    return () => document.removeEventListener("vg-zoom-to-system", onZoomOut);
+  }, []);
+  // The focus is spent on arrival: leaving the system view clears it, so a
+  // later visit does not re-highlight a thread nobody asked about.
+  useEffect(() => { if (viewMode !== "system") setZoomFocusEntry(null); }, [viewMode]);
+
   // Sitting-2 — the pin's outcome notice. The pin used to be silent from
   // the file view (its only visible result was a launchpad row in ANOTHER
   // view — and none at all when the function was already seeded). Transient,
@@ -932,6 +1053,9 @@ function Graph() {
     return { drawable, offFile };
   }, [edges, nodes]);
 
+  // 2026-09-24 — the file view's code mode (a per-viewer toggle): the same
+  // grouping, the source as written (layout/useFileCodeView.ts).
+  const [fileCodeMode, toggleFileCodeMode] = useFileCodeMode();
   const displayedEdges = React.useMemo(
     () => {
       const base = edges.filter((e) => {
@@ -948,6 +1072,12 @@ function Graph() {
     },
     [edges, nodeFilters.showFlowEdges, nodeFilters.showStructureEdges, proposalLayout.ghostEdge],
   );
+
+  const codeView = useFileCodeView({
+    enabled: fileCodeMode && zoomLevel === "file" && viewMode === "diagram",
+    activeFilePath, fileSource, astNodes: astNodesRef.current, hiddenNodeIds, nodeFilters,
+    cardNodes: nodes, edges, displayedEdges,
+  });
 
   if (error) {
     return (
@@ -1022,14 +1152,22 @@ function Graph() {
             entryPoints={entryPoints}
             onOpenThread={handleOpenThreadById}
             onSelectSubsystem={handleSelectSubsystem}
+            stack={stack}
+            crossings={crossings}
+            focusEntryPointId={zoomFocusEntry}
             draftingDescription={describing ? describingDesc : null}
+            architecture={architecture}
+            archPropose={archPropose}
+            onArchAction={handleArchAction}
           />
         ) : viewMode === "architecture" ? (
           <ArchitectureView projectIR={projectDataRef.current} onOpenForward={handleOpenForward} />
         ) : viewMode === "diagram" ? (
           <DiagramCanvas
-            nodes={decoratedNodes}
-            edges={displayedEdges}
+            nodes={codeView?.nodes ?? decoratedNodes}
+            edges={codeView?.edges ?? displayedEdges}
+            codeMode={zoomLevel === "file" ? fileCodeMode : undefined}
+            onToggleCodeMode={toggleFileCodeMode}
             exitGhosts={exitGhosts}
             nodeTypes={nodeTypes}
             edgeTypes={edgeTypes}
@@ -1042,6 +1180,9 @@ function Graph() {
             <ThreadView
               thread={enrichedThread ?? thread}
               projectIR={projectDataRef.current}
+              stack={stack}
+              crossings={crossings}
+              observations={observations}
               entryPoints={entryPoints}
               editorOpen={editorOpen}
               codeOpen={codeOpen}
@@ -1161,9 +1302,19 @@ function Graph() {
 
       {/* ── Top toolbar (Filters + Analyze + Add) ── */}
       <TopToolbar
+        notices={<>
+          <KeyBanner show={anthropicAvailable === false && !keyBannerDismissed} onDismiss={() => setKeyBannerDismissed(true)} />
+          <DepsBanner missing={missingDeps} dismissed={depsBannerDismissed} onDismiss={() => setDepsBannerDismissed(true)} />
+        </>}
         filtersOpen={filtersOpen}
         modelsOpen={modelsOpen}
         onToggleModels={() => setModelsOpen((v) => !v)}
+        skillsOpen={skillsOpen}
+        skillsAvailable={isDirectoryMode}
+        onToggleSkills={() => setSkillsOpen((v) => !v)}
+        workRunOpen={workRunOpen}
+        workRunAvailable={isDirectoryMode}
+        onToggleWorkRun={() => setWorkRunOpen((v) => !v)}
         analysisOpen={analysisOpen}
         codeOpen={codeOpen}
         codeEligible={codeEligible}
@@ -1183,6 +1334,9 @@ function Graph() {
         building={building}
         onToggleBuild={() => setBuildOpen((v) => !v)}
         onToggleEditor={() => setEditorOpen((v) => !v)}
+        stackOpen={stackOpen}
+        stackAvailable={isDirectoryMode}
+        onToggleStack={() => { setStackOpen((v) => !v); setModelsOpen(false); }}
         onToggleFilters={() => { setFiltersOpen((v) => !v); setAnalysisOpen(false); }}
         onToggleAnalysis={() => { setAnalysisOpen((v) => !v); setFiltersOpen(false); }}
         onToggleCode={handleToggleCode}
@@ -1645,26 +1799,52 @@ function Graph() {
         </div>
       )}
 
-      <KeyBanner
-        show={anthropicAvailable === false && !keyBannerDismissed}
-        onDismiss={() => setKeyBannerDismissed(true)}
-      />
-      <DepsBanner
-        missing={missingDeps}
-        dismissed={depsBannerDismissed}
-        onDismiss={() => setDepsBannerDismissed(true)}
-        // Below the toolbar band; stacks under the key banner when both show.
-        top={anthropicAvailable === false && !keyBannerDismissed ? 96 : 56}
-      />
+      {/* The key / deps notices render INSIDE the toolbar (TopToolbar notices). */}
 
       {/* ── Model tiers ── */}
       {modelsOpen && (
         <ModelTiersPanel
           tiers={modelTiers}
-          onChange={setModelTiers}
+          onChange={changeModelTiers}
           onClose={() => setModelsOpen(false)}
+          onProbe={probeEndpoint}
+          probe={endpointProbe}
+          probing={endpointProbing}
         />
       )}
+
+      {/* ── M-SKILLS.2 — generic direction: enable per project, advisory. ── */}
+      {skillsOpen && (
+        <SkillsPanel
+          state={skillsState}
+          onChange={changeSkills}
+          onClose={() => setSkillsOpen(false)}
+        />
+      )}
+
+      {/* ── M-STACK.3 — the Stack panel: facts + the policies about them.
+          "State a policy" writes nothing: it opens the constraint form
+          on the board, pre-filled, because a policy is a human decision. ── */}
+      {stackOpen && (
+        <StackPanel
+          stack={stack}
+          constraints={constraints}
+          onClose={() => setStackOpen(false)}
+          onStatePolicy={(tool, role) => { setPolicyPrefill({ tool, role }); setWorkRunOpen(true); }}
+        />
+      )}
+
+      {/* ── M-AGENT2 — the Agent Manager run board ── */}
+      <WorkRunPanel
+        open={workRunOpen}
+        onClose={() => setWorkRunOpen(false)}
+        run={workRun}
+        constraints={constraints}
+        stack={stack}
+        policyPrefill={policyPrefill}
+        onPolicyPrefillConsumed={() => setPolicyPrefill(null)}
+      />
+
 
       {/* ── README / VibeReadme viewer ── */}
       {readmePanelOpen && (
@@ -1822,7 +2002,7 @@ function Graph() {
           resolves the enclosing function from the selection itself. */}
       <NodeEditorPanel
         open={editorOpen}
-        node={chatContextNode}
+        node={editorNode}
         filePath={activeFilePath}
         projectData={projectDataRef.current}
         astNodes={astNodesRef.current}

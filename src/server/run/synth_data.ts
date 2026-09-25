@@ -11,7 +11,7 @@
 import { spawn } from "child_process";
 import * as fs from "fs";
 import * as path from "path";
-import { resolveClaudeBin } from "./synth_args.ts";
+import { resolveClaudeBin, spawnEnv } from "./synth_args.ts";
 
 const MAX_BYTES = 16 * 1024;
 const MAX_LINES = 100;
@@ -160,14 +160,15 @@ export interface DataSynthResult {
 export function synthesizeDataFile(relPath: string, readerSource: string, cwd: string, context?: DataSynthContext): Promise<DataSynthResult> {
   const prompt = buildPrompt(relPath, readerSource, context);
   // Model tier: routine — mechanical example file.
-  const { cmd, args: pre } = resolveClaudeBin("routine");
+  const spawnTarget = resolveClaudeBin("routine");
+  const { cmd, args: pre } = spawnTarget;
   return new Promise((resolve) => {
     const child = spawn(
       cmd,
       [...pre, "-p", "--output-format", "json", "--strict-mcp-config",
         "--mcp-config", '{"mcpServers":{}}',
         "--dangerously-skip-permissions", "--", prompt],
-      { cwd, env: { ...process.env } },
+      { cwd, env: spawnEnv(spawnTarget) },
     );
     child.stdin?.end();
     let out = "";

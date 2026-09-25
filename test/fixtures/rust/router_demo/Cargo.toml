@@ -1,0 +1,14 @@
+[package]
+name = "router-demo"
+version = "0.1.0"
+edition = "2021"
+
+# ONE declared third-party crate, so the stack index's `third-party`
+# claim and the manifest reader are both exercised by a real dependency
+# rather than by a table entry alone. Everything else the fixture uses
+# is std, which is stdlib by definition (three crate roots).
+[dependencies]
+serde_json = "1.0"
+
+[dev-dependencies]
+# (none — #[test] needs no dependency; that is the point of cargo test)

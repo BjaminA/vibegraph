@@ -35,8 +35,7 @@ export function PlannedSubsystemNode({
       data-subsystem-id={p.id}
       data-plan-ratified={data.ratified ? "true" : "false"}
       style={{
-        minWidth: 200,
-        maxWidth: 260,
+        width: 260, boxSizing: "border-box",
         background: "var(--bg-node)",
         border: "1.5px dashed var(--proposed-border)",
         borderRadius: 14,

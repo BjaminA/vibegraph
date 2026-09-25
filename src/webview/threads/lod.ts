@@ -38,6 +38,44 @@ export function tierForZoom(zoom: number): LodTier {
   return "full";
 }
 
+// ── M-ZOOM (PLAN-M-V5FORKS.md) — the band BELOW overview ──────────────
+//
+// M-NA7 gave each zoom band its own contract inside one thread. PLAN-v5
+// §5.2 asks for the continuum to carry on PAST the thread: keep zooming
+// out and you should arrive at the system plane, keep zooming in and you
+// should descend back into the thread. That is the last band.
+//
+// It is deliberately a long way below `overview` (0.28 → 0.14): a view
+// change is not a rendering change, so it must take a clear extra
+// gesture rather than happening while someone is still reading the map.
+// The thread view announces it at the overview tier before it happens —
+// a transition nobody asked for is the failure mode here.
+//
+// It must also sit ABOVE the canvas's own floor. ThreadView sets
+// `minZoom={0.1}` (M23, so fitView can frame a wide L-R thread), and a
+// threshold AT that floor can never be crossed — zoom clamps to 0.1 and
+// stops, so the band is unreachable and the reader just keeps clicking a
+// dead control. Found exactly that way.
+export const LOD_SYSTEM_BELOW = 0.14;
+/** Zoom above which the system plane descends back into a focused thread. */
+export const LOD_THREAD_ABOVE = 1.35;
+
+/**
+ * Did this move cross the boundary DOWNWARD, this frame?
+ *
+ * Crossing, not "is below": react-flow fires `onMove` continuously, and
+ * a predicate on the current zoom alone would re-fire every frame the
+ * user stayed at the bottom of the range.
+ */
+export function crossedToSystem(prevZoom: number, nextZoom: number): boolean {
+  return prevZoom >= LOD_SYSTEM_BELOW && nextZoom < LOD_SYSTEM_BELOW;
+}
+
+/** The same, upward, for the system plane descending into a thread. */
+export function crossedToThread(prevZoom: number, nextZoom: number): boolean {
+  return prevZoom <= LOD_THREAD_ABOVE && nextZoom > LOD_THREAD_ABOVE;
+}
+
 // Inverse-zoom label sizing, shared by ThreadNode + ThreadContainerNode.
 // base × (1/zoom) renders ~base px on screen at any zoom; the cap stops
 // runaway flow-space text at extreme zoom-out (below the cap's break-

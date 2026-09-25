@@ -11,6 +11,11 @@ import React from "react";
 // `maxChars` is retained for call-site API compatibility but no longer
 // hard-cuts the string — the wrap + clamp + title replace the boundary cut.
 
+/** For card text whose height the layout already derives from the wrapped
+ *  line count at the card's width (buildLayout / wrapCount, 2026-09-25): the
+ *  box is sized to hold every line, so the shared 3-line clamp must not cut. */
+export const UNCLAMPED = 1000;
+
 interface Props {
   text: string;
   maxChars?: number; // deprecated (W1): no longer truncates; kept for compat

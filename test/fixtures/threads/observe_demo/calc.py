@@ -21,3 +21,16 @@ def dispatch():
     eng = make_engine()
     out = eng.run()
     return out
+
+
+def dispatch_for(name):
+    eng = make_engine()
+    out = eng.run()
+    return out
+
+
+def dispatch_broken():
+    eng = make_engine()
+    boom = {}["missing"]
+    out = eng.run()
+    return out

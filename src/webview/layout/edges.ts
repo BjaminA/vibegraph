@@ -16,10 +16,10 @@ function readVar(name: string, fallback: string): string {
   return v.length > 0 ? v : fallback;
 }
 
-const COL_CONTROL   = readVar("--text-secondary", "hsl(220 10% 64%)");
-const COL_DATA      = readVar("--accent-warning", "hsl(38 80% 60%)");
-const COL_REFERENCE = readVar("--accent-thread",  "hsl(168 60% 56%)");
-const COL_CONTAINS  = readVar("--text-muted",     "hsl(220 8% 44%)");
+const COL_CONTROL   = readVar("--text-secondary", "hsl(220 16% 74%)");
+const COL_DATA      = readVar("--accent-warning", "hsl(40 96% 62%)");
+const COL_REFERENCE = readVar("--accent-thread",  "hsl(166 78% 58%)");
+const COL_CONTAINS  = readVar("--text-muted",     "hsl(220 12% 56%)");
 
 // Phase 3: tighter dash densities. Old 6/3 + 3/3 read as placeholder
 // styling; new 4/2 + 2/2 read as deliberate texture.

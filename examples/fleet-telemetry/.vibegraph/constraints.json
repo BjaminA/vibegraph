@@ -1,0 +1,118 @@
+{
+  "version": "1",
+  "constraints": [
+    {
+      "id": "c1",
+      "kind": "proxy",
+      "text": "Every outbound HTTP call from the Python service leaves through telemetry/http_client.py (post_json / get_json): it routes via the egress proxy and attaches the service token. A direct requests.* call anywhere else in telemetry/ is a production incident, not a style issue.",
+      "scope": {
+        "files": [
+          "telemetry/"
+        ],
+        "stack": [
+          "requests",
+          "httpx"
+        ]
+      },
+      "source": "human",
+      "createdAt": "2026-09-07T09:00:00.000Z",
+      "note": "ops runbook \u00a74 \u2014 egress allow-list",
+      "policy": {
+        "tool": "requests",
+        "role": "http-client",
+        "rule": "replace-with",
+        "with": "telemetry.http_client",
+        "reason": "the egress proxy and the service token live in the wrapper; a bare call bypasses both"
+      },
+      "check": {
+        "rule": "import-only",
+        "tool": "requests",
+        "files": [
+          "telemetry/http_client.py"
+        ]
+      }
+    },
+    {
+      "id": "c2",
+      "kind": "payload-schema",
+      "text": "The /export CSV is consumed by the nightly BI job, which reads columns BY POSITION: device_id, ts, metric, value must stay the first four columns in exactly that order. Any new column is APPENDED after value, never inserted.",
+      "scope": {
+        "files": [
+          "telemetry/export.py",
+          "telemetry/app.py",
+          "telemetry/cli.py",
+          "gateway/"
+        ]
+      },
+      "source": "human",
+      "createdAt": "2026-09-07T09:00:00.000Z",
+      "note": "BI team contract \u2014 positional reader, no header parsing"
+    },
+    {
+      "id": "c3",
+      "kind": "invariant",
+      "text": "Operators are paged ONLY through alerts.notify, and only after alerts.should_notify has applied its 5-minute per-(device, metric) dedup. No other module may call notify or post to the webhook \u2014 a flapping sensor once paged the on-call forty times in a minute.",
+      "scope": {
+        "files": [
+          "telemetry/"
+        ]
+      },
+      "source": "human",
+      "createdAt": "2026-09-07T09:00:00.000Z",
+      "note": "post-incident action, 2026-06",
+      "checks": [
+        {
+          "rule": "callers-only",
+          "target": "notify",
+          "files": [
+            "telemetry/alerts.py"
+          ]
+        },
+        {
+          "rule": "calls-through",
+          "target": "notify",
+          "through": "should_notify"
+        }
+      ]
+    },
+    {
+      "id": "c4",
+      "kind": "backend-call",
+      "text": "The gateway never calls the Python service's /ingest without forwarding the caller's bearer token (auth.bearerToken); unauthenticated ingest is rejected at the edge with 401 and a {problems: [...]} body, never forwarded.",
+      "scope": {
+        "files": [
+          "gateway/"
+        ]
+      },
+      "source": "human",
+      "createdAt": "2026-09-07T09:00:00.000Z"
+    },
+    {
+      "id": "c5",
+      "kind": "perf-lever",
+      "text": "Readings are written through storage.insert_readings in batches (backfill uses BATCH_SIZE = 500) \u2014 one executemany per batch. Never one insert per row: a 2M-row backfill took eleven hours that way.",
+      "scope": {
+        "files": [
+          "telemetry/backfill.py",
+          "telemetry/storage.py",
+          "telemetry/ingest.py"
+        ]
+      },
+      "source": "human",
+      "createdAt": "2026-09-07T09:00:00.000Z"
+    },
+    {
+      "id": "c6",
+      "kind": "invariant",
+      "text": "Every production telemetry.db predates every schema change (the fleet hosts were installed in 2025 and are never re-created), so `create table if not exists` NEVER adds a column to a live install. A change to storage.SCHEMA ships with an idempotent migration step (ALTER TABLE ... ADD COLUMN, guarded by a PRAGMA table_info check) in telemetry/migrations.py, invoked from storage._get_conn() before any query.",
+      "scope": {
+        "files": [
+          "telemetry/storage.py"
+        ]
+      },
+      "source": "human",
+      "createdAt": "2026-09-07T09:00:00.000Z",
+      "note": "ops runbook \u00a77 \u2014 schema changes; migrations.py does not exist yet because no schema change has shipped since the runbook was written"
+    }
+  ]
+}

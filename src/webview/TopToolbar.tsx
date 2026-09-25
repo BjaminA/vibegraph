@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Cpu, Spline, GitBranch, FileText, Pencil, Network, Boxes, Sparkles, DraftingCompass, Hammer } from "lucide-react";
+import { Cpu, Spline, GitBranch, FileText, Pencil, Network, Boxes, Layers, Sparkles, DraftingCompass, Hammer, Bot, Compass } from "lucide-react";
 
 interface Props {
   filtersOpen: boolean;
@@ -22,6 +22,9 @@ interface Props {
   // server; shows the muted pulse-dot chip. State-driven between the
   // graph-refresh started/done WS events — never an open-ended spinner.
   refreshing: boolean;
+  /** Status chips (missing Claude CLI, missing project imports) — rendered
+   *  in the toolbar so they never float over a view's own controls. */
+  notices?: React.ReactNode;
   // PLAN-v7 Stage 1b — the "Draft insert with Claude" affordance. draftOpen
   // toggles the minimal intent field; drafting disables it while `claude -p`
   // is producing the proposal.
@@ -44,6 +47,21 @@ interface Props {
   onToggleBuild: () => void;
   onToggleFilters: () => void;
   onToggleModels: () => void;
+  // M-STACK.3 — the Stack panel: what the project is built on (IR fact)
+  // and the policies stated about each tool. Directory mode only — a
+  // single file has no project to index.
+  stackOpen: boolean;
+  stackAvailable: boolean;
+  onToggleStack: () => void;
+  // M-SKILLS.2 — the Skills panel: generic direction, enabled per project.
+  // Directory mode only (the enable file lives under the project).
+  skillsOpen: boolean;
+  skillsAvailable: boolean;
+  onToggleSkills: () => void;
+  // M-AGENT2 — the Agent Manager run board. Directory mode only.
+  workRunOpen: boolean;
+  workRunAvailable: boolean;
+  onToggleWorkRun: () => void;
   onToggleAnalysis: () => void;
   onToggleCode: () => void;
   onToggleThread: () => void;
@@ -91,17 +109,21 @@ function ToolButton({
   title,
   accent,
   children,
+  ...rest
 }: {
   active: boolean;
   disabled?: boolean;
   onClick: () => void;
   title: string;
   accent: string;
+  // data-* passthrough for e2e hooks (M-AGENT2 added the first).
+  [key: `data-${string}`]: boolean | string | undefined;
   children: React.ReactNode;
 }) {
   const [hover, setHover] = useState(false);
   return (
     <button
+      {...rest}
       onMouseEnter={() => !disabled && setHover(true)}
       onMouseLeave={() => setHover(false)}
       onClick={() => !disabled && onClick()}
@@ -118,11 +140,14 @@ function ToolButton({
           ? `color-mix(in oklab, ${accent} 60%, transparent)`
           : (hover ? `color-mix(in oklab, ${accent} 33%, transparent)` : `color-mix(in oklab, ${accent} 20%, transparent)`)}`,
         borderRadius: 6,
-        color: accent,
-        fontSize: 11,
-        fontFamily: "monospace",
-        fontWeight: 600,
-        padding: "5px 10px",
+        color: active ? "var(--text-primary)" : accent,
+        // Inter at 12, medium: the toolbar is navigation, not code
+        // (2026-09-24 look pass; it was 11px bold monospace).
+        fontSize: "var(--fs-12)",
+        fontFamily: "var(--font-ui)",
+        fontWeight: 500,
+        letterSpacing: "0.01em",
+        padding: "4px 12px",
         cursor: disabled ? "not-allowed" : "pointer",
         opacity: disabled ? 0.4 : 1,
         transition: "all 0.12s",
@@ -133,14 +158,45 @@ function ToolButton({
   );
 }
 
+/** Taller than this and the toolbar has wrapped to a second row. */
+const ONE_ROW_MAX = 52;
+
+/**
+ * Top offset for any fixed surface that must sit BELOW the toolbar band.
+ *
+ * The band WRAPS, so its height is not a constant: measured 2026-09-21 on a
+ * 900px-tall window, its bottom edge is 48px at 1800px wide, 82px at 1280
+ * and 116px at 1100. Every surface that hardcoded the one-row figure slid
+ * underneath it — the Stack and Models panels pinned themselves at 56px and
+ * lost their own headers behind the wrapped second row. W9 converted the
+ * two right docks to the variable and left these; this is the helper, so
+ * the next surface cannot get it wrong.
+ *
+ * `gap` is the space between band and surface: 16 for a right-edge panel,
+ * 12 for a centred banner — the conventions already in App.tsx.
+ */
+export function belowToolbar(gap = 8): string {
+  return `calc(var(--vg-toolbar-bottom, 43px) + ${gap}px)`;
+}
+
+/** Height available to a surface starting at `belowToolbar(gap)` that must
+ *  not run off the bottom. Replaces a fixed `80vh`, which assumed the same
+ *  one-row band. */
+export function heightBelowToolbar(gap = 8, bottomMargin = 24): string {
+  return `calc(100vh - var(--vg-toolbar-bottom, 43px) - ${gap + bottomMargin}px)`;
+}
+
 export function TopToolbar({
   filtersOpen, modelsOpen, analysisOpen, codeOpen, codeEligible,
   viewMode, threadEligible,
-  editorOpen, systemAvailable, architectureAvailable, refreshing,
+  editorOpen, systemAvailable, architectureAvailable, refreshing, notices,
   draftOpen, drafting, onToggleDraft,
   describeAvailable, describeOpen, describing, onToggleDescribe,
   buildAvailable, buildOpen, building, onToggleBuild,
-  onToggleFilters, onToggleModels, onToggleAnalysis, onToggleCode, onToggleThread,
+  onToggleFilters, onToggleModels, stackOpen, stackAvailable, onToggleStack,
+  skillsOpen, skillsAvailable, onToggleSkills,
+  workRunOpen, workRunAvailable, onToggleWorkRun,
+  onToggleAnalysis, onToggleCode, onToggleThread,
   onToggleSystem, onToggleArchitecture, onToggleEditor,
 }: Props) {
   const threadActive = viewMode === "thread";
@@ -171,9 +227,31 @@ export function TopToolbar({
     };
   }, []);
 
+  // Overlap pass — a wrapped toolbar is a second row of glass over every
+  // view's own top controls (the System view's mode bar, its top cards, the
+  // thread's first row). When the labelled buttons would wrap, the tools and
+  // Claude groups drop to icons (their names stay in title + accessible
+  // name); only a window too narrow even for that still wraps. Measured
+  // before paint, and re-tried in full on every resize.
+  const [compact, setCompact] = useState(false);
+  const [probe, setProbe] = useState(0);
+  React.useEffect(() => {
+    const retry = () => { setCompact(false); setProbe((n) => n + 1); };
+    window.addEventListener("resize", retry);
+    return () => window.removeEventListener("resize", retry);
+  }, []);
+  React.useLayoutEffect(() => {
+    const el = rootRef.current;
+    if (!el || compact) return;
+    if (el.getBoundingClientRect().height > ONE_ROW_MAX) setCompact(true);
+  });
+  void probe;
+
   return (
     <div
       ref={rootRef}
+      data-top-toolbar
+      data-compact={compact ? "true" : undefined}
       style={{
         position: "fixed",
         top: 10,
@@ -191,7 +269,7 @@ export function TopToolbar({
         gap: 6,
         background: "color-mix(in oklab, var(--bg-node) 85%, transparent)",
         border: "1px solid var(--border-edge)",
-        borderRadius: 8,
+        borderRadius: 12,
         padding: 4,
         // M6 wave 1 — bumped above CodeView (990) and MonacoOverlay
         // (1000) so the toolbar stays reachable while side panels are
@@ -206,6 +284,7 @@ export function TopToolbar({
           the server is re-deriving threads/entry points after an edit.
           Mounted only between graph-refresh started/done, so the pulse
           loop is bounded by real pipeline activity. */}
+      {notices}
       {refreshing && (
         <div
           data-graph-refreshing
@@ -322,6 +401,7 @@ export function TopToolbar({
           per-conversation picker, because a mid-conversation switch drops
           the model-scoped prompt cache. */}
       <ToolButton
+        data-models-toggle
         active={modelsOpen}
         onClick={onToggleModels}
         title="Which model runs which kind of work"
@@ -330,10 +410,55 @@ export function TopToolbar({
         <Cpu size={16} strokeWidth={1.5} />
         Models
       </ToolButton>
+      {/* M-STACK.3 — the software the project is built on, with the
+          evidence behind each tool and the policies stated about it.
+          Thread accent: these are facts about the user's own program. */}
+      {stackAvailable && (
+        <ToolButton
+          data-stack-toggle
+          active={stackOpen}
+          onClick={onToggleStack}
+          title="What this project is built on — tools by role, with their evidence and the policies stated about them"
+          accent="var(--accent-thread)"
+        >
+          <Layers size={16} strokeWidth={1.5} />
+          Stack
+        </ToolButton>
+      )}
+      {/* M-SKILLS.2 — generic direction: the prose half of each quality
+          dimension, enabled per project. Chat accent: it shapes what the
+          agents are told, not what the code is. */}
+      {skillsAvailable && (
+        <ToolButton
+          data-skills-toggle
+          active={skillsOpen}
+          onClick={onToggleSkills}
+          title="Generic direction skills — enable per project; advisory, injected after the thread skill"
+          accent="var(--accent-chat)"
+        >
+          <Compass size={16} strokeWidth={1.5} />
+          Skills
+        </ToolButton>
+      )}
       </ToolGroup>
 
       {/* Group 3 — Claude actions: delegated work, all accent-chat. */}
       <ToolGroup name="claude" divider>
+      {/* M-AGENT2 — the Agent Manager: task → thread packets → gated
+          worker sessions. Thread accent (the run works the user's own
+          program); the two human gates live inside the board. */}
+      {workRunAvailable && (
+        <ToolButton
+          active={workRunOpen}
+          onClick={onToggleWorkRun}
+          title="Agent Manager — plan a task onto threads, ratify, review each packet"
+          accent="var(--accent-thread)"
+          data-work-run-toggle
+        >
+          <Bot size={16} strokeWidth={1.5} />
+          Agents
+        </ToolButton>
+      )}
       {/* Analyze unmounted with Filters — see the note above. It DID
           work (handleAnalyzeFile spawns claude for a prose summary of the
           open file), but the chat answers the same question better and

@@ -75,6 +75,24 @@ before(async () => {
   }
 });
 
+test("an arg-needing enclosing function declines needs-inputs up front, naming its parameters — never a bare TypeError", async () => {
+  const r = await callTool("vibegraph_observe_dynamic_target", { nodeId: "module/dispatch_for.fn/out.assign", receiver: "eng", filePath: "calc.py" });
+  assert.equal(r.outcome, "needs-inputs", JSON.stringify(r));
+  assert.match(r.error ?? "", /dispatch_for\(name\) requires arguments/);
+  assert.equal(r.observedTarget, null);
+  assert.equal(r.effectConsentToken, undefined, "declined before any consent was asked: nothing would run");
+});
+
+test("a run that raises before the probe reports the exception line, not an opaque runtime-error", async () => {
+  const node = "module/dispatch_broken.fn/out.assign";
+  const refused = await callTool("vibegraph_observe_dynamic_target", { nodeId: node, receiver: "eng", filePath: "calc.py" });
+  assert.equal(refused.outcome, "requires-confirmation", JSON.stringify(refused));
+  const r = await callTool("vibegraph_observe_dynamic_target", { nodeId: node, receiver: "eng", filePath: "calc.py", effectConsent: refused.effectConsentToken });
+  assert.equal(r.outcome, "runtime-error", JSON.stringify(r));
+  assert.match(r.error ?? "", /KeyError: 'missing'/);
+  assert.equal(r.observedTarget, null);
+});
+
 after(() => {
   serverProc?.kill();
   if (tmpDir) fs.rmSync(tmpDir, { recursive: true, force: true });

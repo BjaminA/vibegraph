@@ -392,13 +392,27 @@ test("third-party / unresolvable calls emit no cross-file edge", () => {
   assert.equal(utilsXfile.length, 0,
     "utils.py should emit no cross-file edges (no project imports)");
 
-  // main.py: only the two known cross-file edges should be present.
+  // main.py: FIVE cross-file edges, not the two this once asserted.
+  //
+  // The count moved with the M-SWEEP W1 expression sweep (2026-09-10), and
+  // the three it gained were always real: line 5 is
+  //     users = [User("Alice"), User("Bob"), User("Charlie")]
+  // Calls inside a list literal emitted NO node before the sweep, so
+  // main.py's `from models import User` on line 2 had an import edge and
+  // not one single usage edge — the fixture imported a class it appeared
+  // never to call.
+  //
+  // The test's actual claim is unchanged and still holds below: a
+  // third-party or unresolvable call (print, __name__) emits no cross-file
+  // edge. Two was an inventory of what happened to be visible, not the rule.
   const mainXfile = project["main.py"].edges.filter((e) => e.targetFile);
-  assert.equal(mainXfile.length, 2,
-    `main.py expected exactly 2 cross-file edges (format_name + greet); got ${mainXfile.length}`);
-  const targets = new Set(mainXfile.map((e) => e.qualifiedTarget));
-  assert.ok(targets.has("utils:format_name"), "missing utils:format_name edge");
-  assert.ok(targets.has("utils:greet"), "missing utils:greet edge");
+  assert.equal(mainXfile.length, 5,
+    `main.py expected 5 cross-file edges (3× User + format_name + greet); got ${mainXfile.length}`);
+  const targets = mainXfile.map((e) => e.qualifiedTarget);
+  assert.ok(targets.includes("utils:format_name"), "missing utils:format_name edge");
+  assert.ok(targets.includes("utils:greet"), "missing utils:greet edge");
+  assert.equal(targets.filter((t) => t === "models:User").length, 3,
+    "all three list-literal constructor calls resolve to models:User");
 });
 
 // A `raise` carried a bespoke 40-char cap while every other preview-bearing

@@ -14,8 +14,10 @@
  * Asserted on the painted view, in flow units (zoom-independent):
  *   1. no function card's first body statement overlaps its last param row,
  *   2. the docstring paints ≥ 11px in a near-white colour,
- *   3. the clamp is genuinely in force (display:-webkit-box + line-clamp:2),
- *   4. a clamped summary keeps the FULL docstring reachable on hover.
+ *   3. the summary paints WHOLE — no clamp cuts it (2026-09-25, Ben: cards
+ *      fit all their text; the band is sized from the wrapped line count at
+ *      the card width, which is what test 1 guards),
+ *   4. a summarised docstring keeps the FULL text reachable on hover.
  *
  * big_demo is the fixture because its docstrings span the range that matters:
  * summaries of 79 to 544 characters, so one-line, two-line and clamped cases
@@ -81,7 +83,7 @@ test.describe("file view — docstring legibility + header height", () => {
     expect(Math.max(...cards.map((c) => c.docLen)), "need a long docstring in range").toBeGreaterThan(200);
   });
 
-  test("the docstring is legible, clamped, and keeps its full text on hover", async ({ page }) => {
+  test("the docstring is legible, painted whole, and keeps its full text on hover", async ({ page }) => {
     const docs = await page.evaluate(() => {
       return [...document.querySelectorAll('.react-flow__node[data-id$=".fn"] .vg-node-code')].map((el) => {
         const cs = getComputedStyle(el);
@@ -108,18 +110,16 @@ test.describe("file view — docstring legibility + header height", () => {
       // Near-white: --text-primary is rgb(232,234,237); --text-muted (the old
       // value) has a min channel around 103.
       expect(d.minChannel, "docstring must be near-white, not muted").toBeGreaterThan(180);
-      // The clamp that bounds the header must be IN FORCE. Asserted as painted
-      // height, not as CSS: Chromium blockifies `-webkit-box` + line-clamp and
-      // reports `display: flow-root`, so the property tells you nothing. The
-      // inline `display: block` that caused this bug shows up here as a box
-      // 5-7 lines tall.
-      expect(d.visibleLines, "docstring box may never paint more than 2 lines").toBeLessThanOrEqual(2);
+      // The summary is painted whole: the layout reserved the lines it wraps
+      // to, so nothing is hidden behind a clamp (test 1 proves the reserved
+      // band does not push the params into the body).
+      expect(d.clamped, "a docstring summary may not be cut").toBe(false);
       // Whatever the card cuts stays reachable.
       expect(d.full).toBeGreaterThanOrEqual(d.shown);
     }
-    // At least one card must be genuinely CLAMPING — proof the bound is doing
-    // work rather than every summary happening to be short.
-    expect(docs.some((d) => d.clamped), "a clamped docstring must exist here").toBe(true);
+    // At least one summary must genuinely wrap past the old 2-line cap, so
+    // this is not passing because every summary happens to be short.
+    expect(docs.some((d) => d.visibleLines > 2), "a summary longer than two lines must exist here").toBe(true);
     // ...and at least one shows a SUMMARY of a longer docstring, so the hover
     // reveal isn't vacuous.
     expect(docs.some((d) => d.full > d.shown), "a summarised docstring must exist here").toBe(true);

@@ -1,0 +1,37 @@
+{
+  "version": "1",
+  "constraints": [
+    {
+      "id": "c1",
+      "kind": "stack-policy",
+      "text": "@acme/ledger-client is the accounting platform's SDK. Every posting leaves through lib/ledger.ts, the one place a ledger entry is built; a direct client anywhere else bypasses the idempotency key.",
+      "scope": {
+        "stack": [
+          "@acme/ledger-client"
+        ]
+      },
+      "source": "human",
+      "createdAt": "2026-09-23T00:00:00.000Z",
+      "note": "platform docs — no public table can know a private SDK; the person who runs it can. `describe` is the rule that classifies without deciding anything about use.",
+      "policy": {
+        "tool": "@acme/ledger-client",
+        "role": "platform",
+        "rule": "describe",
+        "reason": "the role is STATED because no taxonomy table will ever carry a private platform SDK"
+      }
+    },
+    {
+      "id": "c2",
+      "kind": "payload-schema",
+      "text": "Every command sent to the platform is [<script path>, <region>] or <command name> + { token, amount } — the host's allow-list matches on the first element, so it must stay a literal script path.",
+      "scope": {
+        "files": [
+          "lib/volt.ts"
+        ]
+      },
+      "source": "human",
+      "createdAt": "2026-09-23T00:00:00.000Z",
+      "note": "M-ARCH.3 fixture: a stated payload rule attaches to the edges whose call sites live in lib/volt.ts"
+    }
+  ]
+}

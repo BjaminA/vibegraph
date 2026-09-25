@@ -1,0 +1,106 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibegraph.dev/schemas/quality/skill_manifest.json",
+  "title": "VibeGraph quality layer: skill manifest",
+  "description": "The structured view of one thread skill: its rules, each with its why and the IR nodes it governs (M-WHY), optionally bound to a stated constraint's check so the two can be compared; the stamp the skill was ratified against; and the staling rules that decide when it stops injecting. Derived from the skill file and the constraint store by a script; a human ratifies by editing the skill file's status, exactly as thread_skill_store.ts does today. C.8 settled that constraints beat skills: a rule that contradicts a routed constraint carries the contradiction record and the skill reads stale.",
+  "type": "object",
+  "required": ["version", "entryPointId", "status", "stamp", "rules", "staling", "provenance"],
+  "additionalProperties": false,
+  "properties": {
+    "version": { "const": "1.0" },
+    "entryPointId": { "type": "string", "minLength": 1 },
+    "status": { "enum": ["draft", "ratified"], "description": "Mirrors SkillStatus in thread_skill_store.ts. Anything not exactly ratified is draft." },
+    "stale": { "type": "boolean", "description": "Derived at read time from the stamp; never persisted as authority." },
+    "stamp": {
+      "type": "object",
+      "required": ["sourceHash", "rulesHash", "snapshotPresent"],
+      "additionalProperties": false,
+      "properties": {
+        "sourceHash": { "type": "string", "minLength": 1, "description": "The thread IR hash the skill was stamped with (sourceHashOf)." },
+        "rulesHash": {
+          "description": "The hash of the constraints routed to the thread when stamped (M-WHY). Unknown on a skill stamped before M-WHY, with that reason.",
+          "oneOf": [
+            { "type": "string", "minLength": 1 },
+            { "$ref": "evidence.json#/$defs/Unknown" }
+          ]
+        },
+        "snapshotPresent": { "type": "boolean", "description": "Whether a step snapshot exists, so the stale card can show a diff (M-SKILL.7)." }
+      }
+    },
+    "rules": { "type": "array", "items": { "$ref": "#/$defs/Rule" } },
+    "omitted": {
+      "description": "Run 3: bullets of the `## Rules and why` section the deriver could NOT turn into a Rule, each with its line and the reason (no why stated; no IR node cited). Honest absence, never a defaulted rule.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["line", "reason"],
+        "additionalProperties": false,
+        "properties": {
+          "line": { "type": "integer" },
+          "reason": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "staling": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/StalingRule" } },
+    "provenance": { "$ref": "evidence.json#/$defs/Derived" }
+  },
+  "$defs": {
+    "Rule": {
+      "type": "object",
+      "required": ["id", "text", "why", "nodes", "source"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "text": { "type": "string", "minLength": 1 },
+        "why": { "type": "string", "minLength": 1, "description": "Never empty: a rule without its reason gets worked around by the next agent that meets a case it did not foresee." },
+        "nodes": {
+          "description": "The IR nodes the rule governs. Never empty.",
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "evidence.json#/$defs/NodeRef" }
+        },
+        "source": {
+          "description": "constraint: drafted from a routed constraint's why. worker-draft: the worker's own observation, unratified until a human says so. human: written by a human in the skill file.",
+          "enum": ["constraint", "worker-draft", "human"]
+        },
+        "boundTo": {
+          "description": "Optional binding to a stated constraint's check, so the manifest can say whether the rule and the check agree.",
+          "type": "object",
+          "required": ["constraintId", "rule"],
+          "additionalProperties": false,
+          "properties": {
+            "constraintId": { "type": "string", "minLength": 1 },
+            "rule": { "$ref": "check_grammar.json#/$defs/CheckRule" }
+          }
+        },
+        "contradiction": {
+          "description": "Recorded when a routed constraint forbids what this rule permits (RUN1 5.1 step 6). The constraint wins; the skill is staled.",
+          "type": "object",
+          "required": ["constraintId", "packetId", "at"],
+          "additionalProperties": false,
+          "properties": {
+            "constraintId": { "type": "string", "minLength": 1 },
+            "packetId": { "type": "string", "minLength": 1 },
+            "at": { "type": "string", "format": "date-time" }
+          }
+        }
+      }
+    },
+    "StalingRule": {
+      "type": "object",
+      "required": ["on", "action", "reaffirm"],
+      "additionalProperties": false,
+      "properties": {
+        "on": {
+          "description": "step-changed and rule-changed: M-SKILL.7 and M-WHY, one stamp. constraint-contradiction: RUN1 5.1 step 6. bound-check-retired: the check a rule was bound to left the quality model. bound-constraint-removed: the constraint a rule was bound to was removed.",
+          "enum": ["step-changed", "rule-changed", "constraint-contradiction", "bound-check-retired", "bound-constraint-removed"]
+        },
+        "action": { "const": "stale" },
+        "reaffirm": {
+          "description": "human: Re-affirm re-stamps without regeneration. auto-with-caveat: the per-skill opt-in keeps injecting with a stated caveat (M-SKILL.7).",
+          "enum": ["human", "auto-with-caveat"]
+        }
+      }
+    }
+  }
+}

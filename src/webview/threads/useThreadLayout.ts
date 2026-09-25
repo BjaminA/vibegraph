@@ -57,6 +57,9 @@ export interface ThreadLayout {
   positions: Map<string, LaidOutPosition>;
   width: number;
   height: number;
+  /** node id → its branch index (the subtrees under the first fork after
+   *  the seed); ThreadView colours edges by it. Absent = spine or none. */
+  branchOf?: Map<string, number>;
 }
 
 interface SimNode extends SimulationNodeDatum {
@@ -185,6 +188,12 @@ export function useThreadLayout(
   iterations: number = DEFAULT_ITERATIONS,
   orientation: ThreadOrientation = "vertical",
 ): ThreadLayout {
+  // The L-R source-order layout never reads the canvas size, so a dock
+  // opening (every node click opens the editor) must not re-lay-out the
+  // thread: on a 4,000-step thread that recompute was most of a 2.6 s click.
+  const sizeMatters = !(projectIR && orientation === "horizontal");
+  const keyW = sizeMatters ? width : 0;
+  const keyH = sizeMatters ? height : 0;
   return useMemo(() => {
     const positions = new Map<string, LaidOutPosition>();
     if (!thread || thread.nodes.length === 0) {
@@ -284,7 +293,8 @@ export function useThreadLayout(
       positions.set(n.id, { x: n.x ?? width / 2, y: n.fy });
     }
     return { positions, width, height };
-  }, [thread, width, height, iterations, fileGroups, projectIR, orientation]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- width/height ride keyW/keyH
+  }, [thread, keyW, keyH, iterations, fileGroups, projectIR, orientation]);
 }
 
 // ─────────────────────────────────────────── vertical source order ──
@@ -388,9 +398,14 @@ function sourceOrderLayout(
   // file's IR). `contains` edges aren't part of execution order, so
   // they're excluded — the vertical nesting alone carries that signal.
   const adj = new Map<string, { to: string; line: number }[]>();
+  // Only nodes that are DRAWN take a slot: an edge whose endpoint was
+  // collapsed away (a folded nest) used to allocate a row nobody filled —
+  // the empty bands between a private production codebase's route blocks.
+  const drawnIds = new Set(thread.nodes.map((n) => n.id));
   for (const e of thread.edges) {
     if (e.kind === "contains" || e.kind === "flow") continue;
     if (containerIds.has(e.from) || containerIds.has(e.to)) continue;
+    if (!drawnIds.has(e.from) || !drawnIds.has(e.to)) continue;
     const fromFile = fileById.get(e.from) ?? null;
     const line = lineOfIrNode(e.irSource, fromFile, projectIR);
     const arr = adj.get(e.from);
@@ -414,47 +429,67 @@ function sourceOrderLayout(
 
   const visited = new Set<string>();
 
-  if (horizontal) {
-    // M23 — branch-stacked L-R, with a FLAT SPINE (M-NA6). Two rules:
-    //   * a node with ONE call continues in the caller's lane — a
-    //     linear chain reads as one horizontal rail (the "sentence"),
-    //     instead of the pre-NA6 staircase where every hop dropped a
-    //     lane AND advanced a column, drifting down-right unbounded;
-    //   * a node with 2+ calls opens a body band one lane below —
-    //     genuine branching still stacks on the cross axis (M23's
-    //     point), and per-lane cursors keep sibling subtrees sharing
-    //     main-axis range where the lanes allow.
-    // Per-lane execution order holds either way (lane cursors are
-    // monotonic and DFS visits a callee's body before the next
-    // sibling), and edges always flow rightward: child main ≥ parent
-    // main + step. Revisited nodes keep their first position (visited
-    // check), same as the vertical pass.
-    const laneCursor: number[] = [];
-    const dfsH = (nodeId: string, lane: number, parentMain: number): void => {
-      if (visited.has(nodeId)) return;
-      visited.add(nodeId);
-      const main = Math.max(parentMain + HORIZONTAL_COL_WIDTH, laneCursor[lane] ?? 0);
-      positions.set(nodeId, place(main, lane));
-      laneCursor[lane] = main + HORIZONTAL_COL_WIDTH;
-      const children = (adj.get(nodeId) ?? []).filter((c) => !visited.has(c.to));
-      const childLane = children.length > 1 ? lane + 1 : lane;
-      for (const { to } of children) {
-        dfsH(to, childLane, main);
+  // BRANCHES (2026-09-24): each edge is coloured by the PATH it is on
+  // (ThreadView → ThreadEdge). At a fork, every child that goes on to call
+  // something opens a new path with the next colour; a leaf call (useState,
+  // console.log) keeps its parent's colour, so the leaves of one function
+  // read as that function's and the palette is spent on real branching.
+  // The spine before the first fork carries none (the default teal). A node
+  // two paths reach belongs to the first, in the layout's DFS order.
+  const branchOf = new Map<string, number>();
+  {
+    let next = 0;
+    const seen = new Set<string>();
+    const walk = (id: string, colour: number | null): void => {
+      if (seen.has(id)) return;
+      seen.add(id);
+      if (colour !== null) branchOf.set(id, colour);
+      const kids = (adj.get(id) ?? []).map((c) => c.to).filter((k) => !seen.has(k));
+      const continuing = kids.filter((k) => (adj.get(k) ?? []).some((c) => !seen.has(c.to) && c.to !== k));
+      const forks = kids.length > 1;
+      for (const k of kids) {
+        const opensPath = forks && continuing.includes(k);
+        walk(k, opensPath ? next++ : colour);
       }
     };
-    dfsH(thread.seed.qualifiedName, 0, -HORIZONTAL_COL_WIDTH);
-    // Orphans — lane 0, after everything placed there so far. M24 —
-    // containers are skipped: they were never DFS-reachable (contains/
-    // flow edges are excluded above) and their bounds come from their
-    // children, so an orphan slot would just stretch the canvas.
+    walk(thread.seed.qualifiedName, null);
+  }
+
+  if (horizontal) {
+    // 2026-09-24 — a left-to-right CALL TREE (Ben: "expand the flows more
+    // vertically as they end up bunched"). The M23 layout put every sibling
+    // of a fork on ONE lane, one after another along x: a function with ten
+    // calls became a row 3000px long, and each deeper level another long row
+    // beneath it — wide, flat, bunched. Now:
+    //   * x = call depth (a column per level), so every edge still flows
+    //     rightward;
+    //   * each sibling subtree takes its own block of rows, stacked top to
+    //     bottom in execution order (the line-sorted adjacency) — a fork
+    //     fans out DOWN the screen instead of along it;
+    //   * a single call continues on its parent's row (M-NA6's flat spine:
+    //     a linear chain still reads as one rail).
+    // Revisited nodes keep their first position (visited check).
+    const dfsH = (nodeId: string, depth: number, row: number): number => {
+      visited.add(nodeId);
+      positions.set(nodeId, place(depth * HORIZONTAL_COL_WIDTH, row));
+      let rows = 0;
+      for (const { to } of adj.get(nodeId) ?? []) {
+        if (visited.has(to)) continue;
+        rows += dfsH(to, depth + 1, row + rows);
+      }
+      return Math.max(1, rows);
+    };
+    const used = dfsH(thread.seed.qualifiedName, 0, 0);
+    // Orphans — one row each below the tree. Containers are skipped: they
+    // were never DFS-reachable (contains/flow edges are excluded above) and
+    // their bounds come from their children.
+    let row = used;
     for (const n of thread.nodes) {
       if (!visited.has(n.id) && n.kind !== "container") {
-        const main = laneCursor[0] ?? 0;
-        positions.set(n.id, place(main, 0));
-        laneCursor[0] = main + HORIZONTAL_COL_WIDTH;
+        positions.set(n.id, place(0, row++));
       }
     }
-    return { positions, width, height };
+    return { positions, width, height, branchOf };
   }
 
   // Vertical — the historical single-column pass, untouched by M23.
@@ -483,7 +518,7 @@ function sourceOrderLayout(
     }
   }
 
-  return { positions, width, height };
+  return { positions, width, height, branchOf };
 }
 
 // Per-row collision sweep. Each row's nodes are sorted by their post-

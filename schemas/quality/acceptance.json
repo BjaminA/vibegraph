@@ -1,0 +1,282 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibegraph.dev/schemas/quality/acceptance.json",
+  "title": "VibeGraph quality layer: packet acceptance",
+  "description": "The packet's closing bar, computed up front from the envelope and shipped in it, so the worker knows what will be checked before it edits and the review reads the same bar afterwards. Derived only. The invariants are the pre-checks preCheckReport already runs, named; the checks are the routed constraints' checkable halves plus any calibrated quality-model check whose applies_when fired; a gate-blocking check must cite either the constraint that states it or the calibration commit that earned it. Exceptions to an invariant are stated with provenance, never implied.",
+  "type": "object",
+  "required": [
+    "version",
+    "packetId",
+    "entryPointId",
+    "provenance",
+    "computedAt",
+    "scope",
+    "invariants",
+    "checks",
+    "evidenceRequired",
+    "advisories",
+    "closingBar"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "const": "1.0"
+    },
+    "packetId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "entryPointId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The thread's entry point, or the system packet's id when no thread owns it."
+    },
+    "provenance": {
+      "$ref": "evidence.json#/$defs/Derived"
+    },
+    "computedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "scope": {
+      "type": "object",
+      "required": [
+        "files",
+        "declaredBy"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "files": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "declaredBy": {
+          "enum": [
+            "brief",
+            "thread"
+          ],
+          "description": "brief: the objective gate's edit scope. thread: the thread's filesReached, when the brief declared none."
+        }
+      }
+    },
+    "invariants": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/Invariant"
+      }
+    },
+    "checks": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/AcceptanceCheck"
+      }
+    },
+    "evidenceRequired": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "enum": [
+          "derived",
+          "observed",
+          "stated"
+        ]
+      }
+    },
+    "advisories": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Advisory"
+      }
+    },
+    "closingBar": {
+      "type": "string",
+      "minLength": 1,
+      "description": "One derived line a human can read: what must be true for this packet to close."
+    }
+  },
+  "$defs": {
+    "InvariantKind": {
+      "description": "Each is a line preCheckReport already produces or RUN1 4.2 adds. edits-inside-scope, every-edited-file-reparsed, entry-point-signature-unchanged, bytes-changed, no-forbidden-tool, no-new-resolution-gaps, no-new-runtime-dispatch, no-new-uncaptured: M-ORCH.4 and M-STACK.5. no-new-unattributed-boundary and loosening-loud: RUN1 4.2.",
+      "enum": [
+        "edits-inside-scope",
+        "every-edited-file-reparsed",
+        "entry-point-signature-unchanged",
+        "bytes-changed",
+        "no-forbidden-tool",
+        "no-new-resolution-gaps",
+        "no-new-runtime-dispatch",
+        "no-new-uncaptured",
+        "no-new-unattributed-boundary",
+        "loosening-loud"
+      ]
+    },
+    "Invariant": {
+      "type": "object",
+      "required": [
+        "kind"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/InvariantKind"
+        },
+        "exception": {
+          "description": "A stated reason this invariant does not bind here (the brief marked a signature change, the packet is expected to change no bytes). Never derived.",
+          "type": "object",
+          "required": [
+            "reason",
+            "provenance"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "reason": {
+              "type": "string",
+              "minLength": 1
+            },
+            "provenance": {
+              "$ref": "evidence.json#/$defs/Stated"
+            }
+          }
+        }
+      }
+    },
+    "Basis": {
+      "description": "What entitles a check to gate. A stated constraint, or a calibrated quality-model dimension with the commit its calibration was earned at.",
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "constraintId"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "constraintId": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "dimension",
+            "calibration"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "dimension": {
+              "$ref": "quality_model.json#/$defs/DimensionId"
+            },
+            "calibration": {
+              "description": "The commit the dimension's calibration was earned at, or Unknown with the reason (a candidate awaiting human review). Only a commit entitles a derived check to gate.",
+              "oneOf": [
+                {
+                  "$ref": "evidence.json#/$defs/Unknown"
+                },
+                {
+                  "type": "object",
+                  "required": [
+                    "commit"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "commit": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "AcceptanceCheck": {
+      "type": "object",
+      "required": [
+        "check",
+        "mode",
+        "mustBe",
+        "basis"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "check": {
+          "$ref": "check_grammar.json#/$defs/Check"
+        },
+        "mode": {
+          "enum": [
+            "advisory",
+            "gate-blocking"
+          ]
+        },
+        "mustBe": {
+          "description": "pass: only a pass closes. pass-or-reviewed-unverifiable: an unverifiable may close after a reviewer's model_judgement or a human verdict is recorded beside it (never rewriting it).",
+          "enum": [
+            "pass",
+            "pass-or-reviewed-unverifiable"
+          ]
+        },
+        "basis": {
+          "$ref": "#/$defs/Basis"
+        },
+        "baseline": {
+          "description": "The offenders this check already reported BEFORE any packet ran, captured at the objective gate. A DERIVED gate rejects only an offender ABSENT from this list: a rule nobody stated may not reject a packet for code it inherited. Measured (h2h3, 2026-09-21): arm A's p1 carried a derived resolvability violation naming three functions whose parameters were unannotated before the run began, and gating on it would have rejected correct work. Absent on a stated check, which gates on its own terms.",
+          "type": "object",
+          "required": [
+            "offenders",
+            "at"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "offenders": {
+              "type": "array",
+              "items": {
+                "$ref": "evidence.json#/$defs/NodeRef"
+              }
+            },
+            "verdict": {
+              "enum": [
+                "pass",
+                "violated",
+                "unverifiable"
+              ]
+            },
+            "at": {
+              "type": "string",
+              "format": "date-time"
+            }
+          }
+        }
+      }
+    },
+    "Advisory": {
+      "description": "Lines that cost a needsEyes entry, never a reject. tests-touched: the delta touched no test file (RUN1 4.2, advisory because an instance test did not prevent class recurrence here). annotated: the entry point has untyped parameters. uncalibrated-check: a quality-model check applied but not yet calibrated.",
+      "type": "object",
+      "required": [
+        "kind",
+        "text"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "tests-touched",
+            "annotated",
+            "uncalibrated-check"
+          ]
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    }
+  }
+}

@@ -37,7 +37,15 @@ export const CHAT_MODELS: ChatModelOption[] = [
   { id: "claude-opus-5", label: "Opus 5", hint: "Deep edits and hard reasoning — the workhorse" },
   { id: "claude-sonnet-5", label: "Sonnet 5", hint: "Balanced speed and capability" },
   { id: "claude-haiku-4-5", label: "Haiku 4.5", hint: "Fastest and cheapest — simple questions" },
+  // M-PROVIDER — the local server from the Models panel. Not a claude id:
+  // the server opens an Ollama-backed session instead of spawning the CLI.
+  // Switching provider starts a FRESH conversation (a claude session cannot
+  // be resumed by a local model, nor the reverse); the hint says so.
+  { id: "ollama", label: "Local (Ollama)", hint: "The Models panel's local endpoint and model — switching provider starts a fresh conversation" },
 ];
+
+/** M-PROVIDER — the picker id that means "the local server", not a claude model. */
+export const LOCAL_CHAT_MODEL_ID = "ollama";
 
 /** Whitelist check — the server never forwards an unrecognised id. */
 export function isKnownChatModel(id: unknown): id is string {

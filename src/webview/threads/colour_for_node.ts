@@ -136,6 +136,7 @@ const CONTAINER_KIND_LABELS: Record<string, string> = {
   finally: "FINALLY",
   while: "WHILE",
   for: "FOR",
+  comprehension: "COMP",
   if_then: "IF",
   if_else: "ELSE",
 };
@@ -147,6 +148,13 @@ export function accentForThreadNode(
 ): ThreadNodeAccent {
   // ── External / dynamic / return — kinds without an IR node ─────────────
   if (threadNode.kind === "external") {
+    // M-LANG6 — non-Python frontends stamp effectKind onto external
+    // terminals at extract time (PLAN-M-LANG decision (c)): when
+    // present, the IR is the authority and the Python-vocabulary
+    // tables below (classifyExternal) never run. Python terminals
+    // carry no effectKind, so classifyExternal stays their exact
+    // classifier — byte-identical rendering.
+    if (threadNode.effectKind) return accentForEffectKind(threadNode.effectKind);
     return classifyExternal(threadNode.label ?? "");
   }
   if (threadNode.kind === "dynamic") {
@@ -238,6 +246,20 @@ export function accentForThreadNode(
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
+
+// M-LANG6 — the IR-effectKind → accent mapping for non-Python external
+// terminals (mirrors the classifyCallLike effectKind rows: db/http/fs
+// paint I/O, subprocess paints SHELL, log recedes).
+function accentForEffectKind(effectKind: string): ThreadNodeAccent {
+  switch (effectKind) {
+    case "db": return { accentVar: "--accent-io", kindLabel: "DB" };
+    case "http": return { accentVar: "--accent-io", kindLabel: "HTTP" };
+    case "fs": return { accentVar: "--accent-io", kindLabel: "FS" };
+    case "subprocess": return { accentVar: "--accent-io", kindLabel: "SHELL" };
+    case "log": return { accentVar: "--accent-io-muted", kindLabel: "LOG" };
+    default: return { accentVar: "--accent-io-muted", kindLabel: "EXTERNAL" };
+  }
+}
 
 function classifyExternal(label: string): ThreadNodeAccent {
   const tail = label.split(".").pop() ?? label;

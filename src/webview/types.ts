@@ -122,6 +122,45 @@ export type ExtensionMessage =
     }}
   | { type: "edit-node-source"; payload: { nodeId: string; source: string; error?: string } }
   | { type: "edit-node-saved"; payload: { nodeId: string; success: boolean; error?: string } }
+  | { type: "work-run-error"; payload: { error: string } }
+  | { type: "node-explained"; payload: { nodeId: string; interpretation: string | null; attribution: string; cached: boolean; error?: string } }
+  // SCOPE button — C2 explain-this-node reply: a LABELLED inference
+  // (attribution always present), never a change to the node's kind.
+  | { type: "node-explained"; payload: {
+      nodeId: string;
+      interpretation: string | null;
+      attribution: string;
+      cached: boolean;
+      error?: string;
+    }}
+  // OBSERVE button (PLAN-M-RUNTIME phase 2) — B5's runtime sample surfaced
+  // in the tooltip. `observedTarget` is what the receiver WAS on this run;
+  // `note` says why that is never promoted to a static fact. A
+  // requires-confirmation outcome carries the effects the floor found plus
+  // the token that authorises them — the same SM3 gate run-to-here uses.
+  | { type: "node-observed"; payload: {
+      nodeId: string;
+      outcome: string;
+      observedTarget: string | null;
+      note: string;
+      effects?: EffectOffense[];
+      effectConsentToken?: string | null;
+      error?: string;
+    }}
+  // PLAN-M-RUNTIME phase 3 — the reply to a trace run. `observed` is how
+  // many IR nodes the run annotated; requires-confirmation carries the
+  // floor's offenses and the token, exactly like Observe.
+  | { type: "thread-traced"; payload: {
+      entryPointId: string;
+      outcome: string;
+      observed: number;
+      note: string;
+      effects?: EffectOffense[];
+      effectConsentToken?: string | null;
+      error?: string;
+      stdout?: string;
+      stderr?: string;
+    }}
   | { type: "intent-proposal"; payload: {
       // M18.5 — reply to place-intent. previewSource is the proposed new
       // enclosing function (or whole module when the change is module-
@@ -166,6 +205,7 @@ export type ExtensionMessage =
   // plan as pendingSystemPlan (a SIBLING overlay, never merged into the
   // honest system tier); !ok surfaces the validation reason.
   | { type: "system-proposal"; payload: { ok: boolean; plan?: SystemPlan; error?: string } }
+  | { type: "arch-proposal"; payload: { action: "propose" | "ratify" | "reject"; ok: boolean; error?: string; groups?: number; names?: number; refused?: number } }
   // PLAN-v7 Stage 4 — reply to changeset-propose: the changeset echoed back
   // with its verification floor (parse + sandboxed behavioural check). The
   // gate enables acceptance only when floor.ok.
@@ -190,7 +230,13 @@ export type ExtensionMessage =
   | { type: "file-source"; payload: { filePath: string; source: string } }
   | { type: "file-source-error"; payload: { filePath: string; message: string } }
   | { type: "runtime-state"; payload: { anthropicAvailable: boolean } }
-  | { type: "chat-backend-info"; payload: { backend: "claude-stdio" | "claude-p-headless" | "agent-sdk"; sessionId?: string | null; resumed?: boolean } }
+  | { type: "chat-backend-info"; payload: { backend: "claude-stdio" | "claude-p-headless" | "agent-sdk" | "ollama"; sessionId?: string | null; resumed?: boolean } }
+  // M-PROVIDER — the server's tier settings (sent on connect and after every change) and an endpoint probe result.
+  | { type: "model-tiers"; payload: import("../shared/model_tiers").TierSettings }
+  | { type: "model-endpoint-probe"; payload: { endpoint: string; ok: boolean; version?: string; models?: string[]; model?: string; tokPerSec?: number; loadSeconds?: number; error?: string } }
+  // M-SKILLS.2 — the per-project enable file plus the shipped generic-skill
+  // catalogue (sent on connect and after every change; the model-tiers shape).
+  | { type: "skills-config"; payload: import("../shared/generic_skills_wire").SkillsConfigPayload }
   // M-GF3.4 — `scope` marks a NON-main conversation ("stage:<itemId>"):
   // the ChatPanel ignores scoped chat messages; the StageDetailDialog
   // renders only its own scope. Absent = the main panel.
@@ -202,7 +248,7 @@ export type ExtensionMessage =
   | { type: "chat-tool-result"; payload: { toolUseId: string; success: boolean; message?: string; scope?: string } }
   // M-SKILL.2 — remit-routing provenance: sent before the reply streams when
   // the question deterministically matched other threads' remits.
-  | { type: "chat-routed"; payload: { matches: Array<{ entryPointId: string; qualifiedName: string; matchedOn: string[]; skillInjected: boolean; skillStale?: boolean }>; scope?: string } }
+  | { type: "chat-routed"; payload: { matches: Array<{ entryPointId: string; qualifiedName: string; matchedOn: string[]; skillInjected: boolean; skillStale?: boolean }>; selfMatch?: { qualifiedName: string; matchedOn: string[] }; genericSkills?: Array<{ name: string; injected: boolean; omitted?: string }>; scope?: string } }
   // M-SKILL.3 — thread-skill lifecycle states (all threads / one thread).
   | { type: "thread-skills"; payload: { skills: ThreadSkillRecord[] } }
   | { type: "thread-skill-status"; payload: ThreadSkillRecord }
@@ -245,6 +291,29 @@ export type WebviewMessage =
   | { type: "disconnect-nodes"; payload: { sourceId: string; targetId: string } }
   | { type: "modify-node"; payload: { nodeId: string; prompt: string } }
   | { type: "edit-node-open"; payload: { nodeId: string; filePath?: string } }
+  | { type: "explain-node"; payload: { nodeId: string; filePath?: string } }
+  // PLAN-M-RUNTIME phase 3 — run one entry point under the tracer and store
+  // the overlay it produces. `clear-trace` forgets one run's overlay.
+  | { type: "trace-thread"; payload: { entryPointId: string; effectConsent?: string } }
+  | { type: "clear-trace"; payload: { entryPointId: string } }
+  // OBSERVE — run the enclosing function to this call site and sample the
+  // receiver's runtime type. `receiver` is the variable to inspect, derived
+  // from the node's viaLocal or the head of its dotted label.
+  | { type: "observe-node"; payload: {
+      nodeId: string; receiver: string; filePath?: string; effectConsent?: string;
+    } }
+  // M-AGENT2 — the Agent Manager gate messages. State transitions are
+  // server-side (work_run.ts); these are the ONLY writes the board sends.
+  // M-ORCH.4 — `parallel` lanes + the review policy ride the start message.
+  | { type: "work-run-start"; payload: { task: string; mode?: "gated" | "orchestrated"; parallel?: number; review?: "full" | "pre-checks" } }
+  | { type: "work-run-ratify"; payload: Record<string, never> }
+  | { type: "work-run-review"; payload: { packetId: string; approve: boolean; reason?: string } }
+  | { type: "work-run-pause"; payload: Record<string, never> }
+  | { type: "work-run-resume"; payload: Record<string, never> }
+  | { type: "work-run-discard"; payload: Record<string, never> }
+  // M-CONTRACT.3 — stated constraints: the board states (as human) and removes.
+  | { type: "add-constraint"; payload: { kind: string; text: string; scope: { all?: boolean; entryPointIds?: string[]; files?: string[]; stack?: string[] }; policy?: { tool: string; rule: string; with?: string; role?: string; reason?: string } } }
+  | { type: "remove-constraint"; payload: { id: string } }
   | { type: "edit-node-save"; payload: { nodeId: string; newSource: string; filePath?: string } }
   | { type: "place-intent"; payload: {
       // M18.5 Mode B — the selected node + plain-language intent. The
@@ -265,7 +334,12 @@ export type WebviewMessage =
       isModule: boolean;
       allowSignatureChange: boolean;
     }}
-  | { type: "set-model-tiers"; payload: { thinking: string | null; routine: string | null } }
+  // M-PROVIDER — the full tier settings (claude models, per-tier provider routes, the local endpoint).
+  | { type: "set-model-tiers"; payload: import("../shared/model_tiers").TierSettings }
+  | { type: "probe-model-endpoint"; payload: { endpoint: string; model?: string } }
+  // M-SKILLS.2 — which generic skills this project enables; the server
+  // validates the names against the shipped catalogue and stamps who/when.
+  | { type: "set-skills-config"; payload: { version: "1.0"; enabled: string[] } }
   | { type: "chat-send"; payload: { text: string; contextNodeId: string | null; clearHistory?: boolean; filePath?: string; threadEntryPointId?: string | null; model?: string } }
   // M-GF3.4 — one turn of the per-stage dialogue. The CURRENT plan snapshot
   // rides along (pending proposal or ratified roadmap — the server only
@@ -305,6 +379,10 @@ export type WebviewMessage =
   // drafts the architecture via `claude -p` (grounding-enforced) and replies
   // with the SAME system-proposal shape as the canned path.
   | { type: "system-propose-intent"; payload: { description: string } }
+  // M-ARCH.4 — propose spends tokens; ratify / reject are the human's.
+  | { type: "arch-propose"; payload?: { guidance?: string } }
+  | { type: "arch-ratify"; payload?: Record<string, never> }
+  | { type: "arch-reject"; payload?: Record<string, never> }
   // PLAN-v7 Stage 4 — submit a build increment for the dry verification
   // floor (4a: canned; 4b: builder-drafted). Nothing is written. 6b: an
   // optional effectConsentToken (server-minted at decline, scope-bound to

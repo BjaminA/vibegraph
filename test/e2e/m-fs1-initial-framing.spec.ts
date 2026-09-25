@@ -50,8 +50,10 @@ test.describe("M-FS1 — initial thread framing", () => {
       // Fits vertically → framed: the gaps are within ~180px of each other.
       expect(Math.abs(topGap - bottomGap), `topGap=${topGap} bottomGap=${bottomGap} — cross extent should be framed, not seed-centred`).toBeLessThan(180);
     } else {
-      // Doesn't fit → top-anchored near the pad.
-      expect(topGap, "overflowing thread should anchor its top at the pad").toBeLessThan(120);
+      // Doesn't fit → top-anchored near the pad. The pad is FIT_TOP (128,
+      // ThreadView): the first card must sit below the canvas's top-left
+      // pills (skill / nests), which a 48px pad put it under.
+      expect(topGap, "overflowing thread should anchor its top at the pad").toBeLessThan(160);
     }
 
     // The seed stays in view at the main-axis start.

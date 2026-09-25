@@ -1,6 +1,6 @@
 {
   "app.py": {
-    "version": "1.3",
+    "version": "1.4",
     "nodes": [
       {
         "id": "module/flask.import_from",
@@ -70,6 +70,21 @@
         ]
       },
       {
+        "id": "module/app_route.call",
+        "type": "call",
+        "parentId": null,
+        "line": 21,
+        "endLine": 21,
+        "col": 1,
+        "endCol": 41,
+        "funcName": "app.route",
+        "args": [
+          "\"/api/users\"",
+          "[\"GET\"]"
+        ],
+        "isEffect": false
+      },
+      {
         "id": "module/list_users_route.fn",
         "type": "function_def",
         "parentId": null,
@@ -84,7 +99,8 @@
           "app.route(\"/api/users\", methods=[\"GET\"])"
         ],
         "isAsync": false,
-        "returns": null
+        "returns": null,
+        "decoratorLine": 21
       },
       {
         "id": "module/list_users_route.fn/users.assign",
@@ -111,6 +127,21 @@
         "callTarget": "jsonify"
       },
       {
+        "id": "module/app_route.call@1",
+        "type": "call",
+        "parentId": null,
+        "line": 28,
+        "endLine": 28,
+        "col": 1,
+        "endCol": 51,
+        "funcName": "app.route",
+        "args": [
+          "\"/api/users/<int:uid>\"",
+          "[\"GET\"]"
+        ],
+        "isEffect": false
+      },
+      {
         "id": "module/get_user_route.fn",
         "type": "function_def",
         "parentId": null,
@@ -127,7 +158,8 @@
           "app.route(\"/api/users/<int:uid>\", methods=[\"GET\"])"
         ],
         "isAsync": false,
-        "returns": null
+        "returns": null,
+        "decoratorLine": 28
       },
       {
         "id": "module/get_user_route.fn/user.assign",
@@ -252,6 +284,21 @@
         "value": "user"
       },
       {
+        "id": "module/app_route.call@2",
+        "type": "call",
+        "parentId": null,
+        "line": 44,
+        "endLine": 44,
+        "col": 1,
+        "endCol": 44,
+        "funcName": "app.route",
+        "args": [
+          "\"/api/charges\"",
+          "[\"POST\"]"
+        ],
+        "isEffect": false
+      },
+      {
         "id": "module/create_charge_route.fn",
         "type": "function_def",
         "parentId": null,
@@ -266,7 +313,8 @@
           "app.route(\"/api/charges\", methods=[\"POST\"])"
         ],
         "isAsync": false,
-        "returns": null
+        "returns": null,
+        "decoratorLine": 44
       },
       {
         "id": "module/create_charge_route.fn/body.assign",
@@ -311,6 +359,11 @@
     ],
     "edges": [
       {
+        "source": "module/app_route.call",
+        "target": "module/app.assign",
+        "type": "reference"
+      },
+      {
         "source": "module/list_users_route.fn",
         "target": "module/list_users_route.fn/users.assign",
         "type": "contains"
@@ -319,6 +372,11 @@
         "source": "module/list_users_route.fn",
         "target": "module/list_users_route.fn/return@0",
         "type": "contains"
+      },
+      {
+        "source": "module/app_route.call@1",
+        "target": "module/app.assign",
+        "type": "reference"
       },
       {
         "source": "module/get_user_route.fn",
@@ -361,6 +419,11 @@
         "type": "contains"
       },
       {
+        "source": "module/app_route.call@2",
+        "target": "module/app.assign",
+        "type": "reference"
+      },
+      {
         "source": "module/create_charge_route.fn",
         "target": "module/create_charge_route.fn/body.assign",
         "type": "contains"
@@ -376,6 +439,13 @@
         "type": "contains"
       },
       {
+        "source": "module/app_route.call",
+        "target": "module/app.assign",
+        "type": "reference",
+        "qualifiedTarget": "flask:Flask.route",
+        "viaLocal": "app"
+      },
+      {
         "source": "module/list_users_route.fn/users.assign",
         "target": "module/all_users.fn",
         "type": "reference",
@@ -383,11 +453,25 @@
         "qualifiedTarget": "store:all_users"
       },
       {
+        "source": "module/app_route.call@1",
+        "target": "module/app.assign",
+        "type": "reference",
+        "qualifiedTarget": "flask:Flask.route",
+        "viaLocal": "app"
+      },
+      {
         "source": "module/get_user.fn/user.assign",
         "target": "module/find_user.fn",
         "type": "reference",
         "targetFile": "store.py",
         "qualifiedTarget": "store:find_user"
+      },
+      {
+        "source": "module/app_route.call@2",
+        "target": "module/app.assign",
+        "type": "reference",
+        "qualifiedTarget": "flask:Flask.route",
+        "viaLocal": "app"
       },
       {
         "source": "module/create_charge_route.fn/result.assign",

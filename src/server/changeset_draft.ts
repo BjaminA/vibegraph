@@ -27,7 +27,7 @@
 import { spawn } from "child_process";
 // .ts extensions: run directly by node type-stripping in test:changeset-draft
 // (same convention as compose_draft.ts; esbuild resolves them fine).
-import { resolveClaudeBin } from "./run/synth_args.ts";
+import { resolveClaudeBin, spawnEnv } from "./run/synth_args.ts";
 import { validateChangeset } from "./changeset.ts";
 import type { Changeset, SystemPlan } from "../shared/protocol";
 import type { ChatSession } from "./chat/backend.ts";
@@ -246,14 +246,15 @@ export function draftChangeset(
     })();
   }
   // Model tier: thinking — the builder writes real code.
-  const { cmd, args: pre } = resolveClaudeBin("thinking");
+  const spawnTarget = resolveClaudeBin("thinking");
+  const { cmd, args: pre } = spawnTarget;
   return new Promise((resolve) => {
     const child = spawn(
       cmd,
       [...pre, "-p", "--output-format", "json", "--strict-mcp-config",
         "--mcp-config", '{"mcpServers":{}}',
         "--dangerously-skip-permissions", "--", prompt],
-      { cwd, env: { ...process.env } },
+      { cwd, env: spawnEnv(spawnTarget) },
     );
     child.stdin?.end(); // 6d pre-flight: no open pipe — claude -p otherwise waits 3s for stdin per draft
     let out = "";

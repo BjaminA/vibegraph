@@ -40,6 +40,9 @@ export interface ThreadEdgeData {
   // with a known hue; the edge picks up that hue via --vg-edge-file-hue.
   crossDepth?: boolean;
   sameFileHueIndex?: number | null;
+  /** 2026-09-24 — branch index (ThreadView): edges are coloured per branch,
+   *  and a branch hue outranks the file hue on the edge. */
+  branchHueIndex?: number | null;
   // §5.6a — target-keyed treatments. toReturn: a curved function-exit
   // terminal (teal, thin, directional arrow). toExcept: the error path
   // into an except band (red-tinted dashed "on error").
@@ -49,6 +52,37 @@ export interface ThreadEdgeData {
   // ThreadView staggers siblings sharing a source so their labels don't
   // overprint at the shared midpoint. Absent/0.5 = bezier midpoint.
   labelT?: number;
+  // A LONG edge in a big thread, drawn as two stubs (see STUB_PX): the
+  // far end's label rides each stub and clicking it jumps there.
+  // One CHIP per node end, not per edge: a seed with 190 far calls stacked
+  // 190 chips on one point, unreadable and catching every click. `out` /
+  // `in` is set on ONE edge per source / target; its chip names the far end
+  // (or counts them) and each click jumps to the next one in turn.
+  stub?: {
+    fromLabel: string; toLabel: string;
+    out?: { targets: string[]; labels: string[]; at?: { dist: number; off: number; x?: number; y?: number } | null };
+    in?: { sources: string[]; labels: string[]; at?: { dist: number; off: number; x?: number; y?: number } | null };
+  };
+}
+
+/** Length of each stub of a long edge, in flow units. Measured on a private production codebase's
+ *  largest thread: 190 on-screen edges averaged ~52,000 flow px each (the
+ *  branch-stacked layout is thousands of columns long), and re-rasterising
+ *  them was the whole pan cost — 83 ms a frame with them, 16.7 without. */
+export const STUB_PX = 220;
+
+const OUTWARD: Record<string, [number, number]> = { right: [1, 0], left: [-1, 0], bottom: [0, 1], top: [0, -1] };
+
+function jumpTo(nodeId: string) {
+  document.dispatchEvent(new CustomEvent("vg-thread-jump", { detail: { nodeId } }));
+}
+
+/** Each chip steps through its far ends, one per click. */
+const chipCursor = new Map<string, number>();
+function jumpNext(chipKey: string, ids: string[]) {
+  const i = chipCursor.get(chipKey) ?? 0;
+  chipCursor.set(chipKey, (i + 1) % ids.length);
+  jumpTo(ids[i % ids.length]);
 }
 
 // React-flow's default-bezier control offset (getControlWithCurvature):
@@ -93,6 +127,55 @@ export function ThreadEdge(props: EdgeProps) {
     markerEnd,
   } = props;
   const d = (data ?? {}) as Partial<ThreadEdgeData>;
+  if (d.stub) {
+    const [ox, oy] = OUTWARD[String(sourcePosition)] ?? [1, 0];
+    const [ix, iy] = OUTWARD[String(targetPosition)] ?? [-1, 0];
+    const s1: [number, number] = [sourceX + ox * STUB_PX, sourceY + oy * STUB_PX];
+    const t0: [number, number] = [targetX + ix * STUB_PX, targetY + iy * STUB_PX];
+    const chip = (x: number, y: number, text: string, ids: string[], labels: string[], which: string) => {
+      const key = `${which}:${which === "out" ? source : target}`;
+      const title = ids.length > 1
+        ? `${ids.length} far ${which === "out" ? "calls" : "callers"} — each click goes to the next:\n${labels.slice(0, 12).join("\n")}${labels.length > 12 ? `\n… +${labels.length - 12}` : ""}`
+        : `${text} — click to go there`;
+      return (
+        <div
+          className="vg-thread-edge-label vg-thread-edge-stub-label"
+          data-edge-stub={which}
+          data-edge-stub-to={ids[0]}
+          data-edge-stub-count={ids.length}
+          role="button"
+          tabIndex={0}
+          title={title}
+          onClick={(ev) => { ev.stopPropagation(); jumpNext(key, ids); }}
+          onKeyDown={(ev) => { if (ev.key === "Enter") jumpNext(key, ids); }}
+          style={{ position: "absolute", transform: `translate(-50%, -50%) translate(${x}px, ${y}px)`, pointerEvents: "auto", cursor: "pointer" }}
+        >{text}</div>
+      );
+    };
+    const out = d.stub.out, inn = d.stub.in;
+    return (
+      <>
+        <g className="vg-thread-edge vg-thread-edge-thin vg-thread-edge-stub" data-source={source} data-target={target}>
+          <BaseEdge id={`${id}::out`} path={`M${sourceX},${sourceY} L${s1[0]},${s1[1]}`} style={{ strokeDasharray: "6 5" }} />
+          <BaseEdge id={id} path={`M${t0[0]},${t0[1]} L${targetX},${targetY}`} markerEnd={markerEnd} style={{ strokeDasharray: "6 5" }} />
+        </g>
+        {(out || inn) && (
+          <EdgeLabelRenderer>
+            {/* Placed clear of cards and labels (label_place.ts); null = no clear spot, no chip. */}
+            {/* At the absolute spot label_place checked, when it gave one. */}
+            {out && out.at !== null && chip(
+              out.at?.x ?? sourceX + ox * (out.at?.dist ?? STUB_PX + 12) + (oy !== 0 ? (out.at?.off ?? 0) : 0),
+              out.at?.y ?? sourceY + oy * (out.at?.dist ?? STUB_PX + 12) + (ox !== 0 ? (out.at?.off ?? 0) : 0),
+              out.targets.length > 1 ? `→ ${out.targets.length} far calls` : `→ ${out.labels[0]}`, out.targets, out.labels, "out")}
+            {inn && inn.at !== null && chip(
+              inn.at?.x ?? targetX + ix * (inn.at?.dist ?? STUB_PX + 12) + (iy !== 0 ? (inn.at?.off ?? 0) : 0),
+              inn.at?.y ?? targetY + iy * (inn.at?.dist ?? STUB_PX + 12) + (ix !== 0 ? (inn.at?.off ?? 0) : 0),
+              inn.sources.length > 1 ? `${inn.sources.length} far callers →` : `${inn.labels[0]} →`, inn.sources, inn.labels, "in")}
+          </EdgeLabelRenderer>
+        )}
+      </>
+    );
+  }
   const [edgePath, labelX, labelY] = getBezierPath({
     sourceX, sourceY, sourcePosition,
     targetX, targetY, targetPosition,
@@ -119,7 +202,13 @@ export function ThreadEdge(props: EdgeProps) {
   // omit the attr so they stay on --accent-thread.
   const hueAttrs: Record<string, string> = {};
   const hueStyle: React.CSSProperties = {};
-  if (d.sameFileHueIndex != null) {
+  // A BRANCH hue (2026-09-24) outranks the file hue on edges: which path an
+  // edge is on reads first; the file is still the card's wash.
+  if (d.branchHueIndex != null) {
+    hueAttrs["data-edge-branch-hue"] = String(d.branchHueIndex % 8);
+    (hueStyle as Record<string, string>)["--vg-edge-branch-hue"] =
+      `var(--thread-branch-hue-${d.branchHueIndex % 8})`;
+  } else if (d.sameFileHueIndex != null) {
     hueAttrs["data-edge-file-hue"] = String(d.sameFileHueIndex);
     (hueStyle as Record<string, string>)["--vg-edge-file-hue"] =
       `var(--thread-file-hue-${d.sameFileHueIndex})`;

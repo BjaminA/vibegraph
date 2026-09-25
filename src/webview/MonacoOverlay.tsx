@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import Editor from "@monaco-editor/react";
+import { monacoLanguageForPath, capabilitiesForPath } from "../shared/languages";
 import { CODE_WRAP_OPTIONS } from "./monaco_options";
 import { X, Check, AlertCircle } from "lucide-react";
 import { bridge, type ExtensionMessage } from "./types";
@@ -186,7 +187,9 @@ export function MonacoOverlay({ nodeId, nodeType, nodeLabel, filePath, onClose }
           {nodeLabel}
         </span>
         <div style={{ flex: 1 }} />
-        <button
+        {/* M-LANG2b — no Save for languages without an edit floor
+            (affordance-must-match-operation; the overlay stays a viewer). */}
+        {capabilitiesForPath(filePath).edit && <button
           onClick={handleSave}
           disabled={saving || source === null}
           style={{
@@ -204,7 +207,7 @@ export function MonacoOverlay({ nodeId, nodeType, nodeLabel, filePath, onClose }
           }}
         >
           {saving ? "Saving…" : "Save"}
-        </button>
+        </button>}
       </div>
 
       {/* ── status bar ── */}
@@ -258,12 +261,14 @@ export function MonacoOverlay({ nodeId, nodeType, nodeLabel, filePath, onClose }
         ) : (
           <Editor
             height="100%"
-            language="python"
+            language={monacoLanguageForPath(filePath)}
             value={value}
             onChange={(v) => setValue(v ?? "")}
             beforeMount={defineVibegraphDark}
             theme={VIBEGRAPH_DARK}
             options={{
+              // M-LANG2b — viewer-only for languages without an edit floor.
+              readOnly: !capabilitiesForPath(filePath).edit,
               fontSize: 13,
               fontFamily: "var(--font-mono)",
               minimap: { enabled: false },

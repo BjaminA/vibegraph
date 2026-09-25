@@ -2,8 +2,8 @@ import React from "react";
 import { FunctionIcon, PortDot, ReturnArrow } from "./icons";
 import { NodeActionStrip } from "./NodeActionStrip";
 import { NodeHandles } from "./NodeHandles";
-import { TextLine } from "../util/TextLine";
-import { docSummary, DOC_MAX_LINES } from "../util/docSummary";
+import { TextLine, UNCLAMPED } from "../util/TextLine";
+import { docSummary } from "../util/docSummary";
 
 interface Props {
   data: { id: string; name: string; params: string[]; docstring?: string | null };
@@ -67,7 +67,7 @@ export function FunctionDefNode({ data }: Props) {
             <TextLine
               text={docSummary(data.docstring)}
               title={data.docstring ?? undefined}
-              clampLines={DOC_MAX_LINES}
+              clampLines={UNCLAMPED}
               style={{
                 // Was 9px --text-muted: below the 11px type floor and barely
                 // legible over the accent-washed band.

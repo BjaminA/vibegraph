@@ -3,16 +3,22 @@
 
 :root {
   /* ── Colour (HSL, semantic role names — no raw hex anywhere else) ───────── */
-  --bg-canvas:        hsl(220 14% 8%);
-  --bg-node:          hsl(220 12% 12%);
-  --bg-node-hover:    hsl(220 12% 16%);
-  --border-edge:      hsl(220 10% 22%);
-  --text-primary:     hsl(220 14% 92%);
-  --text-secondary:   hsl(220 10% 64%);
-  --text-muted:       hsl(220 8% 44%);
-  --accent-thread:    hsl(168 60% 56%);
-  --accent-warning:   hsl(38 80% 60%);
-  --accent-error:     hsl(358 70% 60%);
+  /* 2026-09-24 brightness pass: accents lifted in saturation and lightness
+     so the threads carry the energy on the near-black canvas (touchstone 1),
+     and the text ramp raised — --text-muted at 44% read at ~3.4:1 on the
+     node surface, below legibility for the 11px captions it is used for;
+     at 56% it clears 4.5:1. The families and their within-family order
+     (io-write > io > io-muted) are unchanged. */
+  --bg-canvas:        hsl(222 18% 7%);
+  --bg-node:          hsl(222 16% 12%);
+  --bg-node-hover:    hsl(222 16% 16%);
+  --border-edge:      hsl(222 14% 24%);
+  --text-primary:     hsl(220 24% 95%);
+  --text-secondary:   hsl(220 16% 74%);
+  --text-muted:       hsl(220 12% 56%);
+  --accent-thread:    hsl(166 78% 58%);
+  --accent-warning:   hsl(40 96% 62%);
+  --accent-error:     hsl(356 90% 67%);
 
   /* U3.2 revised — three-family semantic palette.
      Family 1 (logic/control): --accent-thread above; function_def,
@@ -31,10 +37,10 @@
        Hue 38 (same family as --accent-warning) but desaturated and
        darker so genuine warnings still pop.
      Errors keep --accent-error (358) as the only red. */
-  --accent-io:        hsl(212 60% 60%);
-  --accent-io-write:  hsl(212 75% 68%);
-  --accent-io-muted:  hsl(212 35% 50%);
-  --accent-config:    hsl(38 35% 50%);
+  --accent-io:        hsl(212 90% 67%);
+  --accent-io-write:  hsl(208 100% 76%);
+  --accent-io-muted:  hsl(214 50% 62%);
+  --accent-config:    hsl(38 58% 62%);
 
   /* ── Panel accents — chat (lavender) and compose (peach) ──────────────── */
   --accent-chat:      hsl(267 84% 81%);
@@ -144,20 +150,33 @@
 
   /* ── M9.3 — per-file colour wash (cross-file depth cue) ────────────────
      Eight HSL variants off --accent-thread (hue 168), each at saturation
-     60% lightness 56% — the same values that make --accent-thread feel
+     74% lightness 60% — near the values that make --accent-thread feel
      "alive". 20° hue steps walk through teal → blue → indigo → violet →
      magenta and back. Files in a thread are assigned an index in BFS
      order; seed file always lands on hue-0 so it inherits --accent-thread.
      Used at low alpha (~0.04) on node backdrops and ~0.5 on same-file
      edges — the wash is a soft grouping cue, never the dominant signal. */
-  --thread-file-hue-0: hsl(168 60% 56%);  /* seed — matches --accent-thread */
-  --thread-file-hue-1: hsl(188 60% 56%);
-  --thread-file-hue-2: hsl(208 60% 56%);
-  --thread-file-hue-3: hsl(228 60% 56%);
-  --thread-file-hue-4: hsl(248 60% 56%);
-  --thread-file-hue-5: hsl(268 60% 56%);
-  --thread-file-hue-6: hsl(288 60% 56%);
-  --thread-file-hue-7: hsl(308 60% 56%);
+  --thread-file-hue-0: hsl(166 78% 58%);  /* seed — matches --accent-thread */
+  --thread-file-hue-1: hsl(188 74% 60%);
+  --thread-file-hue-2: hsl(208 74% 60%);
+  --thread-file-hue-3: hsl(228 74% 60%);
+  --thread-file-hue-4: hsl(248 74% 60%);
+  --thread-file-hue-5: hsl(268 74% 60%);
+  --thread-file-hue-6: hsl(288 74% 60%);
+  --thread-file-hue-7: hsl(308 74% 60%);
+
+  /* 2026-09-24 — BRANCH hues for thread edges: one per path under the
+     thread's first fork (useThreadLayout branchOf). The same cool ramp as
+     the file wash, re-ordered so neighbouring branches contrast, and never
+     amber or red — those mean warning and error. Cycled past eight. */
+  --thread-branch-hue-0: hsl(166 78% 58%);
+  --thread-branch-hue-1: hsl(268 82% 74%);
+  --thread-branch-hue-2: hsl(208 92% 66%);
+  --thread-branch-hue-3: hsl(318 76% 70%);
+  --thread-branch-hue-4: hsl(188 86% 58%);
+  --thread-branch-hue-5: hsl(248 84% 74%);
+  --thread-branch-hue-6: hsl(288 70% 72%);
+  --thread-branch-hue-7: hsl(228 86% 72%);
 }
 
 /* ── Document defaults ─────────────────────────────────────────────────────
@@ -222,3 +241,33 @@ code, pre, kbd {
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+
+/* ── Canvas chrome (2026-09-24 look pass) ──────────────────────────────────
+   react-flow's zoom controls shipped in their default white skin — the one
+   default react-flow surface left, and the brightest thing on a dark
+   canvas. react-flow's stylesheet loads after this one, so the skin is set
+   through its own --xy-* variables on .react-flow (and the button rules are
+   scoped under .react-flow to outrank its equal-specificity defaults). */
+.react-flow {
+  --xy-controls-button-background-color: var(--bg-node);
+  --xy-controls-button-background-color-hover: var(--bg-node-hover);
+  --xy-controls-button-color: var(--text-secondary);
+  --xy-controls-button-color-hover: var(--accent-thread);
+  --xy-controls-button-border-color: var(--border-edge);
+  --xy-controls-box-shadow: var(--shadow-control);
+  --xy-minimap-background-color: var(--bg-node);
+}
+.react-flow .react-flow__controls {
+  border: 1px solid var(--border-edge);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.react-flow .react-flow__controls-button {
+  width: 28px;
+  height: 28px;
+  transition: background var(--motion-hover-dur) var(--motion-hover-ease),
+              color var(--motion-hover-dur) var(--motion-hover-ease);
+}
+.react-flow .react-flow__controls-button:last-child { border-bottom: none; }
+.react-flow .react-flow__controls-button svg { max-width: 12px; max-height: 12px; }
+.react-flow .react-flow__minimap { box-shadow: var(--shadow-control); }

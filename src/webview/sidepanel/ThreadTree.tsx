@@ -18,6 +18,7 @@ import {
   FileCode,
 } from "lucide-react";
 import type { EntryPoint, ProjectThread } from "../types";
+import { entryLabelSuffixes } from "../../shared/entry_labels";
 
 const KIND_ICON: Record<EntryPoint["kind"], React.ComponentType<any>> = {
   route: Globe,
@@ -43,9 +44,11 @@ interface RowProps {
   active: boolean;
   onSelect: (entry: EntryPoint) => void;
   onSelectFile: (filePath: string) => void;
+  /** set when another entry point shares this label (shared/entry_labels.ts). */
+  suffix?: string;
 }
 
-function ThreadRow({ entry, thread, active, onSelect, onSelectFile }: RowProps) {
+function ThreadRow({ entry, thread, active, onSelect, onSelectFile, suffix }: RowProps) {
   const [open, setOpen] = useState(false);
   const Icon = KIND_ICON[entry.kind];
   const filesReached = thread?.filesReached ?? [];
@@ -87,6 +90,7 @@ function ThreadRow({ entry, thread, active, onSelect, onSelectFile }: RowProps) 
         <button
           type="button"
           onClick={() => onSelect(entry)}
+          title={`${entry.label} — ${entry.file}`}
           style={{
             background: "none", border: "none", padding: 0,
             cursor: "pointer", textAlign: "left",
@@ -97,6 +101,9 @@ function ThreadRow({ entry, thread, active, onSelect, onSelectFile }: RowProps) 
           }}
         >
           {entry.label}
+          {suffix && (
+            <span data-entry-suffix style={{ color: "var(--text-muted)", fontWeight: 400 }}>{` · ${suffix}`}</span>
+          )}
         </button>
       </div>
       {open && filesReached.length > 0 && (
@@ -143,6 +150,7 @@ export function ThreadTree({ entryPoints, threads, activeEntryPointId, onSelectE
       .map((k) => ({ kind: k, items: entryPoints.filter((e) => e.kind === k) }))
       .filter((g) => g.items.length > 0);
   }, [entryPoints]);
+  const suffixes = React.useMemo(() => entryLabelSuffixes(entryPoints), [entryPoints]);
 
   if (entryPoints.length === 0) {
     return (
@@ -173,6 +181,7 @@ export function ThreadTree({ entryPoints, threads, activeEntryPointId, onSelectE
               active={entry.id === activeEntryPointId}
               onSelect={onSelectEntry}
               onSelectFile={onSelectFile}
+              suffix={suffixes.get(entry.id)}
             />
           ))}
         </div>

@@ -6,6 +6,9 @@ import "./styles/tokens.css";
 import "./styles/motion.css";
 import "./styles/depth.css";
 import App from "./App";
+import { startBootClock } from "./boot";
+
+startBootClock();
 
 const container = document.getElementById("root");
 if (container) {

@@ -35,7 +35,7 @@ Resolution per PLAN.md §1.5 M4a:
 import json
 import os
 import sys
-from typing import Dict, List, NamedTuple, Optional, Tuple
+from typing import Dict, List, NamedTuple, Optional, Set, Tuple
 
 # A qualified symbol path: "<modulePath>:<name>" for module-level, or
 # "<modulePath>:<class>.<method>" for class methods. The ':' separator is
@@ -627,6 +627,43 @@ def _ratchet_version(current: str, floor: str) -> str:
         return floor
 
 
+def resolve_script_dir_siblings(
+    import_map: Dict[str, str],
+    file_module: str,
+    project_modules: Set[str],
+) -> Dict[str, str]:
+    """Python's SCRIPT-DIRECTORY rule (M-CONTRACT.1, polyglot fixture
+    2026-09-06): `python api/app.py` puts api/ on sys.path, so a bare
+    `import orders` / `from orders import x` inside api/ names the
+    SIBLING api/orders.py — not a third-party package. The import map is
+    built from the literal import text, so in a sub-directory layout
+    every sibling read as external (`orders.validate_order` rendered as
+    a library call, the M17.1 lie in a new coat) and no cross-file edge
+    ever landed. Rewrite a target whose top package is NOT a project
+    module when `<package-of-file>.<target>` IS one. Root-level files
+    (no package) are untouched — every existing python snapshot stays
+    byte-identical."""
+    pkg = file_module.rsplit(".", 1)[0] if "." in file_module else ""
+    if not pkg:
+        return import_map
+
+    def is_project(module: str) -> bool:
+        return module in project_modules or any(
+            m.startswith(module + ".") for m in project_modules
+        )
+
+    out: Dict[str, str] = {}
+    for alias, target in import_map.items():
+        module, sep, sym = target.partition(":")
+        top = module.split(".", 1)[0]
+        sibling = f"{pkg}.{module}"
+        if module and not is_project(top) and is_project(sibling):
+            out[alias] = f"{sibling}{sep}{sym}"
+        else:
+            out[alias] = target
+    return out
+
+
 def link(files: Dict[str, dict]) -> Dict[str, dict]:
     """Take a {filePath: IR} mapping (each IR already has `modulePath` set
     by parse_cst.py --module-path), return the same shape with cross-file
@@ -644,10 +681,13 @@ def link(files: Dict[str, dict]) -> Dict[str, dict]:
     # §5.5: project-wide {qualified_fn → resolved return type}, so a binding
     # callee's return annotation resolves whether it's same-file or imported.
     function_return_types = build_function_return_types(files, module_paths)
+    project_modules = {m for m in module_paths.values() if m}
     out: Dict[str, dict] = {}
     for file_path, ir in files.items():
         modpath = module_paths.get(file_path, "")
-        import_map = build_import_map(ir, modpath)
+        import_map = resolve_script_dir_siblings(
+            build_import_map(ir, modpath), modpath, project_modules
+        )
         # Strip prior linker output FIRST so emit_cross_file_edges sees
         # the same edge view a fresh parse would give it (its same-file
         # fallback consults existing reference edges).

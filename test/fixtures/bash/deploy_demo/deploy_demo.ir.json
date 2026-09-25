@@ -1,0 +1,911 @@
+{
+  "deploy.sh": {
+    "version": "2.0",
+    "language": "bash",
+    "nodes": [
+      {
+        "id": "module/lib_common_sh.import",
+        "type": "import",
+        "parentId": null,
+        "line": 10,
+        "endLine": 10,
+        "col": 0,
+        "endCol": 20,
+        "names": [
+          "lib/common.sh"
+        ]
+      },
+      {
+        "id": "module/RELEASE.assign",
+        "type": "assignment",
+        "parentId": null,
+        "line": 12,
+        "endLine": 12,
+        "col": 0,
+        "endCol": 16,
+        "name": "RELEASE",
+        "valueKind": "string",
+        "preview": "\"v1.4.2\""
+      },
+      {
+        "id": "module/BUILD_STAMP.assign",
+        "type": "assignment",
+        "parentId": null,
+        "line": 13,
+        "endLine": 13,
+        "col": 0,
+        "endCol": 23,
+        "name": "BUILD_STAMP",
+        "valueKind": "call",
+        "preview": "$(date +%s)",
+        "callTarget": "date",
+        "args": [
+          "+%s"
+        ]
+      },
+      {
+        "id": "module/prepare.fn",
+        "type": "function_def",
+        "parentId": null,
+        "line": 16,
+        "endLine": 20,
+        "col": 0,
+        "endCol": 1,
+        "name": "prepare",
+        "params": [],
+        "docstring": "Clean the build dir and pack the release tarball."
+      },
+      {
+        "id": "module/prepare.fn/rm.call",
+        "type": "call",
+        "parentId": "module/prepare.fn",
+        "line": 17,
+        "endLine": 17,
+        "col": 2,
+        "endCol": 15,
+        "funcName": "rm",
+        "args": [
+          "-rf",
+          "build/"
+        ],
+        "isEffect": true,
+        "effectKind": "fs"
+      },
+      {
+        "id": "module/prepare.fn/mkdir.call",
+        "type": "call",
+        "parentId": "module/prepare.fn",
+        "line": 18,
+        "endLine": 18,
+        "col": 2,
+        "endCol": 17,
+        "funcName": "mkdir",
+        "args": [
+          "-p",
+          "build/"
+        ],
+        "isEffect": true,
+        "effectKind": "fs"
+      },
+      {
+        "id": "module/prepare.fn/tar.call",
+        "type": "call",
+        "parentId": "module/prepare.fn",
+        "line": 19,
+        "endLine": 19,
+        "col": 2,
+        "endCol": 40,
+        "funcName": "tar",
+        "args": [
+          "-czf",
+          "\"build/app-$RELEASE.tgz\"",
+          "src/"
+        ],
+        "isEffect": true,
+        "effectKind": "fs"
+      },
+      {
+        "id": "module/upload.fn",
+        "type": "function_def",
+        "parentId": null,
+        "line": 23,
+        "endLine": 31,
+        "col": 0,
+        "endCol": 1,
+        "name": "upload",
+        "params": [
+          "$1"
+        ],
+        "docstring": "Upload the tarball to the target environment (staging|canary|prod)."
+      },
+      {
+        "id": "module/upload.fn/if@0",
+        "type": "if_stmt",
+        "parentId": "module/upload.fn",
+        "line": 24,
+        "endLine": 30,
+        "col": 2,
+        "endCol": 4,
+        "condition": "[ \"$1\" = \"staging\" ]",
+        "hasElse": true,
+        "elseLine": 26
+      },
+      {
+        "id": "module/upload.fn/if@0/curl.call",
+        "type": "call",
+        "parentId": "module/upload.fn/if@0",
+        "line": 25,
+        "endLine": 25,
+        "col": 4,
+        "endCol": 78,
+        "funcName": "curl",
+        "args": [
+          "-fsS",
+          "-T",
+          "\"build/app-$RELEASE.tgz\"",
+          "\"https://staging.example.com/upload\""
+        ],
+        "isEffect": true,
+        "effectKind": "http"
+      },
+      {
+        "id": "module/upload.fn/if@0/if@0",
+        "type": "if_stmt",
+        "parentId": "module/upload.fn/if@0",
+        "line": 26,
+        "endLine": 28,
+        "col": 2,
+        "endCol": 0,
+        "condition": "[ \"$1\" = \"canary\" ]",
+        "hasElse": true,
+        "elseLine": 28
+      },
+      {
+        "id": "module/upload.fn/if@0/if@0/ssh.call",
+        "type": "call",
+        "parentId": "module/upload.fn/if@0/if@0",
+        "line": 27,
+        "endLine": 27,
+        "col": 4,
+        "endCol": 57,
+        "funcName": "ssh",
+        "args": [
+          "deploy@canary.example.com",
+          "\"systemctl restart app\""
+        ],
+        "isEffect": false,
+        "effectKind": "subprocess"
+      },
+      {
+        "id": "module/upload.fn/if@0/curl.call@1",
+        "type": "call",
+        "parentId": "module/upload.fn/if@0",
+        "line": 29,
+        "endLine": 29,
+        "col": 4,
+        "endCol": 75,
+        "funcName": "curl",
+        "args": [
+          "-fsS",
+          "-T",
+          "\"build/app-$RELEASE.tgz\"",
+          "\"https://prod.example.com/upload\""
+        ],
+        "isEffect": true,
+        "effectKind": "http"
+      },
+      {
+        "id": "module/record_release.fn",
+        "type": "function_def",
+        "parentId": null,
+        "line": 33,
+        "endLine": 35,
+        "col": 0,
+        "endCol": 1,
+        "name": "record_release",
+        "params": [],
+        "docstring": null
+      },
+      {
+        "id": "module/record_release.fn/psql.call",
+        "type": "call",
+        "parentId": "module/record_release.fn",
+        "line": 34,
+        "endLine": 34,
+        "col": 2,
+        "endCol": 94,
+        "funcName": "psql",
+        "args": [
+          "-h",
+          "db.internal",
+          "-c",
+          "\"insert into releases (tag, stamp) values ('$RELEASE', $BUILD_STAMP)\""
+        ],
+        "isEffect": true,
+        "effectKind": "db"
+      },
+      {
+        "id": "module/watch_logs.fn",
+        "type": "function_def",
+        "parentId": null,
+        "line": 37,
+        "endLine": 41,
+        "col": 0,
+        "endCol": 1,
+        "name": "watch_logs",
+        "params": [],
+        "docstring": null
+      },
+      {
+        "id": "module/watch_logs.fn/while@0",
+        "type": "while_loop",
+        "parentId": "module/watch_logs.fn",
+        "line": 38,
+        "endLine": 40,
+        "col": 2,
+        "endCol": 6,
+        "condition": "read -r line"
+      },
+      {
+        "id": "module/watch_logs.fn/while@0/read.call",
+        "type": "call",
+        "parentId": "module/watch_logs.fn/while@0",
+        "line": 38,
+        "endLine": 38,
+        "col": 8,
+        "endCol": 20,
+        "funcName": "read",
+        "args": [
+          "-r",
+          "line"
+        ],
+        "isEffect": false
+      },
+      {
+        "id": "module/watch_logs.fn/while@0/echo.call",
+        "type": "call",
+        "parentId": "module/watch_logs.fn/while@0",
+        "line": 39,
+        "endLine": 39,
+        "col": 4,
+        "endCol": 16,
+        "funcName": "echo",
+        "args": [
+          "\"$line\""
+        ],
+        "isEffect": true,
+        "effectKind": "log"
+      },
+      {
+        "id": "module/main.fn",
+        "type": "function_def",
+        "parentId": null,
+        "line": 44,
+        "endLine": 60,
+        "col": 0,
+        "endCol": 1,
+        "name": "main",
+        "params": [
+          "$1"
+        ],
+        "docstring": "Build, upload everywhere, record the release, then run the deploy hook."
+      },
+      {
+        "id": "module/main.fn/log_step.call",
+        "type": "call",
+        "parentId": "module/main.fn",
+        "line": 45,
+        "endLine": 45,
+        "col": 2,
+        "endCol": 28,
+        "funcName": "log_step",
+        "args": [
+          "\"deploy $RELEASE\""
+        ],
+        "isEffect": false
+      },
+      {
+        "id": "module/main.fn/prepare.call",
+        "type": "call",
+        "parentId": "module/main.fn",
+        "line": 46,
+        "endLine": 46,
+        "col": 2,
+        "endCol": 9,
+        "funcName": "prepare",
+        "args": [],
+        "isEffect": false
+      },
+      {
+        "id": "module/main.fn/for@0",
+        "type": "for_loop",
+        "parentId": "module/main.fn",
+        "line": 47,
+        "endLine": 49,
+        "col": 2,
+        "endCol": 6,
+        "target": "target",
+        "iterName": "staging prod"
+      },
+      {
+        "id": "module/main.fn/for@0/upload.call",
+        "type": "call",
+        "parentId": "module/main.fn/for@0",
+        "line": 48,
+        "endLine": 48,
+        "col": 4,
+        "endCol": 20,
+        "funcName": "upload",
+        "args": [
+          "\"$target\""
+        ],
+        "isEffect": false
+      },
+      {
+        "id": "module/main.fn/record_release.call",
+        "type": "call",
+        "parentId": "module/main.fn",
+        "line": 50,
+        "endLine": 50,
+        "col": 2,
+        "endCol": 16,
+        "funcName": "record_release",
+        "args": [],
+        "isEffect": false
+      },
+      {
+        "id": "module/main.fn/fetch_status.call",
+        "type": "call",
+        "parentId": "module/main.fn",
+        "line": 51,
+        "endLine": 51,
+        "col": 2,
+        "endCol": 14,
+        "funcName": "fetch_status",
+        "args": [],
+        "isEffect": false
+      },
+      {
+        "id": "module/main.fn/grep.call",
+        "type": "call",
+        "parentId": "module/main.fn",
+        "line": 51,
+        "endLine": 51,
+        "col": 17,
+        "endCol": 32,
+        "funcName": "grep",
+        "args": [
+          "-v",
+          "healthy"
+        ],
+        "isEffect": false,
+        "effectKind": "subprocess"
+      },
+      {
+        "id": "module/main.fn/tee.call",
+        "type": "call",
+        "parentId": "module/main.fn",
+        "line": 51,
+        "endLine": 51,
+        "col": 35,
+        "endCol": 58,
+        "funcName": "tee",
+        "args": [
+          "build/unhealthy.txt"
+        ],
+        "isEffect": true,
+        "effectKind": "fs"
+      },
+      {
+        "id": "module/main.fn/if@0",
+        "type": "if_stmt",
+        "parentId": "module/main.fn",
+        "line": 52,
+        "endLine": 55,
+        "col": 2,
+        "endCol": 6,
+        "condition": "case \"$1\"",
+        "hasElse": false
+      },
+      {
+        "id": "module/main.fn/if@0/watch_logs.call",
+        "type": "call",
+        "parentId": "module/main.fn/if@0",
+        "line": 53,
+        "endLine": 53,
+        "col": 13,
+        "endCol": 23,
+        "funcName": "watch_logs",
+        "args": [],
+        "isEffect": false
+      },
+      {
+        "id": "module/main.fn/if@0/echo.call",
+        "type": "call",
+        "parentId": "module/main.fn/if@0",
+        "line": 54,
+        "endLine": 54,
+        "col": 7,
+        "endCol": 18,
+        "funcName": "echo",
+        "args": [
+          "\"done\""
+        ],
+        "isEffect": true,
+        "effectKind": "log"
+      },
+      {
+        "id": "module/main.fn/HOOK_CMD.assign",
+        "type": "assignment",
+        "parentId": "module/main.fn",
+        "line": 56,
+        "endLine": 56,
+        "col": 2,
+        "endCol": 33,
+        "name": "HOOK_CMD",
+        "valueKind": "string",
+        "preview": "\"${DEPLOY_HOOK:-true}\""
+      },
+      {
+        "id": "module/main.fn/HOOK_CMD.call",
+        "type": "call",
+        "parentId": "module/main.fn",
+        "line": 57,
+        "endLine": 57,
+        "col": 2,
+        "endCol": 34,
+        "funcName": "\"$HOOK_CMD\"",
+        "args": [
+          "--release",
+          "\"$RELEASE\""
+        ],
+        "isEffect": false
+      },
+      {
+        "id": "module/main.fn/eval.call",
+        "type": "call",
+        "parentId": "module/main.fn",
+        "line": 58,
+        "endLine": 58,
+        "col": 2,
+        "endCol": 21,
+        "funcName": "eval",
+        "args": [
+          "\"$POST_DEPLOY\""
+        ],
+        "isEffect": false
+      },
+      {
+        "id": "module/main.fn/return@0",
+        "type": "return_stmt",
+        "parentId": "module/main.fn",
+        "line": 59,
+        "endLine": 59,
+        "col": 2,
+        "endCol": 10,
+        "value": "0"
+      },
+      {
+        "id": "module/main.call",
+        "type": "call",
+        "parentId": null,
+        "line": 62,
+        "endLine": 62,
+        "col": 0,
+        "endCol": 9,
+        "funcName": "main",
+        "args": [
+          "\"$@\""
+        ],
+        "isEffect": false
+      }
+    ],
+    "edges": [
+      {
+        "source": "module/prepare.fn",
+        "target": "module/prepare.fn/rm.call",
+        "type": "contains"
+      },
+      {
+        "source": "module/prepare.fn",
+        "target": "module/prepare.fn/mkdir.call",
+        "type": "contains"
+      },
+      {
+        "source": "module/prepare.fn",
+        "target": "module/prepare.fn/tar.call",
+        "type": "contains"
+      },
+      {
+        "source": "module/upload.fn",
+        "target": "module/upload.fn/if@0",
+        "type": "contains"
+      },
+      {
+        "source": "module/upload.fn/if@0",
+        "target": "module/upload.fn/if@0/curl.call",
+        "type": "contains"
+      },
+      {
+        "source": "module/upload.fn/if@0",
+        "target": "module/upload.fn/if@0/if@0",
+        "type": "contains"
+      },
+      {
+        "source": "module/upload.fn/if@0/if@0",
+        "target": "module/upload.fn/if@0/if@0/ssh.call",
+        "type": "contains"
+      },
+      {
+        "source": "module/upload.fn/if@0",
+        "target": "module/upload.fn/if@0/curl.call@1",
+        "type": "contains"
+      },
+      {
+        "source": "module/record_release.fn",
+        "target": "module/record_release.fn/psql.call",
+        "type": "contains"
+      },
+      {
+        "source": "module/watch_logs.fn",
+        "target": "module/watch_logs.fn/while@0",
+        "type": "contains"
+      },
+      {
+        "source": "module/watch_logs.fn/while@0",
+        "target": "module/watch_logs.fn/while@0/read.call",
+        "type": "contains"
+      },
+      {
+        "source": "module/watch_logs.fn/while@0",
+        "target": "module/watch_logs.fn/while@0/echo.call",
+        "type": "contains"
+      },
+      {
+        "source": "module/main.fn",
+        "target": "module/main.fn/log_step.call",
+        "type": "contains"
+      },
+      {
+        "source": "module/main.fn",
+        "target": "module/main.fn/prepare.call",
+        "type": "contains"
+      },
+      {
+        "source": "module/main.fn",
+        "target": "module/main.fn/for@0",
+        "type": "contains"
+      },
+      {
+        "source": "module/main.fn/for@0",
+        "target": "module/main.fn/for@0/upload.call",
+        "type": "contains"
+      },
+      {
+        "source": "module/main.fn",
+        "target": "module/main.fn/record_release.call",
+        "type": "contains"
+      },
+      {
+        "source": "module/main.fn",
+        "target": "module/main.fn/fetch_status.call",
+        "type": "contains"
+      },
+      {
+        "source": "module/main.fn",
+        "target": "module/main.fn/grep.call",
+        "type": "contains"
+      },
+      {
+        "source": "module/main.fn/fetch_status.call",
+        "target": "module/main.fn/grep.call",
+        "type": "data"
+      },
+      {
+        "source": "module/main.fn",
+        "target": "module/main.fn/tee.call",
+        "type": "contains"
+      },
+      {
+        "source": "module/main.fn/grep.call",
+        "target": "module/main.fn/tee.call",
+        "type": "data"
+      },
+      {
+        "source": "module/main.fn",
+        "target": "module/main.fn/if@0",
+        "type": "contains"
+      },
+      {
+        "source": "module/main.fn/if@0",
+        "target": "module/main.fn/if@0/watch_logs.call",
+        "type": "contains"
+      },
+      {
+        "source": "module/main.fn/if@0",
+        "target": "module/main.fn/if@0/echo.call",
+        "type": "contains"
+      },
+      {
+        "source": "module/main.fn",
+        "target": "module/main.fn/HOOK_CMD.assign",
+        "type": "contains"
+      },
+      {
+        "source": "module/main.fn",
+        "target": "module/main.fn/HOOK_CMD.call",
+        "type": "contains"
+      },
+      {
+        "source": "module/main.fn",
+        "target": "module/main.fn/eval.call",
+        "type": "contains"
+      },
+      {
+        "source": "module/main.fn",
+        "target": "module/main.fn/return@0",
+        "type": "contains"
+      },
+      {
+        "source": "module/main.fn/prepare.call",
+        "target": "module/prepare.fn",
+        "type": "reference"
+      },
+      {
+        "source": "module/main.fn/for@0/upload.call",
+        "target": "module/upload.fn",
+        "type": "reference"
+      },
+      {
+        "source": "module/main.fn/record_release.call",
+        "target": "module/record_release.fn",
+        "type": "reference"
+      },
+      {
+        "source": "module/main.fn/if@0/watch_logs.call",
+        "target": "module/watch_logs.fn",
+        "type": "reference"
+      },
+      {
+        "source": "module/main.call",
+        "target": "module/main.fn",
+        "type": "reference"
+      },
+      {
+        "source": "module/main.fn/log_step.call",
+        "target": "module/log_step.fn",
+        "type": "reference",
+        "targetFile": "lib/common.sh",
+        "qualifiedTarget": "lib/common.sh:log_step"
+      },
+      {
+        "source": "module/main.fn/fetch_status.call",
+        "target": "module/fetch_status.fn",
+        "type": "reference",
+        "targetFile": "lib/common.sh",
+        "qualifiedTarget": "lib/common.sh:fetch_status"
+      }
+    ],
+    "symbolIndex": [
+      {
+        "sym": "function:prepare",
+        "kind": "function",
+        "name": "prepare",
+        "scope": "module",
+        "loc": {
+          "line": 16,
+          "endLine": 20,
+          "col": 0,
+          "endCol": 1
+        },
+        "signature": "prepare()",
+        "docstring": "Clean the build dir and pack the release tarball.",
+        "source": "prepare() {\n  rm -rf build/\n  mkdir -p build/\n  tar -czf \"build/app-$RELEASE.tgz\" src/\n}"
+      },
+      {
+        "sym": "function:upload",
+        "kind": "function",
+        "name": "upload",
+        "scope": "module",
+        "loc": {
+          "line": 23,
+          "endLine": 31,
+          "col": 0,
+          "endCol": 1
+        },
+        "signature": "upload($1)",
+        "docstring": "Upload the tarball to the target environment (staging|canary|prod).",
+        "source": "upload() {\n  if [ \"$1\" = \"staging\" ]; then\n    curl -fsS -T \"build/app-$RELEASE.tgz\" \"https://staging.example.com/upload\"\n  elif [ \"$1\" = \"canary\" ]; then\n    ssh deploy@canary.example.com \"systemctl restart app\"\n  else\n    curl -fsS -T \"build/app-$RELEASE.tgz\" \"https://prod.example.com/upload\"\n  fi\n}"
+      },
+      {
+        "sym": "function:record_release",
+        "kind": "function",
+        "name": "record_release",
+        "scope": "module",
+        "loc": {
+          "line": 33,
+          "endLine": 35,
+          "col": 0,
+          "endCol": 1
+        },
+        "signature": "record_release()",
+        "docstring": null,
+        "source": "record_release() {\n  psql -h db.internal -c \"insert into releases (tag, stamp) values ('$RELEASE', $BUILD_STAMP)\"\n}"
+      },
+      {
+        "sym": "function:watch_logs",
+        "kind": "function",
+        "name": "watch_logs",
+        "scope": "module",
+        "loc": {
+          "line": 37,
+          "endLine": 41,
+          "col": 0,
+          "endCol": 1
+        },
+        "signature": "watch_logs()",
+        "docstring": null,
+        "source": "watch_logs() {\n  while read -r line; do\n    echo \"$line\"\n  done < /var/log/app.log\n}"
+      },
+      {
+        "sym": "function:main",
+        "kind": "function",
+        "name": "main",
+        "scope": "module",
+        "loc": {
+          "line": 44,
+          "endLine": 60,
+          "col": 0,
+          "endCol": 1
+        },
+        "signature": "main($1)",
+        "docstring": "Build, upload everywhere, record the release, then run the deploy hook.",
+        "source": "main() {\n  log_step \"deploy $RELEASE\"\n  prepare\n  for target in staging prod; do\n    upload \"$target\"\n  done\n  record_release\n  fetch_status | grep -v healthy | tee build/unhealthy.txt\n  case \"$1\" in\n    verbose) watch_logs ;;\n    *) echo \"done\" ;;\n  esac\n  HOOK_CMD=\"${DEPLOY_HOOK:-true}\"\n  \"$HOOK_CMD\" --release \"$RELEASE\"\n  eval \"$POST_DEPLOY\"\n  return 0\n}"
+      }
+    ],
+    "modulePath": "deploy.sh",
+    "shebang": "#!/usr/bin/env bash"
+  },
+  "lib/common.sh": {
+    "version": "2.0",
+    "language": "bash",
+    "nodes": [
+      {
+        "id": "module/LOG_PREFIX.assign",
+        "type": "assignment",
+        "parentId": null,
+        "line": 4,
+        "endLine": 4,
+        "col": 0,
+        "endCol": 21,
+        "name": "LOG_PREFIX",
+        "valueKind": "string",
+        "preview": "\"[deploy]\""
+      },
+      {
+        "id": "module/log_step.fn",
+        "type": "function_def",
+        "parentId": null,
+        "line": 7,
+        "endLine": 10,
+        "col": 0,
+        "endCol": 1,
+        "name": "log_step",
+        "params": [
+          "$1"
+        ],
+        "docstring": "Log one deploy step to stdout and syslog."
+      },
+      {
+        "id": "module/log_step.fn/echo.call",
+        "type": "call",
+        "parentId": "module/log_step.fn",
+        "line": 8,
+        "endLine": 8,
+        "col": 2,
+        "endCol": 23,
+        "funcName": "echo",
+        "args": [
+          "\"$LOG_PREFIX $1\""
+        ],
+        "isEffect": true,
+        "effectKind": "log"
+      },
+      {
+        "id": "module/log_step.fn/logger.call",
+        "type": "call",
+        "parentId": "module/log_step.fn",
+        "line": 9,
+        "endLine": 9,
+        "col": 2,
+        "endCol": 23,
+        "funcName": "logger",
+        "args": [
+          "-t",
+          "deploy",
+          "\"$1\""
+        ],
+        "isEffect": true,
+        "effectKind": "log"
+      },
+      {
+        "id": "module/fetch_status.fn",
+        "type": "function_def",
+        "parentId": null,
+        "line": 12,
+        "endLine": 14,
+        "col": 0,
+        "endCol": 1,
+        "name": "fetch_status",
+        "params": [],
+        "docstring": null
+      },
+      {
+        "id": "module/fetch_status.fn/curl.call",
+        "type": "call",
+        "parentId": "module/fetch_status.fn",
+        "line": 13,
+        "endLine": 13,
+        "col": 2,
+        "endCol": 45,
+        "funcName": "curl",
+        "args": [
+          "-fsS",
+          "\"https://prod.example.com/status\""
+        ],
+        "isEffect": true,
+        "effectKind": "http"
+      }
+    ],
+    "edges": [
+      {
+        "source": "module/log_step.fn",
+        "target": "module/log_step.fn/echo.call",
+        "type": "contains"
+      },
+      {
+        "source": "module/log_step.fn",
+        "target": "module/log_step.fn/logger.call",
+        "type": "contains"
+      },
+      {
+        "source": "module/fetch_status.fn",
+        "target": "module/fetch_status.fn/curl.call",
+        "type": "contains"
+      }
+    ],
+    "symbolIndex": [
+      {
+        "sym": "function:log_step",
+        "kind": "function",
+        "name": "log_step",
+        "scope": "module",
+        "loc": {
+          "line": 7,
+          "endLine": 10,
+          "col": 0,
+          "endCol": 1
+        },
+        "signature": "log_step($1)",
+        "docstring": "Log one deploy step to stdout and syslog.",
+        "source": "log_step() {\n  echo \"$LOG_PREFIX $1\"\n  logger -t deploy \"$1\"\n}"
+      },
+      {
+        "sym": "function:fetch_status",
+        "kind": "function",
+        "name": "fetch_status",
+        "scope": "module",
+        "loc": {
+          "line": 12,
+          "endLine": 14,
+          "col": 0,
+          "endCol": 1
+        },
+        "signature": "fetch_status()",
+        "docstring": null,
+        "source": "fetch_status() {\n  curl -fsS \"https://prod.example.com/status\"\n}"
+      }
+    ],
+    "modulePath": "lib/common.sh"
+  }
+}

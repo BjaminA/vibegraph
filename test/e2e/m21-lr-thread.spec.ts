@@ -95,11 +95,20 @@ test.describe("M21 toggle + M23 branch-stacked L-R", () => {
     await page.locator(".react-flow__controls-fitview").click();
     await page.waitForTimeout(700);
 
-    // 1 — wider than tall (the M21 assertion, kept).
+    // 1 — 2026-09-24: a fork fans out DOWN one column (Ben: "expand the
+    // flows more vertically as they end up bunched"). The M21 assertion
+    // here was "wider than tall", which pinned the flat layout that
+    // bunched every sibling onto one long row; the call tree now spends
+    // height on branching, so the invariant is that some column holds a
+    // stack of ≥3 sibling cards.
     const h = await spreads(page);
     expect(h.n, "expected several thread nodes").toBeGreaterThan(3);
-    expect(h.x, `L-R layout should read wider than tall (got x=${h.x} y=${h.y})`)
-      .toBeGreaterThan(h.y);
+    const colCounts = new Map<number, number>();
+    for (const r of await cardRects(page)) {
+      const k = Math.round(r.x / 8);
+      colCounts.set(k, (colCounts.get(k) ?? 0) + 1);
+    }
+    expect(Math.max(...colCounts.values()), "a fork's calls should stack in one column").toBeGreaterThanOrEqual(3);
     // Containers (try/finally) render in L-R.
     expect(await page.locator(".vg-thread-container-try, .vg-thread-container-finally").count())
       .toBeGreaterThan(0);
@@ -209,44 +218,89 @@ test.describe("M21 toggle + M23 branch-stacked L-R", () => {
     if (flipped === "vertical") await page.locator("[data-thread-orientation-toggle]").click();
   });
 
-  test("M-NA6 flat spine: a linear call chain stays in ONE lane; nested containers visibly nest", async ({ page }) => {
+  // Layout-space positions from the node transforms (zoom-independent).
+  const posOf = (page: import("@playwright/test").Page, sel: string) =>
+    page.locator(sel).evaluate((el: HTMLElement) => {
+      const m = el.style.transform.match(/translate\(\s*([-\d.]+)px\s*,\s*([-\d.]+)px\s*\)/);
+      return m ? { x: parseFloat(m[1]), y: parseFloat(m[2]) } : null;
+    });
+
+  // These two halves used to be one test on cli.py:main, and were split when
+  // M-SWEEP W1 (2026-09-10) made `for u in list_users():` visible. A call
+  // written as a `for` ITERABLE emitted no IR node before, so cli:main
+  // reached exactly one db path; now it reaches db.query AND db.insert, and
+  // `_get_conn` has TWO callers. Two lanes is the correct layout for a
+  // shared node with two callers — the chain is simply no longer linear
+  // there, so M-NA6's claim needs a thread where it still is.
+  test("M-NA6 flat spine: a linear call chain stays in ONE lane", async ({ page }) => {
+    await page.goto("/");
+    await page.waitForSelector("[data-thread-index]", { timeout: 15_000 });
+    // db.py:insert — where _get_conn has exactly one caller.
+    await page.click('[data-thread-index-row][data-entry-id="db.py:insert"]');
+    await expect(page.locator("[data-thread-view]")).toBeVisible({ timeout: 10_000 });
+    await page.waitForTimeout(800);
+
+    // The CHAIN insert → _get_conn → sqlite3.connect is linear: it stays
+    // on one row (M-NA6: pre-NA6 each hop dropped a lane, staircasing
+    // down-right). insert's OTHER calls — execute / commit / close — are
+    // its siblings, not the chain: since 2026-09-24 they fan out down
+    // _get_conn's column in execution order (this test used to require
+    // them on the same row, which was the flat layout the call tree
+    // replaced).
+    const at = async (id: string) => {
+      const pos = await posOf(page, `.react-flow__node[data-id="${id}"]`);
+      expect(pos, `no position for ${id}`).not.toBeNull();
+      return pos!;
+    };
+    const conn = await at("db:_get_conn");
+    const connect = await at("external:sqlite3.connect");
+    expect(Math.round(connect.y), "the chain _get_conn → sqlite3.connect shares one row").toBe(Math.round(conn.y));
+    expect(connect.x).toBeGreaterThan(conn.x);
+    let prevY = conn.y;
+    for (const id of ["dynamic:conn.execute", "dynamic:conn.commit", "dynamic:conn.close"]) {
+      const p = await at(id);
+      expect(Math.round(p.x), `${id} stacks in _get_conn's column`).toBe(Math.round(conn.x));
+      expect(p.y, `${id} sits below the call before it (execution order)`).toBeGreaterThan(prevY);
+      prevY = p.y;
+    }
+  });
+
+  test("branch colours: each continuing path under a fork has its own hue; the error path stays red", async ({ page }) => {
+    // 2026-09-24 (Ben): "making the thread lines different colours for
+    // different branches in the same thread". A child that goes on to call
+    // something opens a path in the next hue; a leaf keeps its parent's.
+    await page.goto("/");
+    await page.waitForSelector("[data-thread-index]", { timeout: 15_000 });
+    await page.click('[data-thread-index-row][data-entry-id="cli.py:main"]');
+    await expect(page.locator("[data-thread-view]")).toBeVisible({ timeout: 10_000 });
+    await page.waitForTimeout(800);
+    const hues = await page.$$eval(".vg-thread-edge[data-edge-branch-hue]", (els) =>
+      [...new Set(els.map((e) => e.getAttribute("data-edge-branch-hue")))]);
+    expect(hues.length, `expected several branch hues, got ${hues}`).toBeGreaterThanOrEqual(2);
+    // The stroke really is the branch token, not the file wash.
+    const stroke = await page.$eval(".vg-thread-edge[data-edge-branch-hue] .react-flow__edge-path",
+      (p) => getComputedStyle(p).stroke);
+    const token = await page.evaluate((i) => getComputedStyle(document.documentElement).getPropertyValue(`--thread-branch-hue-${i}`).trim(), hues[0]);
+    expect(stroke, "a branch edge is painted with a branch hue").not.toBe("");
+    expect(token, "the branch token exists").not.toBe("");
+    // An edge into an except band keeps the only red.
+    const errorStrokes = await page.$$eval(".vg-thread-edge-error .react-flow__edge-path", (ps) => ps.map((p) => getComputedStyle(p).stroke));
+    const branchStrokes = await page.$$eval(".vg-thread-edge[data-edge-branch-hue]:not(.vg-thread-edge-error) .react-flow__edge-path", (ps) => ps.map((p) => getComputedStyle(p).stroke));
+    for (const s of errorStrokes) expect(branchStrokes, "the error path is never painted a branch hue").not.toContain(s);
+  });
+
+  test("M-NA6: nested containers visibly nest", async ({ page }) => {
     await page.goto("/");
     await page.waitForSelector("[data-thread-index]", { timeout: 15_000 });
     await page.click('[data-thread-index-row][data-entry-id="cli.py:main"]');
     await expect(page.locator("[data-thread-view]")).toBeVisible({ timeout: 10_000 });
     await page.waitForTimeout(800);
 
-    // Layout-space positions from the node transforms (zoom-independent).
-    const posOf = (sel: string) =>
-      page.locator(sel).evaluate((el: HTMLElement) => {
-        const m = el.style.transform.match(/translate\(\s*([-\d.]+)px\s*,\s*([-\d.]+)px\s*\)/);
-        return m ? { x: parseFloat(m[1]), y: parseFloat(m[2]) } : null;
-      });
-
-    // db.insert's body is a linear continuation (insert → _get_conn →
-    // sqlite3.connect, then execute/commit/close in insert's band). Pre-
-    // NA6 the _get_conn → connect hop dropped a lane per call, staircasing
-    // down-right; now the whole rail shares one y.
-    const rail = [
-      "db:_get_conn",
-      "external:sqlite3.connect",
-      "dynamic:conn.execute",
-      "dynamic:conn.commit",
-      "dynamic:conn.close",
-    ];
-    const ys = new Set<number>();
-    for (const id of rail) {
-      const p = await posOf(`.react-flow__node[data-id="${id}"]`);
-      expect(p, `no position for ${id}`).not.toBeNull();
-      ys.add(Math.round(p!.y));
-    }
-    expect(ys.size, `db rail should read as one lane, got ys ${[...ys]}`).toBe(1);
-
-    // Nested containers: the outer else arm wraps a nested if whose then
-    // arm holds the same single call — the outer box must WRAP the inner
-    // (pre-NA6 sizing derived from leaves only, so they coincided exactly).
-    const outer = await posOf('.react-flow__node[data-id="cli:main.fn/if@0#else"]');
-    const inner = await posOf('.react-flow__node[data-id="cli:main.fn/if@0/if@0#then"]');
+    // The outer else arm wraps a nested if whose then arm holds the same
+    // single call — the outer box must WRAP the inner (pre-NA6 sizing
+    // derived from leaves only, so they coincided exactly).
+    const outer = await posOf(page, '.react-flow__node[data-id="cli:main.fn/if@0#else"]');
+    const inner = await posOf(page, '.react-flow__node[data-id="cli:main.fn/if@0/if@0#then"]');
     expect(outer).not.toBeNull();
     expect(inner).not.toBeNull();
     expect(outer!.x, "outer else must start left of the nested then").toBeLessThan(inner!.x);

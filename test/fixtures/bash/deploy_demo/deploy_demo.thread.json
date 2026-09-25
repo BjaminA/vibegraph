@@ -1,0 +1,511 @@
+{
+  "threads": [
+    {
+      "version": "1.0",
+      "seed": {
+        "file": "deploy.sh",
+        "irNodeId": "module/main.fn",
+        "qualifiedName": "deploy.sh:main"
+      },
+      "nodes": [
+        {
+          "id": "deploy.sh:main",
+          "kind": "seed",
+          "label": "main",
+          "file": "deploy.sh",
+          "irNodeId": "module/main.fn",
+          "preview": "Build, upload everywhere, record the release, then run the deploy hook."
+        },
+        {
+          "id": "dynamic:\"$HOOK_CMD\"",
+          "kind": "dynamic",
+          "label": "\"$HOOK_CMD\"",
+          "file": null,
+          "irNodeId": "module/main.fn/HOOK_CMD.call",
+          "preview": "\"$HOOK_CMD\""
+        },
+        {
+          "id": "dynamic:eval",
+          "kind": "dynamic",
+          "label": "eval",
+          "file": null,
+          "irNodeId": "module/main.fn/eval.call",
+          "preview": "eval"
+        },
+        {
+          "id": "lib/common.sh:fetch_status",
+          "kind": "step",
+          "label": "fetch_status",
+          "file": "lib/common.sh",
+          "irNodeId": "module/fetch_status.fn",
+          "preview": null
+        },
+        {
+          "id": "external:curl",
+          "kind": "external",
+          "label": "curl",
+          "file": null,
+          "irNodeId": "module/fetch_status.fn/curl.call",
+          "preview": "curl",
+          "effectKind": "http"
+        },
+        {
+          "id": "deploy.sh:upload",
+          "kind": "step",
+          "label": "upload",
+          "file": "deploy.sh",
+          "irNodeId": "module/upload.fn",
+          "preview": "Upload the tarball to the target environment (staging|canary|prod)."
+        },
+        {
+          "id": "external:curl@1",
+          "kind": "external",
+          "label": "curl",
+          "file": null,
+          "irNodeId": "module/upload.fn/if@0/curl.call",
+          "preview": "curl",
+          "effectKind": "http"
+        },
+        {
+          "id": "deploy.sh:upload.fn/if@0#then",
+          "kind": "container",
+          "containerKind": "if_then",
+          "label": "if [ \"$1\" = \"staging\" ]",
+          "file": "deploy.sh",
+          "irNodeId": "module/upload.fn/if@0",
+          "preview": null
+        },
+        {
+          "id": "external:curl@2",
+          "kind": "external",
+          "label": "curl",
+          "file": null,
+          "irNodeId": "module/upload.fn/if@0/curl.call@1",
+          "preview": "curl",
+          "effectKind": "http"
+        },
+        {
+          "id": "deploy.sh:upload.fn/if@0#else",
+          "kind": "container",
+          "containerKind": "if_else",
+          "label": "else",
+          "file": "deploy.sh",
+          "irNodeId": "module/upload.fn/if@0",
+          "preview": null
+        },
+        {
+          "id": "external:ssh",
+          "kind": "external",
+          "label": "ssh",
+          "file": null,
+          "irNodeId": "module/upload.fn/if@0/if@0/ssh.call",
+          "preview": "ssh",
+          "effectKind": "subprocess"
+        },
+        {
+          "id": "deploy.sh:upload.fn/if@0/if@0#then",
+          "kind": "container",
+          "containerKind": "if_then",
+          "label": "if [ \"$1\" = \"canary\" ]",
+          "file": "deploy.sh",
+          "irNodeId": "module/upload.fn/if@0/if@0",
+          "preview": null
+        },
+        {
+          "id": "deploy.sh:main.fn/for@0",
+          "kind": "container",
+          "containerKind": "for",
+          "label": "for target in staging prod",
+          "file": "deploy.sh",
+          "irNodeId": "module/main.fn/for@0",
+          "preview": null
+        },
+        {
+          "id": "external:grep",
+          "kind": "external",
+          "label": "grep",
+          "file": null,
+          "irNodeId": "module/main.fn/grep.call",
+          "preview": "grep",
+          "effectKind": "subprocess"
+        },
+        {
+          "id": "external:echo",
+          "kind": "external",
+          "label": "echo",
+          "file": null,
+          "irNodeId": "module/main.fn/if@0/echo.call",
+          "preview": "echo",
+          "effectKind": "log"
+        },
+        {
+          "id": "deploy.sh:main.fn/if@0#then",
+          "kind": "container",
+          "containerKind": "if_then",
+          "label": "case \"$1\"",
+          "file": "deploy.sh",
+          "irNodeId": "module/main.fn/if@0",
+          "preview": null
+        },
+        {
+          "id": "deploy.sh:watch_logs",
+          "kind": "step",
+          "label": "watch_logs",
+          "file": "deploy.sh",
+          "irNodeId": "module/watch_logs.fn",
+          "preview": null
+        },
+        {
+          "id": "external:echo@1",
+          "kind": "external",
+          "label": "echo",
+          "file": null,
+          "irNodeId": "module/watch_logs.fn/while@0/echo.call",
+          "preview": "echo",
+          "effectKind": "log"
+        },
+        {
+          "id": "deploy.sh:watch_logs.fn/while@0",
+          "kind": "container",
+          "containerKind": "while",
+          "label": "while read -r line",
+          "file": "deploy.sh",
+          "irNodeId": "module/watch_logs.fn/while@0",
+          "preview": null
+        },
+        {
+          "id": "external:read",
+          "kind": "external",
+          "label": "read",
+          "file": null,
+          "irNodeId": "module/watch_logs.fn/while@0/read.call",
+          "preview": "read"
+        },
+        {
+          "id": "lib/common.sh:log_step",
+          "kind": "step",
+          "label": "log_step",
+          "file": "lib/common.sh",
+          "irNodeId": "module/log_step.fn",
+          "preview": "Log one deploy step to stdout and syslog."
+        },
+        {
+          "id": "external:echo@2",
+          "kind": "external",
+          "label": "echo",
+          "file": null,
+          "irNodeId": "module/log_step.fn/echo.call",
+          "preview": "echo",
+          "effectKind": "log"
+        },
+        {
+          "id": "external:logger",
+          "kind": "external",
+          "label": "logger",
+          "file": null,
+          "irNodeId": "module/log_step.fn/logger.call",
+          "preview": "logger",
+          "effectKind": "log"
+        },
+        {
+          "id": "deploy.sh:prepare",
+          "kind": "step",
+          "label": "prepare",
+          "file": "deploy.sh",
+          "irNodeId": "module/prepare.fn",
+          "preview": "Clean the build dir and pack the release tarball."
+        },
+        {
+          "id": "external:mkdir",
+          "kind": "external",
+          "label": "mkdir",
+          "file": null,
+          "irNodeId": "module/prepare.fn/mkdir.call",
+          "preview": "mkdir",
+          "effectKind": "fs"
+        },
+        {
+          "id": "external:rm",
+          "kind": "external",
+          "label": "rm",
+          "file": null,
+          "irNodeId": "module/prepare.fn/rm.call",
+          "preview": "rm",
+          "effectKind": "fs"
+        },
+        {
+          "id": "external:tar",
+          "kind": "external",
+          "label": "tar",
+          "file": null,
+          "irNodeId": "module/prepare.fn/tar.call",
+          "preview": "tar",
+          "effectKind": "fs"
+        },
+        {
+          "id": "deploy.sh:record_release",
+          "kind": "step",
+          "label": "record_release",
+          "file": "deploy.sh",
+          "irNodeId": "module/record_release.fn",
+          "preview": null
+        },
+        {
+          "id": "external:psql",
+          "kind": "external",
+          "label": "psql",
+          "file": null,
+          "irNodeId": "module/record_release.fn/psql.call",
+          "preview": "psql",
+          "effectKind": "db"
+        },
+        {
+          "id": "external:tee",
+          "kind": "external",
+          "label": "tee",
+          "file": null,
+          "irNodeId": "module/main.fn/tee.call",
+          "preview": "tee",
+          "effectKind": "fs"
+        },
+        {
+          "id": "deploy.sh:main:return@0",
+          "kind": "return",
+          "label": "return",
+          "file": "deploy.sh",
+          "irNodeId": "module/main.fn/return@0",
+          "preview": "0"
+        }
+      ],
+      "edges": [
+        {
+          "from": "deploy.sh:main",
+          "to": "dynamic:\"$HOOK_CMD\"",
+          "kind": "direct",
+          "irSource": "module/main.fn/HOOK_CMD.call"
+        },
+        {
+          "from": "deploy.sh:main",
+          "to": "dynamic:eval",
+          "kind": "direct",
+          "irSource": "module/main.fn/eval.call"
+        },
+        {
+          "from": "lib/common.sh:fetch_status",
+          "to": "external:curl",
+          "kind": "direct",
+          "irSource": "module/fetch_status.fn/curl.call"
+        },
+        {
+          "from": "deploy.sh:main",
+          "to": "lib/common.sh:fetch_status",
+          "kind": "direct",
+          "irSource": "module/main.fn/fetch_status.call"
+        },
+        {
+          "from": "deploy.sh:upload",
+          "to": "external:curl@1",
+          "kind": "conditional",
+          "irSource": "module/upload.fn/if@0/curl.call"
+        },
+        {
+          "from": "deploy.sh:upload.fn/if@0#then",
+          "to": "external:curl@1",
+          "kind": "contains",
+          "irSource": "module/upload.fn/if@0"
+        },
+        {
+          "from": "deploy.sh:upload",
+          "to": "external:curl@2",
+          "kind": "conditional",
+          "irSource": "module/upload.fn/if@0/curl.call@1"
+        },
+        {
+          "from": "deploy.sh:upload.fn/if@0#else",
+          "to": "external:curl@2",
+          "kind": "contains",
+          "irSource": "module/upload.fn/if@0"
+        },
+        {
+          "from": "deploy.sh:upload",
+          "to": "external:ssh",
+          "kind": "conditional",
+          "irSource": "module/upload.fn/if@0/if@0/ssh.call"
+        },
+        {
+          "from": "deploy.sh:upload.fn/if@0/if@0#then",
+          "to": "external:ssh",
+          "kind": "contains",
+          "irSource": "module/upload.fn/if@0/if@0"
+        },
+        {
+          "from": "deploy.sh:upload.fn/if@0#else",
+          "to": "deploy.sh:upload.fn/if@0/if@0#then",
+          "kind": "contains",
+          "irSource": "module/upload.fn/if@0"
+        },
+        {
+          "from": "deploy.sh:main",
+          "to": "deploy.sh:upload",
+          "kind": "direct",
+          "irSource": "module/main.fn/for@0/upload.call"
+        },
+        {
+          "from": "deploy.sh:main.fn/for@0",
+          "to": "deploy.sh:upload",
+          "kind": "contains",
+          "irSource": "module/main.fn/for@0"
+        },
+        {
+          "from": "deploy.sh:main",
+          "to": "external:grep",
+          "kind": "direct",
+          "irSource": "module/main.fn/grep.call"
+        },
+        {
+          "from": "deploy.sh:main",
+          "to": "external:echo",
+          "kind": "direct",
+          "irSource": "module/main.fn/if@0/echo.call"
+        },
+        {
+          "from": "deploy.sh:main.fn/if@0#then",
+          "to": "external:echo",
+          "kind": "contains",
+          "irSource": "module/main.fn/if@0"
+        },
+        {
+          "from": "deploy.sh:watch_logs",
+          "to": "external:echo@1",
+          "kind": "direct",
+          "irSource": "module/watch_logs.fn/while@0/echo.call"
+        },
+        {
+          "from": "deploy.sh:watch_logs.fn/while@0",
+          "to": "external:echo@1",
+          "kind": "contains",
+          "irSource": "module/watch_logs.fn/while@0"
+        },
+        {
+          "from": "deploy.sh:watch_logs",
+          "to": "external:read",
+          "kind": "direct",
+          "irSource": "module/watch_logs.fn/while@0/read.call"
+        },
+        {
+          "from": "deploy.sh:watch_logs.fn/while@0",
+          "to": "external:read",
+          "kind": "contains",
+          "irSource": "module/watch_logs.fn/while@0"
+        },
+        {
+          "from": "deploy.sh:main",
+          "to": "deploy.sh:watch_logs",
+          "kind": "direct",
+          "irSource": "module/main.fn/if@0/watch_logs.call"
+        },
+        {
+          "from": "deploy.sh:main.fn/if@0#then",
+          "to": "deploy.sh:watch_logs",
+          "kind": "contains",
+          "irSource": "module/main.fn/if@0"
+        },
+        {
+          "from": "lib/common.sh:log_step",
+          "to": "external:echo@2",
+          "kind": "direct",
+          "irSource": "module/log_step.fn/echo.call"
+        },
+        {
+          "from": "lib/common.sh:log_step",
+          "to": "external:logger",
+          "kind": "direct",
+          "irSource": "module/log_step.fn/logger.call"
+        },
+        {
+          "from": "deploy.sh:main",
+          "to": "lib/common.sh:log_step",
+          "kind": "direct",
+          "irSource": "module/main.fn/log_step.call"
+        },
+        {
+          "from": "deploy.sh:prepare",
+          "to": "external:mkdir",
+          "kind": "direct",
+          "irSource": "module/prepare.fn/mkdir.call"
+        },
+        {
+          "from": "deploy.sh:prepare",
+          "to": "external:rm",
+          "kind": "direct",
+          "irSource": "module/prepare.fn/rm.call"
+        },
+        {
+          "from": "deploy.sh:prepare",
+          "to": "external:tar",
+          "kind": "direct",
+          "irSource": "module/prepare.fn/tar.call"
+        },
+        {
+          "from": "deploy.sh:main",
+          "to": "deploy.sh:prepare",
+          "kind": "direct",
+          "irSource": "module/main.fn/prepare.call"
+        },
+        {
+          "from": "deploy.sh:record_release",
+          "to": "external:psql",
+          "kind": "direct",
+          "irSource": "module/record_release.fn/psql.call"
+        },
+        {
+          "from": "deploy.sh:main",
+          "to": "deploy.sh:record_release",
+          "kind": "direct",
+          "irSource": "module/main.fn/record_release.call"
+        },
+        {
+          "from": "deploy.sh:main",
+          "to": "external:tee",
+          "kind": "direct",
+          "irSource": "module/main.fn/tee.call"
+        },
+        {
+          "from": "dynamic:eval",
+          "to": "deploy.sh:main:return@0",
+          "kind": "direct",
+          "irSource": "module/main.fn/return@0"
+        },
+        {
+          "from": "deploy.sh:upload",
+          "to": "deploy.sh:upload.fn/if@0#then",
+          "kind": "conditional",
+          "irSource": "module/upload.fn/if@0"
+        },
+        {
+          "from": "deploy.sh:upload",
+          "to": "deploy.sh:upload.fn/if@0#else",
+          "kind": "conditional",
+          "irSource": "module/upload.fn/if@0"
+        },
+        {
+          "from": "deploy.sh:upload.fn/if@0#else",
+          "to": "deploy.sh:upload.fn/if@0/if@0#then",
+          "kind": "conditional",
+          "irSource": "module/upload.fn/if@0/if@0"
+        },
+        {
+          "from": "lib/common.sh:fetch_status",
+          "to": "deploy.sh:main.fn/if@0#then",
+          "kind": "conditional",
+          "irSource": "module/main.fn/if@0"
+        }
+      ],
+      "entryPointId": "deploy.sh:main",
+      "filesReached": [
+        "deploy.sh",
+        "lib/common.sh"
+      ]
+    }
+  ]
+}

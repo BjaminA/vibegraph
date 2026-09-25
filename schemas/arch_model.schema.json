@@ -1,0 +1,554 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibegraph.dev/schemas/arch_model.schema.json",
+  "title": "VibeGraph architecture model (M-ARCH)",
+  "description": "PLAN-M-ARCH.md. Three strata that never blur: `derived` elements are aggregated from entry points, hops, contracts and the stack (IR fact, with refs); `stated` ones come from a person's .vibegraph/architecture.json; `proposed` ones from a model, each citing evidence or rendered INFERRED. A protocol is read from a fact and says which (`protocolBasis`); a model never writes one.",
+  "type": "object",
+  "required": [
+    "version",
+    "nodes",
+    "edges",
+    "groups",
+    "unplaced",
+    "notes"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "const": "1"
+    },
+    "nodes": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Node"
+      }
+    },
+    "edges": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Edge"
+      }
+    },
+    "groups": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Group"
+      }
+    },
+    "unplaced": {
+      "type": "object",
+      "required": [
+        "tests",
+        "unmatchedHops",
+        "toolsPresentNotCalled",
+        "unattributedBoundaries"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "tests": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "unmatchedHops": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "toolsPresentNotCalled": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "unattributedBoundaries": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "notes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "primaryPath": {
+      "type": "object",
+      "required": [
+        "entryPoints",
+        "source"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "entryPoints": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "source": {
+          "enum": [
+            "stated",
+            "proposed"
+          ]
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "proposal": {
+      "type": "object",
+      "required": [
+        "at",
+        "model",
+        "narrative",
+        "refused"
+      ],
+      "additionalProperties": false,
+      "description": "M-ARCH.4 — a pending model proposal; its items ride groups/labels with source proposed.",
+      "properties": {
+        "at": {
+          "type": "string"
+        },
+        "model": {
+          "type": "string"
+        },
+        "narrative": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "refused": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "item",
+              "reason"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "item": {
+                "type": "string"
+              },
+              "reason": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "Source": {
+      "type": "string",
+      "enum": [
+        "derived",
+        "stated",
+        "proposed"
+      ]
+    },
+    "Category": {
+      "type": "string",
+      "enum": [
+        "frontend",
+        "backend",
+        "scripts",
+        "agent",
+        "pipeline",
+        "platform",
+        "database",
+        "cache",
+        "storage",
+        "queue",
+        "model",
+        "cloud",
+        "external",
+        "unknown"
+      ]
+    },
+    "Ref": {
+      "type": "object",
+      "required": [
+        "file"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "file": {
+          "type": "string"
+        },
+        "nodeId": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        }
+      }
+    },
+    "Node": {
+      "type": "object",
+      "required": [
+        "id",
+        "kind",
+        "label",
+        "sublabel",
+        "category",
+        "source",
+        "threads",
+        "refs"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^(cluster|tool|hub|actor):"
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "cluster",
+            "tool",
+            "hub",
+            "actor"
+          ]
+        },
+        "label": {
+          "type": "string"
+        },
+        "sublabel": {
+          "type": "string"
+        },
+        "category": {
+          "$ref": "#/$defs/Category"
+        },
+        "source": {
+          "$ref": "#/$defs/Source"
+        },
+        "family": {
+          "type": "string"
+        },
+        "root": {
+          "type": "string"
+        },
+        "entryPoints": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "frameworks": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "files": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "internalHops": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer"
+          }
+        },
+        "tool": {
+          "type": "string"
+        },
+        "role": {
+          "type": "string"
+        },
+        "origin": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        },
+        "roleStatedBy": {
+          "type": "string"
+        },
+        "wrappedBy": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "threads": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "refs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Ref"
+          }
+        },
+        "notes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "labelSource": {
+          "enum": [
+            "stated",
+            "proposed"
+          ],
+          "description": "M-ARCH.4 — the label came from .vibegraph/architecture.json or a pending proposal."
+        },
+        "derivedLabel": {
+          "type": "string"
+        },
+        "labelEvidence": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "cluster": {
+          "type": "string",
+          "description": "hub: the cluster the dispatcher belongs to."
+        },
+        "callers": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "hub: the files that name it (other than itself)."
+        },
+        "dispatches": {
+          "type": "array",
+          "description": "hub: the scripts its own file names and runs, grouped by directory relative to it.",
+          "items": {
+            "type": "object",
+            "required": [
+              "dir",
+              "scripts"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "dir": {
+                "type": "string"
+              },
+              "scripts": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "entryPointId",
+                    "file"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "entryPointId": {
+                      "type": "string"
+                    },
+                    "file": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "group": {
+          "type": "string",
+          "description": "hierarchy: the innermost group holding this node (directly, or through a dispatcher cluster)."
+        },
+        "parent": {
+          "type": "string",
+          "description": "hierarchy: the direct parent - a dispatcher cluster, else group."
+        }
+      }
+    },
+    "Edge": {
+      "type": "object",
+      "required": [
+        "id",
+        "from",
+        "to",
+        "kind",
+        "protocol",
+        "protocolBasis",
+        "count",
+        "threads",
+        "confidence",
+        "refs",
+        "source"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "from": {
+          "type": "string"
+        },
+        "to": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "http",
+            "command",
+            "tool",
+            "uses"
+          ]
+        },
+        "protocol": {
+          "type": "string",
+          "minLength": 1
+        },
+        "protocolBasis": {
+          "type": "string",
+          "minLength": 1
+        },
+        "protocolPresence": {
+          "const": true
+        },
+        "details": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "count": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "threads": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "confidence": {
+          "type": "string",
+          "enum": [
+            "path+method",
+            "path",
+            "ambiguous",
+            "called"
+          ]
+        },
+        "via": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "refs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Ref"
+          }
+        },
+        "source": {
+          "$ref": "#/$defs/Source"
+        },
+        "payloads": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Payload"
+          }
+        },
+        "payloadSummary": {
+          "type": "string"
+        }
+      }
+    },
+    "Group": {
+      "type": "object",
+      "required": [
+        "id",
+        "kind",
+        "label",
+        "wraps",
+        "source"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "wraps": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "parent": {
+          "type": "string"
+        },
+        "source": {
+          "$ref": "#/$defs/Source"
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "Payload": {
+      "description": "M-ARCH.3: one shape read at one end of an edge. `keys` are object-literal keys / keyword names the code spells, never values; `observed` is what a trace run saw DISPATCHED, never argument values.",
+      "type": "object",
+      "required": [
+        "side",
+        "source",
+        "text"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "side": {
+          "type": "string",
+          "enum": [
+            "caller",
+            "callee",
+            "stated",
+            "observed"
+          ]
+        },
+        "source": {
+          "type": "string",
+          "enum": [
+            "derived",
+            "stated",
+            "observed"
+          ]
+        },
+        "text": {
+          "type": "string"
+        },
+        "keys": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "where": {
+          "$ref": "#/$defs/Ref"
+        },
+        "note": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

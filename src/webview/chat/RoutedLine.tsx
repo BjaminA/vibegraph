@@ -45,6 +45,24 @@ export function RoutedLine({ seg }: { seg: RoutedSegment }) {
             context is already in the prompt, so it was not routed again.
           </span>
         )}
+        {/* M-SKILLS.3 — generic direction a human enabled for this project.
+            An injected body must never be invisible to the person paying
+            for the tokens, and a withheld one must say why (the M-SKILL.7
+            rule: silence never reads as "no direction exists"). */}
+        {seg.genericSkills?.map((g) => (
+          <span
+            key={`generic:${g.name}`}
+            data-chat-routed-generic={g.name}
+            data-generic-injected={g.injected ? "true" : "false"}
+            style={{ display: "block" }}
+          >
+            {g.injected
+              ? `generic direction: ${g.name} was shared with the agent (enabled for this project; advisory, never a gate)`
+              : g.omitted === "already-in-session"
+                ? `generic direction: ${g.name} was already shared earlier in this session`
+                : `generic direction: ${g.name} exceeded this turn's injection budget and was withheld`}
+          </span>
+        ))}
       </span>
     </div>
   );

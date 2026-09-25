@@ -23,9 +23,11 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import Editor from "@monaco-editor/react";
+import { monacoLanguageForPath, capabilitiesForPath } from "../../shared/languages";
 import { CODE_WRAP_OPTIONS } from "../monaco_options";
-import { X, Check, AlertCircle, ExternalLink, Pin, FileCode } from "lucide-react";
-import { bridge, type ExtensionMessage, type ThreadRunResult, type ThreadSynthProposal, type ThreadDataProposal } from "../types";
+import { X, Check, AlertCircle, ExternalLink, Pin, FileCode, Sparkles, Activity } from "lucide-react";
+import { bridge, type ExtensionMessage, type ThreadRunResult, type ThreadSynthProposal, type ThreadDataProposal, type EffectOffense } from "../types";
+import { runDate } from "../../shared/observations";
 import { defineVibegraphDark, VIBEGRAPH_DARK } from "../themes/vibegraph-dark";
 
 export interface AnchorRect {
@@ -61,6 +63,24 @@ export interface ThreadNodeTooltipProps {
   // §5.5a — how that receiver was bound (local-call|param|loop), so the
   // body can name the binding form even when there's no binding callee.
   receiverBoundKind?: "local-call" | "param" | "loop";
+  // M-BOUNDARY.4 — the tool this boundary leaves the project through,
+  // attributed by ThreadView through the same pure rule the server's
+  // thread contract uses. Absent = no rule reached it, and the body keeps
+  // its honest runtime-bound explanation instead of naming a tool.
+  boundaryTool?: import("../../shared/stack_attribution").Attribution;
+  // M-XLANG.2 - when this terminal is an HTTP hop that LEAVES the thread's
+  // language, the crossing names the route(s) that serve it and lets the
+  // reader walk there. Ambiguous crossings offer every candidate and pick
+  // none; an unmatched one says so rather than offering a dead button.
+  crossing?: import("../../shared/protocol").CrossingRecord;
+  // PLAN-M-RUNTIME phase 3 — what a consented trace run actually saw at
+  // this call site. A LIST: two entry points can reach the same site and
+  // dispatch differently, and that disagreement is the finding.
+  observations?: import("../../shared/observations").ResolvedObservation[];
+  // PLAN-M-RUNTIME phase 2 — the file this node BELONGS to, which for a
+  // terminal is not `file` (null: there is nothing to open) but is still
+  // where the call is written. Decides the language for the Observe gate.
+  ownerFile?: string | null;
   // M-RUN3 — structural runnability (ThreadView computes via planRunToNode):
   // the run-to-here button only renders when the node can actually produce a
   // value. Absent (older callers/tests) → keep the legacy always-offer.
@@ -140,7 +160,8 @@ function clamp(v: number, lo: number, hi: number): number {
 export function ThreadNodeTooltip(props: ThreadNodeTooltipProps) {
   const {
     nodeId, irNodeId, file, kind, label, preview, qualifiedTarget, viaLocal,
-    receiverBoundFrom, receiverBoundKind, runnable,
+    receiverBoundFrom, receiverBoundKind, runnable, boundaryTool, crossing,
+    ownerFile, observations,
     anchor, pinned, onPin, onClose, onTooltipEnter, onTooltipLeave,
   } = props;
 
@@ -163,7 +184,25 @@ export function ThreadNodeTooltip(props: ThreadNodeTooltipProps) {
   } | null>(null);
 
   const isTerminal = kind === "external" || kind === "dynamic" || kind === "return";
-  const canEdit = !isTerminal && !!irNodeId && !!file;
+  // M-LANG2b — capability gates from the language registry: a read-only
+  // frontend (bash until M-LANG4) must show NO edit/run affordances
+  // (affordance-must-match-operation; the CST-patch and run floors are
+  // Python-only today).
+  const caps = capabilitiesForPath(file);
+  // A node with a file and an IR id HAS source whatever its language; only
+  // the Save floor is capability-gated. Before this split, C++ (no edit
+  // floor) fell through to "No source available for this node" on every
+  // seed and container of a thread — false: the source was there, the
+  // chokepoint was not. The snippet now renders read-only and the footer
+  // says why Save is absent (the NodeEditorPanel already did both).
+  const canShowSource = !isTerminal && !!irNodeId && !!file;
+  // A CONTAINER shows its source and is never editable here. The node is a
+  // whole `for`/`if`/`while`/`try` block, so a Save would rewrite every
+  // statement inside it through one chokepoint call — the editor panel is
+  // where a change that size belongs. Reading it costs nothing and was the
+  // gap: a third of a thread's elements had source and showed none.
+  const isContainer = kind === "container";
+  const canEdit = canShowSource && caps.edit && !isContainer;
   // M-RUN SM1 — "run to here": run the real path to this node, capture its
   // value. M-RUN3 — affordance honesty: when ThreadView supplied structural
   // runnability, a node with no capturable value shows NO button (instead of
@@ -172,7 +211,7 @@ export function ThreadNodeTooltip(props: ThreadNodeTooltipProps) {
   // capture_probe exists precisely to grab a return's value, and a pure-
   // expression return (no call step to run from — the live Standardizer.apply)
   // is only runnable HERE. planRunToNode already vets it structurally.
-  const canRun = (!isTerminal || kind === "return") && !!irNodeId && !!file && runnable !== false;
+  const canRun = (!isTerminal || kind === "return") && !!irNodeId && !!file && runnable !== false && caps.run;
   const [running, setRunning] = useState(false);
   const [runResult, setRunResult] = useState<ThreadRunResult | null>(null);
   // SM2.d — synthesized-args proposal awaiting the user's confirm. When set
@@ -306,9 +345,95 @@ export function ThreadNodeTooltip(props: ThreadNodeTooltipProps) {
     document.dispatchEvent(new CustomEvent("vg-run-thread-to-node", { detail: { nodeId, irNodeId, file, trustUnverified: trustToken, ...dataDetail() } }));
   };
 
+  // SCOPE button — C2 explain-this-node surfaced in the tooltip: an AI
+  // INFERENCE about a runtime-resolved (dynamic) or unresolved target,
+  // rendered WITH its attribution line and never changing the node's
+  // kind (the honesty contract in src/server/explain.ts). v1 covers
+  // dynamic + unresolved terminals; runtime OBSERVATION (B5,
+  // vibegraph_observe_dynamic_target) stays MCP-only until its consent
+  // flow gets a tooltip UI — see PLAN-M-RUNTIME.md.
+  const canScope = (kind === "dynamic" || kind === "unresolved") && !!irNodeId;
+  const [scoping, setScoping] = useState(false);
+  const [scopeResult, setScopeResult] = useState<{
+    interpretation: string | null; attribution: string; error?: string;
+  } | null>(null);
+  useEffect(() => { setScoping(false); setScopeResult(null); }, [irNodeId]);
+  useEffect(() => {
+    if (!canScope) return;
+    const handler = (msg: ExtensionMessage) => {
+      if (msg.type === "node-explained" && msg.payload.nodeId === irNodeId) {
+        setScoping(false);
+        setScopeResult({
+          interpretation: msg.payload.interpretation,
+          attribution: msg.payload.attribution,
+          error: msg.payload.error,
+        });
+      }
+    };
+    bridge.onMessage(handler);
+    return () => bridge.removeListener(handler);
+  }, [canScope, irNodeId]);
+  const startScope = () => {
+    setScoping(true);
+    bridge.postMessage({
+      type: "explain-node",
+      payload: { nodeId: irNodeId!, filePath: file ?? undefined },
+    });
+  };
+
+  // OBSERVE button (PLAN-M-RUNTIME phase 2) — B5's runtime sample, beside
+  // Scope. The two answer different questions and must not be confused:
+  // Scope ASKS a model what the target probably is; Observe RUNS the
+  // enclosing function to this call site and reports what the receiver
+  // actually WAS. Both are labelled overlays; neither changes the node's
+  // kind, and Observe's note says why one run is not a fact.
+  //
+  // Gated on the registry's `run` capability rather than a hardcoded
+  // "python": bash / TS / C++ have no run floor, and an affordance must
+  // match an operation that actually exists (the M-LANG2b rule).
+  // `caps` above is keyed on `file` and gates EDITING, which a terminal
+  // never offers anyway. Observing is different: the node is a terminal by
+  // definition, so the gate has to key on the file the call is written in.
+  const observeFile = file ?? ownerFile ?? null;
+  const runCaps = capabilitiesForPath(observeFile);
+  const observeReceiver = viaLocal
+    ?? (label.includes(".") ? label.slice(0, label.indexOf(".")) : null);
+  const canObserve = kind === "dynamic" && !!irNodeId && !!observeFile && runCaps.run
+    && !!observeReceiver && /^[A-Za-z_][A-Za-z0-9_]*$/.test(observeReceiver);
+  const [observing, setObserving] = useState(false);
+  const [observeResult, setObserveResult] = useState<{
+    outcome: string; observedTarget: string | null; note: string;
+    effects?: EffectOffense[]; effectConsentToken?: string | null; error?: string;
+  } | null>(null);
+  useEffect(() => { setObserving(false); setObserveResult(null); }, [irNodeId]);
+  useEffect(() => {
+    if (!canObserve) return;
+    const handler = (msg: ExtensionMessage) => {
+      if (msg.type === "node-observed" && msg.payload.nodeId === irNodeId) {
+        setObserving(false);
+        setObserveResult(msg.payload);
+      }
+    };
+    bridge.onMessage(handler);
+    return () => bridge.removeListener(handler);
+  }, [canObserve, irNodeId]);
+  const startObserve = (consent?: string) => {
+    setObserving(true);
+    setObserveResult(null);
+    bridge.postMessage({
+      type: "observe-node",
+      payload: {
+        nodeId: irNodeId!,
+        receiver: observeReceiver!,
+        filePath: observeFile ?? undefined,
+        ...(consent ? { effectConsent: consent } : {}),
+      },
+    });
+  };
+
   // Fetch the function source via the existing edit-node-open round-trip.
   useEffect(() => {
-    if (!canEdit) return;
+    if (!canShowSource) return;
     setSource(null);
     setError(null);
     setSaveResult(null);
@@ -338,7 +463,7 @@ export function ThreadNodeTooltip(props: ThreadNodeTooltipProps) {
     };
     bridge.onMessage(handler);
     return () => bridge.removeListener(handler);
-  }, [canEdit, irNodeId, file]);
+  }, [canShowSource, irNodeId, file]);
 
   // M13.2 — when this tooltip is showing an external library call,
   // request signature + docstring resolution from the server.
@@ -417,7 +542,10 @@ export function ThreadNodeTooltip(props: ThreadNodeTooltipProps) {
         left: placement.left,
         top: placement.top,
         width: TOOLTIP_W,
-        height: TOOLTIP_H,
+        // A source view needs the full box; a message (a return, a dynamic
+        // call, an external) sizes to its content up to the same cap — a
+        // one-line note in a 400px frame read as a broken panel (look pass).
+        ...(canShowSource ? { height: TOOLTIP_H } : { maxHeight: TOOLTIP_H }),
         background: "var(--bg-node)",
         border: "1px solid color-mix(in oklab, var(--accent-thread) 35%, var(--border-edge))",
         borderRadius: 8,
@@ -538,14 +666,108 @@ export function ThreadNodeTooltip(props: ThreadNodeTooltipProps) {
         </button>
       </div>
 
+        {/* M-BOUNDARY.4 — which TOOL this boundary leaves the project
+            through. Attributed by ThreadView through the same pure rule
+            the server's thread contract uses, so the view and the
+            prompts can never disagree. Absent when no rule reached it:
+            the honest line above then stands alone, and no tool is
+            invented from a receiver name. */}
+        {boundaryTool && (
+          <div
+            data-boundary-tool={boundaryTool.tool}
+            data-boundary-how={boundaryTool.how}
+            {...(boundaryTool.via ? { "data-boundary-via": boundaryTool.via } : {})}
+            style={{
+              color: "var(--text-secondary)",
+              fontFamily: "var(--font-mono)",
+              fontSize: 11,
+              lineHeight: 1.5,
+              paddingLeft: 10,
+              borderLeft: "2px solid color-mix(in oklab, var(--accent-thread) 55%, transparent)",
+            }}>
+            {boundaryTool.how === "funnel-file"
+              ? `Leaves through ${boundaryTool.tool} — the project's own ${boundaryTool.role} funnel${
+                boundaryTool.wraps?.length ? ` (wraps ${boundaryTool.wraps.join(", ")})` : ""
+              }; this callee itself is unresolved.`
+              : boundaryTool.projectModule
+                ? `Goes through project code (${boundaryTool.projectModule}) the linker did not follow — a resolution gap, not a tool.`
+                : `Leaves the project through ${boundaryTool.tool} [${boundaryTool.role}]${
+                  boundaryTool.via ? `, via the ${boundaryTool.via} funnel` : ""
+                }.`}
+          </div>
+        )}
+
+      {/* M-XLANG.2 - the cross-language hop. The join is the same one the
+          server's contract renders (src/server/crossings.ts), so the view
+          and the prompts cannot disagree. `confidence` is shown as given:
+          two routes that both serve the path stay two, and neither is
+          preselected. */}
+      {crossing && (
+        <div
+          data-crossing
+          data-crossing-path={crossing.path}
+          data-crossing-confidence={crossing.confidence}
+          style={{
+            padding: "8px 18px",
+            borderTop: "1px solid var(--border-edge)",
+            display: "flex",
+            flexDirection: "column",
+            gap: 6,
+          }}>
+          <div style={{ fontSize: 11, color: "var(--text-muted)", fontFamily: "var(--font-mono)", lineHeight: 1.5 }}>
+            {crossing.kind === "command"
+              ? `Runs a script: ${crossing.path}`
+              : crossing.kind === "tool"
+                ? `Calls a tool: ${crossing.path}`
+                : `Leaves this language: ${crossing.method ?? "?"} ${crossing.path}`}
+            {crossing.methodAssumed ? " (method assumed)" : ""}
+            {crossing.confidence === "ambiguous" ? " - AMBIGUOUS, nothing here separates these" : ""}
+          </div>
+          {crossing.targets.length === 0 ? (
+            <div style={{ fontSize: 11, color: "var(--accent-warning)", fontFamily: "var(--font-mono)" }}>
+              {crossing.kind === "command" ? "No parsed file is that script." : crossing.kind === "tool" ? "No tool is registered under that name here." : "No route in this project serves that path."}
+            </div>
+          ) : (
+            crossing.targets.map((t) => (
+              <button
+                key={t.entryPointId}
+                data-crossing-target={t.entryPointId}
+                onClick={() => {
+                  document.dispatchEvent(new CustomEvent("vg-open-thread", { detail: { entryPointId: t.entryPointId } }));
+                  onClose();
+                }}
+                title={`Open the thread that serves ${t.method} ${t.route}`}
+                style={{
+                  background: "none",
+                  border: "1px solid var(--border-edge)",
+                  borderRadius: 4,
+                  color: "var(--text-secondary)",
+                  cursor: "pointer",
+                  padding: "3px 8px",
+                  fontSize: 11,
+                  fontFamily: "var(--font-mono)",
+                  textAlign: "left",
+                }}>
+                {`-> ${t.entryPointId} [${t.method}${t.methodAssumed ? " assumed" : ""}${t.framework ? `, ${t.framework}` : ""}]`}
+              </button>
+            ))
+          )}
+          <div style={{ fontSize: 11, color: "var(--text-muted)", opacity: 0.8, lineHeight: 1.4 }}>
+            {crossing.note}
+          </div>
+        </div>
+      )}
+
       {/* ── editor / placeholder ── */}
       {/* Sitting-2 — while a consent/synth gate is open, the gate is the
           decision surface: the editor yields its height floor so the gate's
           action rows fit inside the fixed 400px box (they used to clip off
           the bottom on long offense lists). Restores to 200 when the gate
           resolves. */}
-      <div style={{ flex: "1 1 0", minHeight: sideEffectGate || (synthProposal && synthProposal.ok) ? 88 : 200, position: "relative", overflow: "hidden" }}>
-        {!canEdit ? (
+      <div style={canShowSource
+        ? { flex: "1 1 0", minHeight: sideEffectGate || (synthProposal && synthProposal.ok) ? 88 : 200, position: "relative", overflow: "hidden" }
+        : { flex: "0 1 auto", minHeight: 0, position: "relative", overflow: "auto" }}>
+        {!canShowSource ? (
           kind === "external" ? (
             // M-FS2 — the friendly copy must describe what resolution
             // actually tried (qualifiedTarget when present), not the raw
@@ -555,6 +777,13 @@ export function ThreadNodeTooltip(props: ThreadNodeTooltipProps) {
           ) : (
             <div style={{
               padding: "16px 18px",
+              display: "flex",
+              flexDirection: "column",
+              gap: 10,
+              overflowY: "auto",
+              maxHeight: "100%",
+            }}>
+            <div style={{
               color: "var(--text-muted)",
               fontFamily: "var(--font-mono)",
               fontSize: 12,
@@ -586,6 +815,200 @@ export function ThreadNodeTooltip(props: ThreadNodeTooltipProps) {
                     ? "Couldn't resolve this call yet — if it was just created, the graph is still re-linking."
                     : "No source available for this node."}
             </div>
+
+
+            {/* SCOPE — one press asks Claude for a hedged inference about
+                the runtime/unresolved target. The result renders WITH the
+                attribution line; the node's kind never changes. */}
+            {canScope && !scopeResult && (
+              <button
+                data-scope-node
+                onClick={startScope}
+                disabled={scoping}
+                style={{
+                  alignSelf: "flex-start",
+                  display: "flex", alignItems: "center", gap: 6,
+                  background: scoping
+                    ? "var(--border-edge)"
+                    : "color-mix(in oklab, var(--accent-chat) 14%, transparent)",
+                  border: "1px solid color-mix(in oklab, var(--accent-chat) 40%, transparent)",
+                  borderRadius: 4, color: "var(--accent-chat)", padding: "4px 10px",
+                  cursor: scoping ? "wait" : "pointer", fontSize: 11,
+                  fontFamily: "var(--font-mono)", fontWeight: 600,
+                }}
+              >
+                <Sparkles size={13} strokeWidth={1.5} />
+                {scoping ? "Scoping…" : "Scope — infer the likely target"}
+              </button>
+            )}
+            {scopeResult && (
+              <div data-scope-result style={{
+                background: "color-mix(in oklab, var(--accent-chat) 6%, transparent)",
+                border: "1px solid color-mix(in oklab, var(--accent-chat) 25%, transparent)",
+                borderRadius: 6, padding: "8px 10px",
+                display: "flex", flexDirection: "column", gap: 6,
+              }}>
+                {scopeResult.error || !scopeResult.interpretation ? (
+                  <div style={{ color: "var(--accent-error)", fontFamily: "var(--font-mono)", fontSize: 11 }}>
+                    {scopeResult.error ?? "No inference returned."}
+                  </div>
+                ) : (
+                  <>
+                    <div style={{ color: "var(--text-primary)", fontFamily: "var(--font-mono)", fontSize: 12, lineHeight: 1.5 }}>
+                      {scopeResult.interpretation}
+                    </div>
+                    <div style={{ color: "var(--text-muted)", fontFamily: "var(--font-mono)", fontSize: 10, lineHeight: 1.4 }}>
+                      {scopeResult.attribution}
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* PLAN-M-RUNTIME phase 3 — what a TRACE RUN already saw here.
+                Muted, beneath the IR facts, and never in place of them: the
+                node's kind is unchanged and the label says which run, on
+                which inputs, and whether the file has moved since. */}
+            {!!observations?.length && (
+              <div data-observed-block style={{
+                display: "flex", flexDirection: "column", gap: 4,
+                borderLeft: "2px solid color-mix(in oklab, var(--accent-thread) 40%, transparent)",
+                paddingLeft: 8,
+              }}>
+                {observations.map((o, i) => (
+                  <div key={i} data-observed-run={o.entryPointId} data-observed-stale={o.stale ? "1" : "0"}>
+                    <div style={{
+                      fontFamily: "var(--font-mono)", fontSize: 11,
+                      color: o.stale ? "var(--text-muted)" : "var(--text-primary)",
+                    }}>
+                      observed: {o.callees.map((c) => c.callee + (c.count > 1 ? ` ×${c.count}` : "")).join(", ")}
+                    </div>
+                    <div style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--text-muted)", lineHeight: 1.4 }}>
+                      run {runDate(o.at)} · {o.entryPointId} · {o.inputs}
+                      {o.outcome !== "ok" ? ` · the run ended ${o.outcome}` : ""}
+                      {/* Stale is a caveat, not a reason to hide it: it is
+                          still evidence about the code as it was. */}
+                      {o.stale ? " · this file has changed since — the observation may no longer hold" : ""}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* OBSERVE (PLAN-M-RUNTIME phase 2) — run the enclosing function
+                to THIS call site and report what the receiver actually was.
+                Rendered in the run accent, not the chat accent, because it
+                is a measurement and Scope is an inference. */}
+            {canObserve && !observeResult && (
+              <button
+                data-observe-node
+                onClick={() => startObserve()}
+                disabled={observing}
+                style={{
+                  alignSelf: "flex-start",
+                  display: "flex", alignItems: "center", gap: 6,
+                  background: observing
+                    ? "var(--border-edge)"
+                    : "color-mix(in oklab, var(--accent-thread) 14%, transparent)",
+                  border: "1px solid color-mix(in oklab, var(--accent-thread) 40%, transparent)",
+                  borderRadius: 4, color: "var(--accent-thread)", padding: "4px 10px",
+                  cursor: observing ? "wait" : "pointer", fontSize: 11,
+                  fontFamily: "var(--font-mono)", fontWeight: 600,
+                }}
+              >
+                <Activity size={13} strokeWidth={1.5} />
+                {observing ? "Observing…" : `Observe — run to here and sample ${observeReceiver}`}
+              </button>
+            )}
+            {observeResult && (() => {
+              const o = observeResult;
+              // The consent gate. NOTHING has run at this point: the floor
+              // scanned the path, found effects, and handed back a token
+              // instead of a result. Listing them IS the consent.
+              if (o.outcome === "requires-confirmation" && o.effects?.length && o.effectConsentToken) {
+                return (
+                  <div data-observe-consent style={{
+                    background: "color-mix(in oklab, var(--bg-canvas) 75%, transparent)",
+                    border: "1px solid color-mix(in oklab, var(--accent-warning) 30%, transparent)",
+                    borderRadius: 6, padding: "8px 10px", fontSize: 11,
+                    fontFamily: "var(--font-mono)", lineHeight: 1.5,
+                  }}>
+                    <div style={{ color: "var(--accent-warning)", fontWeight: 600 }}>
+                      Sampling {observeReceiver} means running the code that binds it
+                    </div>
+                    <div style={{ marginTop: 4, color: "var(--text-muted)", fontSize: 10 }}>
+                      Nothing has run. These effects are on the path to this call:
+                    </div>
+                    <ul style={{ margin: "4px 0 0", paddingLeft: 16, color: "var(--text-primary)", fontSize: 10 }}>
+                      {o.effects.map((e, i) => (
+                        <li key={i}>{e.target} <span style={{ color: "var(--text-muted)" }}>
+                          ({e.kind}{e.effectKind ? `: ${e.effectKind}` : ""} · {e.file}:{e.line})
+                        </span></li>
+                      ))}
+                    </ul>
+                    <div style={{ marginTop: 8, display: "flex", gap: 8 }}>
+                      <button
+                        data-observe-confirm
+                        onClick={() => startObserve(o.effectConsentToken!)}
+                        style={{
+                          background: "color-mix(in oklab, var(--accent-thread) 16%, transparent)",
+                          border: "1px solid color-mix(in oklab, var(--accent-thread) 50%, transparent)",
+                          borderRadius: 4, color: "var(--accent-thread)", padding: "4px 10px",
+                          cursor: "pointer", fontSize: 11, fontFamily: "var(--font-mono)", fontWeight: 600,
+                        }}
+                      >▷ Run with the listed effects</button>
+                      <button
+                        onClick={() => setObserveResult(null)}
+                        style={{
+                          background: "transparent", border: "1px solid var(--border-edge)",
+                          borderRadius: 4, color: "var(--text-muted)", padding: "4px 10px",
+                          cursor: "pointer", fontSize: 11, fontFamily: "var(--font-mono)",
+                        }}
+                      >Cancel</button>
+                    </div>
+                  </div>
+                );
+              }
+              const ok = o.outcome === "ok" && o.observedTarget;
+              return (
+                <div data-observe-result data-observe-outcome={o.outcome} style={{
+                  background: "color-mix(in oklab, var(--accent-thread) 6%, transparent)",
+                  border: "1px solid color-mix(in oklab, var(--accent-thread) 25%, transparent)",
+                  borderRadius: 6, padding: "8px 10px",
+                  display: "flex", flexDirection: "column", gap: 6,
+                }}>
+                  {ok ? (
+                    <>
+                      <div style={{ color: "var(--text-primary)", fontFamily: "var(--font-mono)", fontSize: 12, lineHeight: 1.5 }}>
+                        <span style={{ color: "var(--text-muted)" }}>{observeReceiver} was </span>
+                        <span data-observed-target>{o.observedTarget}</span>
+                      </div>
+                      {/* The honesty label travels with the value, never
+                          separately — src/server/observe.ts owns the wording. */}
+                      <div data-observe-note style={{ color: "var(--text-muted)", fontFamily: "var(--font-mono)", fontSize: 10, lineHeight: 1.4 }}>
+                        {o.note}
+                      </div>
+                    </>
+                  ) : (
+                    <div style={{ color: "var(--accent-error)", fontFamily: "var(--font-mono)", fontSize: 11, lineHeight: 1.4 }}>
+                      Didn't observe a target ({o.outcome})
+                      {o.error ? <div style={{ marginTop: 4, color: "var(--text-muted)", fontSize: 10, wordBreak: "break-word" }}>{o.error.slice(0, 400)}</div> : null}
+                    </div>
+                  )}
+                  <button
+                    data-observe-again
+                    onClick={() => setObserveResult(null)}
+                    style={{
+                      alignSelf: "flex-start", background: "transparent",
+                      border: "1px solid var(--border-edge)", borderRadius: 4,
+                      color: "var(--text-muted)", padding: "2px 8px",
+                      cursor: "pointer", fontSize: 10, fontFamily: "var(--font-mono)",
+                    }}
+                  >Observe again</button>
+                </div>
+              );
+            })()}
+            </div>
           )
         ) : error ? (
           <div style={{
@@ -610,12 +1033,13 @@ export function ThreadNodeTooltip(props: ThreadNodeTooltipProps) {
         ) : (
           <Editor
             height="100%"
-            language="python"
+            language={monacoLanguageForPath(file)}
             value={value}
             onChange={(v) => setValue(v ?? "")}
             beforeMount={defineVibegraphDark}
             theme={VIBEGRAPH_DARK}
             options={{
+              readOnly: !canEdit,
               fontSize: 12,
               fontFamily: "var(--font-mono)",
               minimap: { enabled: false },
@@ -634,6 +1058,30 @@ export function ThreadNodeTooltip(props: ThreadNodeTooltipProps) {
           />
         )}
       </div>
+
+      {/* ── read-only note ── Two different reasons, and the note says
+          WHICH: a language whose edit floor has not landed, or a
+          container, which is read-only in every language because the
+          node is a whole block. Reporting the language reason for a
+          container would be false on Python, where editing has landed. */}
+      {canShowSource && !canEdit && source !== null && (
+        <div
+          data-readonly-language
+          data-readonly-reason={isContainer ? "container" : "language"}
+          style={{
+            padding: "6px 12px",
+            borderTop: "1px solid var(--border-edge)",
+            color: "var(--text-muted)",
+            fontSize: 11,
+            fontFamily: "var(--font-mono)",
+            flexShrink: 0,
+          }}
+        >
+          {isContainer
+            ? "Read-only — this is a whole block; edit a statement inside it, or open the enclosing function in the editor."
+            : "Read-only — editing for this language hasn’t landed yet."}
+        </div>
+      )}
 
       {/* ── save status ── */}
       {saveResult && (

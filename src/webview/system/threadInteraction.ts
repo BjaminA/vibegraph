@@ -13,7 +13,9 @@
 
 import { Position, MarkerType, type Node, type Edge } from "@xyflow/react";
 import type { EntryPoint, ProjectThread } from "../types";
+import type { CrossingIndexRecord, CrossingRecord } from "../../shared/protocol";
 import type { ThreadNode } from "../threads";
+import { entryLabelSuffixes } from "../../shared/entry_labels.ts";
 
 export interface ThreadGraphNode {
   entryPointId: string;
@@ -28,9 +30,44 @@ export interface ThreadCallEdge {
   count: number; // distinct call sites in the caller that reach `to`'s head
 }
 
+/** M-XLANG.3 - a thread-to-thread hop ACROSS the language boundary: an
+ *  HTTP call in one language whose path is served by a route in another.
+ *  Drawn apart from a `tcall` on purpose. A tcall is a call this project
+ *  can follow; a crossing is a claim it can only weigh, and an ambiguous
+ *  one draws to every candidate rather than picking one. */
+export interface ThreadCrossingEdge {
+  from: string;
+  to: string;
+  method: string | null;
+  path: string;
+  confidence: CrossingRecord["confidence"];
+}
+
 export interface ThreadGraph {
   nodes: ThreadGraphNode[];
   edges: ThreadCallEdge[];
+  /** M-XLANG.3 - cross-language hops, empty when no index was passed. */
+  crossings: ThreadCrossingEdge[];
+}
+
+/** M-FLOW.4 — one thread's cross-thread adjacency: the same-language calls
+ *  AND the hops (HTTP, command, tool). The contract's "reaches / reached by"
+ *  line read `edges` alone, so a page running a backend script through the
+ *  platform reached "(none)" while its own crossing named the script — and
+ *  the script's contract could not say who runs it. The reverse trace is
+ *  this function read from `to`. */
+export function threadAdjacency(graph: ThreadGraph, entryPointId: string): { reaches: string[]; reachedBy: string[] } {
+  const reaches = new Set<string>();
+  const reachedBy = new Set<string>();
+  for (const e of graph.edges) {
+    if (e.from === entryPointId) reaches.add(e.to);
+    if (e.to === entryPointId) reachedBy.add(e.from);
+  }
+  for (const c of graph.crossings) {
+    if (c.from === entryPointId) reaches.add(c.to);
+    if (c.to === entryPointId) reachedBy.add(c.from);
+  }
+  return { reaches: [...reaches].sort(), reachedBy: [...reachedBy].sort() };
 }
 
 // file::irNodeId — node IDs are module-relative ("module/foo.fn") and collide
@@ -46,6 +83,7 @@ function headKey(file: string, irNodeId: string): string {
 export function deriveThreadCalls(
   threads: ProjectThread[],
   entryPoints: EntryPoint[],
+  crossings?: CrossingIndexRecord | null,
 ): ThreadGraph {
   const epById = new Map(entryPoints.map((e) => [e.id, e]));
   // Every entry point's head function, keyed by where it lives.
@@ -82,13 +120,31 @@ export function deriveThreadCalls(
     return { from, to, count };
   });
 
-  return { nodes, edges };
+  // M-XLANG.3 - the cross-language hops. One edge per (caller thread,
+  // candidate route): an AMBIGUOUS crossing draws to every candidate,
+  // because drawing one would be the claim the join refused to make.
+  const crossingEdges: ThreadCrossingEdge[] = [];
+  for (const c of crossings?.all ?? []) {
+    for (const t of c.targets) {
+      if (c.entryPointId === t.entryPointId) continue;
+      crossingEdges.push({
+        from: c.entryPointId, to: t.entryPointId,
+        method: c.method, path: c.path, confidence: c.confidence,
+      });
+    }
+  }
+
+  return { nodes, edges, crossings: crossingEdges };
 }
 
 // L-R layered spacing — mirrors buildSystemLayout's COL/ROW idiom.
 const COL_GAP = 320;
 const ROW_GAP = 110;
 const THREAD_ACCENT = "var(--accent-thread)";
+// M-XLANG.3 - a crossing is a different KIND of claim from a call, so it
+// gets its own hue as well as its own dash (confidence is visible, the
+// PLAN-v5 aesthetic rule the `calls` edges already follow).
+const CROSSING_ACCENT = "var(--accent-config)";
 
 /**
  * Build react-flow nodes + edges for the thread-interaction graph. Layering is
@@ -99,11 +155,13 @@ const THREAD_ACCENT = "var(--accent-thread)";
 export function buildThreadInteractionLayout(
   threads: ProjectThread[],
   entryPoints: EntryPoint[],
+  crossings?: CrossingIndexRecord | null,
 ): { nodes: Node[]; edges: Edge[] } {
-  const g = deriveThreadCalls(threads, entryPoints);
+  const g = deriveThreadCalls(threads, entryPoints, crossings);
   const nodeIds = new Set(g.nodes.map((n) => n.entryPointId));
   // Keep only edges whose both endpoints are real nodes (defensive).
   const callEdges = g.edges.filter((e) => nodeIds.has(e.from) && nodeIds.has(e.to));
+  const crossEdges = g.crossings.filter((e) => nodeIds.has(e.from) && nodeIds.has(e.to));
 
   // Longest-path layering, capped to bound cycles. Roots stay at layer 0.
   const layer = new Map<string, number>();
@@ -111,7 +169,7 @@ export function buildThreadInteractionLayout(
   const cap = g.nodes.length;
   for (let iter = 0; iter < cap; iter++) {
     let changed = false;
-    for (const e of callEdges) {
+    for (const e of [...callEdges, ...crossEdges]) {
       const next = (layer.get(e.from) ?? 0) + 1;
       if (next > (layer.get(e.to) ?? 0) && next <= cap) {
         layer.set(e.to, next);
@@ -122,6 +180,7 @@ export function buildThreadInteractionLayout(
   }
 
   const rowInLayer: Record<number, number> = {};
+  const suffixes = entryLabelSuffixes(g.nodes.map((n) => ({ id: n.entryPointId, label: n.label, file: n.file })));
   const nodes: Node[] = g.nodes.map((gn) => {
     const l = layer.get(gn.entryPointId) ?? 0;
     const row = rowInLayer[l] ?? 0;
@@ -130,7 +189,7 @@ export function buildThreadInteractionLayout(
       id: gn.entryPointId,
       type: "threadInteraction",
       position: { x: l * COL_GAP, y: row * ROW_GAP },
-      data: { label: gn.label, kind: gn.kind, file: gn.file, entryPointId: gn.entryPointId },
+      data: { label: gn.label, suffix: suffixes.get(gn.entryPointId), kind: gn.kind, file: gn.file, entryPointId: gn.entryPointId },
       sourcePosition: Position.Right,
       targetPosition: Position.Left,
       draggable: true,
@@ -149,6 +208,30 @@ export function buildThreadInteractionLayout(
     labelStyle: { fill: "var(--text-muted)", fontSize: 10, fontFamily: "var(--font-ui)" },
     labelBgStyle: { fill: "var(--bg-canvas)", opacity: 0.8 },
   }));
+
+  // M-XLANG.3 - cross-language hops, drawn APART from resolved calls:
+  // dashed, in the config accent, and labelled with the method + path
+  // rather than a call count. An ambiguous one is marked, and draws to
+  // every candidate: the picture must not look more certain than the join.
+  for (const e of crossEdges) {
+    edges.push({
+      id: `crossing:${e.from}->${e.to}:${e.path}`,
+      source: e.from,
+      target: e.to,
+      type: "default",
+      markerEnd: { type: MarkerType.ArrowClosed, color: CROSSING_ACCENT, width: 16, height: 16 },
+      label: `${e.method ?? "?"} ${e.path}${e.confidence === "ambiguous" ? " (ambiguous)" : ""}`,
+      data: { crossing: true, confidence: e.confidence, path: e.path },
+      style: {
+        stroke: CROSSING_ACCENT,
+        strokeWidth: 1.5,
+        strokeDasharray: "5 4",
+        opacity: e.confidence === "ambiguous" ? 0.5 : 0.75,
+      },
+      labelStyle: { fill: "var(--text-muted)", fontSize: 10, fontFamily: "var(--font-mono)" },
+      labelBgStyle: { fill: "var(--bg-canvas)", opacity: 0.85 },
+    });
+  }
 
   return { nodes, edges };
 }

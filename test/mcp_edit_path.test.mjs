@@ -206,6 +206,36 @@ test("rewrite_node with NO source key is rejected (the old silent-delete shape)"
   assert.ok(fs.readFileSync(dbPath(), "utf-8").includes("def query"), "query must survive");
 });
 
+test("H2H finding: nodeId \"module\" WRITES the whole file (replace_module_body), and the other ops say why it is no anchor", async () => {
+  // get_node_source already accepts "module"; a worker that needed to touch
+  // the module docstring (no IR node exists for one) dead-ended on
+  // "Node not found: module" and escalated. Reading and writing now agree.
+  const beforeEdit = fs.readFileSync(dbPath(), "utf-8");
+  const withModuleDoc = '"""db — the module docstring, which has no IR node of its own."""\n' + beforeEdit;
+  const { text, isError } = await callTool("vibegraph_rewrite_node", {
+    nodeId: "module",
+    op: "replace_node",
+    filePath: "db.py",
+    payload: { source: withModuleDoc },
+  });
+  assert.equal(isError, false, text);
+  const onDisk = fs.readFileSync(dbPath(), "utf-8");
+  assert.ok(onDisk.startsWith('"""db — the module docstring'), "module docstring not written");
+  assert.ok(onDisk.includes("def query(sql, params=()):"), "the rest of the module must survive");
+  // revert through the same path
+  const revert = await callTool("vibegraph_rewrite_node", { nodeId: "module", op: "replace_node", filePath: "db.py", payload: { source: beforeEdit } });
+  assert.equal(revert.isError, false, revert.text);
+  assert.equal(fs.readFileSync(dbPath(), "utf-8"), beforeEdit);
+  // anchor ops: an honest hint, not a bare not-found, and the file untouched
+  for (const op of ["insert_statement_before", "insert_statement_after", "delete_node"]) {
+    const r = await callTool("vibegraph_rewrite_node", { nodeId: "module", op, filePath: "db.py", payload: { source: "x = 1\n" } });
+    assert.equal(r.isError, true, op);
+    assert.match(r.text, /"module" is the whole file, which has no anchor node/, op);
+    assert.match(r.text, /module docstring has no IR node of its own/, op);
+  }
+  assert.equal(fs.readFileSync(dbPath(), "utf-8"), beforeEdit, "anchor-op hints never touch the file");
+});
+
 test("M26.1: threads are fresh seconds after MCP edits — no watcher wait", async () => {
   // The fs-watcher now SKIPS self-edits (noteSelfEdit, 2s window), so a
   // project-update whose threads include the new function can only come

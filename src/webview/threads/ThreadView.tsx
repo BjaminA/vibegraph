@@ -13,7 +13,7 @@
 //     (see ThreadNode.tsx).
 
 import React, { useMemo, useRef, useEffect, useState, useCallback } from "react";
-import { MoveVertical, MoveHorizontal, ChevronsDownUp, ChevronsUpDown } from "lucide-react";
+import { MoveVertical, MoveHorizontal, ChevronsDownUp, ChevronsUpDown, Activity } from "lucide-react";
 import {
   ReactFlow,
   ReactFlowProvider,
@@ -29,11 +29,22 @@ import {
 import "@xyflow/react/dist/style.css";
 import { VgMiniMap, threadNodeColor } from "../Minimap";
 import { belowChipStrip } from "../ChipStrip";
+import { observationsForNode, runDate } from "../../shared/observations";
+import { capabilitiesForPath } from "../../shared/languages";
 
 import { ThreadNode } from "./ThreadNode";
 import { ThreadContainerNode, TARGET_PORTS } from "./ThreadContainerNode";
 import { ThreadEdge, type ThreadEdgeData } from "./ThreadEdge";
 import { ThreadNodeTooltip, type AnchorRect } from "./ThreadNodeTooltip";
+import { attributeBoundary, type Attribution } from "../../shared/stack_attribution";
+import { tierForZoom, crossedToSystem } from "./lod";
+import { foldByFile, FOLD_ABOVE } from "./thread_fold";
+import { placeThreadLabels } from "./label_place";
+/** An edge longer than this (flow px, |dx|+|dy|) in a big thread draws as stubs. */
+const LONG_EDGE_PX = 3000;
+import { ThreadFileCard, FILE_CARD_W, FILE_CARD_H } from "./ThreadFileCard";
+import type { CrossingRecord } from "../../shared/protocol";
+import { languageForPath } from "../../shared/languages";
 import { useThreadLayout, type ThreadOrientation } from "./useThreadLayout";
 import { deriveNests, collapseNests, nestFlowEdges } from "./collapse";
 import { planRunToNode } from "./runToNode";
@@ -56,7 +67,7 @@ import type { ProjectFileData, EntryPoint, AstNode } from "../../shared/protocol
 // its position + size from the descendants' layout positions and feeds
 // them through this custom node type. ThreadNode handles every other
 // kind (seed / step / external / dynamic / return).
-const nodeTypes = { threadNode: ThreadNode, threadContainer: ThreadContainerNode };
+const nodeTypes = { threadNode: ThreadNode, threadContainer: ThreadContainerNode, threadFileCard: ThreadFileCard };
 // U2: register the custom bezier-with-glow edge. The default react-flow
 // straight-line + inline-stroke pattern is replaced; visual treatment
 // (glow, tier-by-frequency, dashed cross-file, pulse, dim-non-focus)
@@ -64,6 +75,11 @@ const nodeTypes = { threadNode: ThreadNode, threadContainer: ThreadContainerNode
 const edgeTypes = { threadEdge: ThreadEdge };
 
 // Read CSS tokens at module load -- same pattern as layout/edges.ts.
+/** Clear of the canvas's top-left pills (skill badge, nests toggle), which
+ *  end ~112px down; every thread fit keeps its first card below them. */
+const FIT_TOP = 128;
+const FIT_PADDING = { top: `${FIT_TOP}px`, right: "8%", bottom: "8%", left: "8%" } as const;
+
 function readVar(name: string, fallback: string): string {
   if (typeof window === "undefined" || typeof document === "undefined") return fallback;
   const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
@@ -408,9 +424,25 @@ function ThreadCanvas({ thread: rawThread, width, height, projectIR, entryPoints
       return box;
     }
 
+    // One called function is ONE card however many blocks call it, so
+    // sibling containers that hold exactly the same cards compute the same
+    // rectangle and pile up (a private production codebase: eight `if` blocks around `bad`).
+    // Keep the first; its chip counts the rest — folded, never dropped.
+    const boxKey = (b: Box) => `${Math.round(b.minX)},${Math.round(b.minY)},${Math.round(b.maxX)},${Math.round(b.maxY)}`;
+    const firstByBox = new Map<string, string>();
+    const alsoCount = new Map<string, number>();
+    for (const c of containerNodes) {
+      const b = boxOf(c.id, new Set<string>());
+      if (!b) continue;
+      const k = boxKey(b);
+      const first = firstByBox.get(k);
+      if (!first) firstByBox.set(k, c.id);
+      else alsoCount.set(first, (alsoCount.get(first) ?? 0) + 1);
+    }
     return containerNodes.flatMap<Node>((c) => {
       const box = boxOf(c.id, new Set<string>());
       if (!box) return [];
+      if (firstByBox.get(boxKey(box)) !== c.id) return [];
       const minX = box.minX - PAD_X;
       const minY = box.minY - PAD_TOP;
       const maxX = box.maxX + PAD_X;
@@ -432,8 +464,19 @@ function ThreadCanvas({ thread: rawThread, width, height, projectIR, entryPoints
         data: {
           containerKind: c.containerKind,
           label: c.label,
+          alsoIn: alsoCount.get(c.id) ?? 0,
           accentVar,
           kindLabel,
+          // A container is the only element on the canvas that HAS source
+          // and never showed any: a `for`/`if`/`while`/`try` carries a file
+          // and an IR node id, and hovering it did nothing at all — a third
+          // of a C++ thread's elements, in every language (the C++ render
+          // review). Its chip is the hover target, not the whole region:
+          // the region spans its children, and a tooltip that opened
+          // whenever the cursor crossed a loop would fire constantly.
+          nodeId: c.id,
+          irNodeId: c.irNodeId,
+          file: c.file,
           // M24 — flow/fork edges anchor on container handles, which
           // follow the layout's main axis.
           orientation,
@@ -516,8 +559,17 @@ function ThreadCanvas({ thread: rawThread, width, height, projectIR, entryPoints
   // open at the SEED at a readable zoom instead and let pan / minimap /
   // the Controls fit button carry the tail. Threads that fit legibly keep
   // the full fit.
+  // What the last fit was for. A dock opening or closing changes only the
+  // canvas size; on a BIG thread re-fitting then sent the reader back to the
+  // seed every time they clicked a step (the editor docks on click), so for
+  // big threads a size-only change keeps the view where the reader put it.
+  const fitKeyRef = useRef<string | null>(null);
   useEffect(() => {
     if (!rf || !rf.fitView) return;
+    const fitKey = `${thread.seed.qualifiedName}|${orientation}`;
+    // Only a fit that really ran (a real canvas size, measured nodes) counts:
+    // the first pass fires before the canvas has its width.
+    if (fitKeyRef.current === fitKey && rawThread.nodes.length > FOLD_ABOVE) return;
     const LEGIBLE_FIT_ZOOM = 0.6; // below this, labels are noise
     const LEGIBLE_START_ZOOM = 0.78;
     const fitLegibly = () => {
@@ -529,13 +581,14 @@ function ThreadCanvas({ thread: rawThread, width, height, projectIR, entryPoints
         .map((n) => rf.getInternalNode(n.id))
         .filter((n): n is NonNullable<typeof n> => !!n?.measured?.width && !n.hidden);
       if (measured.length === 0) {
-        rf.fitView({ padding: 0.2, duration: 300 });
+        rf.fitView({ padding: FIT_PADDING, duration: 300 });
         return;
       }
+      if (width > 0 && height > 0) fitKeyRef.current = fitKey;
       const bounds = getNodesBounds(measured);
-      const full = getViewportForBounds(bounds, width, height, 0.1, 1, 0.2);
+      const full = getViewportForBounds(bounds, width, height, 0.1, 1, FIT_PADDING);
       if (full.zoom >= LEGIBLE_FIT_ZOOM) {
-        rf.fitView({ padding: 0.2, duration: 300 });
+        rf.fitView({ padding: FIT_PADDING, duration: 300 });
         return;
       }
       const zoom = LEGIBLE_START_ZOOM;
@@ -548,17 +601,20 @@ function ThreadCanvas({ thread: rawThread, width, height, projectIR, entryPoints
       // the seed's lane is the first, so it stays in view either way.
       const PAD = 48;
       if (orientation === "horizontal") {
+        // Centre in the band BELOW the canvas's top-left pills (skill /
+        // nests), which a card at the canvas top sat under (overlap pass).
         const extent = bounds.height * zoom;
-        const y = extent <= height - PAD * 2
-          ? (height - extent) / 2 - bounds.y * zoom
-          : PAD - bounds.y * zoom;
+        const band = height - FIT_TOP - PAD;
+        const y = extent <= band
+          ? FIT_TOP + (band - extent) / 2 - bounds.y * zoom
+          : FIT_TOP - bounds.y * zoom;
         rf.setViewport({ x: PAD - bounds.x * zoom, y, zoom }, { duration: 300 });
       } else {
         const extent = bounds.width * zoom;
         const x = extent <= width - PAD * 2
           ? (width - extent) / 2 - bounds.x * zoom
           : PAD - bounds.x * zoom;
-        rf.setViewport({ x, y: PAD - bounds.y * zoom, zoom }, { duration: 300 });
+        rf.setViewport({ x, y: FIT_TOP - bounds.y * zoom, zoom }, { duration: 300 });
       }
     };
     const quick = window.setTimeout(fitLegibly, 60);
@@ -656,10 +712,10 @@ function ThreadCanvas({ thread: rawThread, width, height, projectIR, entryPoints
     for (const e of thread.edges) {
       inDegree.set(e.to, (inDegree.get(e.to) ?? 0) + 1);
     }
-    const arrowColour = readVar("--accent-thread", "hsl(168 60% 56%)");
+    const arrowColour = readVar("--accent-thread", "hsl(166 78% 58%)");
     // §5.6a — the error path into an except band gets a red arrowhead to
     // match its red stroke (the only red edge in the thread).
-    const errorColour = readVar("--accent-error", "hsl(358 65% 58%)");
+    const errorColour = readVar("--accent-error", "hsl(356 90% 67%)");
 
     // §5.6 — spread converging container edges across the entry ports so
     // they don't collapse onto a single anchor and cross. Group edges
@@ -738,6 +794,11 @@ function ThreadCanvas({ thread: rawThread, width, height, projectIR, entryPoints
         crossFile,
         crossDepth,
         sameFileHueIndex,
+        // 2026-09-24 — the branch the edge leads INTO (useThreadLayout's
+        // branchOf): edges are coloured per branch, so each path under the
+        // thread's first fork reads as one colour. Edges into containers
+        // (fork arrows, contains) carry none.
+        branchHueIndex: tgt?.kind === "container" ? null : layout.branchOf?.get(e.to) ?? null,
         tier: buildEdgeTier(nodeById, inDegree, e.to),
         label: lbl?.text ?? null,
         labelFull: lbl?.fullText ?? null,
@@ -788,6 +849,58 @@ function ThreadCanvas({ thread: rawThread, width, height, projectIR, entryPoints
           0.35 + (0.3 * pos) / (idxs.length - 1);
       });
     }
+    // Big threads: an edge spanning more than LONG_EDGE_PX becomes two stubs
+    // (ThreadEdge STUB_PX) — its full length was the pan cost.
+    if (rawThread.nodes.length > FOLD_ABOVE) {
+      const firstOut = new Map<string, ThreadEdgeData>(), firstIn = new Map<string, ThreadEdgeData>();
+      const lbl = (id: string) => nodeById.get(id)?.label ?? id;
+      for (const e of built) {
+        const a = layout.positions.get(e.source), b = layout.positions.get(e.target);
+        if (!a || !b || Math.abs(a.x - b.x) + Math.abs(a.y - b.y) <= LONG_EDGE_PX) continue;
+        const d = e.data as unknown as ThreadEdgeData;
+        d.stub = { fromLabel: lbl(e.source), toLabel: lbl(e.target) };
+        // One chip per node end (ThreadEdge): the first long edge of each
+        // source carries every far target, the first of each target every
+        // far source.
+        const o = firstOut.get(e.source);
+        if (o) { o.stub!.out!.targets.push(e.target); o.stub!.out!.labels.push(lbl(e.target)); }
+        else { d.stub.out = { targets: [e.target], labels: [lbl(e.target)] }; firstOut.set(e.source, d); }
+        const i = firstIn.get(e.target);
+        if (i) { i.stub!.in!.sources.push(e.source); i.stub!.in!.labels.push(lbl(e.source)); }
+        else { d.stub.in = { sources: [e.source], labels: [lbl(e.source)] }; firstIn.set(e.target, d); }
+      }
+    }
+    // Labels and stub chips go where they cover no card and no other label
+    // (label_place.ts). A label with no free point along its curve is not
+    // drawn; a stub chip with no clear spot is not drawn (its stub still is).
+    {
+      const labelled = built.filter((e) => (e.data as unknown as ThreadEdgeData).label);
+      const chipOut = new Map<string, { dist: number; off: number; x: number; y: number } | null>();
+      const chips: { key: string; node: string; end: "out" | "in"; text: string }[] = [];
+      for (const e of built) {
+        const st = (e.data as unknown as ThreadEdgeData).stub;
+        if (st?.out) chips.push({ key: `${e.id}|out`, node: e.source, end: "out", text: st.out.targets.length > 1 ? `→ ${st.out.targets.length} far calls` : `→ ${st.out.labels[0]}` });
+        if (st?.in) chips.push({ key: `${e.id}|in`, node: e.target, end: "in", text: st.in.sources.length > 1 ? `${st.in.sources.length} far callers →` : `${st.in.labels[0]} →` });
+      }
+      const spots = placeThreadLabels(
+        labelled.map((e) => {
+          const d = e.data as unknown as ThreadEdgeData;
+          return { id: e.id, source: e.source, target: e.target, text: d.label!, t0: d.labelT };
+        }),
+        layout.positions, orientation === "horizontal", chips, chipOut,
+      );
+      for (const e of labelled) {
+        const d = e.data as unknown as ThreadEdgeData;
+        const t = spots.get(e.id)?.t ?? null;
+        if (t === null) d.label = null; else d.labelT = t;
+      }
+      for (const e of built) {
+        const st = (e.data as unknown as ThreadEdgeData).stub;
+        if (st?.out) st.out.at = chipOut.get(`${e.id}|out`) ?? null;
+        if (st?.in) st.in.at = chipOut.get(`${e.id}|in`) ?? null;
+      }
+    }
+
     return built;
     // §5.6 — layout.positions + orientation + container centres drive the
     // port assignment, so slots recompute on relayout / orientation toggle.
@@ -796,7 +909,23 @@ function ThreadCanvas({ thread: rawThread, width, height, projectIR, entryPoints
   // M5 wave 3 — clicking a step / return node funnels through the
   // vg-selection bus so the diagram & code view stay in sync.
   // External terminals (library/dynamic) have no irNodeId; skip them.
-  const handleNodeClick = (_: React.MouseEvent, node: { id: string }) => {
+  const handleNodeClick = (_: React.MouseEvent, node: { id: string; data?: unknown }) => {
+    // A folded FILE card zooms into that file's steps; the zoom leaves the
+    // overview tier, so the steps return (only those in view are drawn).
+    const card = (node.data as { card?: { members: string[] } } | undefined)?.card;
+    if (card) {
+      const pts = card.members.map((id) => layout.positions.get(id)).filter((q): q is { x: number; y: number } => !!q);
+      if (!pts.length) return;
+      const xs = pts.map((q) => q.x), ys = pts.map((q) => q.y);
+      const bx = Math.min(...xs), by = Math.min(...ys);
+      const bw = Math.max(...xs) - bx + 260, bh = Math.max(...ys) - by + 100;
+      // Frame the file BELOW the floating toolbar (it covers the canvas's top
+      // ~130px; framing at y 48 put the first row under it, unclickable).
+      const TOP = 160, SIDE = 48;
+      const zoom = Math.max(0.6, Math.min(1, (width - 2 * SIDE) / bw, (height - TOP - SIDE) / bh));
+      moveView({ x: SIDE - bx * zoom, y: TOP - by * zoom, zoom }, 0); // a long jump: no fly
+      return;
+    }
     const original = thread.nodes.find((n) => n.id === node.id);
     if (!original || !original.irNodeId || !original.file) return;
     document.dispatchEvent(new CustomEvent("vg-selection", {
@@ -815,28 +944,157 @@ function ThreadCanvas({ thread: rawThread, width, height, projectIR, entryPoints
   // TIER switches ride quantized useStore selectors in the node
   // components themselves.
   const lodWrapRef = useRef<HTMLDivElement | null>(null);
+  // M-ZOOM (PLAN-v5 §5.2) - the band below `overview` leaves the thread
+  // for the system plane. Fires on CROSSING, once, so sitting at the
+  // bottom of the range does not re-fire; and the hint below announces it
+  // before it happens, because a view change nobody asked for is the
+  // failure mode.
+  const lastZoomRef = useRef<number>(1);
+  const [atOverview, setAtOverview] = useState(false);
+  // ARMING matters more than it looks. This view can be ARRIVED at from
+  // the system plane, and it mounts before react-flow has reported a
+  // viewport - so an unarmed handler compares the real zoom against a
+  // placeholder, reads that as a crossing, and bounces straight back.
+  // Two views each doing that is an infinite ping-pong, which is exactly
+  // how it failed the first time (the browser died, not the assertion).
+  const armedRef = useRef(false);
+  useEffect(() => {
+    armedRef.current = false;
+    lastZoomRef.current = rf.getViewport().zoom;
+    const t = setTimeout(() => { armedRef.current = true; }, 500);
+    return () => clearTimeout(t);
+  }, []);
+  // A move the VIEW makes (a file card's zoom-in, a stub's jump, framing the
+  // fold) must never read as the reader zooming out to the system plane:
+  // an animated viewport change over a long distance "flies" — d3 zooms far
+  // out mid-flight — and crossed the 0.14 band on the way (found by the
+  // big-thread click-through: a file card opened the System view).
+  const moveView = (vp: { x: number; y: number; zoom: number }, duration: number) => {
+    armedRef.current = false;
+    // Re-arm when the move has LANDED (a timer re-armed mid-flight once and
+    // the tail of the fly still crossed the band).
+    Promise.resolve(rf.setViewport(vp, { duration })).then(() => {
+      window.setTimeout(() => { lastZoomRef.current = rf.getViewport().zoom; armedRef.current = true; }, 60);
+    });
+  };
+  const onZoomMove = (zoom: number) => {
+    const prev = lastZoomRef.current;
+    lastZoomRef.current = zoom;
+    // Only re-render when the TIER changes, not once per zoom frame.
+    setAtOverview((was) => {
+      const now = tierForZoom(zoom) === "overview";
+      return was === now ? was : now;
+    });
+    if (armedRef.current && crossedToSystem(prev, zoom)) {
+      armedRef.current = false; // one transition per visit
+      document.dispatchEvent(new CustomEvent("vg-zoom-to-system", {
+        detail: { entryPointId: rawThread.entryPointId ?? null },
+      }));
+    }
+  };
+  // Stubbed long edges are drawn only when one of their ENDS is near the
+  // view: react-flow keeps an edge whose straight line crosses the viewport,
+  // which after unfolding a big thread meant 1,317 edges (and their chips)
+  // for a screen showing 34 steps. Re-checked 150 ms after the view stops.
+  const [viewRect, setViewRect] = useState<{ x0: number; y0: number; x1: number; y1: number } | null>(null);
+  const viewTimer = useRef<number | null>(null);
+  const noteView = (vp: { x: number; y: number; zoom: number }) => {
+    if (viewTimer.current !== null) window.clearTimeout(viewTimer.current);
+    viewTimer.current = window.setTimeout(() => {
+      const m = 400 / vp.zoom; // a margin, so a stub just off-screen is ready
+      setViewRect({ x0: -vp.x / vp.zoom - m, y0: -vp.y / vp.zoom - m, x1: (width - vp.x) / vp.zoom + m, y1: (height - vp.y) / vp.zoom + m });
+    }, 150);
+  };
+  const edgesShown = useMemo(() => {
+    if (!viewRect) return edges;
+    const near = (id: string) => {
+      const q = layout.positions.get(id);
+      return !!q && q.x > viewRect.x0 && q.x < viewRect.x1 && q.y > viewRect.y0 && q.y < viewRect.y1;
+    };
+    return edges.map((e) => ((e.data as unknown as ThreadEdgeData)?.stub && !near(e.source) && !near(e.target) ? { ...e, hidden: true } : e));
+  }, [edges, viewRect, layout.positions]);
+  // One array identity per real change: a fresh spread on every render made
+  // react-flow diff every node of a big thread on each unrelated re-render.
+  const allNodes = useMemo(() => [...containerReactFlowNodes, ...nestContainerNodes, ...nodes], [containerReactFlowNodes, nestContainerNodes, nodes]);
   const setInvZoom = (zoom: number) => {
     lodWrapRef.current?.style.setProperty("--vg-inv-zoom", (1 / Math.max(zoom, 0.01)).toFixed(4));
   };
   useEffect(() => { setInvZoom(rf.getViewport().zoom); });
 
+  // Big threads fold BY FILE at the overview tier (thread_fold.ts): one card
+  // per file instead of thousands of steps no one can read at that zoom.
+  const folded = useMemo(() => {
+    if (!atOverview || thread.nodes.length <= FOLD_ABOVE) return null;
+    const f = foldByFile(thread.nodes, thread.edges, layout.positions, thread.seed.file ?? null);
+    return {
+      nodes: f.cards.map((c): Node => ({
+        id: c.id, type: "threadFileCard",
+        position: { x: c.x, y: c.y },
+        data: { card: c }, draggable: false, selectable: true,
+      })),
+      edges: f.edges.map((e): Edge => ({
+        id: e.id, source: e.from, target: e.to, type: "default",
+        label: e.count > 1 ? `×${e.count}` : undefined,
+        style: { stroke: "var(--accent-thread)", strokeWidth: Math.min(12, 3 + e.count), opacity: 0.5 },
+        labelStyle: { fill: "var(--text-muted)", fontSize: 40, fontFamily: "var(--font-mono)" },
+        labelBgStyle: { fill: "var(--bg-canvas)", opacity: 0.8 },
+      })),
+    };
+  }, [atOverview, thread.nodes, thread.edges, thread.seed.file, layout.positions]);
+  // Entering the fold frames the file grid: it is a different picture, laid
+  // out apart from the steps. The zoom stays inside the overview band —
+  // above the system-view threshold (0.14) and below the fold's (0.28) — so
+  // framing can neither leave the thread nor unfold it.
+  // A stub's chip jumps to the edge's far end, at a readable zoom.
+  useEffect(() => {
+    const onJump = (ev: Event) => {
+      const id = (ev as CustomEvent<{ nodeId: string }>).detail?.nodeId;
+      const p = id ? layout.positions.get(id) : undefined;
+      if (!p) return;
+      const zoom = Math.max(rf.getViewport().zoom, 0.78);
+      moveView({ x: width / 2 - (p.x + 120) * zoom, y: (height + 130) / 2 - (p.y + 30) * zoom, zoom }, 0); // a long jump: no fly; centred in the area under the toolbar
+    };
+    document.addEventListener("vg-thread-jump", onJump);
+    return () => document.removeEventListener("vg-thread-jump", onJump);
+  }, [rf, layout.positions]);
+  const wasFolded = useRef(false);
+  useEffect(() => {
+    const now = !!folded;
+    if (now && !wasFolded.current && folded!.nodes.length) {
+      const xs = folded!.nodes.map((n) => n.position.x), ys = folded!.nodes.map((n) => n.position.y);
+      const bx = Math.min(...xs), by = Math.min(...ys);
+      const bw = Math.max(...xs) - bx + FILE_CARD_W, bh = Math.max(...ys) - by + FILE_CARD_H;
+      const zoom = Math.min(0.26, Math.max(0.15, Math.min((width - 96) / bw, (height - 208) / bh)));
+      moveView({ x: 48 - bx * zoom, y: 160 - by * zoom, zoom }, 200); // below the floating toolbar
+    }
+    wasFolded.current = now;
+  }, [folded, rf, width, height]);
+
   return (
-    <div ref={lodWrapRef} style={{ width: "100%", height: "100%" }}>
+    <div ref={lodWrapRef} data-thread-folded={folded ? "true" : "false"} style={{ width: "100%", height: "100%" }}>
     <ReactFlow
       // M17.3 — containers go first so they stack behind regular nodes
       // (react-flow renders later-array entries on top). Combined here at
       // the boundary rather than in a third memo: both inputs are
       // already memoised, and the spread is cheap.
-      nodes={[...containerReactFlowNodes, ...nestContainerNodes, ...nodes]}
-      edges={edges}
+      nodes={folded ? folded.nodes : allNodes}
+      edges={folded ? folded.edges : edgesShown}
+      // BIG threads draw only what is on screen: on a 4,000-step thread the
+      // whole DOM was 73k elements and panning ran at ~9 fps. Small threads
+      // keep every element (specs and the minimap read off-screen ones).
+      onlyRenderVisibleElements={rawThread.nodes.length > FOLD_ABOVE}
       nodeTypes={nodeTypes}
       edgeTypes={edgeTypes}
-      fitView
+      // BIG threads drop the `fitView` prop: react-flow re-fits whenever a
+      // new node set is measured, so unfolding (thread_fold.ts) snapped the
+      // view back to the whole-thread fit at minZoom. The fitLegibly effect
+      // owns their first fit; small threads keep the prop exactly as before.
+      fitView={rawThread.nodes.length <= FOLD_ABOVE}
       // M17.3-polish — bump fitView padding so containers don't graze
       // the ExternalEffectsPanel boundary. 0.3 = 30% gutter on each
       // side, which gives the bordered regions clear space from the
       // right-side panel chrome.
-      fitViewOptions={{ padding: 0.3 }}
+      fitViewOptions={{ padding: FIT_PADDING }}
       // M23 — react-flow's default minZoom (0.5) clamps fitView on the
       // L-R layout: a long thread needs ~0.3 to fit its main axis, so
       // the fit silently stopped at 0.5 and the thread overflowed both
@@ -853,7 +1111,8 @@ function ThreadCanvas({ thread: rawThread, width, height, projectIR, entryPoints
       nodesConnectable={false}
       elementsSelectable={true}
       onNodeClick={handleNodeClick}
-      onMove={(_, viewport) => setInvZoom(viewport.zoom)}
+      onMove={(_, viewport) => { setInvZoom(viewport.zoom); onZoomMove(viewport.zoom); noteView(viewport); }}
+      onInit={(inst) => noteView(inst.getViewport())}
     >
       <Background color="var(--border-edge)" gap={24} size={1} />
       <Controls style={{ background: "var(--bg-node)", borderColor: "var(--border-edge)" }} />
@@ -865,6 +1124,23 @@ function ThreadCanvas({ thread: rawThread, width, height, projectIR, entryPoints
           M-NA7 — wide + shallow dims match the L-R thread aspect (the
           default 200×150 squeezed a long thread into a grey smear). */}
       {!hideMiniMap && <VgMiniMap nodeColor={threadNodeColor} width={260} height={110} />}
+      {/* M-ZOOM - announce the next band BEFORE crossing it. The tiers
+          are a continuum; the one that changes view has to be asked for
+          knowingly, so it is named while you are still in the thread. */}
+      {atOverview && (
+        <div
+          data-zoom-hint
+          style={{
+            position: "absolute", bottom: 12, left: "50%", transform: "translateX(-50%)",
+            zIndex: 5, pointerEvents: "none",
+            padding: "3px 10px", borderRadius: 4,
+            background: "var(--bg-node)", border: "1px solid var(--border-edge)",
+            color: "var(--text-muted)", fontSize: 11, fontFamily: "var(--font-ui)",
+            opacity: 0.9,
+          }}>
+          keep zooming out for the system view
+        </div>
+      )}
     </ReactFlow>
     </div>
   );
@@ -886,6 +1162,17 @@ export interface ThreadViewProps {
   // tooltip would overlap it. Suppress/dismiss tooltips while it's open
   // too (same unmount precedent as editorOpen).
   codeOpen?: boolean;
+  // M-BOUNDARY.4 — the stack facts, so a terminal's tooltip can name the
+  // TOOL the call leaves through. Optional: without it the tooltip keeps
+  // its pre-M-BOUNDARY body exactly.
+  stack?: import("../../shared/protocol").StackIndexRecord | null;
+  // M-XLANG.2 — this thread's crossings, so an HTTP terminal can name the
+  // route (in another language) that serves it and open that thread.
+  crossings?: import("../../shared/protocol").CrossingIndexRecord | null;
+  // PLAN-M-RUNTIME phase 3 — the trace overlay, so a node can say what a
+  // consented run actually dispatched to. Optional: without it every node
+  // renders exactly as it did before phase 3.
+  observations?: import("../../shared/protocol").ObservationStoreRecord | null;
 }
 
 // U3.1 — hover/pin tooltip state.
@@ -906,6 +1193,17 @@ interface TooltipState {
   kind: string;
   label: string;
   preview?: string | null;
+  /** M-RUN3 structural runnability. Both setTooltip call sites have passed
+   *  it since M-RUN3; the interface never declared it, so tsc has flagged
+   *  those two literals ever since. Declared here (type-only fix, noticed
+   *  while adding the field below). */
+  runnable?: boolean;
+  /** M-BOUNDARY.4 — the tool this boundary leaves through, if any rule
+   *  reached it. Computed here (the index and the per-file IR both live at
+   *  this level) and handed to the tooltip ready to render. */
+  boundaryTool?: Attribution;
+  /** M-XLANG.2 — the crossing this terminal is, when the join found one. */
+  crossing?: CrossingRecord;
   anchor: AnchorRect;
   pinned: boolean;
   // M17.1 — via-local terminals: passed through to the tooltip so
@@ -934,10 +1232,115 @@ interface HoverEventDetail {
 
 const HOVER_OPEN_DELAY = 150;
 const HOVER_CLOSE_DELAY = 200;
+/** M-BOUNDARY.4 — the terminal kinds that ARE boundaries (extract_thread's
+ *  shape): the only ones a tool attribution can apply to. */
+const TERMINAL_TOOLTIP_KINDS = new Set(["external", "dynamic", "unresolved"]);
 
-export function ThreadView({ thread, projectIR, entryPoints, editorOpen, codeOpen }: ThreadViewProps) {
+export function ThreadView({ thread, projectIR, entryPoints, editorOpen, codeOpen, stack, crossings, observations }: ThreadViewProps) {
   // W2 — either right-edge detail dock suppresses/dismisses the tooltip.
   const detailDockOpen = !!editorOpen || !!codeOpen;
+
+  // M-BOUNDARY.4 — which TOOL this boundary leaves the project through,
+  // through the SAME pure rule the server's contract uses (src/shared/
+  // stack_attribution.ts). External terminals carry `file: null`, so the
+  // owning file is found from the per-file IR by node id. Returns undefined
+  // when nothing resolved — the tooltip then keeps its honest
+  // receiver-bound-at-runtime body rather than inventing a tool.
+  // The node listeners are registered in an effect whose deps do not
+  // include `stack` (adding it would re-register them on every envelope),
+  // so the handler must not close over the FIRST render's value - which is
+  // null, because the index arrives with the first project payload.
+  const stackRef = useRef(stack);
+  stackRef.current = stack;
+  const crossingsRef = useRef(crossings);
+  crossingsRef.current = crossings;
+  const observationsRef = useRef(observations);
+  observationsRef.current = observations;
+
+  // PLAN-M-RUNTIME phase 3 — the trace run's own state. Deliberately NOT
+  // derived from `observations`: the overlay says what a run saw, and this
+  // says what THIS press is doing about it, including the consent step in
+  // which nothing has run yet.
+  const [tracing, setTracing] = useState(false);
+  const [traceResult, setTraceResult] = useState<
+    Extract<ExtensionMessage, { type: "thread-traced" }>["payload"] | null
+  >(null);
+  const entryPointId = thread.entryPointId ?? null;
+  // Gated on , NOT on : bash has a trace floor and no run floor,
+  // and the affordance must match the operation that exists behind it.
+  const traceable = capabilitiesForPath(thread.seed?.file ?? null).trace;
+  useEffect(() => { setTracing(false); setTraceResult(null); }, [entryPointId]);
+  useEffect(() => {
+    if (!entryPointId) return;
+    const handler = (msg: ExtensionMessage) => {
+      if (msg.type === "thread-traced" && msg.payload.entryPointId === entryPointId) {
+        setTracing(false);
+        setTraceResult(msg.payload);
+      }
+    };
+    bridge.onMessage(handler);
+    return () => bridge.removeListener(handler);
+  }, [entryPointId]);
+  const startTrace = (consent?: string) => {
+    if (!entryPointId) return;
+    setTracing(true);
+    setTraceResult(null);
+    bridge.postMessage({
+      type: "trace-thread",
+      payload: { entryPointId, ...(consent ? { effectConsent: consent } : {}) },
+    });
+  };
+  const projectIRRef = useRef(projectIR);
+  projectIRRef.current = projectIR;
+  /** M-XLANG.2 — the crossing this terminal IS, if the join found one.
+   *  Keyed on the call's IR node id, which is what a crossing records. */
+  const crossingFor = (d: HoverEventDetail): CrossingRecord | undefined => {
+    const idx = crossingsRef.current;
+    if (!idx || !d.irNodeId) return undefined;
+    const list = idx.byThread[thread.entryPointId ?? ""] ?? idx.all;
+    return list.find((c) => c.nodeId === d.irNodeId);
+  };
+  // The file a node BELONGS to, which is not the file it navigates to: a
+  // terminal (`eng.run`, `$HOOK_CMD`) has `d.file === null` because there is
+  // nothing to open, but the CALL is still written somewhere, and that
+  // somewhere decides the language. Attribution has always needed this;
+  // PLAN-M-RUNTIME phase 2's Observe button needs the same answer, so it is
+  // one function rather than two copies drifting apart.
+  const ownerFileFor = (d: HoverEventDetail): string | null => {
+    if (d.file) return d.file;
+    if (!d.irNodeId) return null;
+    const files = projectIRRef.current ?? {};
+    return Object.keys(files).find(
+      (f) => (files[f]?.nodes ?? []).some((n: any) => n.id === d.irNodeId),
+    ) ?? null;
+  };
+  // PLAN-M-RUNTIME phase 3 — what a consented run saw at this node. Read
+  // through the SAME shared function the server uses (src/shared/
+  // observations.ts), so the tooltip and a prompt can never disagree about
+  // what was observed — the stack_attribution rule.
+  const observationsFor = (d: HoverEventDetail) =>
+    observationsForNode(observationsRef.current, ownerFileFor(d), d.irNodeId);
+  const boundaryToolFor = (d: HoverEventDetail): Attribution | undefined => {
+    const stack = stackRef.current;
+    if (!stack || !TERMINAL_TOOLTIP_KINDS.has(d.kind)) return undefined;
+    const files = projectIRRef.current ?? {};
+    const file = ownerFileFor(d);
+    const ir = file && d.irNodeId
+      ? (files[file]?.nodes ?? []).find((n: any) => n.id === d.irNodeId)
+      : null;
+    const a = attributeBoundary({
+      language: (file ? languageForPath(file)?.id : null) ?? "",
+      label: d.label,
+      kind: d.kind as "external" | "dynamic" | "unresolved",
+      qualifiedTarget: d.qualifiedTarget ?? null,
+      effectKind: (d as { effectKind?: string }).effectKind ?? (ir as any)?.effectKind ?? null,
+      file,
+      irNodeId: d.irNodeId,
+      imports: file ? stack.importsByFile?.[file] ?? [] : [],
+      stack,
+    });
+    return a && a.how !== "builtin" ? a : undefined;
+  };
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [size, setSize] = useState<{ width: number; height: number }>({
     width: 1200,
@@ -1196,6 +1599,10 @@ export function ThreadView({ thread, projectIR, entryPoints, editorOpen, codeOpe
           receiverBoundFrom: d.receiverBoundFrom,
           receiverBoundKind: d.receiverBoundKind,
           runnable: structurallyRunnable(d),
+          boundaryTool: boundaryToolFor(d),
+          crossing: crossingFor(d),
+          ownerFile: ownerFileFor(d),
+          observations: observationsFor(d),
           anchor: d.anchor!,
           pinned: false,
         });
@@ -1227,6 +1634,10 @@ export function ThreadView({ thread, projectIR, entryPoints, editorOpen, codeOpe
         receiverBoundFrom: d.receiverBoundFrom,
         receiverBoundKind: d.receiverBoundKind,
         runnable: structurallyRunnable(d),
+        boundaryTool: boundaryToolFor(d),
+        crossing: crossingFor(d),
+        ownerFile: ownerFileFor(d),
+        observations: observationsFor(d),
         anchor: d.anchor,
         pinned: true,
       });
@@ -1483,6 +1894,123 @@ export function ThreadView({ thread, projectIR, entryPoints, editorOpen, codeOpe
             : <ChevronsUpDown size={14} strokeWidth={1.5} />}
           nests
         </button>
+      )}
+
+      {/* PLAN-M-RUNTIME phase 3 — TRACE THIS THREAD: one consented run of
+          the entry point, annotating every call site it touched at once.
+          The batch form of the tooltip's Observe, and it shares that floor:
+          the first press returns the effects on the path plus a token, and
+          nothing has run until the human presses again. */}
+      {!editorOpen && !codeOpen && thread.entryPointId && traceable && (
+        <div style={{ position: "absolute", top: belowChipStrip(threadHasNests ? 1 : 0), left: 12, zIndex: 30 }}>
+          <button
+            data-trace-thread
+            onClick={() => startTrace()}
+            disabled={tracing}
+            title="Run this entry point once and record what every call site really called"
+            style={{
+              display: "flex", alignItems: "center", gap: 6,
+              background: "color-mix(in oklab, var(--bg-node) 90%, transparent)",
+              border: "1px solid var(--border-edge)", borderRadius: 8,
+              padding: "5px 10px",
+              color: tracing ? "var(--text-muted)" : "var(--text-secondary)",
+              fontFamily: "var(--font-ui)", fontSize: "var(--fs-11)",
+              cursor: tracing ? "wait" : "pointer",
+              backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)",
+            }}
+          >
+            <Activity size={14} strokeWidth={1.5} />
+            {tracing ? "tracing…" : "trace"}
+          </button>
+          {traceResult && (() => {
+            const t = traceResult;
+            if (t.outcome === "requires-confirmation" && t.effects?.length && t.effectConsentToken) {
+              return (
+                <div data-trace-consent style={{
+                  marginTop: 6, maxWidth: 380,
+                  background: "color-mix(in oklab, var(--bg-node) 95%, transparent)",
+                  border: "1px solid color-mix(in oklab, var(--accent-warning) 30%, transparent)",
+                  borderRadius: 8, padding: "8px 10px",
+                  fontFamily: "var(--font-mono)", fontSize: 11, lineHeight: 1.5,
+                  backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)",
+                }}>
+                  <div style={{ color: "var(--accent-warning)", fontWeight: 600 }}>
+                    Tracing runs this whole entry point
+                  </div>
+                  <div style={{ marginTop: 4, color: "var(--text-muted)", fontSize: 10 }}>
+                    Nothing has run. These effects are on the path:
+                  </div>
+                  <ul style={{ margin: "4px 0 0", paddingLeft: 16, color: "var(--text-primary)", fontSize: 10, maxHeight: 140, overflowY: "auto" }}>
+                    {t.effects.map((e, i) => (
+                      <li key={i}>{e.target} <span style={{ color: "var(--text-muted)" }}>
+                        ({e.kind}{e.effectKind ? `: ${e.effectKind}` : ""} · {e.file}:{e.line})
+                      </span></li>
+                    ))}
+                  </ul>
+                  <div style={{ marginTop: 8, display: "flex", gap: 8 }}>
+                    <button
+                      data-trace-confirm
+                      onClick={() => startTrace(t.effectConsentToken!)}
+                      style={{
+                        background: "color-mix(in oklab, var(--accent-thread) 16%, transparent)",
+                        border: "1px solid color-mix(in oklab, var(--accent-thread) 50%, transparent)",
+                        borderRadius: 4, color: "var(--accent-thread)", padding: "4px 10px",
+                        cursor: "pointer", fontSize: 11, fontFamily: "var(--font-mono)", fontWeight: 600,
+                      }}
+                    >▷ Run with the listed effects</button>
+                    <button
+                      onClick={() => setTraceResult(null)}
+                      style={{
+                        background: "transparent", border: "1px solid var(--border-edge)",
+                        borderRadius: 4, color: "var(--text-muted)", padding: "4px 10px",
+                        cursor: "pointer", fontSize: 11, fontFamily: "var(--font-mono)",
+                      }}
+                    >Cancel</button>
+                  </div>
+                </div>
+              );
+            }
+            return (
+              <div data-trace-result data-trace-outcome={t.outcome} style={{
+                marginTop: 6, maxWidth: 380,
+                background: "color-mix(in oklab, var(--bg-node) 95%, transparent)",
+                border: "1px solid var(--border-edge)", borderRadius: 8, padding: "8px 10px",
+                fontFamily: "var(--font-mono)", fontSize: 11, lineHeight: 1.5,
+                backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)",
+              }}>
+                <div style={{ color: t.observed > 0 ? "var(--accent-thread)" : "var(--accent-error)" }}>
+                  {t.observed > 0
+                    ? `${t.observed} call site(s) annotated`
+                    : `Nothing annotated (${t.outcome})`}
+                </div>
+                {/* A run that raised still wrote down what it saw first, and
+                    saying so is the difference between partial evidence and
+                    a clean pass. */}
+                {t.outcome !== "ok" && t.observed > 0 && (
+                  <div style={{ marginTop: 4, color: "var(--accent-warning)", fontSize: 10 }}>
+                    The run ended {t.outcome} — these are the sites it reached before that.
+                  </div>
+                )}
+                <div data-trace-note style={{ marginTop: 4, color: "var(--text-muted)", fontSize: 10 }}>
+                  {t.note}
+                </div>
+                {t.error && (
+                  <div style={{ marginTop: 4, color: "var(--text-muted)", fontSize: 10, wordBreak: "break-word" }}>
+                    {t.error.slice(0, 300)}
+                  </div>
+                )}
+                <button
+                  onClick={() => setTraceResult(null)}
+                  style={{
+                    marginTop: 6, background: "transparent", border: "1px solid var(--border-edge)",
+                    borderRadius: 4, color: "var(--text-muted)", padding: "2px 8px",
+                    cursor: "pointer", fontSize: 10, fontFamily: "var(--font-mono)",
+                  }}
+                >Dismiss</button>
+              </div>
+            );
+          })()}
+        </div>
       )}
 
       {!editorOpen && (

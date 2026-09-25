@@ -11,6 +11,7 @@
 // identity (reassigned on boot parse and every M26 refreshDerived).
 
 import { extractNodeIdTokens } from "./citations.ts";
+import { LANGUAGES } from "../shared/languages.ts";
 
 // Minimal structural inputs (ProjectThread.nodes is unknown[] on the wire;
 // we read only the fields the remit needs, absent fields simply add nothing).
@@ -106,10 +107,20 @@ export function buildRemitIndex(threads: RemitThreadInput[]): ThreadRemit[] {
 
 // ── question tokenization (false-positive-hostile) ─────────────────────
 // A bare English word never matches: a symbol candidate must be backticked,
-// dotted, underscored, or written as a call. File tokens must be *.py-shaped.
+// dotted, underscored, or written as a call. File tokens must be shaped
+// like a REGISTERED language's source file (M-LANG6: the extension
+// alternation is built from the registry, so a question naming
+// deploy.sh or db.ts routes exactly like one naming app.py).
 // Node-id tokens use the pinned grammar from citations.ts.
 
-const FILE_TOKEN_RE = /(?:[A-Za-z0-9_\-.]+\/)*[A-Za-z0-9_\-]+\.py\b/g;
+const SOURCE_EXT_ALTERNATION = LANGUAGES
+  .flatMap((l) => l.extensions)
+  .map((e) => e.slice(1))
+  .join("|");
+const FILE_TOKEN_RE = new RegExp(
+  `(?:[A-Za-z0-9_\\-.]+\\/)*[A-Za-z0-9_\\-]+\\.(?:${SOURCE_EXT_ALTERNATION})\\b`,
+  "g",
+);
 const BACKTICK_RE = /`([^`]+)`/g;
 const WORD_TOKEN_RE = /[A-Za-z_][A-Za-z0-9_]*(?:[.:][A-Za-z_][A-Za-z0-9_]*)*(?:\(\))?/g;
 
@@ -140,7 +151,11 @@ export function tokenizeQuestion(question: string): QuestionTokens {
     const codeShaped = raw.endsWith("()") || raw.includes("_") || raw.includes(".") || raw.includes(":");
     if (!codeShaped) continue;
     const token = stripCall(raw);
-    if (token && !nodeIds.has(token) && !files.has(token) && !token.endsWith(".py")) {
+    // M-LANG6 — a token shaped like ANY registered language's source
+    // file is a file token, never a symbol (was `.py`-only).
+    const isSourceToken = LANGUAGES.some((l) =>
+      l.extensions.some((ext) => token.endsWith(ext)));
+    if (token && !nodeIds.has(token) && !files.has(token) && !isSourceToken) {
       symbols.add(token);
     }
   }

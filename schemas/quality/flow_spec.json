@@ -1,0 +1,170 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibegraph.dev/schemas/quality/flow_spec.json",
+  "title": "VibeGraph quality layer: flow spec",
+  "description": "Per task archetype: how packets group, how they order, where the gates sit, which evidence classes are mandatory, the archetype's ESCALATE surface, its declared overhead against a blind run, and the cheaper-lane rule (RUN1.md 5.2). Constants pin what PLAN-HISTORY settled: the objective gate is human, escalation goes to a human, and mandatory evidence can only be derived, observed or stated (a self-report or a model's judgement can never be what a run requires). Overhead is a measured record naming the report and the blind run it was paired with, or Unknown; it is never a number typed into a config.",
+  "type": "object",
+  "required": ["version", "provenance", "archetypes"],
+  "additionalProperties": false,
+  "properties": {
+    "version": { "const": "1.0" },
+    "provenance": {
+      "oneOf": [
+        { "$ref": "evidence.json#/$defs/Derived" },
+        { "$ref": "evidence.json#/$defs/Stated" }
+      ]
+    },
+    "archetypes": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/FlowArchetype" } }
+  },
+  "$defs": {
+    "TaskFact": {
+      "description": "Facts of the packet envelope, beside the stack profile's. constraintsRouted: at least one stated constraint routes to the thread. effectfulBoundaries: the contract's Leaves-the-project-through has an effectful external. systemPacket: the packet was proposed by the brief for work no thread owns. crossLanguage: the thread has a crossing. retry: the packet is a re-draft after a rejection.",
+      "enum": ["constraintsRouted", "effectfulBoundaries", "systemPacket", "crossLanguage", "retry"]
+    },
+    "TaskPredicate": {
+      "description": "The quality model's predicate extended with task facts. No `always`.",
+      "oneOf": [
+        {
+          "type": "object", "required": ["all"], "additionalProperties": false,
+          "properties": { "all": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/TaskPredicate" } } }
+        },
+        {
+          "type": "object", "required": ["any"], "additionalProperties": false,
+          "properties": { "any": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/TaskPredicate" } } }
+        },
+        {
+          "type": "object", "required": ["not"], "additionalProperties": false,
+          "properties": { "not": { "$ref": "#/$defs/TaskPredicate" } }
+        },
+        {
+          "type": "object", "required": ["task", "is"], "additionalProperties": false,
+          "properties": {
+            "task": { "$ref": "#/$defs/TaskFact" },
+            "is": { "type": "boolean" }
+          }
+        },
+        { "$ref": "quality_model.json#/$defs/Predicate" }
+      ]
+    },
+    "EscalateTrigger": {
+      "description": "The triggers the system already recognises, plus the two RUN1 5.1 adds (repeated-violation, plan-problem).",
+      "enum": ["out-of-scope-edit", "contract-break", "worker-session-failed", "output-contract-broken", "no-bytes-changed", "new-dependency", "unverifiable-check", "repeated-violation", "plan-problem", "silent-reviewer"]
+    },
+    "MeasuredOverhead": {
+      "description": "A paired run recorded the h2h way. The number lives in the report; the spec cites it.",
+      "type": "object",
+      "required": ["report", "blindRun", "commit", "model", "at"],
+      "additionalProperties": false,
+      "properties": {
+        "report": { "type": "string", "minLength": 1, "description": "Path of the report, e.g. reviews/h2h2/REPORT.md." },
+        "blindRun": { "type": "string", "minLength": 1, "description": "Path or id of the blind run it was paired with." },
+        "commit": { "type": "string", "minLength": 1 },
+        "model": { "type": "string", "minLength": 1 },
+        "at": { "type": "string", "format": "date-time" }
+      }
+    },
+    "CheaperLane": {
+      "description": "RUN1 5.2. When the predicate holds, the packet costs what plain Claude costs or the summary says why not. The `then` is fixed by const: it is one lane, not a menu.",
+      "type": "object",
+      "required": ["when", "then"],
+      "additionalProperties": false,
+      "properties": {
+        "when": { "$ref": "#/$defs/TaskPredicate" },
+        "then": {
+          "type": "object",
+          "required": ["reviewPolicy", "orchestratorTask", "warmSession", "modelReview", "objectiveGate"],
+          "additionalProperties": false,
+          "properties": {
+            "reviewPolicy": { "const": "pre-checks" },
+            "orchestratorTask": { "const": "verbatim", "description": "The human's task text rides verbatim; no per-packet brief spawn." },
+            "warmSession": { "const": "preferred" },
+            "modelReview": { "const": "on-needs-eyes" },
+            "objectiveGate": { "const": "human" }
+          }
+        }
+      }
+    },
+    "FlowArchetype": {
+      "type": "object",
+      "required": ["id", "text", "applies_when", "grouping", "ordering", "gates", "mandatoryEvidence", "escalateSurface", "overhead", "cheaperLane"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+        "text": { "type": "string", "minLength": 1 },
+        "applies_when": { "$ref": "#/$defs/TaskPredicate" },
+        "grouping": {
+          "description": "thread: one packet per logic thread (M-AGENT). coupling-chain: packets that could not run beside each other share a session (M-BATCH). system-packet: work no thread owns (M-ORCH.3).",
+          "enum": ["thread", "coupling-chain", "system-packet"]
+        },
+        "ordering": {
+          "type": "object",
+          "required": ["rule", "plus"],
+          "additionalProperties": false,
+          "properties": {
+            "rule": { "const": "dependencies-first" },
+            "plus": { "type": "array", "items": { "enum": ["after", "read-after-write"] } }
+          }
+        },
+        "gates": {
+          "type": "object",
+          "required": ["objective", "packetReview", "escalation"],
+          "additionalProperties": false,
+          "properties": {
+            "objective": {
+              "description": "Who confirms the objective. human: the M-ORCH gate. orchestrator: AUTONOMY (ruling:2026-09-12:human-out-of-the-loop, Ben's stated intent that the agent pipeline runs with the human out of the loop; PLAN-HISTORY): the run confirms its own objective when the brief lands, and MUST name the human ruling it acts under.",
+              "type": "object", "required": ["by"], "additionalProperties": false,
+              "properties": {
+                "by": { "enum": ["human", "orchestrator"] },
+                "underRuling": {
+                  "type": "object", "required": ["source", "id", "at"], "additionalProperties": false,
+                  "properties": {
+                    "source": { "const": "human" },
+                    "id": { "type": "string", "minLength": 1 },
+                    "at": { "type": "string", "format": "date-time" }
+                  }
+                }
+              },
+              "if": { "properties": { "by": { "const": "orchestrator" } } },
+              "then": { "required": ["underRuling"] }
+            },
+            "packetReview": {
+              "type": "object", "required": ["policy"], "additionalProperties": false,
+              "properties": { "policy": { "enum": ["pre-checks", "orchestrator", "human"] } }
+            },
+            "escalation": {
+              "description": "Where an escalation goes. human: the amber card. failed-with-reason: AUTONOMY — the packet ends FAILED with its reason kept, dependents skip, the summary names the ruling; never an approval.",
+              "type": "object", "required": ["to"], "additionalProperties": false,
+              "properties": { "to": { "enum": ["human", "failed-with-reason"] } }
+            }
+          }
+        },
+        "mandatoryEvidence": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "enum": ["derived", "observed", "stated"] }
+        },
+        "escalateSurface": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["trigger", "to", "text"],
+            "additionalProperties": false,
+            "properties": {
+              "trigger": { "$ref": "#/$defs/EscalateTrigger" },
+              "to": { "enum": ["human", "orchestrator"] },
+              "text": { "type": "string", "minLength": 1 }
+            }
+          }
+        },
+        "overhead": {
+          "oneOf": [
+            { "$ref": "evidence.json#/$defs/Unknown" },
+            { "$ref": "#/$defs/MeasuredOverhead" }
+          ]
+        },
+        "cheaperLane": { "$ref": "#/$defs/CheaperLane" }
+      }
+    }
+  }
+}

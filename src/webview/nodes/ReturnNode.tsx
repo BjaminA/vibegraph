@@ -1,7 +1,7 @@
 import React from "react";
 import { NodeActionStrip } from "./NodeActionStrip";
 import { NodeHandles } from "./NodeHandles";
-import { TextLine } from "../util/TextLine";
+import { TextLine, UNCLAMPED } from "../util/TextLine";
 
 interface Props {
   data: { id: string; value?: string | null; charBudget?: number };
@@ -35,7 +35,7 @@ export function ReturnNode({ data }: Props) {
           <TextLine
             text={data.value ?? "None"}
             maxChars={data.charBudget ?? 32}
-            clampLines={Math.max(3, (data.value ?? "None").split("\n").length)}
+            clampLines={UNCLAMPED}
             style={{ color: "var(--text-primary)", fontSize: 11, fontFamily: "monospace", display: "block" }}
           />
         </div>

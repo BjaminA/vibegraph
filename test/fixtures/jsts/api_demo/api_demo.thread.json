@@ -1,0 +1,396 @@
+{
+  "threads": [
+    {
+      "version": "1.0",
+      "seed": {
+        "file": "server.ts",
+        "irNodeId": "module/listUsers.fn",
+        "qualifiedName": "server.ts:listUsers"
+      },
+      "nodes": [
+        {
+          "id": "server.ts:listUsers",
+          "kind": "seed",
+          "label": "listUsers",
+          "file": "server.ts",
+          "irNodeId": "module/listUsers.fn",
+          "preview": "List every user, capped at 25 — warns when the table is empty."
+        },
+        {
+          "id": "external:console.warn",
+          "kind": "external",
+          "label": "console.warn",
+          "file": null,
+          "irNodeId": "module/listUsers.fn/if@0/console_warn.call",
+          "preview": "console.warn",
+          "effectKind": "log"
+        },
+        {
+          "id": "server.ts:listUsers.fn/if@0#then",
+          "kind": "container",
+          "containerKind": "if_then",
+          "label": "if users.length === 0",
+          "file": "server.ts",
+          "irNodeId": "module/listUsers.fn/if@0",
+          "preview": null
+        },
+        {
+          "id": "dynamic:res.json",
+          "kind": "dynamic",
+          "label": "res.json",
+          "file": null,
+          "irNodeId": "module/listUsers.fn/res_json.call",
+          "preview": "res.json",
+          "receiverBoundKind": "param"
+        },
+        {
+          "id": "db.ts:queryUsers",
+          "kind": "step",
+          "label": "queryUsers",
+          "file": "db.ts",
+          "irNodeId": "module/queryUsers.fn",
+          "preview": "Read the seed file, then fetch up to `limit` users from postgres.\nReturns the raw row objects."
+        },
+        {
+          "id": "external:pool.query",
+          "kind": "external",
+          "label": "pool.query",
+          "file": null,
+          "irNodeId": "module/queryUsers.fn/result.assign",
+          "preview": "pool.query(sql, [limit])",
+          "effectKind": "db"
+        },
+        {
+          "id": "external:readFile",
+          "kind": "external",
+          "label": "readFile",
+          "file": null,
+          "irNodeId": "module/queryUsers.fn/seed.assign",
+          "preview": "readFile(\"seed.json\", \"utf-8\")",
+          "effectKind": "fs"
+        }
+      ],
+      "edges": [
+        {
+          "from": "server.ts:listUsers",
+          "to": "external:console.warn",
+          "kind": "direct",
+          "irSource": "module/listUsers.fn/if@0/console_warn.call"
+        },
+        {
+          "from": "server.ts:listUsers.fn/if@0#then",
+          "to": "external:console.warn",
+          "kind": "contains",
+          "irSource": "module/listUsers.fn/if@0"
+        },
+        {
+          "from": "server.ts:listUsers",
+          "to": "dynamic:res.json",
+          "kind": "direct",
+          "irSource": "module/listUsers.fn/res_json.call"
+        },
+        {
+          "from": "db.ts:queryUsers",
+          "to": "external:pool.query",
+          "kind": "direct",
+          "irSource": "module/queryUsers.fn/result.assign"
+        },
+        {
+          "from": "db.ts:queryUsers",
+          "to": "external:readFile",
+          "kind": "direct",
+          "irSource": "module/queryUsers.fn/seed.assign"
+        },
+        {
+          "from": "server.ts:listUsers",
+          "to": "db.ts:queryUsers",
+          "kind": "direct",
+          "irSource": "module/listUsers.fn/users.assign"
+        },
+        {
+          "from": "db.ts:queryUsers",
+          "to": "server.ts:listUsers.fn/if@0#then",
+          "kind": "conditional",
+          "irSource": "module/listUsers.fn/if@0"
+        }
+      ],
+      "entryPointId": "server.ts:listUsers",
+      "filesReached": [
+        "server.ts",
+        "db.ts"
+      ]
+    },
+    {
+      "version": "1.0",
+      "seed": {
+        "file": "server.ts",
+        "irNodeId": "module/createUser.fn",
+        "qualifiedName": "server.ts:createUser"
+      },
+      "nodes": [
+        {
+          "id": "server.ts:createUser",
+          "kind": "seed",
+          "label": "createUser",
+          "file": "server.ts",
+          "irNodeId": "module/createUser.fn",
+          "preview": null
+        },
+        {
+          "id": "db.ts:insertUser",
+          "kind": "step",
+          "label": "insertUser",
+          "file": "db.ts",
+          "irNodeId": "module/insertUser.fn",
+          "preview": null
+        },
+        {
+          "id": "external:Error",
+          "kind": "external",
+          "label": "Error",
+          "file": null,
+          "irNodeId": "module/insertUser.fn/if@0/raise@0",
+          "preview": "new Error(\"insert returned nothing\")"
+        },
+        {
+          "id": "db.ts:insertUser.fn/if@0#then",
+          "kind": "container",
+          "containerKind": "if_then",
+          "label": "if !result.rows[0]",
+          "file": "db.ts",
+          "irNodeId": "module/insertUser.fn/if@0",
+          "preview": null
+        },
+        {
+          "id": "external:pool.query",
+          "kind": "external",
+          "label": "pool.query",
+          "file": null,
+          "irNodeId": "module/insertUser.fn/result.assign",
+          "preview": "pool.query(\"insert into users (name) values ($1) returning *\", [user.name])",
+          "effectKind": "db"
+        },
+        {
+          "id": "server.ts:loadPlugins",
+          "kind": "step",
+          "label": "loadPlugins",
+          "file": "server.ts",
+          "irNodeId": "module/loadPlugins.fn",
+          "preview": null
+        },
+        {
+          "id": "dynamic:import",
+          "kind": "dynamic",
+          "label": "import",
+          "file": null,
+          "irNodeId": "module/loadPlugins.fn/mod.assign",
+          "preview": "import(\"./plugins.js\")"
+        },
+        {
+          "id": "server.ts:createUser.fn/if@0#then",
+          "kind": "container",
+          "containerKind": "if_then",
+          "label": "if req.query.plugins",
+          "file": "server.ts",
+          "irNodeId": "module/createUser.fn/if@0",
+          "preview": null
+        },
+        {
+          "id": "dynamic:res.json",
+          "kind": "dynamic",
+          "label": "res.json",
+          "file": null,
+          "irNodeId": "module/createUser.fn/res_json.call",
+          "preview": "res.json",
+          "receiverBoundKind": "param"
+        },
+        {
+          "id": "dynamic:res.status",
+          "kind": "dynamic",
+          "label": "res.status",
+          "file": null,
+          "irNodeId": "module/createUser.fn/res_status.call",
+          "preview": "res.status",
+          "receiverBoundKind": "param"
+        }
+      ],
+      "edges": [
+        {
+          "from": "db.ts:insertUser",
+          "to": "external:Error",
+          "kind": "direct",
+          "irSource": "module/insertUser.fn/if@0/raise@0"
+        },
+        {
+          "from": "db.ts:insertUser.fn/if@0#then",
+          "to": "external:Error",
+          "kind": "contains",
+          "irSource": "module/insertUser.fn/if@0"
+        },
+        {
+          "from": "db.ts:insertUser",
+          "to": "external:pool.query",
+          "kind": "direct",
+          "irSource": "module/insertUser.fn/result.assign"
+        },
+        {
+          "from": "server.ts:createUser",
+          "to": "db.ts:insertUser",
+          "kind": "direct",
+          "irSource": "module/createUser.fn/created.assign"
+        },
+        {
+          "from": "server.ts:loadPlugins",
+          "to": "dynamic:import",
+          "kind": "direct",
+          "irSource": "module/loadPlugins.fn/mod.assign"
+        },
+        {
+          "from": "server.ts:createUser",
+          "to": "server.ts:loadPlugins",
+          "kind": "direct",
+          "irSource": "module/createUser.fn/if@0/loadPlugins.call"
+        },
+        {
+          "from": "server.ts:createUser.fn/if@0#then",
+          "to": "server.ts:loadPlugins",
+          "kind": "contains",
+          "irSource": "module/createUser.fn/if@0"
+        },
+        {
+          "from": "server.ts:createUser",
+          "to": "dynamic:res.json",
+          "kind": "direct",
+          "irSource": "module/createUser.fn/res_json.call"
+        },
+        {
+          "from": "server.ts:createUser",
+          "to": "dynamic:res.status",
+          "kind": "direct",
+          "irSource": "module/createUser.fn/res_status.call"
+        },
+        {
+          "from": "external:pool.query",
+          "to": "db.ts:insertUser.fn/if@0#then",
+          "kind": "conditional",
+          "irSource": "module/insertUser.fn/if@0"
+        },
+        {
+          "from": "server.ts:createUser",
+          "to": "server.ts:createUser.fn/if@0#then",
+          "kind": "conditional",
+          "irSource": "module/createUser.fn/if@0"
+        }
+      ],
+      "entryPointId": "server.ts:createUser",
+      "filesReached": [
+        "server.ts",
+        "db.ts"
+      ]
+    },
+    {
+      "version": "1.0",
+      "seed": {
+        "file": "db.test.ts",
+        "irNodeId": "module/checkQueryUsers.fn",
+        "qualifiedName": "db.test.ts:checkQueryUsers"
+      },
+      "nodes": [
+        {
+          "id": "db.test.ts:checkQueryUsers",
+          "kind": "seed",
+          "label": "checkQueryUsers",
+          "file": "db.test.ts",
+          "irNodeId": "module/checkQueryUsers.fn",
+          "preview": null
+        },
+        {
+          "id": "external:Error",
+          "kind": "external",
+          "label": "Error",
+          "file": null,
+          "irNodeId": "module/checkQueryUsers.fn/if@0/raise@0",
+          "preview": "new Error(\"limit ignored\")"
+        },
+        {
+          "id": "db.test.ts:checkQueryUsers.fn/if@0#then",
+          "kind": "container",
+          "containerKind": "if_then",
+          "label": "if users.length > 1",
+          "file": "db.test.ts",
+          "irNodeId": "module/checkQueryUsers.fn/if@0",
+          "preview": null
+        },
+        {
+          "id": "db.ts:queryUsers",
+          "kind": "step",
+          "label": "queryUsers",
+          "file": "db.ts",
+          "irNodeId": "module/queryUsers.fn",
+          "preview": "Read the seed file, then fetch up to `limit` users from postgres.\nReturns the raw row objects."
+        },
+        {
+          "id": "external:pool.query",
+          "kind": "external",
+          "label": "pool.query",
+          "file": null,
+          "irNodeId": "module/queryUsers.fn/result.assign",
+          "preview": "pool.query(sql, [limit])",
+          "effectKind": "db"
+        },
+        {
+          "id": "external:readFile",
+          "kind": "external",
+          "label": "readFile",
+          "file": null,
+          "irNodeId": "module/queryUsers.fn/seed.assign",
+          "preview": "readFile(\"seed.json\", \"utf-8\")",
+          "effectKind": "fs"
+        }
+      ],
+      "edges": [
+        {
+          "from": "db.test.ts:checkQueryUsers",
+          "to": "external:Error",
+          "kind": "direct",
+          "irSource": "module/checkQueryUsers.fn/if@0/raise@0"
+        },
+        {
+          "from": "db.test.ts:checkQueryUsers.fn/if@0#then",
+          "to": "external:Error",
+          "kind": "contains",
+          "irSource": "module/checkQueryUsers.fn/if@0"
+        },
+        {
+          "from": "db.ts:queryUsers",
+          "to": "external:pool.query",
+          "kind": "direct",
+          "irSource": "module/queryUsers.fn/result.assign"
+        },
+        {
+          "from": "db.ts:queryUsers",
+          "to": "external:readFile",
+          "kind": "direct",
+          "irSource": "module/queryUsers.fn/seed.assign"
+        },
+        {
+          "from": "db.test.ts:checkQueryUsers",
+          "to": "db.ts:queryUsers",
+          "kind": "direct",
+          "irSource": "module/checkQueryUsers.fn/users.assign"
+        },
+        {
+          "from": "db.ts:queryUsers",
+          "to": "db.test.ts:checkQueryUsers.fn/if@0#then",
+          "kind": "conditional",
+          "irSource": "module/checkQueryUsers.fn/if@0"
+        }
+      ],
+      "entryPointId": "db.test.ts:checkQueryUsers",
+      "filesReached": [
+        "db.test.ts",
+        "db.ts"
+      ]
+    }
+  ]
+}

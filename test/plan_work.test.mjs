@@ -177,6 +177,20 @@ test("maxPackets caps the plan; determinism: same task → byte-identical plan",
   assert.equal(a, b);
 });
 
+test("M-CONTRACT: packets carry the compact contract ONLY when contractFor is supplied (additive)", () => {
+  const without = plan("fix `db.query`");
+  assert.ok(without.packets.every((p) => !("contract" in p)), "no contractFor → no contract field (M-PLANWORK shape unchanged)");
+  const contractFor = (ep) => ep === "db.py:query"
+    ? { params: 1, returns: "list", effects: { db: 2 }, roundTrips: 1, constraints: 2 }
+    : null;
+  const p = planWork({ task: "fix `db.query`", threads: THREADS, entryPoints: ENTRY_POINTS, skillFor: NO_SKILL, contractFor });
+  const db = p.packets.find((x) => x.entryPointId === "db.py:query");
+  assert.deepEqual(db.contract, { params: 1, returns: "list", effects: { db: 2 }, roundTrips: 1, constraints: 2 });
+  for (const other of p.packets.filter((x) => x.entryPointId !== "db.py:query")) {
+    assert.ok(!("contract" in other), "a null contract adds no field");
+  }
+});
+
 test("verification names the real floor: bounded agents, CST chokepoint, assertions, run-to-node", () => {
   const p = plan("fix `db.query`");
   const v = p.verification.join("\n");

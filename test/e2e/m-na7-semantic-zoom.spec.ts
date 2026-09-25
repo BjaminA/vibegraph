@@ -11,8 +11,11 @@
  *   - compact (mid zoom): every card's label rides outside the card
  *     at ~constant on-screen size.
  *
- * Gated on flask_demo (cli:main is long enough that fit < the
- * overview threshold). Boot: VG_FIXTURE=test/fixtures/threads/flask_demo
+ * Gated on flask_demo. Boot: VG_FIXTURE=test/fixtures/threads/flask_demo
+ * (2026-09-24: the call-tree layout made cli:main taller and narrower, so
+ * its FIT no longer falls below the overview threshold; the overview test
+ * zooms out until it does — the tiers are what is under test, not the
+ * fit zoom a given layout happens to land on.)
  */
 import { test, expect } from "@playwright/test";
 
@@ -37,12 +40,17 @@ test.describe("M-NA7 — semantic zoom tiers", () => {
     expect(await page.locator("[data-lod-label]").count()).toBe(0);
   });
 
-  test("fit zoom drops to overview: landmarks stay legible, steps yield to structure", async ({ page }) => {
+  test("overview zoom: landmarks stay legible, steps yield to structure", async ({ page }) => {
     await openCliMain(page);
     await page.locator(".react-flow__controls-fitview").click();
     await page.waitForTimeout(700);
 
+    // Zoom out until the seed reports the overview tier (bounded).
     const seedCard = page.locator('.react-flow__node[data-id="cli:main"] .vg-thread-node');
+    for (let i = 0; i < 8 && (await seedCard.getAttribute("data-lod")) !== "overview"; i++) {
+      await page.locator(".react-flow__controls-zoomout").click();
+      await page.waitForTimeout(250);
+    }
     await expect(seedCard).toHaveAttribute("data-lod", "overview");
 
     // The seed is a landmark: its LOD label must render at a genuinely

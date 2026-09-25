@@ -46,7 +46,21 @@ export interface StoredThreadSkill {
   /** M-SKILL.7 — human opt-in: keep injecting across code changes (with a
    *  stated caveat) until told otherwise. */
   autoReaffirm?: boolean;
+  /** WHO ratified. Absent on every file written before 2026-09-21 and on
+   *  a draft; those read as a human's, which is what they were — the UI
+   *  was the only writer.
+   *
+   *  It exists because ratification became delegable on 2026-09-21 and a
+   *  model's ratification must never be indistinguishable from a human's.
+   *  Same shape and same rule as the CalibrationRecord's
+   *  falsePositiveReview: a model carries its audit label AND the human
+   *  ruling that delegated it, and the injected text says so. */
+  ratifiedBy?: SkillRatifier;
 }
+
+export type SkillRatifier =
+  | { kind: "human" }
+  | { kind: "model"; model: string; delegatedBy: { source: "human"; id: string; at: string } };
 
 export type ThreadSkillResult =
   | (StoredThreadSkill & { exists: true; stale: boolean })
@@ -74,6 +88,7 @@ function serialize(r: StoredThreadSkill): string {
     `generatedAt: ${r.generatedAt}`,
     ...(r.snapshot ? [`snapshot: ${JSON.stringify(r.snapshot)}`] : []),
     ...(r.autoReaffirm ? ["autoReaffirm: true"] : []),
+    ...(r.ratifiedBy ? [`ratifiedBy: ${JSON.stringify(r.ratifiedBy)}`] : []),
     "---",
     "",
     r.body.trim(),
@@ -97,6 +112,7 @@ function parse(text: string): StoredThreadSkill | null {
   // A human ratifies by editing status; anything that isn't exactly "ratified"
   // is treated as draft (fail-safe — never auto-trust an ambiguous value).
   const status: SkillStatus = fm.status === "ratified" ? "ratified" : "draft";
+  const ratifiedBy = status === "ratified" ? parseRatifier(fm.ratifiedBy) ?? { kind: "human" as const } : undefined;
   // Fail-safe parses on the M-SKILL.7 fields too: a mangled snapshot reads
   // as absent (diff honestly unavailable); autoReaffirm only on exact "true".
   let snapshot: ThreadStepSnapshot[] | undefined;
@@ -115,7 +131,29 @@ function parse(text: string): StoredThreadSkill | null {
     body,
     ...(snapshot ? { snapshot } : {}),
     ...(fm.autoReaffirm === "true" ? { autoReaffirm: true } : {}),
+    ...(ratifiedBy ? { ratifiedBy } : {}),
   };
+}
+
+/** Fail-safe, and it fails toward SAYING SO: anything that is not an
+ *  exact, well-formed human record reads as a model's with its fields
+ *  unknown, because a mangled line must never silently upgrade a
+ *  delegated ratification into a human one. An ABSENT line is the
+ *  pre-2026-09-21 case and reads as a human's — the UI was the only
+ *  writer then. */
+function parseRatifier(raw: string | undefined): SkillRatifier | undefined {
+  if (!raw) return undefined;
+  try {
+    const v = JSON.parse(raw) as Record<string, unknown>;
+    if (v?.kind === "human") return { kind: "human" };
+    if (v?.kind === "model" && typeof v.model === "string" && v.delegatedBy && typeof v.delegatedBy === "object") {
+      const d = v.delegatedBy as Record<string, unknown>;
+      if (d.source === "human" && typeof d.id === "string" && typeof d.at === "string") {
+        return { kind: "model", model: v.model, delegatedBy: { source: "human", id: d.id, at: d.at } };
+      }
+    }
+  } catch { /* fall through */ }
+  return { kind: "model", model: "(unreadable)", delegatedBy: { source: "human", id: "(unreadable)", at: "" } };
 }
 
 /** Generation writes a fresh DRAFT; only a human edits status to ratified.
@@ -244,10 +282,20 @@ export const AUTO_REAFFIRM_CAVEAT =
 /** The ONE injection gate for prompts: authoritative body, or a stale
  *  ratified body the human opted into auto-reaffirm — then ALWAYS with the
  *  caveat appended, never silently. Drafts never inject. */
+export function modelRatifiedCaveat(by: SkillRatifier | undefined): string | null {
+  return by?.kind === "model"
+    ? `(Caveat: this skill was ratified by a MODEL (${by.model}) under the human ruling ${by.delegatedBy.id}, not by a human reading it. Its rules carry the same weight as any drafted text — a stated constraint still overrides it.)`
+    : null;
+}
+
 export function injectableSkillText(r: ThreadSkillResult): string | null {
   if (!r.exists || r.status !== "ratified") return null;
-  if (!r.stale) return r.body;
-  return r.autoReaffirm ? `${r.body}\n\n${AUTO_REAFFIRM_CAVEAT}` : null;
+  // Every caveat the body needs, appended in the order it was earned:
+  // who ratified it, then whether the code has moved since.
+  const notes = [modelRatifiedCaveat(r.ratifiedBy)].filter(Boolean) as string[];
+  const withNotes = (body: string) => (notes.length ? `${body}\n\n${notes.join("\n")}` : body);
+  if (!r.stale) return withNotes(r.body);
+  return r.autoReaffirm ? `${withNotes(r.body)}\n\n${AUTO_REAFFIRM_CAVEAT}` : null;
 }
 
 /** M-SKILL.3 — human ratification via the UI: the ONLY sanctioned status
@@ -255,10 +303,14 @@ export function injectableSkillText(r: ThreadSkillResult): string | null {
  *  ratifying a draft generated against an older thread yields ratified+stale,
  *  honestly (the human reviewed THAT body against THAT thread version).
  *  Returns the updated record, or null when no stored skill exists. */
-export function ratifyThreadSkill(root: string, entryPointId: string): StoredThreadSkill | null {
+export function ratifyThreadSkill(
+  root: string,
+  entryPointId: string,
+  by: SkillRatifier = { kind: "human" },
+): StoredThreadSkill | null {
   const stored = readStoredThreadSkill(root, entryPointId);
   if (!stored) return null;
-  const record: StoredThreadSkill = { ...stored, status: "ratified" };
+  const record: StoredThreadSkill = { ...stored, status: "ratified", ratifiedBy: by };
   writeFileSync(threadSkillPath(root, entryPointId), serialize(record));
   return record;
 }

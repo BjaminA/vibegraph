@@ -92,10 +92,14 @@ export interface ArchModel {
   netType: NetTypeClass;
 }
 
-// Control-flow node types (incl. the v1.5 container kinds the TS AstNodeType
-// union doesn't yet list — matched as runtime strings).
+// Control-flow node types (the v1.5 container kinds joined the TS
+// AstNodeType union in M-LANG1's drift fix; matched here as runtime strings).
 const CONTROL_FLOW_TYPES = new Set([
   "if_stmt", "for_loop", "while_loop", "try_stmt", "except_handler", "finally_block",
+  // M-COMP — a comprehension in forward() IS control flow. Leaving it out
+  // would let `[self.block(t) for t in ts]` report a straight-line forward
+  // pass, which is the schematic claiming more than it knows.
+  "comprehension",
 ]);
 
 // The discriminating "signature" families. linear / norm / dropout /

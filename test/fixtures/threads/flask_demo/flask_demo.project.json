@@ -2,7 +2,7 @@
   "version": "2.1",
   "files": {
     "app.py": {
-      "version": "1.3",
+      "version": "1.5",
       "nodes": [
         {
           "id": "module/flask.import_from",
@@ -52,6 +52,20 @@
           ]
         },
         {
+          "id": "module/app_route.call",
+          "type": "call",
+          "parentId": null,
+          "line": 20,
+          "endLine": 20,
+          "col": 1,
+          "endCol": 20,
+          "funcName": "app.route",
+          "args": [
+            "\"/users\""
+          ],
+          "isEffect": false
+        },
+        {
           "id": "module/list_users_route.fn",
           "type": "function_def",
           "parentId": null,
@@ -66,7 +80,8 @@
             "app.route(\"/users\")"
           ],
           "isAsync": false,
-          "returns": null
+          "returns": null,
+          "decoratorLine": 20
         },
         {
           "id": "module/list_users_route.fn/users.assign",
@@ -93,6 +108,33 @@
           "callTarget": "jsonify"
         },
         {
+          "id": "module/list_users_route.fn/comp@0",
+          "type": "comprehension",
+          "parentId": "module/list_users_route.fn",
+          "line": 23,
+          "endLine": 23,
+          "col": 19,
+          "endCol": 84,
+          "compKind": "list",
+          "target": "u",
+          "iterName": "users"
+        },
+        {
+          "id": "module/app_route.call@1",
+          "type": "call",
+          "parentId": null,
+          "line": 26,
+          "endLine": 26,
+          "col": 1,
+          "endCol": 47,
+          "funcName": "app.route",
+          "args": [
+            "\"/users/<int:uid>\"",
+            "[\"GET\"]"
+          ],
+          "isEffect": false
+        },
+        {
           "id": "module/get_user_route.fn",
           "type": "function_def",
           "parentId": null,
@@ -109,7 +151,8 @@
             "app.route(\"/users/<int:uid>\", methods=[\"GET\"])"
           ],
           "isAsync": false,
-          "returns": null
+          "returns": null,
+          "decoratorLine": 26
         },
         {
           "id": "module/get_user_route.fn/user.assign",
@@ -151,6 +194,20 @@
           "nestExtracted": false
         },
         {
+          "id": "module/get_user_route.fn/if@0/jsonify.call",
+          "type": "call",
+          "parentId": "module/get_user_route.fn/if@0",
+          "line": 30,
+          "endLine": 30,
+          "col": 15,
+          "endCol": 46,
+          "funcName": "jsonify",
+          "args": [
+            "{\"error\": \"not found\"}"
+          ],
+          "isEffect": false
+        },
+        {
           "id": "module/get_user_route.fn/return@0",
           "type": "return_stmt",
           "parentId": "module/get_user_route.fn",
@@ -160,6 +217,20 @@
           "endCol": 77,
           "value": "jsonify({\"uid\": user.uid, \"name\": user.name, \"email\": user.email})",
           "callTarget": "jsonify"
+        },
+        {
+          "id": "module/app_post.call",
+          "type": "call",
+          "parentId": null,
+          "line": 34,
+          "endLine": 34,
+          "col": 1,
+          "endCol": 19,
+          "funcName": "app.post",
+          "args": [
+            "\"/users\""
+          ],
+          "isEffect": false
         },
         {
           "id": "module/create_user_route.fn",
@@ -176,7 +247,8 @@
             "app.post(\"/users\")"
           ],
           "isAsync": false,
-          "returns": null
+          "returns": null,
+          "decoratorLine": 34
         },
         {
           "id": "module/create_user_route.fn/body.assign",
@@ -219,9 +291,28 @@
           "value": "jsonify({\"uid\": user.uid}), 201",
           "nestsInnerCalls": true,
           "nestExtracted": false
+        },
+        {
+          "id": "module/create_user_route.fn/jsonify.call",
+          "type": "call",
+          "parentId": "module/create_user_route.fn",
+          "line": 38,
+          "endLine": 38,
+          "col": 11,
+          "endCol": 37,
+          "funcName": "jsonify",
+          "args": [
+            "{\"uid\": user.uid}"
+          ],
+          "isEffect": false
         }
       ],
       "edges": [
+        {
+          "source": "module/app_route.call",
+          "target": "module/app.assign",
+          "type": "reference"
+        },
         {
           "source": "module/list_users_route.fn",
           "target": "module/list_users_route.fn/users.assign",
@@ -231,6 +322,16 @@
           "source": "module/list_users_route.fn",
           "target": "module/list_users_route.fn/return@0",
           "type": "contains"
+        },
+        {
+          "source": "module/list_users_route.fn",
+          "target": "module/list_users_route.fn/comp@0",
+          "type": "contains"
+        },
+        {
+          "source": "module/app_route.call@1",
+          "target": "module/app.assign",
+          "type": "reference"
         },
         {
           "source": "module/get_user_route.fn",
@@ -248,9 +349,19 @@
           "type": "contains"
         },
         {
+          "source": "module/get_user_route.fn/if@0",
+          "target": "module/get_user_route.fn/if@0/jsonify.call",
+          "type": "contains"
+        },
+        {
           "source": "module/get_user_route.fn",
           "target": "module/get_user_route.fn/return@0",
           "type": "contains"
+        },
+        {
+          "source": "module/app_post.call",
+          "target": "module/app.assign",
+          "type": "reference"
         },
         {
           "source": "module/create_user_route.fn",
@@ -268,6 +379,18 @@
           "type": "contains"
         },
         {
+          "source": "module/create_user_route.fn",
+          "target": "module/create_user_route.fn/jsonify.call",
+          "type": "contains"
+        },
+        {
+          "source": "module/app_route.call",
+          "target": "module/app.assign",
+          "type": "reference",
+          "qualifiedTarget": "flask:Flask.route",
+          "viaLocal": "app"
+        },
+        {
           "source": "module/list_users_route.fn/users.assign",
           "target": "module/list_users.fn",
           "type": "reference",
@@ -275,11 +398,25 @@
           "qualifiedTarget": "models:list_users"
         },
         {
+          "source": "module/app_route.call@1",
+          "target": "module/app.assign",
+          "type": "reference",
+          "qualifiedTarget": "flask:Flask.route",
+          "viaLocal": "app"
+        },
+        {
           "source": "module/get_user_route.fn/user.assign",
           "target": "module/find_user.fn",
           "type": "reference",
           "targetFile": "models.py",
           "qualifiedTarget": "models:find_user"
+        },
+        {
+          "source": "module/app_post.call",
+          "target": "module/app.assign",
+          "type": "reference",
+          "qualifiedTarget": "flask:Flask.post",
+          "viaLocal": "app"
         },
         {
           "source": "module/create_user_route.fn/user.assign",
@@ -381,6 +518,18 @@
           "decorators": [],
           "isAsync": false,
           "returns": null
+        },
+        {
+          "id": "module/cmd_list.fn/list_users.call",
+          "type": "call",
+          "parentId": "module/cmd_list.fn",
+          "line": 15,
+          "endLine": 15,
+          "col": 13,
+          "endCol": 25,
+          "funcName": "list_users",
+          "args": [],
+          "isEffect": false
         },
         {
           "id": "module/cmd_list.fn/for@0",
@@ -668,6 +817,11 @@
       "edges": [
         {
           "source": "module/cmd_list.fn",
+          "target": "module/cmd_list.fn/list_users.call",
+          "type": "contains"
+        },
+        {
+          "source": "module/cmd_list.fn",
           "target": "module/cmd_list.fn/for@0",
           "type": "contains"
         },
@@ -760,6 +914,13 @@
           "source": "module/if@0/main.call",
           "target": "module/main.fn",
           "type": "reference"
+        },
+        {
+          "source": "module/cmd_list.fn/list_users.call",
+          "target": "module/list_users.fn",
+          "type": "reference",
+          "targetFile": "models.py",
+          "qualifiedTarget": "models:list_users"
         },
         {
           "source": "module/cmd_create.fn/user.assign",
@@ -1210,7 +1371,7 @@
       "modulePath": "db"
     },
     "models.py": {
-      "version": "1.3",
+      "version": "1.5",
       "nodes": [
         {
           "id": "module/dataclasses.import_from",
@@ -1252,7 +1413,8 @@
           "decorators": [
             "dataclass"
           ],
-          "docstring": null
+          "docstring": null,
+          "decoratorLine": 13
         },
         {
           "id": "module/User.class/uid.assign",
@@ -1411,9 +1573,35 @@
           "endLine": 30,
           "col": 4,
           "endCol": 64,
-          "value": "[User(uid=r[0], name=r[1], email=r[2]) for r in rows]",
-          "nestsInnerCalls": true,
-          "nestExtracted": false
+          "value": "[User(uid=r[0], name=r[1], email=r[2]) for r in rows]"
+        },
+        {
+          "id": "module/list_users.fn/comp@0",
+          "type": "comprehension",
+          "parentId": "module/list_users.fn",
+          "line": 30,
+          "endLine": 30,
+          "col": 11,
+          "endCol": 64,
+          "compKind": "list",
+          "target": "r",
+          "iterName": "rows"
+        },
+        {
+          "id": "module/list_users.fn/comp@0/User.call",
+          "type": "call",
+          "parentId": "module/list_users.fn/comp@0",
+          "line": 30,
+          "endLine": 30,
+          "col": 12,
+          "endCol": 49,
+          "funcName": "User",
+          "args": [
+            "r[0]",
+            "r[1]",
+            "r[2]"
+          ],
+          "isEffect": false
         },
         {
           "id": "module/create_user.fn",
@@ -1518,6 +1706,21 @@
           "source": "module/list_users.fn",
           "target": "module/list_users.fn/return@0",
           "type": "contains"
+        },
+        {
+          "source": "module/list_users.fn",
+          "target": "module/list_users.fn/comp@0",
+          "type": "contains"
+        },
+        {
+          "source": "module/list_users.fn/comp@0",
+          "target": "module/list_users.fn/comp@0/User.call",
+          "type": "contains"
+        },
+        {
+          "source": "module/list_users.fn/comp@0/User.call",
+          "target": "module/User.class",
+          "type": "reference"
         },
         {
           "source": "module/create_user.fn",
@@ -1715,6 +1918,21 @@
           "callTarget": "list_users"
         },
         {
+          "id": "module/test_list_returns_users.fn/isinstance.call",
+          "type": "call",
+          "parentId": "module/test_list_returns_users.fn",
+          "line": 19,
+          "endLine": 19,
+          "col": 11,
+          "endCol": 34,
+          "funcName": "isinstance",
+          "args": [
+            "users",
+            "list"
+          ],
+          "isEffect": false
+        },
+        {
           "id": "module/_helper_not_a_test.fn",
           "type": "function_def",
           "parentId": null,
@@ -1754,6 +1972,11 @@
         {
           "source": "module/test_list_returns_users.fn",
           "target": "module/test_list_returns_users.fn/users.assign",
+          "type": "contains"
+        },
+        {
+          "source": "module/test_list_returns_users.fn",
+          "target": "module/test_list_returns_users.fn/isinstance.call",
           "type": "contains"
         },
         {
@@ -2234,6 +2457,15 @@
           "preview": "request.get_json()"
         },
         {
+          "id": "external:jsonify",
+          "kind": "external",
+          "label": "jsonify",
+          "file": null,
+          "irNodeId": "module/create_user_route.fn/jsonify.call",
+          "preview": "jsonify",
+          "qualifiedTarget": "flask.jsonify"
+        },
+        {
           "id": "models:create_user",
           "kind": "step",
           "label": "create_user",
@@ -2336,6 +2568,12 @@
           "to": "external:request.get_json",
           "kind": "direct",
           "irSource": "module/create_user_route.fn/body.assign"
+        },
+        {
+          "from": "app:create_user_route",
+          "to": "external:jsonify",
+          "kind": "direct",
+          "irSource": "module/create_user_route.fn/jsonify.call"
         },
         {
           "from": "models:create_user",
@@ -2445,6 +2683,24 @@
           "kind": "external",
           "label": "jsonify",
           "file": null,
+          "irNodeId": "module/get_user_route.fn/if@0/jsonify.call",
+          "preview": "jsonify",
+          "qualifiedTarget": "flask.jsonify"
+        },
+        {
+          "id": "app:get_user_route.fn/if@0#then",
+          "kind": "container",
+          "containerKind": "if_then",
+          "label": "if user is None",
+          "file": "app.py",
+          "irNodeId": "module/get_user_route.fn/if@0",
+          "preview": null
+        },
+        {
+          "id": "external:jsonify@1",
+          "kind": "external",
+          "label": "jsonify",
+          "file": null,
           "irNodeId": "module/get_user_route.fn/return@0",
           "preview": "jsonify({\"uid\": user.uid, \"name\": user.name, \"email\": user.email})",
           "qualifiedTarget": "flask.jsonify"
@@ -2546,15 +2802,6 @@
           "preview": "jsonify({\"error\": \"not found\"}), 404"
         },
         {
-          "id": "app:get_user_route.fn/if@0#then",
-          "kind": "container",
-          "containerKind": "if_then",
-          "label": "if user is None",
-          "file": "app.py",
-          "irNodeId": "module/get_user_route.fn/if@0",
-          "preview": null
-        },
-        {
           "id": "app:get_user_route:return@1",
           "kind": "return",
           "label": "return",
@@ -2567,6 +2814,18 @@
         {
           "from": "app:get_user_route",
           "to": "external:jsonify",
+          "kind": "direct",
+          "irSource": "module/get_user_route.fn/if@0/jsonify.call"
+        },
+        {
+          "from": "app:get_user_route.fn/if@0#then",
+          "to": "external:jsonify",
+          "kind": "contains",
+          "irSource": "module/get_user_route.fn/if@0"
+        },
+        {
+          "from": "app:get_user_route",
+          "to": "external:jsonify@1",
           "kind": "direct",
           "irSource": "module/get_user_route.fn/return@0"
         },
@@ -2637,7 +2896,7 @@
           "irSource": "module/get_user_route.fn/user.assign"
         },
         {
-          "from": "app:get_user_route",
+          "from": "app:get_user_route.fn/if@0#then",
           "to": "app:get_user_route:return@0",
           "kind": "direct",
           "irSource": "module/get_user_route.fn/if@0/return@0"
@@ -2649,7 +2908,7 @@
           "irSource": "module/get_user_route.fn/if@0"
         },
         {
-          "from": "external:jsonify",
+          "from": "external:jsonify@1",
           "to": "app:get_user_route:return@1",
           "kind": "direct",
           "irSource": "module/get_user_route.fn/return@0"
@@ -2706,6 +2965,23 @@
           "label": "list_users",
           "file": "models.py",
           "irNodeId": "module/list_users.fn",
+          "preview": null
+        },
+        {
+          "id": "models:User",
+          "kind": "step",
+          "label": "User",
+          "file": "models.py",
+          "irNodeId": "module/User.class",
+          "preview": null
+        },
+        {
+          "id": "models:list_users.fn/comp@0",
+          "kind": "container",
+          "containerKind": "comprehension",
+          "label": "listcomp for r in rows",
+          "file": "models.py",
+          "irNodeId": "module/list_users.fn/comp@0",
           "preview": null
         },
         {
@@ -2795,6 +3071,18 @@
           "to": "external:jsonify",
           "kind": "direct",
           "irSource": "module/list_users_route.fn/return@0"
+        },
+        {
+          "from": "models:list_users",
+          "to": "models:User",
+          "kind": "direct",
+          "irSource": "module/list_users.fn/comp@0/User.call"
+        },
+        {
+          "from": "models:list_users.fn/comp@0",
+          "to": "models:User",
+          "kind": "contains",
+          "irSource": "module/list_users.fn/comp@0"
         },
         {
           "from": "db:_get_conn",
@@ -2959,6 +3247,103 @@
           "preview": null
         },
         {
+          "id": "models:list_users",
+          "kind": "step",
+          "label": "list_users",
+          "file": "models.py",
+          "irNodeId": "module/list_users.fn",
+          "preview": null
+        },
+        {
+          "id": "models:User",
+          "kind": "step",
+          "label": "User",
+          "file": "models.py",
+          "irNodeId": "module/User.class",
+          "preview": null
+        },
+        {
+          "id": "models:list_users.fn/comp@0",
+          "kind": "container",
+          "containerKind": "comprehension",
+          "label": "listcomp for r in rows",
+          "file": "models.py",
+          "irNodeId": "module/list_users.fn/comp@0",
+          "preview": null
+        },
+        {
+          "id": "db:query",
+          "kind": "step",
+          "label": "query",
+          "file": "db.py",
+          "irNodeId": "module/query.fn",
+          "preview": null
+        },
+        {
+          "id": "db:_get_conn",
+          "kind": "step",
+          "label": "_get_conn",
+          "file": "db.py",
+          "irNodeId": "module/_get_conn.fn",
+          "preview": null
+        },
+        {
+          "id": "external:sqlite3.connect",
+          "kind": "external",
+          "label": "sqlite3.connect",
+          "file": null,
+          "irNodeId": "module/_get_conn.fn/return@0",
+          "preview": "sqlite3.connect(DB_PATH)"
+        },
+        {
+          "id": "dynamic:conn.close",
+          "kind": "dynamic",
+          "label": "conn.close",
+          "file": null,
+          "irNodeId": "module/query.fn/finally@0/conn_close.call",
+          "preview": "conn.close",
+          "receiverBoundKind": "local-call",
+          "receiverBoundFrom": "_get_conn"
+        },
+        {
+          "id": "db:query.fn/finally@0",
+          "kind": "container",
+          "containerKind": "finally",
+          "label": "finally",
+          "file": "db.py",
+          "irNodeId": "module/query.fn/finally@0",
+          "preview": null
+        },
+        {
+          "id": "dynamic:conn.execute",
+          "kind": "dynamic",
+          "label": "conn.execute",
+          "file": null,
+          "irNodeId": "module/query.fn/try@0/cursor.assign",
+          "preview": "conn.execute(sql, params)",
+          "receiverBoundKind": "local-call",
+          "receiverBoundFrom": "_get_conn"
+        },
+        {
+          "id": "db:query.fn/try@0",
+          "kind": "container",
+          "containerKind": "try",
+          "label": "try",
+          "file": "db.py",
+          "irNodeId": "module/query.fn/try@0",
+          "preview": null
+        },
+        {
+          "id": "dynamic:cursor.fetchall",
+          "kind": "dynamic",
+          "label": "cursor.fetchall",
+          "file": null,
+          "irNodeId": "module/query.fn/try@0/return@0",
+          "preview": "cursor.fetchall()",
+          "receiverBoundKind": "local-call",
+          "receiverBoundFrom": "conn.execute"
+        },
+        {
           "id": "cli:main.fn/if@0#then",
           "kind": "container",
           "containerKind": "if_then",
@@ -2992,14 +3377,6 @@
           "preview": null
         },
         {
-          "id": "models:User",
-          "kind": "step",
-          "label": "User",
-          "file": "models.py",
-          "irNodeId": "module/User.class",
-          "preview": null
-        },
-        {
           "id": "db:insert",
           "kind": "step",
           "label": "insert",
@@ -3008,23 +3385,7 @@
           "preview": null
         },
         {
-          "id": "db:_get_conn",
-          "kind": "step",
-          "label": "_get_conn",
-          "file": "db.py",
-          "irNodeId": "module/_get_conn.fn",
-          "preview": null
-        },
-        {
-          "id": "external:sqlite3.connect",
-          "kind": "external",
-          "label": "sqlite3.connect",
-          "file": null,
-          "irNodeId": "module/_get_conn.fn/return@0",
-          "preview": "sqlite3.connect(DB_PATH)"
-        },
-        {
-          "id": "dynamic:conn.close",
+          "id": "dynamic:conn.close@1",
           "kind": "dynamic",
           "label": "conn.close",
           "file": null,
@@ -3062,7 +3423,7 @@
           "preview": null
         },
         {
-          "id": "dynamic:conn.execute",
+          "id": "dynamic:conn.execute@1",
           "kind": "dynamic",
           "label": "conn.execute",
           "file": null,
@@ -3156,6 +3517,78 @@
           "irSource": "module/cmd_list.fn/for@0"
         },
         {
+          "from": "models:list_users",
+          "to": "models:User",
+          "kind": "direct",
+          "irSource": "module/list_users.fn/comp@0/User.call"
+        },
+        {
+          "from": "models:list_users.fn/comp@0",
+          "to": "models:User",
+          "kind": "contains",
+          "irSource": "module/list_users.fn/comp@0"
+        },
+        {
+          "from": "db:_get_conn",
+          "to": "external:sqlite3.connect",
+          "kind": "direct",
+          "irSource": "module/_get_conn.fn/return@0"
+        },
+        {
+          "from": "db:query",
+          "to": "db:_get_conn",
+          "kind": "direct",
+          "irSource": "module/query.fn/conn.assign"
+        },
+        {
+          "from": "db:query",
+          "to": "dynamic:conn.close",
+          "kind": "direct",
+          "irSource": "module/query.fn/finally@0/conn_close.call"
+        },
+        {
+          "from": "db:query.fn/finally@0",
+          "to": "dynamic:conn.close",
+          "kind": "contains",
+          "irSource": "module/query.fn/finally@0"
+        },
+        {
+          "from": "db:query",
+          "to": "dynamic:conn.execute",
+          "kind": "direct",
+          "irSource": "module/query.fn/try@0/cursor.assign"
+        },
+        {
+          "from": "db:query.fn/try@0",
+          "to": "dynamic:conn.execute",
+          "kind": "contains",
+          "irSource": "module/query.fn/try@0"
+        },
+        {
+          "from": "db:query",
+          "to": "dynamic:cursor.fetchall",
+          "kind": "direct",
+          "irSource": "module/query.fn/try@0/return@0"
+        },
+        {
+          "from": "db:query.fn/try@0",
+          "to": "dynamic:cursor.fetchall",
+          "kind": "contains",
+          "irSource": "module/query.fn/try@0"
+        },
+        {
+          "from": "models:list_users",
+          "to": "db:query",
+          "kind": "direct",
+          "irSource": "module/list_users.fn/rows.assign"
+        },
+        {
+          "from": "cli:cmd_list",
+          "to": "models:list_users",
+          "kind": "direct",
+          "irSource": "module/cmd_list.fn/list_users.call"
+        },
+        {
           "from": "cli:main",
           "to": "cli:cmd_list",
           "kind": "conditional",
@@ -3180,12 +3613,6 @@
           "irSource": "module/create_user.fn/return@0"
         },
         {
-          "from": "db:_get_conn",
-          "to": "external:sqlite3.connect",
-          "kind": "direct",
-          "irSource": "module/_get_conn.fn/return@0"
-        },
-        {
           "from": "db:insert",
           "to": "db:_get_conn",
           "kind": "direct",
@@ -3193,13 +3620,13 @@
         },
         {
           "from": "db:insert",
-          "to": "dynamic:conn.close",
+          "to": "dynamic:conn.close@1",
           "kind": "direct",
           "irSource": "module/insert.fn/finally@0/conn_close.call"
         },
         {
           "from": "db:insert.fn/finally@0",
-          "to": "dynamic:conn.close",
+          "to": "dynamic:conn.close@1",
           "kind": "contains",
           "irSource": "module/insert.fn/finally@0"
         },
@@ -3217,13 +3644,13 @@
         },
         {
           "from": "db:insert",
-          "to": "dynamic:conn.execute",
+          "to": "dynamic:conn.execute@1",
           "kind": "direct",
           "irSource": "module/insert.fn/try@0/cursor.assign"
         },
         {
           "from": "db:insert.fn/try@0",
-          "to": "dynamic:conn.execute",
+          "to": "dynamic:conn.execute@1",
           "kind": "contains",
           "irSource": "module/insert.fn/try@0"
         },
@@ -3274,6 +3701,13 @@
           "to": "dynamic:sub.add_parser@1",
           "kind": "direct",
           "irSource": "module/main.fn/sub_add_parser.call"
+        },
+        {
+          "from": "db:query.fn/try@0",
+          "to": "db:query.fn/finally@0",
+          "kind": "flow",
+          "irSource": "module/query.fn/finally@0",
+          "label": "always"
         },
         {
           "from": "db:insert.fn/try@0",
@@ -3643,11 +4077,36 @@
           "preview": null
         },
         {
+          "id": "external:isinstance",
+          "kind": "external",
+          "label": "isinstance",
+          "file": null,
+          "irNodeId": "module/test_list_returns_users.fn/isinstance.call",
+          "preview": "isinstance"
+        },
+        {
           "id": "models:list_users",
           "kind": "step",
           "label": "list_users",
           "file": "models.py",
           "irNodeId": "module/list_users.fn",
+          "preview": null
+        },
+        {
+          "id": "models:User",
+          "kind": "step",
+          "label": "User",
+          "file": "models.py",
+          "irNodeId": "module/User.class",
+          "preview": null
+        },
+        {
+          "id": "models:list_users.fn/comp@0",
+          "kind": "container",
+          "containerKind": "comprehension",
+          "label": "listcomp for r in rows",
+          "file": "models.py",
+          "irNodeId": "module/list_users.fn/comp@0",
           "preview": null
         },
         {
@@ -3724,6 +4183,24 @@
         }
       ],
       "edges": [
+        {
+          "from": "test_flow:test_list_returns_users",
+          "to": "external:isinstance",
+          "kind": "direct",
+          "irSource": "module/test_list_returns_users.fn/isinstance.call"
+        },
+        {
+          "from": "models:list_users",
+          "to": "models:User",
+          "kind": "direct",
+          "irSource": "module/list_users.fn/comp@0/User.call"
+        },
+        {
+          "from": "models:list_users.fn/comp@0",
+          "to": "models:User",
+          "kind": "contains",
+          "irSource": "module/list_users.fn/comp@0"
+        },
         {
           "from": "db:_get_conn",
           "to": "external:sqlite3.connect",
@@ -4549,6 +5026,23 @@
           "preview": null
         },
         {
+          "id": "models:User",
+          "kind": "step",
+          "label": "User",
+          "file": "models.py",
+          "irNodeId": "module/User.class",
+          "preview": null
+        },
+        {
+          "id": "models:list_users.fn/comp@0",
+          "kind": "container",
+          "containerKind": "comprehension",
+          "label": "listcomp for r in rows",
+          "file": "models.py",
+          "irNodeId": "module/list_users.fn/comp@0",
+          "preview": null
+        },
+        {
           "id": "db:query",
           "kind": "step",
           "label": "query",
@@ -4630,6 +5124,18 @@
         }
       ],
       "edges": [
+        {
+          "from": "models:list_users",
+          "to": "models:User",
+          "kind": "direct",
+          "irSource": "module/list_users.fn/comp@0/User.call"
+        },
+        {
+          "from": "models:list_users.fn/comp@0",
+          "to": "models:User",
+          "kind": "contains",
+          "irSource": "module/list_users.fn/comp@0"
+        },
         {
           "from": "db:_get_conn",
           "to": "external:sqlite3.connect",
@@ -4769,18 +5275,48 @@
           "app.py:get_user_route",
           "app.py:list_users_route"
         ],
-        "fileCount": 5
+        "fileCount": 5,
+        "threadRefs": [
+          "app.py:create_user_route",
+          "app.py:get_user_route",
+          "app.py:list_users_route",
+          "cli.py:main",
+          "db.py:insert",
+          "db.py:query",
+          "models.py:create_user",
+          "models.py:find_user",
+          "models.py:list_users",
+          "test_flow.py:test_create_then_find",
+          "test_flow.py:test_list_returns_users"
+        ]
       },
       {
         "id": "db",
         "kind": "db",
         "label": "Database",
-        "evidence": "effectKind:db"
+        "evidence": "effectKind:db",
+        "threadRefs": [
+          "app.py:create_user_route",
+          "app.py:get_user_route",
+          "app.py:list_users_route",
+          "cli.py:main",
+          "db.py:_get_conn",
+          "db.py:insert",
+          "db.py:query",
+          "models.py:create_user",
+          "models.py:find_user",
+          "models.py:list_users",
+          "test_flow.py:test_create_then_find",
+          "test_flow.py:test_list_returns_users"
+        ]
       },
       {
         "id": "library",
         "kind": "library",
-        "label": "Library / internal"
+        "label": "Library / internal",
+        "threadRefs": [
+          "db.py:_get_conn"
+        ]
       }
     ],
     "edges": [
@@ -4834,6 +5370,7 @@
         "viaThread": "cli.py:main",
         "refs": [
           "db.py:15",
+          "db.py:21",
           "db.py:30",
           "models.py:34"
         ]

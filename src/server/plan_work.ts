@@ -64,6 +64,18 @@ export interface WorkPacket {
   filesReached: string[];
   boundaries: WorkPacketBoundaries;
   skill: { status: PacketSkillStatus; note: string };
+  /** M-CONTRACT — compact contract facts + how many stated constraints
+   *  route to this thread. Present only when the caller supplies
+   *  `contractFor` (additive; the M-PLANWORK shape is unchanged without it). */
+  contract?: PacketContractSummary;
+}
+
+export interface PacketContractSummary {
+  params: number;
+  returns: string | null;
+  effects: Record<string, number>;
+  roundTrips: number;
+  constraints: number;
 }
 
 export interface WorkPlan {
@@ -158,6 +170,10 @@ export interface PlanWorkArgs {
   skillFor: (entryPointId: string) => ThreadSkillResult;
   /** Max packets (default 8, capped at 16). */
   maxPackets?: number;
+  /** M-CONTRACT — compact contract facts per thread (params/returns/
+   *  effects/round trips + routed constraint count). Optional: absent
+   *  callers get packets without the `contract` field. */
+  contractFor?: (entryPointId: string) => PacketContractSummary | null;
 }
 
 export function planWork(args: PlanWorkArgs): WorkPlan {
@@ -249,6 +265,10 @@ export function planWork(args: PlanWorkArgs): WorkPlan {
         },
       },
       skill: skillPacketState(args.skillFor(id)),
+      ...(() => {
+        const c = args.contractFor?.(id) ?? null;
+        return c ? { contract: c } : {};
+      })(),
     };
   });
 

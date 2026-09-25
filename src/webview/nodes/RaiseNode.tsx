@@ -1,7 +1,7 @@
 import React from "react";
 import { NodeActionStrip } from "./NodeActionStrip";
 import { NodeHandles } from "./NodeHandles";
-import { TextLine } from "../util/TextLine";
+import { TextLine, UNCLAMPED } from "../util/TextLine";
 
 interface Props {
   data: { id: string; exc?: string | null; charBudget?: number };
@@ -38,7 +38,7 @@ export function RaiseNode({ data }: Props) {
             // The layout sizes this node to the full line count (previewLines
             // covers raise_stmt), so the default 3-line clamp must not cut
             // what the box already fits — same contract as ReturnNode.
-            clampLines={Math.max(3, (data.exc ?? "").split("\n").length)}
+            clampLines={UNCLAMPED}
             style={{ color: "var(--accent-error)", fontSize: 11, fontFamily: "monospace", opacity: 0.85, display: "block" }}
           />
         </div>

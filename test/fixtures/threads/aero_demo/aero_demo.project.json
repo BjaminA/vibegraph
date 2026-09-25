@@ -61,7 +61,11 @@
           "docstring": "Compute aerodynamic drag for an aircraft under given conditions.",
           "decorators": [],
           "isAsync": false,
-          "returns": "dict"
+          "returns": "dict",
+          "paramTypes": {
+            "aircraft_id": "str",
+            "conditions": "dict"
+          }
         },
         {
           "id": "module/compute_drag.fn/config.assign",
@@ -395,7 +399,10 @@
           "docstring": "Load runtime state for an aircraft (stub for disk/network read).",
           "decorators": [],
           "isAsync": false,
-          "returns": "dict"
+          "returns": "dict",
+          "paramTypes": {
+            "aircraft_id": "str"
+          }
         },
         {
           "id": "module/fetch_state.fn/return@0",
@@ -422,7 +429,10 @@
           "docstring": "Load aircraft configuration by id; caches per process.",
           "decorators": [],
           "isAsync": false,
-          "returns": "dict"
+          "returns": "dict",
+          "paramTypes": {
+            "aircraft_id": "str"
+          }
         },
         {
           "id": "module/load_aircraft_config.fn/if@0",
@@ -621,7 +631,10 @@
           "docstring": "Fill in missing condition fields. Branches on whether temperature\n    was supplied; both arms call other functions and return a full dict.",
           "decorators": [],
           "isAsync": false,
-          "returns": "dict"
+          "returns": "dict",
+          "paramTypes": {
+            "conditions": "dict"
+          }
         },
         {
           "id": "module/normalize_conditions.fn/if@0",
@@ -662,6 +675,21 @@
           "value": "{\n    \"velocity\": conditions.get(\"velocity\", REFERENCE_VELOCITY),\n    \"density\": density,\n}",
           "nestsInnerCalls": true,
           "nestExtracted": false
+        },
+        {
+          "id": "module/normalize_conditions.fn/if@0/conditions_get.call",
+          "type": "call",
+          "parentId": "module/normalize_conditions.fn/if@0",
+          "line": 19,
+          "endLine": 19,
+          "col": 24,
+          "endCol": 70,
+          "funcName": "conditions.get",
+          "args": [
+            "\"velocity\"",
+            "REFERENCE_VELOCITY"
+          ],
+          "isEffect": false
         },
         {
           "id": "module/normalize_conditions.fn/if@0/velocity.assign",
@@ -722,7 +750,10 @@
           "docstring": "Ideal-gas-law density estimate at sea-level pressure.",
           "decorators": [],
           "isAsync": false,
-          "returns": "float"
+          "returns": "float",
+          "paramTypes": {
+            "temp_kelvin": "float"
+          }
         },
         {
           "id": "module/density_from_temperature.fn/pressure.assign",
@@ -774,7 +805,11 @@
           "docstring": "Combine velocity and density into a corrected airspeed.\n    Calls math.sqrt — a library boundary the thread must mark as external.",
           "decorators": [],
           "isAsync": false,
-          "returns": "float"
+          "returns": "float",
+          "paramTypes": {
+            "velocity": "float",
+            "density": "float"
+          }
         },
         {
           "id": "module/apply_correction_factor.fn/return@0",
@@ -787,6 +822,20 @@
           "value": "velocity * math.sqrt(density / REFERENCE_DENSITY)",
           "nestsInnerCalls": true,
           "nestExtracted": false
+        },
+        {
+          "id": "module/apply_correction_factor.fn/math_sqrt.call",
+          "type": "call",
+          "parentId": "module/apply_correction_factor.fn",
+          "line": 41,
+          "endLine": 41,
+          "col": 22,
+          "endCol": 60,
+          "funcName": "math.sqrt",
+          "args": [
+            "density / REFERENCE_DENSITY"
+          ],
+          "isEffect": false
         }
       ],
       "edges": [
@@ -803,6 +852,11 @@
         {
           "source": "module/normalize_conditions.fn/if@0",
           "target": "module/normalize_conditions.fn/if@0/return@0",
+          "type": "contains"
+        },
+        {
+          "source": "module/normalize_conditions.fn/if@0",
+          "target": "module/normalize_conditions.fn/if@0/conditions_get.call",
           "type": "contains"
         },
         {
@@ -838,6 +892,11 @@
         {
           "source": "module/apply_correction_factor.fn",
           "target": "module/apply_correction_factor.fn/return@0",
+          "type": "contains"
+        },
+        {
+          "source": "module/apply_correction_factor.fn",
+          "target": "module/apply_correction_factor.fn/math_sqrt.call",
           "type": "contains"
         }
       ],
@@ -933,7 +992,10 @@
           "docstring": "Look up a drag model by name. Resolved dynamically -- thread stops.",
           "decorators": [],
           "isAsync": false,
-          "returns": "Callable[[float, dict], float]"
+          "returns": "Callable[[float, dict], float]",
+          "paramTypes": {
+            "name": "str"
+          }
         },
         {
           "id": "module/select_model.fn/return@0",
@@ -1004,7 +1066,11 @@
           "docstring": "Drag coefficient model for subsonic flight.",
           "decorators": [],
           "isAsync": false,
-          "returns": "float"
+          "returns": "float",
+          "paramTypes": {
+            "corrected_velocity": "float",
+            "state": "dict"
+          }
         },
         {
           "id": "module/subsonic.fn/altitude_factor.assign",
@@ -1044,7 +1110,11 @@
           "docstring": "Drag coefficient model for supersonic flight.",
           "decorators": [],
           "isAsync": false,
-          "returns": "float"
+          "returns": "float",
+          "paramTypes": {
+            "corrected_velocity": "float",
+            "state": "dict"
+          }
         },
         {
           "id": "module/supersonic.fn/return@0",
@@ -1057,6 +1127,20 @@
           "value": "0.08 * math.log1p(corrected_velocity) * (1.0 + state[\"altitude\"] / 50000.0)",
           "nestsInnerCalls": true,
           "nestExtracted": false
+        },
+        {
+          "id": "module/supersonic.fn/math_log1p.call",
+          "type": "call",
+          "parentId": "module/supersonic.fn",
+          "line": 20,
+          "endLine": 20,
+          "col": 18,
+          "endCol": 48,
+          "funcName": "math.log1p",
+          "args": [
+            "corrected_velocity"
+          ],
+          "isEffect": false
         }
       ],
       "edges": [
@@ -1073,6 +1157,11 @@
         {
           "source": "module/supersonic.fn",
           "target": "module/supersonic.fn/return@0",
+          "type": "contains"
+        },
+        {
+          "source": "module/supersonic.fn",
+          "target": "module/supersonic.fn/math_log1p.call",
           "type": "contains"
         }
       ],
@@ -1344,12 +1433,13 @@
           "preview": "Fill in missing condition fields. Branches on whether temperature\n    was supplied; both arms call other functions and return a full dict."
         },
         {
-          "id": "processing:density_from_temperature",
-          "kind": "step",
-          "label": "density_from_temperature",
-          "file": "processing.py",
-          "irNodeId": "module/density_from_temperature.fn",
-          "preview": "Ideal-gas-law density estimate at sea-level pressure."
+          "id": "dynamic:conditions.get",
+          "kind": "dynamic",
+          "label": "conditions.get",
+          "file": null,
+          "irNodeId": "module/normalize_conditions.fn/if@0/conditions_get.call",
+          "preview": "conditions.get",
+          "receiverBoundKind": "param"
         },
         {
           "id": "processing:normalize_conditions.fn/if@0#then",
@@ -1361,7 +1451,15 @@
           "preview": null
         },
         {
-          "id": "dynamic:conditions.get",
+          "id": "processing:density_from_temperature",
+          "kind": "step",
+          "label": "density_from_temperature",
+          "file": "processing.py",
+          "irNodeId": "module/density_from_temperature.fn",
+          "preview": "Ideal-gas-law density estimate at sea-level pressure."
+        },
+        {
+          "id": "dynamic:conditions.get@1",
           "kind": "dynamic",
           "label": "conditions.get",
           "file": null,
@@ -1379,7 +1477,7 @@
           "preview": null
         },
         {
-          "id": "dynamic:conditions.get@1",
+          "id": "dynamic:conditions.get@2",
           "kind": "dynamic",
           "label": "conditions.get",
           "file": null,
@@ -1410,6 +1508,14 @@
           "file": "processing.py",
           "irNodeId": "module/apply_correction_factor.fn",
           "preview": "Combine velocity and density into a corrected airspeed.\n    Calls math.sqrt — a library boundary the thread must mark as external."
+        },
+        {
+          "id": "external:math.sqrt",
+          "kind": "external",
+          "label": "math.sqrt",
+          "file": null,
+          "irNodeId": "module/apply_correction_factor.fn/math_sqrt.call",
+          "preview": "math.sqrt"
         },
         {
           "id": "dynamic:model",
@@ -1461,6 +1567,18 @@
         },
         {
           "from": "processing:normalize_conditions",
+          "to": "dynamic:conditions.get",
+          "kind": "conditional",
+          "irSource": "module/normalize_conditions.fn/if@0/conditions_get.call"
+        },
+        {
+          "from": "processing:normalize_conditions.fn/if@0#then",
+          "to": "dynamic:conditions.get",
+          "kind": "contains",
+          "irSource": "module/normalize_conditions.fn/if@0"
+        },
+        {
+          "from": "processing:normalize_conditions",
           "to": "processing:density_from_temperature",
           "kind": "conditional",
           "irSource": "module/normalize_conditions.fn/if@0/density.assign"
@@ -1473,25 +1591,25 @@
         },
         {
           "from": "processing:normalize_conditions",
-          "to": "dynamic:conditions.get",
+          "to": "dynamic:conditions.get@1",
           "kind": "conditional",
           "irSource": "module/normalize_conditions.fn/if@0/density.assign@1"
         },
         {
           "from": "processing:normalize_conditions.fn/if@0#else",
-          "to": "dynamic:conditions.get",
+          "to": "dynamic:conditions.get@1",
           "kind": "contains",
           "irSource": "module/normalize_conditions.fn/if@0"
         },
         {
           "from": "processing:normalize_conditions",
-          "to": "dynamic:conditions.get@1",
+          "to": "dynamic:conditions.get@2",
           "kind": "conditional",
           "irSource": "module/normalize_conditions.fn/if@0/velocity.assign"
         },
         {
           "from": "processing:normalize_conditions.fn/if@0#else",
-          "to": "dynamic:conditions.get@1",
+          "to": "dynamic:conditions.get@2",
           "kind": "contains",
           "irSource": "module/normalize_conditions.fn/if@0"
         },
@@ -1512,6 +1630,12 @@
           "to": "data:load_aircraft_config",
           "kind": "direct",
           "irSource": "module/compute_drag.fn/config.assign"
+        },
+        {
+          "from": "processing:apply_correction_factor",
+          "to": "external:math.sqrt",
+          "kind": "direct",
+          "irSource": "module/apply_correction_factor.fn/math_sqrt.call"
         },
         {
           "from": "main:compute_drag",
@@ -1712,6 +1836,14 @@
           "preview": "Combine velocity and density into a corrected airspeed.\n    Calls math.sqrt — a library boundary the thread must mark as external."
         },
         {
+          "id": "external:math.sqrt",
+          "kind": "external",
+          "label": "math.sqrt",
+          "file": null,
+          "irNodeId": "module/apply_correction_factor.fn/math_sqrt.call",
+          "preview": "math.sqrt"
+        },
+        {
           "id": "processing:apply_correction_factor:return@0",
           "kind": "return",
           "label": "return",
@@ -1721,6 +1853,12 @@
         }
       ],
       "edges": [
+        {
+          "from": "processing:apply_correction_factor",
+          "to": "external:math.sqrt",
+          "kind": "direct",
+          "irSource": "module/apply_correction_factor.fn/math_sqrt.call"
+        },
         {
           "from": "processing:apply_correction_factor",
           "to": "processing:apply_correction_factor:return@0",
@@ -1750,12 +1888,13 @@
           "preview": "Fill in missing condition fields. Branches on whether temperature\n    was supplied; both arms call other functions and return a full dict."
         },
         {
-          "id": "processing:density_from_temperature",
-          "kind": "step",
-          "label": "density_from_temperature",
-          "file": "processing.py",
-          "irNodeId": "module/density_from_temperature.fn",
-          "preview": "Ideal-gas-law density estimate at sea-level pressure."
+          "id": "dynamic:conditions.get",
+          "kind": "dynamic",
+          "label": "conditions.get",
+          "file": null,
+          "irNodeId": "module/normalize_conditions.fn/if@0/conditions_get.call",
+          "preview": "conditions.get",
+          "receiverBoundKind": "param"
         },
         {
           "id": "processing:normalize_conditions.fn/if@0#then",
@@ -1767,7 +1906,15 @@
           "preview": null
         },
         {
-          "id": "dynamic:conditions.get",
+          "id": "processing:density_from_temperature",
+          "kind": "step",
+          "label": "density_from_temperature",
+          "file": "processing.py",
+          "irNodeId": "module/density_from_temperature.fn",
+          "preview": "Ideal-gas-law density estimate at sea-level pressure."
+        },
+        {
+          "id": "dynamic:conditions.get@1",
           "kind": "dynamic",
           "label": "conditions.get",
           "file": null,
@@ -1785,7 +1932,7 @@
           "preview": null
         },
         {
-          "id": "dynamic:conditions.get@1",
+          "id": "dynamic:conditions.get@2",
           "kind": "dynamic",
           "label": "conditions.get",
           "file": null,
@@ -1813,6 +1960,18 @@
       "edges": [
         {
           "from": "processing:normalize_conditions",
+          "to": "dynamic:conditions.get",
+          "kind": "conditional",
+          "irSource": "module/normalize_conditions.fn/if@0/conditions_get.call"
+        },
+        {
+          "from": "processing:normalize_conditions.fn/if@0#then",
+          "to": "dynamic:conditions.get",
+          "kind": "contains",
+          "irSource": "module/normalize_conditions.fn/if@0"
+        },
+        {
+          "from": "processing:normalize_conditions",
           "to": "processing:density_from_temperature",
           "kind": "conditional",
           "irSource": "module/normalize_conditions.fn/if@0/density.assign"
@@ -1825,25 +1984,25 @@
         },
         {
           "from": "processing:normalize_conditions",
-          "to": "dynamic:conditions.get",
+          "to": "dynamic:conditions.get@1",
           "kind": "conditional",
           "irSource": "module/normalize_conditions.fn/if@0/density.assign@1"
         },
         {
           "from": "processing:normalize_conditions.fn/if@0#else",
-          "to": "dynamic:conditions.get",
+          "to": "dynamic:conditions.get@1",
           "kind": "contains",
           "irSource": "module/normalize_conditions.fn/if@0"
         },
         {
           "from": "processing:normalize_conditions",
-          "to": "dynamic:conditions.get@1",
+          "to": "dynamic:conditions.get@2",
           "kind": "conditional",
           "irSource": "module/normalize_conditions.fn/if@0/velocity.assign"
         },
         {
           "from": "processing:normalize_conditions.fn/if@0#else",
-          "to": "dynamic:conditions.get@1",
+          "to": "dynamic:conditions.get@2",
           "kind": "contains",
           "irSource": "module/normalize_conditions.fn/if@0"
         },
@@ -1860,7 +2019,7 @@
           "irSource": "module/normalize_conditions.fn/if@0"
         },
         {
-          "from": "dynamic:conditions.get",
+          "from": "dynamic:conditions.get@1",
           "to": "processing:normalize_conditions:return@1",
           "kind": "direct",
           "irSource": "module/normalize_conditions.fn/if@0/return@1"

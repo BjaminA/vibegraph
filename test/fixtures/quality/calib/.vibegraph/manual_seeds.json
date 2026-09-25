@@ -1,0 +1,14 @@
+{
+  "seeds": [
+    "guards_demo.py:good_if_arm",
+    "guards_demo.py:good_negated_return",
+    "guards_demo.py:good_bound_then_if",
+    "guards_demo.py:good_negated_else",
+    "guards_demo.py:bad_after",
+    "guards_demo.py:bad_else_arm",
+    "guards_demo.py:bad_negated_then",
+    "guards_demo.py:bad_return_between",
+    "guards_demo.py:bad_no_guard",
+    "guards_demo.py:unv_dynamic_target"
+  ]
+}

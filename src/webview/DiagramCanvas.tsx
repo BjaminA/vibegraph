@@ -4,6 +4,7 @@
 // out so App.tsx can switch between <DiagramCanvas/> and <ThreadView/>
 // based on viewMode without breaching the 500-line file cap.
 
+import { LayoutGrid, Code2 } from "lucide-react";
 import React from "react";
 import {
   ReactFlow,
@@ -67,11 +68,15 @@ interface Props {
   // mouseup events (per W3C pointer-events spec). Listening for
   // mouseup meant the handler never fired during a real drop.
   onAnyNodePointerUp?: (event: React.PointerEvent, nodeId: string) => void;
+  /** 2026-09-24 — the file view's cards / code toggle; undefined hides it
+   *  (the project grid has no code to show). */
+  codeMode?: boolean;
+  onToggleCodeMode?: () => void;
 }
 
 export function DiagramCanvas({
   nodes, edges, exitGhosts, nodeTypes, edgeTypes, composeOpen, hideMinimap, onNodeClick,
-  onAnyNodePointerUp,
+  onAnyNodePointerUp, codeMode, onToggleCodeMode,
 }: Props) {
   // React Flow v12 doesn't expose onNodePointerUp directly. Use
   // elementsFromPoint(clientX, clientY) to find the topmost
@@ -88,7 +93,34 @@ export function DiagramCanvas({
     onAnyNodePointerUp(e, nodeId);
   };
   return (
-    <div style={{ width: "100%", height: "100%" }} onPointerUp={handlePointerUp}>
+    <div style={{ width: "100%", height: "100%", position: "relative" }} onPointerUp={handlePointerUp}>
+      {codeMode !== undefined && onToggleCodeMode && (
+        // Cards (every statement a card) or Code (each top-level block as
+        // written, highlighted like the editor) — the same grouping either way.
+        <div data-fileview-mode={codeMode ? "code" : "cards"} role="group" aria-label="File view"
+          style={{
+            position: "absolute", top: 56, left: 12, zIndex: 30, display: "flex", gap: 2, padding: 2,
+            background: "color-mix(in oklab, var(--bg-node) 90%, transparent)",
+            border: "1px solid var(--border-edge)", borderRadius: 8,
+          }}>
+          {([["cards", "Cards", LayoutGrid], ["code", "Code", Code2]] as const).map(([m, label, Icon]) => {
+            const active = (m === "code") === codeMode;
+            return (
+              <button key={m} data-fileview-mode-option={m} aria-pressed={active}
+                onClick={() => { if (!active) onToggleCodeMode(); }}
+                title={m === "code" ? "Show each block as source code, grouped the same way" : "Show every statement as a card"}
+                style={{
+                  display: "flex", alignItems: "center", gap: 4, border: "none", borderRadius: 6, padding: "4px 10px",
+                  background: active ? "color-mix(in oklab, var(--accent-thread) 18%, transparent)" : "transparent",
+                  color: active ? "var(--text-primary)" : "var(--text-secondary)", cursor: active ? "default" : "pointer",
+                  fontFamily: "var(--font-ui)", fontSize: "var(--fs-12)",
+                }}>
+                <Icon size={14} strokeWidth={1.5} />{label}
+              </button>
+            );
+          })}
+        </div>
+      )}
       <ReactFlow
         nodes={nodes}
         edges={edges}

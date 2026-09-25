@@ -21,6 +21,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import Editor, { type OnMount } from "@monaco-editor/react";
+import { monacoLanguageForPath, capabilitiesForPath } from "../../shared/languages";
 import { CODE_WRAP_OPTIONS } from "../monaco_options";
 import { defineVibegraphDark, VIBEGRAPH_DARK } from "../themes/vibegraph-dark";
 import { bridge, type AstNode, type ProjectFileData, type ExtensionMessage } from "../types";
@@ -72,6 +73,10 @@ export function NodeEditorPanel(props: NodeEditorPanelProps) {
     () => resolveEditTarget(node, filePath, projectData, astNodes),
     [node, filePath, projectData, astNodes],
   );
+  // M-LANG2b — languages without an edit floor (bash until M-LANG4)
+  // open READ-ONLY: Monaco locks, the Save footer is replaced by an
+  // honest note. Gated per-file from the language registry.
+  const editable = capabilitiesForPath(target?.filePath).edit;
 
   // Source cache — which file the `source` string holds.
   const [source, setSource] = useState<string | null>(null);
@@ -269,10 +274,19 @@ export function NodeEditorPanel(props: NodeEditorPanelProps) {
         width: dock.width,
         minWidth: dock.minWidth,
         boxSizing: "border-box",
-        // The TopToolbar (z 1010) floats top-right and sits above this
-        // panel; reserve its band so the breadcrumb + mode toggle clear
-        // it instead of rendering behind it.
-        paddingTop: 48,
+        // The TopToolbar floats above this dock at z 1010, so the dock
+        // must reserve its band or the header row renders BEHIND it — and
+        // a header row behind the toolbar is not merely ugly: its close
+        // button stops accepting clicks.
+        //
+        // This was a hardcoded 48 (= the one-row 43 + 5). The toolbar WRAPS
+        // to a second row at common widths — 72px tall at 1440 — so 48 was
+        // short by 24 and the toolbar sat on top of the close button. The
+        // toolbar already publishes its real bottom edge as
+        // --vg-toolbar-bottom for exactly this reason (TopToolbar.tsx); the
+        // chip strip, the changeset gate and four App.tsx surfaces bind to
+        // it. These two docks were the ones that never got converted.
+        paddingTop: "calc(var(--vg-toolbar-bottom, 43px) + 5px)",
         background: "var(--bg-canvas)",
         borderLeft: "2px solid color-mix(in oklab, var(--accent-thread) 27%, transparent)",
         display: "flex",
@@ -296,14 +310,17 @@ export function NodeEditorPanel(props: NodeEditorPanelProps) {
         ) : (
           <Editor
             height="100%"
-            language="python"
+            language={monacoLanguageForPath(target?.filePath)}
             value={value}
             beforeMount={defineVibegraphDark}
             theme={VIBEGRAPH_DARK}
             onMount={(ed) => { editorRef.current = ed; }}
             onChange={(v) => setValue(v ?? "")}
             options={{
-              readOnly: false,
+              // M-LANG2b — read-only for languages whose edit floor
+              // hasn't landed (bash until M-LANG4): the CST-patch
+              // chokepoint is Python-only, so Save cannot exist here.
+              readOnly: !editable,
               fontSize: 13,
               fontFamily: "var(--font-mono)",
               minimap: { enabled: false },
@@ -333,14 +350,29 @@ export function NodeEditorPanel(props: NodeEditorPanelProps) {
         )}
       </div>
 
-      <Footer
-        dirty={dirty}
-        saving={saving}
-        note={note}
-        saveError={saveError}
-        onSave={handleSave}
-        onCancel={handleCancel}
-      />
+      {editable ? (
+        <Footer
+          dirty={dirty}
+          saving={saving}
+          note={note}
+          saveError={saveError}
+          onSave={handleSave}
+          onCancel={handleCancel}
+        />
+      ) : (
+        <div
+          data-readonly-language
+          style={{
+            padding: "8px 12px",
+            borderTop: "1px solid var(--border-edge)",
+            color: "var(--text-muted)",
+            fontSize: 11,
+            fontFamily: "var(--font-mono)",
+          }}
+        >
+          Read-only — editing for this language hasn&apos;t landed yet.
+        </div>
+      )}
     </div>
   );
 }

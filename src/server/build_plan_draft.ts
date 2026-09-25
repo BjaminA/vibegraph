@@ -12,7 +12,7 @@
 
 import { spawn } from "child_process";
 // .ts extensions: run directly by node type-stripping in test:build-plan-draft.
-import { resolveClaudeBin } from "./run/synth_args.ts";
+import { resolveClaudeBin, spawnEnv } from "./run/synth_args.ts";
 import { validateBuildPlan } from "./build_plan.ts";
 import type { BuildPlan, SystemPlan } from "../shared/protocol";
 
@@ -83,14 +83,15 @@ export interface BuildPlanDraftResult {
 export function draftBuildPlan(sysPlan: SystemPlan, cwd: string, revision?: RoadmapRevision): Promise<BuildPlanDraftResult> {
   const prompt = buildPrompt(sysPlan, revision);
   // Model tier: thinking — roadmap planning.
-  const { cmd, args: pre } = resolveClaudeBin("thinking");
+  const spawnTarget = resolveClaudeBin("thinking");
+  const { cmd, args: pre } = spawnTarget;
   return new Promise((resolve) => {
     const child = spawn(
       cmd,
       [...pre, "-p", "--output-format", "json", "--strict-mcp-config",
         "--mcp-config", '{"mcpServers":{}}',
         "--dangerously-skip-permissions", "--", prompt],
-      { cwd, env: { ...process.env } },
+      { cwd, env: spawnEnv(spawnTarget) },
     );
     child.stdin?.end(); // 6d pre-flight: no open pipe — claude -p otherwise waits 3s for stdin per draft
     let out = "";

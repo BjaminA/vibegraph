@@ -116,6 +116,21 @@ test("truncation is ANNOUNCED, never silent", () => {
   assert.match(out, /INCOMPLETE/, "and warn against reasoning from the absence of later steps");
 });
 
+test("M-CONTRACT: contract and constraints ride the D1 bundle between the skill and the blind spots; absent → unchanged", () => {
+  const plain = buildThreadAgentPrompt(bundle, "x");
+  assert.doesNotMatch(plain, /Thread contract|Constraints for this thread/);
+  const p = buildThreadAgentPrompt({
+    ...bundle,
+    skill: "## Purpose\nCreates a user.",
+    contract: "## Thread contract (IR fact — auto-generated, do not edit)\nEnters: (no parameters)",
+    constraints: "## Constraints for this thread (STATED — not IR fact; the source of each line is named)\n- [proxy · human-stated — authoritative] via nginx",
+  }, "x");
+  const at = (re) => { const i = p.search(re); assert.ok(i >= 0, `missing ${re}`); return i; };
+  assert.ok(at(/Human-ratified thread skill/) < at(/## Thread contract/));
+  assert.ok(at(/## Thread contract/) < at(/## Constraints for this thread/));
+  assert.ok(at(/## Constraints for this thread/) < at(/What is NOT statically known/));
+});
+
 test("a projection at exactly the cap is NOT marked truncated", () => {
   const exact = Array.from({ length: PROJECTION_MAX }, (_, i) => ({ kind: "external", label: `c${i}` }));
   assert.doesNotMatch(renderAgentProjection(exact), /TRUNCATED/, "off-by-one: 40 of 40 is complete");

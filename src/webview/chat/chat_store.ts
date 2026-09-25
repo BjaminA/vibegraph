@@ -53,11 +53,16 @@ export interface RoutedSegment {
   /** The question matched the thread already open — reported, not routed
    * (its full context is in the prompt already). */
   selfMatch?: { qualifiedName: string; matchedOn: string[] };
+  /** M-SKILLS.2/.3 — generic direction a human enabled for this project:
+   * which skills rode this turn, and which were withheld (over budget /
+   * already shared this session). Disabled and not-applicable are the
+   * audit's business, not the chip's. */
+  genericSkills?: Array<{ name: string; injected: boolean; omitted?: string }>;
 }
 
 export type Segment = UserSegment | AssistantSegment | ToolSegment | RoutedSegment;
 
-export type ChatBackendId = "claude-stdio" | "claude-p-headless" | "agent-sdk";
+export type ChatBackendId = "claude-stdio" | "claude-p-headless" | "agent-sdk" | "ollama";
 
 export interface ChatSnapshot {
   segments: Segment[];
@@ -157,7 +162,7 @@ function handleChatMessage(msg: ExtensionMessage): void {
     }
     emit(patch);
   } else if (msg.type === "chat-routed") {
-    emit({ segments: [...state.segments, { kind: "routed", id: nextId(), matches: msg.payload.matches, selfMatch: (msg.payload as any).selfMatch } as RoutedSegment] });
+    emit({ segments: [...state.segments, { kind: "routed", id: nextId(), matches: msg.payload.matches, selfMatch: msg.payload.selfMatch, genericSkills: msg.payload.genericSkills } as RoutedSegment] });
   } else if (msg.type === "chat-chunk") {
     const prev = state.segments;
     const last = prev[prev.length - 1];

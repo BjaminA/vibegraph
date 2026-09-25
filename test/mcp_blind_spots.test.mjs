@@ -126,12 +126,26 @@ test("db:query roll-up — runtimeDispatch + a db effect, no gaps, staticallyCom
   assert.ok(r.effects.some((e) => e.effectKind === "db"), JSON.stringify(r.effects));
 });
 
-test("models:create_user roll-up — the unresolved User constructor is a post-link resolution gap", async () => {
+test("models:create_user roll-up — the User constructor RESOLVES, so the thread is complete", async () => {
+  // This test used to assert the opposite, and was red for a long time.
+  //
+  // `create_user` ends `return User(uid=uid, ...)`. A same-file class
+  // instantiation in a RETURN position had no reference edge and missed the
+  // extractor's same-file fallback, so it painted an `unresolved` terminal
+  // while the identical `f = User(...)` painted a step — the asymmetry
+  // visit_Return's `_emit_local_ref` was added to end. Once that landed the
+  // gap was gone and the assertion was pinning a bug.
+  //
+  // The roll-up REPORTING a gap is still covered, at the unit level, on a
+  // synthetic thread that genuinely has one (test/blind_spots.test.mjs).
   const r = await blindSpots("module/create_user.fn", "models.py");
-  assert.equal(r.totals.resolutionGaps, 1, JSON.stringify(r.totals));
+  assert.equal(r.totals.resolutionGaps, 0, JSON.stringify(r.totals));
   assert.equal(r.totals.runtimeDispatch, 0);
-  assert.equal(r.staticallyComplete, false, "an unresolved gap makes the thread incomplete");
-  assert.ok(r.resolutionGaps.some((g) => g.label.includes("User")), JSON.stringify(r.resolutionGaps));
+  assert.equal(r.totals.uncaptured, 0);
+  assert.equal(r.staticallyComplete, true, "no gaps and nothing uncaptured");
+  // The db write it performs is still on the effects axis — the thread being
+  // statically complete says nothing about it being pure.
+  assert.ok(r.effects.length >= 1, JSON.stringify(r.effects));
 });
 
 test("a sibling thread's cross-file call RESOLVES (no false gap) — link pass honoured", async () => {

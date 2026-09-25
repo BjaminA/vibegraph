@@ -1,0 +1,5 @@
+# The CLI reads code; it never edits it. libcst is the parser (M1) and the
+# only Python dependency of parse_cst / cross_file_link / discover_entry_points
+# / extract_thread / build_system_tier. black is an EDIT-time dependency of the
+# CST chokepoint and is deliberately not here.
+libcst

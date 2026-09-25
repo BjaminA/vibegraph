@@ -256,6 +256,14 @@
   stroke: var(--vg-edge-file-hue);
   filter: drop-shadow(0 0 4px color-mix(in oklab, var(--vg-edge-file-hue) 50%, transparent));
 }
+
+/* 2026-09-24 — BRANCH colours: every path under the thread's first fork
+   takes one hue (tokens.css --thread-branch-hue-*), set inline by
+   ThreadEdge. The error path keeps the only red. */
+.vg-thread-edge[data-edge-branch-hue]:not(.vg-thread-edge-error) .react-flow__edge-path {
+  stroke: var(--vg-edge-branch-hue);
+  filter: drop-shadow(0 0 4px color-mix(in oklab, var(--vg-edge-branch-hue) 55%, transparent));
+}
 .vg-thread-edge-cross-depth .react-flow__edge-path {
   stroke-width: 2px;
 }
@@ -266,20 +274,10 @@
   stroke-width: 1.5px;
 }
 
-/* ── U2 — dim non-focus on hover (Obsidian binary-attention) ─────────
-   Hover any thread node → siblings drop to --attention-fade-opacity;
-   edges drop to --attention-fade-edge-opacity. Tokens are 0.35 / 0.18
-   (existing); the skill suggests stricter 0.2 / 0.18 — flagged for
-   pushback. Pure CSS via :has() — no JS hovered-id state to sync.
-   Future refinement (U5+): keep edges touching the hovered node at
-   full opacity. Today, all edges dim uniformly. */
-[data-thread-view]:has(.vg-thread-node:hover) .vg-thread-node:not(:hover) {
-  opacity: var(--attention-fade-opacity);
-  transition: opacity var(--motion-fade-dur) ease;
-}
-[data-thread-view]:has(.vg-thread-node:hover) .vg-thread-edge .react-flow__edge-path {
-  opacity: var(--attention-fade-edge-opacity);
-}
+/* ── U2 — hover no longer dims the rest (2026-09-24) ─────────────────
+   The thread view used to fade every sibling while one node was hovered.
+   Ben: keep the whole thread lit; focus is shown on the node itself — the
+   hover bloom below, and the selection ring (depth.css §2) on click. */
 
 /* Hover bloom on a thread node — outer ring + M3 lift. Reuses
    --hover-lift-y / --hover-lift-scale so the cue rhymes with the
@@ -527,6 +525,21 @@ body[data-add-component-dragging="true"] .vg-thread-node[data-add-component-drop
 .vg-skeleton-pulse {
   animation: vg-skeleton-pulse-kf 1600ms ease-in-out infinite;
 }
+/* 2026-09-25 — the architecture proposal's working state: while a model
+   drafts groups, the processes it is grouping breathe in the proposed
+   accent, staggered in thirds so the map reads as being scanned rather than
+   blinking. Bound to [data-arch-proposing] on the System view, which goes
+   when the reply (or an error) arrives (ArchProposingCard.tsx). */
+[data-arch-proposing] [data-arch-node][data-arch-kind="cluster"],
+[data-arch-proposing] [data-arch-node][data-arch-kind="hub"] {
+  animation: vg-drafting-breathe-kf 1600ms ease-in-out infinite;
+}
+[data-arch-proposing] .react-flow__node:nth-child(3n + 2) [data-arch-node] { animation-delay: 533ms; }
+[data-arch-proposing] .react-flow__node:nth-child(3n) [data-arch-node] { animation-delay: 1066ms; }
+@media (prefers-reduced-motion: reduce) {
+  [data-arch-proposing] [data-arch-node][data-arch-kind="cluster"],
+  [data-arch-proposing] [data-arch-node][data-arch-kind="hub"] { animation: none; box-shadow: 0 0 14px var(--proposed-glow); }
+}
 @media (prefers-reduced-motion: reduce) {
   .vg-drafting-ants { animation: none; }
   .vg-drafting-card { animation: none; box-shadow: 0 0 14px var(--proposed-glow); }
@@ -546,4 +559,96 @@ body[data-add-component-dragging="true"] .vg-thread-node[data-add-component-drop
 @media (prefers-reduced-motion: reduce) {
   .vg-gate-btn { transition: none; }
   .vg-gate-btn:active:not(:disabled) { transform: none; }
+}
+
+/* Overlap pass — TopToolbar's compact mode: the tools and Claude groups show
+   icons only (the label text stays in the DOM, so the accessible name and
+   the title are unchanged). The views group keeps its labels. */
+[data-top-toolbar][data-compact="true"] [data-toolbar-group]:not([data-toolbar-group="views"]) button {
+  font-size: 0 !important;
+  gap: 0 !important;
+  padding: 5px 8px !important;
+}
+
+/* ── Boot screen (2026-09-24) ─────────────────────────────────────────────
+   Markup in src/shared/boot_markup.ts, painted by the server's page shell
+   beside #root; the app fades it out and removes it when the first parse
+   lands (dismissBootScreen). A thread in miniature:
+   a current runs seed → branches → write, and each card brightens as it
+   arrives. The loop is bounded by the parse — the screen unmounts when the
+   first envelope lands — the relink dot's exception to "no infinite loops".
+   Reduced motion: a still thread, fully lit. */
+.vg-boot {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  background: var(--bg-canvas);
+  font-family: var(--font-ui);
+  /* Above everything the app mounts beneath it (toolbar 1010, modals 1150). */
+  z-index: 2000;
+  animation: vg-view-enter-kf var(--motion-view-dur) var(--motion-view-ease) both;
+}
+/* The app adds this when the first parse lands, then removes the node. */
+.vg-boot.vg-boot-out {
+  /* The entry animation's fill (both) would hold opacity at 1 over this,
+     so the screen stayed opaque until removal — release it first. */
+  animation: none;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--motion-view-dur) var(--motion-view-ease);
+}
+.vg-boot-mark { margin-bottom: 12px; overflow: visible; }
+.vg-boot-edge { fill: none; stroke: var(--border-edge); stroke-width: 1.5; }
+.vg-boot-pulse {
+  fill: none;
+  stroke: var(--accent-thread);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-dasharray: 22 100;
+  stroke-dashoffset: 22;
+  opacity: 0;
+  filter: drop-shadow(0 0 4px var(--accent-thread));
+  animation: vg-boot-flow 1800ms var(--motion-node-enter-ease) infinite;
+}
+.vg-boot-pulse.io { stroke: var(--accent-io); filter: drop-shadow(0 0 4px var(--accent-io)); }
+@keyframes vg-boot-flow {
+  0%        { stroke-dashoffset: 22;   opacity: 0; }
+  8%        { opacity: 1; }
+  50%       { stroke-dashoffset: -100; opacity: 1; }
+  51%, 100% { stroke-dashoffset: -100; opacity: 0; }
+}
+.vg-boot-node {
+  fill: var(--bg-node);
+  stroke: var(--accent-thread);
+  stroke-width: 1.5;
+  stroke-opacity: 0.45;
+  animation: vg-boot-node 1800ms ease-in-out infinite;
+}
+.vg-boot-node.io    { stroke: var(--accent-io); }
+.vg-boot-node.write { stroke: var(--accent-io-write); }
+@keyframes vg-boot-node {
+  0%, 100% { stroke-opacity: 0.45; }
+  25%      { stroke-opacity: 1; }
+}
+.vg-boot-word {
+  font-size: var(--fs-20);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
+}
+.vg-boot-status { font-size: var(--fs-13); color: var(--text-secondary); }
+.vg-boot-elapsed {
+  min-height: 16px;
+  font-family: var(--font-mono);
+  font-size: var(--fs-12);
+  color: var(--text-muted);
+}
+@media (prefers-reduced-motion: reduce) {
+  .vg-boot { animation: none; }
+  .vg-boot-pulse { animation: none; opacity: 0; }
+  .vg-boot-node { animation: none; stroke-opacity: 1; }
 }

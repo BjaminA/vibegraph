@@ -49,8 +49,13 @@ _KIND_ORDER = {
     "backend": 1,
     "cache": 2,
     "db": 3,
-    "external_http": 4,
-    "library": 5,
+    # 5.4 - the local-resource effects read after the stores and before
+    # the remote host: the L-R order is roughly 'how far from this process'.
+    "fs": 4,
+    "subprocess": 5,
+    "log": 6,
+    "external_http": 7,
+    "library": 8,
 }
 
 # Frameworks we recognise from a frontend package.json dependency.
@@ -69,10 +74,21 @@ _COMPONENT_EXT = (".jsx", ".tsx", ".vue", ".svelte")
 _SCAN_EXT = (".jsx", ".tsx", ".vue", ".svelte", ".js", ".ts", ".mjs")
 _SKIP_DIRS = {"node_modules", "__pycache__", ".git", ".vibegraph", "dist", "build"}
 
-# A db/http effectKind already classified upstream maps to a subsystem;
-# fs/subprocess/log are intra-backend detail, NOT system-tier subsystems
-# (PLAN-v5 §1.2, §5.4).
-_EFFECT_TO_SUBSYSTEM = {"db": "db", "http": "external_http"}
+# An effectKind already classified upstream maps to a subsystem.
+#
+# PLAN-v5 5.4 parked fs/subprocess/log as "intra-backend detail". On a
+# ONE-language web service that reading held. It stopped holding when the
+# polyglot examples arrived: fleet's ops scripts ARE subprocess and remote
+# work (ssh, make, psql) and their whole story is what the shell does to
+# the services, which the architecture view could not show at all. They
+# are subsystems now, derived from the same per-file effectKind the IR
+# already stamps - no new evidence, and no per-file IR change (the Q6
+# floor: this classification lives at the aggregation layer, never on an
+# IR node).
+_EFFECT_TO_SUBSYSTEM = {
+    "db": "db", "http": "external_http",
+    "fs": "fs", "subprocess": "subprocess", "log": "log",
+}
 
 # Cache name-match: an identifier-boundary hit on redis / memcache(d) /
 # cache in the call's target. Heuristic, low fidelity, acknowledged
@@ -137,7 +153,9 @@ def _effects_in(files, reached):
             elif ek == "http":
                 yield "external_http:" + _http_host(node), "http", "effectKind", file, node.get("line")
             elif ek in ("fs", "subprocess", "log"):
-                continue  # §5.4 — not a system-tier subsystem
+                # 5.4 - promoted. Same evidence class as db: an
+                # effectKind the parser already stamped.
+                yield ek, ek, "effectKind", file, node.get("line")
             elif _is_cache_call(node):
                 yield "cache", "cache", "name-match", file, node.get("line")
 
@@ -190,7 +208,11 @@ def _detect_frontend(root):
                         if dep in deps:
                             framework, pkg_dep, pkg_dir = label, dep, dirpath
                             break
-                except Exception:
+                # A package.json we cannot read or cannot parse tells us no
+                # framework, and that is the honest answer. Narrow on
+                # purpose: `except Exception` here also swallowed a bug in
+                # the dependency walk above it and reported "no framework".
+                except (OSError, UnicodeDecodeError, json.JSONDecodeError, AttributeError):
                     pass
             if fn.endswith(_COMPONENT_EXT):
                 component_count += 1
@@ -264,7 +286,10 @@ def _scan_calls_edges(frontend, entry_points, root):
         try:
             with open(full, encoding="utf-8") as fh:
                 text = fh.read()
-        except Exception:
+        # A file we cannot open or decode is a file we cannot scan, and
+        # skipping it is right. Narrow on purpose: `except Exception` here
+        # would also have swallowed a bug in the scan below it.
+        except (OSError, UnicodeDecodeError):
             continue
         for lineno, line in enumerate(text.splitlines(), 1):
             for m in _LITERAL_RE.finditer(line):
@@ -369,6 +394,15 @@ def build_system(files, entry_points, threads, project_root=None):
         subsystems.append({"id": "cache", "kind": "cache", "label": "Cache", "evidence": "name-match"})
     if "db" in referenced:
         subsystems.append({"id": "db", "kind": "db", "label": "Database", "evidence": "effectKind:db"})
+    # 5.4 - the three effects v5 parked. Each is emitted only when a thread
+    # actually reaches one, so a project that touches no files and spawns
+    # nothing shows no card rather than three empty ones.
+    for kind, label in (("fs", "Filesystem"), ("subprocess", "Subprocess"), ("log", "Logging")):
+        if kind in referenced:
+            subsystems.append({
+                "id": kind, "kind": kind, "label": label,
+                "evidence": "effectKind:" + kind,
+            })
     for host in sorted(s for s in referenced if s.startswith("external_http:")):
         subsystems.append({
             "id": host,
@@ -388,6 +422,35 @@ def build_system(files, entry_points, threads, project_root=None):
             card["endpointRefs"] = sorted(ep["id"] for ep in library_eps)
             card["fileCount"] = len(files)
         subsystems.append(card)
+
+    # -- PLAN-v5 5.3: a thread surfaces in EVERY subsystem it touches --
+    #
+    # v5 modelled a thread as belonging to one subsystem, its entry
+    # point's. That was never true of the interesting threads: fleet's
+    # ingest_route is a backend route that also writes the db and posts a
+    # webhook, and reading it as "a backend thread" hides two thirds of
+    # what it does.
+    #
+    # No new evidence is needed -- every effect edge ALREADY carries the
+    # thread it came from (`viaThread`, the M19 drill-down handle). This
+    # is that data, read the other way round: per subsystem, the threads
+    # that reach it. A card with no threadRefs touches nothing and says
+    # nothing, rather than claiming an empty list.
+    threads_by_subsystem = {}
+    for e in edges:
+        via = e.get("viaThread")
+        if not via:
+            continue  # a `calls` edge has no thread handle; it is a text scan
+        threads_by_subsystem.setdefault(e["to"], set()).add(via)
+        # The OWNING side too: the thread is equally "in" the subsystem it
+        # runs from, which is what makes the relation many-to-many.
+        owner = e["from"].split(":", 1)[0]
+        if owner:
+            threads_by_subsystem.setdefault(owner, set()).add(via)
+    for sub in subsystems:
+        refs = sorted(threads_by_subsystem.get(sub["id"], ()))
+        if refs:
+            sub["threadRefs"] = refs
 
     subsystems.sort(key=lambda s: (_KIND_ORDER.get(s["kind"], 99), s["id"]))
     return {"subsystems": subsystems, "edges": edges}

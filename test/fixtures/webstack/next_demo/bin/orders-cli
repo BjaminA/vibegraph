@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# No file extension, and it is the only thing a caller is permitted to run.
+set -euo pipefail
+ALLOWED=("ingest" "report")
+
+dispatch() {
+  case "$1" in
+    ingest) exec "$(dirname "$0")/../scripts/run.sh" "$2" ;;
+    *) echo "refused: $1" >&2; exit 2 ;;
+  esac
+}
+
+dispatch "$@"

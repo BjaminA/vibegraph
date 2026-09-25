@@ -9,6 +9,8 @@
 // Pure: the server renders the bundle pieces to strings and assembles the
 // prompt here, so this is unit-testable without a claude -p call.
 
+import { languageForPath } from "../shared/languages.ts";
+
 export interface ThreadAgentBundle {
   entryPointId: string;
   qualifiedName: string;
@@ -23,6 +25,16 @@ export interface ThreadAgentBundle {
   reaches: string[];
   /** entryPointIds that reach this thread (incoming adjacency). */
   reachedBy: string[];
+  /** M-CONTRACT.2 — rendered thread contract (IR fact), or null/absent. */
+  contract?: string | null;
+  /** M-CONTRACT.3 — rendered routed constraints (stated, provenance per line). */
+  constraints?: string | null;
+  /** M-STACK.3 — the rendered system spec for this thread (tools + the
+   *  policies stated about them). Same position as the worker prompt. */
+  stack?: string | null;
+  /** M-SKILLS.2 — rendered generic direction, after the thread skill (the
+   *  same section and order as the worker prompt). */
+  genericSkills?: string | null;
 }
 
 export interface ThreadAgentResult {
@@ -111,7 +123,10 @@ const NO_EXECUTION_RULE =
 
 export function buildThreadAgentPrompt(b: ThreadAgentBundle, task: string): string {
   const parts: string[] = [
-    `You are a subagent scoped to ONE code thread of a Python project: ${b.qualifiedName} (${b.entryPointId}).`,
+    // M-LANG6 — the thread's language derives from its seed file
+    // (threads never cross languages; the entryPointId's file prefix
+    // is the seed). Unknown extensions fall back to plain "code".
+    `You are a subagent scoped to ONE code thread of a ${languageForPath(b.entryPointId.split(":")[0])?.label ?? "code"} project: ${b.qualifiedName} (${b.entryPointId}).`,
     "Your context is DELIBERATELY BOUNDED to this thread. Work within it; everything you need to know about the thread is below.",
     "",
     NO_EXECUTION_RULE,
@@ -124,6 +139,12 @@ export function buildThreadAgentPrompt(b: ThreadAgentBundle, task: string): stri
   if (b.skill) {
     parts.push("", "Human-ratified thread skill (authoritative guidance for this thread):", b.skill.trim());
   }
+  if (b.genericSkills) parts.push("", b.genericSkills.trim());
+  // M-CONTRACT — what enters / leaves / is touched (IR fact), then the
+  // stated constraints with provenance. Same order as the worker prompt.
+  if (b.contract) parts.push("", b.contract.trim());
+  if (b.stack) parts.push("", b.stack.trim());
+  if (b.constraints) parts.push("", b.constraints.trim());
   parts.push(
     "",
     // Was "read source / run / ask" — an instruction to do three things this

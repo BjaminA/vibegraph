@@ -1,5 +1,6 @@
 import React from "react";
 import { X } from "lucide-react";
+import { belowToolbar } from "./TopToolbar";
 
 export interface NodeFilters {
   showImports: boolean;
@@ -70,7 +71,9 @@ export function FiltersPanel({ filters, onChange, onClose, flowStats }: Props) {
     <div
       style={{
         position: "fixed",
-        top: 56,
+        // Was a hardcoded 56: the toolbar band WRAPS at narrow widths and
+        // this went behind it (belowToolbar's note).
+        top: belowToolbar(16),
         right: 18,
         width: 240,
         background: "var(--bg-node)",

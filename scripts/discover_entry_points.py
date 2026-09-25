@@ -60,6 +60,19 @@ def is_module_scope(node):
     return node.get("parentId") is None
 
 
+def _inside_block(node, block_id, by_id, cap=8):
+    """True when `block_id` is on `node`'s parent chain (bounded walk)."""
+    pid = node.get("parentId")
+    for _ in range(cap):
+        if pid == block_id:
+            return True
+        parent = by_id.get(pid)
+        if parent is None:
+            return False
+        pid = parent.get("parentId")
+    return False
+
+
 def find_function_defs(ir):
     return [n for n in ir["nodes"]
             if n["type"] == "function_def" and is_module_scope(n)]
@@ -164,10 +177,15 @@ def detect_cli(file, ir):
         if not (NAME_MAIN_RE.match(cond) or NAME_MAIN_RE_REVERSED.match(cond)):
             continue
         # Find function calls / call-RHS assignments inside this block
-        # (parentId == this if_stmt) whose funcName matches a top-level
-        # function in the same file.
+        # whose funcName matches a top-level function in the same file.
+        # 2026-08-30 (case-1 sensorhub finding): membership is by PARENT
+        # CHAIN, not direct childhood — the canonical CLI idioms
+        # `sys.exit(main())` / `print(ingest(path))` put the real entry
+        # call one level down as an M-NEST minted NESTED call node
+        # (parentId = the wrapping call), and the direct-child test
+        # silently dropped the entry point.
         for c in ir["nodes"]:
-            if c.get("parentId") != n["id"]:
+            if not _inside_block(c, n["id"], by_id):
                 continue
             target_name = None
             if c["type"] == "call":

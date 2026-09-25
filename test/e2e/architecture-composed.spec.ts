@@ -74,14 +74,19 @@ test.describe("M-NEST L1 — composed forward de-lie", () => {
     await page.waitForTimeout(400);
     await expect(node(page, "self.conv1").first()).toBeVisible();
     await expect(node(page, "self.conv2").first()).toBeVisible();
-    // Ordered along the L-R data path: conv1 < conv2 < fc < return.
-    const xOf = async (label: string) => (await node(page, label).first().boundingBox())!.x;
-    const [c1, c2, fc, ret] = await Promise.all(
-      ["self.conv1", "self.conv2", "self.fc", "return"].map(xOf),
-    );
-    expect(c1).toBeLessThan(c2);
-    expect(c2).toBeLessThan(fc);
-    expect(fc).toBeLessThan(ret);
+    // Ordered along the data path: conv1 < conv2 < fc < return. They are
+    // forward()'s siblings, which the call-tree thread (2026-09-24) stacks
+    // down one column in execution order — the path reads along y.
+    // A single-call continuation stays on its row (the return after fc sits
+    // right of it), so "before" is reading order: an earlier row, or the
+    // same row further left.
+    const box = async (label: string) => (await node(page, label).first().boundingBox())!;
+    const [c1, c2, fc, ret] = await Promise.all(["self.conv1", "self.conv2", "self.fc", "return"].map(box));
+    const before = (a: { x: number; y: number }, b: { x: number; y: number }) =>
+      a.y < b.y - 2 || (Math.abs(a.y - b.y) <= 2 && a.x < b.x);
+    expect(before(c1, c2), "conv1 before conv2").toBe(true);
+    expect(before(c2, fc), "conv2 before fc").toBe(true);
+    expect(before(fc, ret), "fc before return").toBe(true);
   });
 
   test("per-node badge expands a single nest", async ({ page }) => {
@@ -120,15 +125,32 @@ test.describe("M-NEST L1 — composed forward de-lie", () => {
     expect(contained, "self.conv1 should sit inside a nest container box").toBe(true);
   });
 
-  test("ChainNet: chain + comprehension nests carry the 'uncaptured' badge (path shown incomplete)", async ({ page }) => {
+  test("ChainNet: the METHOD CHAIN is still uncaptured; the comprehension no longer is", async ({ page }) => {
     await openForward(page, "ChainNet");
-    // self.proj (chain callee) and self.head (comprehension) are NOT decomposed
-    // into steps — that's the documented stopping rule. They must NOT appear as
-    // silently-complete; the wrapping steps carry the dashed "uncaptured" badge.
+    // THIS TEST USED TO ASSERT TWO UNCAPTURED NESTS. M-COMP retired one of
+    // them, and the retirement is the point: a comprehension is a LOOP, so
+    // it now carries its own container and its calls are real nodes inside
+    // it. `self.head` is visible, in a `listcomp for _ in range(2)` region,
+    // repeated — which is strictly more than the badge ever said.
+    //
+    // The backstop is unchanged and still has a live case. `self.proj(x)`
+    // sits in the CALLEE position of `.relu()`; nothing decomposes a method
+    // chain, so the wrapping step must still say the path it shows is
+    // incomplete.
     await expect(node(page, "self.proj").first()).toHaveCount(0); // not a standalone step
-    await expect(node(page, "self.head").first()).toHaveCount(0);
+    await expect(node(page, "self.head").first()).toBeVisible();  // a step now, inside the comp
+    await expect(page.locator('[data-thread-container][data-container-kind="comprehension"]'))
+      .toHaveCount(1);
+
     const uncaptured = page.locator('[data-nest-badge][data-nest-uncaptured="true"]');
-    await expect(uncaptured).toHaveCount(2); // self.proj().relu + torch.stack
+    await expect(uncaptured).toHaveCount(1); // self.proj().relu only
+    // And `torch.stack(...)` must NOT be badged any more: its one nested call
+    // is the comprehension's, which the reader can see. Badging it would be a
+    // false alarm about our own completeness, which costs exactly the trust
+    // the badge exists to earn.
+    await expect(node(page, "torch.stack").first().locator('[data-nest-badge]'))
+      .toHaveCount(0);
+
     // Uncaptured nests are not expandable — no global expand toggle appears
     // (ChainNet has zero EXTRACTED nests), so nothing can be silently revealed.
     await expect(page.locator("[data-thread-nests-toggle]")).toHaveCount(0);

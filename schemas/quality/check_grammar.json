@@ -1,0 +1,115 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibegraph.dev/schemas/quality/check_grammar.json",
+  "title": "VibeGraph quality layer: the check grammar",
+  "description": "The eight verbs a checkable half may use: the three M-GRAMMAR verbs already in constraint_grammar.ts (callers-only, import-only, calls-through) and the five Run 1 forced into existence (guards, not-in-loop, handles-failure, annotated, co-changes; reviews/quality-layer/RUN1.md section 3). Operand shapes only. Decision procedures are specified in RUN1.md and implemented in Run 3. A malformed check is refused at the boundary, never coerced (constraint_store.ts precedent).",
+  "$defs": {
+    "CheckRule": {
+      "enum": ["callers-only", "import-only", "calls-through", "guards", "not-in-loop", "handles-failure", "annotated", "co-changes"]
+    },
+    "StackRole": {
+      "description": "Mirrors STACK_ROLES in src/shared/stack_taxonomy.ts.",
+      "enum": ["web-framework", "frontend", "http-client", "model-api", "agent-protocol", "platform", "db", "cache", "queue", "tensor", "data", "cloud", "infra", "process", "remote", "test", "build", "utility", "runtime", "unknown"]
+    },
+    "NonEmptyStrings": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } },
+    "CallersOnly": {
+      "type": "object",
+      "required": ["rule", "target"],
+      "additionalProperties": false,
+      "properties": {
+        "rule": { "const": "callers-only" },
+        "target": { "type": "string", "minLength": 1 },
+        "files": { "$ref": "#/$defs/NonEmptyStrings" },
+        "functions": { "$ref": "#/$defs/NonEmptyStrings" }
+      },
+      "anyOf": [{ "required": ["files"] }, { "required": ["functions"] }]
+    },
+    "ImportOnly": {
+      "type": "object",
+      "required": ["rule", "tool", "files"],
+      "additionalProperties": false,
+      "properties": {
+        "rule": { "const": "import-only" },
+        "tool": { "type": "string", "minLength": 1 },
+        "files": { "$ref": "#/$defs/NonEmptyStrings" }
+      }
+    },
+    "CallsThrough": {
+      "type": "object",
+      "required": ["rule", "target", "through"],
+      "additionalProperties": false,
+      "properties": {
+        "rule": { "const": "calls-through" },
+        "target": { "type": "string", "minLength": 1 },
+        "through": { "type": "string", "minLength": 1 }
+      }
+    },
+    "Guards": {
+      "description": "RUN1 3.1. Every call to target is governed by a call to guard: the guard sits in an if-test whose arm contains the target call, or precedes it in the same or an enclosing block with no return between. Stricter than calls-through, which stays for co-occurrence.",
+      "type": "object",
+      "required": ["rule", "target", "guard"],
+      "additionalProperties": false,
+      "properties": {
+        "rule": { "const": "guards" },
+        "target": { "type": "string", "minLength": 1 },
+        "guard": { "type": "string", "minLength": 1 }
+      }
+    },
+    "NotInLoop": {
+      "description": "RUN1 3.2. No call attributed to target (a name) or to a tool with role sits inside a loop container reached by the thread. At least one of target or role. except names project funnels whose bodies are judged on their own.",
+      "type": "object",
+      "required": ["rule"],
+      "additionalProperties": false,
+      "properties": {
+        "rule": { "const": "not-in-loop" },
+        "target": { "type": "string", "minLength": 1 },
+        "role": { "$ref": "#/$defs/StackRole" },
+        "except": { "$ref": "#/$defs/NonEmptyStrings" }
+      },
+      "anyOf": [{ "required": ["target"] }, { "required": ["role"] }]
+    },
+    "HandlesFailure": {
+      "description": "RUN1 3.3. Every except/catch arm reached by the thread contains a raise, a return, or a call attributed to the log role or a funnel wrapping it.",
+      "type": "object",
+      "required": ["rule", "scope"],
+      "additionalProperties": false,
+      "properties": {
+        "rule": { "const": "handles-failure" },
+        "scope": { "enum": ["thread", "files"], "description": "thread: the arms the thread reaches. files: every arm in the packet edit scope (or a whole tree for calibration)." }
+      }
+    },
+    "Annotated": {
+      "description": "RUN1 3.4. The named parameters carry a type. entry-point: the packet's entry function's parameters. dynamic-receivers: parameters whose receiver calls the thread reports dynamic.",
+      "type": "object",
+      "required": ["rule", "at"],
+      "additionalProperties": false,
+      "properties": {
+        "rule": { "const": "annotated" },
+        "at": { "enum": ["entry-point", "dynamic-receivers"] }
+      }
+    },
+    "CoChanges": {
+      "description": "RUN1 3.5. If the run's combined delta changes `when`, it must also change `require`. Evaluated over server-collected deltas; a packet reviewed before the requiring packet ran is unverifiable (not-yet), never violated.",
+      "type": "object",
+      "required": ["rule", "when", "require"],
+      "additionalProperties": false,
+      "properties": {
+        "rule": { "const": "co-changes" },
+        "when": { "$ref": "evidence.json#/$defs/FileOrNodeRef" },
+        "require": { "$ref": "evidence.json#/$defs/FileOrNodeRef" }
+      }
+    },
+    "Check": {
+      "oneOf": [
+        { "$ref": "#/$defs/CallersOnly" },
+        { "$ref": "#/$defs/ImportOnly" },
+        { "$ref": "#/$defs/CallsThrough" },
+        { "$ref": "#/$defs/Guards" },
+        { "$ref": "#/$defs/NotInLoop" },
+        { "$ref": "#/$defs/HandlesFailure" },
+        { "$ref": "#/$defs/Annotated" },
+        { "$ref": "#/$defs/CoChanges" }
+      ]
+    }
+  }
+}

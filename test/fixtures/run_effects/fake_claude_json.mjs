@@ -24,6 +24,13 @@ if (exitCode !== 0) {
   process.stderr.write("fake synth failure\n");
   process.exit(exitCode);
 }
+// FAKE_IS_ERROR (optional): answer the way the real CLI does when it cannot
+// run at all (an expired login says "Failed to authenticate: OAuth session
+// expired…"): an is_error envelope on stdout and a non-zero exit.
+if (process.env.FAKE_IS_ERROR) {
+  process.stdout.write(JSON.stringify({ result: process.env.FAKE_IS_ERROR, is_error: true, session_id: "fake" }));
+  process.exit(1);
+}
 const modelText = process.env.FAKE_SYNTH_RESPONSE ?? '{"args":{}}';
 process.stdout.write(JSON.stringify({ result: modelText, is_error: false, session_id: "fake" }));
 process.exit(0);

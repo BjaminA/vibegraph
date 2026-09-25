@@ -38,6 +38,16 @@ test.describe("W6 — resolved third-party call shows the real source", () => {
     await expect(page.locator("[data-thread-view]")).toBeVisible({ timeout: 10_000 });
     await page.waitForTimeout(600);
 
+    // FIT FIRST. M-COMP gave the comprehension its own container and made
+    // its iterable (`range(2)`) a step of its own, so ChainNet's thread is
+    // wider than it was — at the default framing `torch.stack` sat past the
+    // right edge, and the hover landed on whatever was under the pointer
+    // instead. An off-frame tail is documented behaviour here (the thread
+    // pans; it does not shrink), so the test fits the view rather than
+    // assuming one.
+    await page.locator(".react-flow__controls-fitview").click();
+    await page.waitForTimeout(700);
+
     const node = page.locator(".vg-thread-node").filter({ hasText: "torch.stack" }).first();
     await node.waitFor({ state: "visible", timeout: 10_000 });
     await node.hover();

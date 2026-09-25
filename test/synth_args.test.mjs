@@ -40,7 +40,14 @@ async function withStub({ response, exit }, fn) {
 test("resolveClaudeBin honors VG_CLAUDE_BIN (whitespace split)", () => {
   const prev = process.env.VG_CLAUDE_BIN;
   process.env.VG_CLAUDE_BIN = "node /tmp/x.mjs --flag";
-  assert.deepEqual(resolveClaudeBin(), { cmd: "node", args: ["/tmp/x.mjs", "--flag"] });
+  // The claim is the SPLIT, and only the split. `resolveClaudeBin` has since
+  // grown `label` (M-BOUNDARY.5's audit trail) and `timeoutMs` (M-PROVIDER's
+  // per-tier route), so a deepEqual on the whole object was pinning the
+  // shape of a struct rather than the behaviour under test — and went red
+  // the day either was added, for no reason a reader could act on.
+  const r = resolveClaudeBin();
+  assert.equal(r.cmd, "node");
+  assert.deepEqual(r.args, ["/tmp/x.mjs", "--flag"]);
   if (prev === undefined) delete process.env.VG_CLAUDE_BIN; else process.env.VG_CLAUDE_BIN = prev;
 });
 

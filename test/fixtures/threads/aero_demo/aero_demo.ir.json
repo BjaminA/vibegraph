@@ -59,7 +59,11 @@
         "docstring": "Compute aerodynamic drag for an aircraft under given conditions.",
         "decorators": [],
         "isAsync": false,
-        "returns": "dict"
+        "returns": "dict",
+        "paramTypes": {
+          "aircraft_id": "str",
+          "conditions": "dict"
+        }
       },
       {
         "id": "module/compute_drag.fn/config.assign",
@@ -393,7 +397,10 @@
         "docstring": "Load runtime state for an aircraft (stub for disk/network read).",
         "decorators": [],
         "isAsync": false,
-        "returns": "dict"
+        "returns": "dict",
+        "paramTypes": {
+          "aircraft_id": "str"
+        }
       },
       {
         "id": "module/fetch_state.fn/return@0",
@@ -420,7 +427,10 @@
         "docstring": "Load aircraft configuration by id; caches per process.",
         "decorators": [],
         "isAsync": false,
-        "returns": "dict"
+        "returns": "dict",
+        "paramTypes": {
+          "aircraft_id": "str"
+        }
       },
       {
         "id": "module/load_aircraft_config.fn/if@0",
@@ -619,7 +629,10 @@
         "docstring": "Fill in missing condition fields. Branches on whether temperature\n    was supplied; both arms call other functions and return a full dict.",
         "decorators": [],
         "isAsync": false,
-        "returns": "dict"
+        "returns": "dict",
+        "paramTypes": {
+          "conditions": "dict"
+        }
       },
       {
         "id": "module/normalize_conditions.fn/if@0",
@@ -660,6 +673,21 @@
         "value": "{\n    \"velocity\": conditions.get(\"velocity\", REFERENCE_VELOCITY),\n    \"density\": density,\n}",
         "nestsInnerCalls": true,
         "nestExtracted": false
+      },
+      {
+        "id": "module/normalize_conditions.fn/if@0/conditions_get.call",
+        "type": "call",
+        "parentId": "module/normalize_conditions.fn/if@0",
+        "line": 19,
+        "endLine": 19,
+        "col": 24,
+        "endCol": 70,
+        "funcName": "conditions.get",
+        "args": [
+          "\"velocity\"",
+          "REFERENCE_VELOCITY"
+        ],
+        "isEffect": false
       },
       {
         "id": "module/normalize_conditions.fn/if@0/velocity.assign",
@@ -720,7 +748,10 @@
         "docstring": "Ideal-gas-law density estimate at sea-level pressure.",
         "decorators": [],
         "isAsync": false,
-        "returns": "float"
+        "returns": "float",
+        "paramTypes": {
+          "temp_kelvin": "float"
+        }
       },
       {
         "id": "module/density_from_temperature.fn/pressure.assign",
@@ -772,7 +803,11 @@
         "docstring": "Combine velocity and density into a corrected airspeed.\n    Calls math.sqrt \u2014 a library boundary the thread must mark as external.",
         "decorators": [],
         "isAsync": false,
-        "returns": "float"
+        "returns": "float",
+        "paramTypes": {
+          "velocity": "float",
+          "density": "float"
+        }
       },
       {
         "id": "module/apply_correction_factor.fn/return@0",
@@ -785,6 +820,20 @@
         "value": "velocity * math.sqrt(density / REFERENCE_DENSITY)",
         "nestsInnerCalls": true,
         "nestExtracted": false
+      },
+      {
+        "id": "module/apply_correction_factor.fn/math_sqrt.call",
+        "type": "call",
+        "parentId": "module/apply_correction_factor.fn",
+        "line": 41,
+        "endLine": 41,
+        "col": 22,
+        "endCol": 60,
+        "funcName": "math.sqrt",
+        "args": [
+          "density / REFERENCE_DENSITY"
+        ],
+        "isEffect": false
       }
     ],
     "edges": [
@@ -801,6 +850,11 @@
       {
         "source": "module/normalize_conditions.fn/if@0",
         "target": "module/normalize_conditions.fn/if@0/return@0",
+        "type": "contains"
+      },
+      {
+        "source": "module/normalize_conditions.fn/if@0",
+        "target": "module/normalize_conditions.fn/if@0/conditions_get.call",
         "type": "contains"
       },
       {
@@ -836,6 +890,11 @@
       {
         "source": "module/apply_correction_factor.fn",
         "target": "module/apply_correction_factor.fn/return@0",
+        "type": "contains"
+      },
+      {
+        "source": "module/apply_correction_factor.fn",
+        "target": "module/apply_correction_factor.fn/math_sqrt.call",
         "type": "contains"
       }
     ],
@@ -931,7 +990,10 @@
         "docstring": "Look up a drag model by name. Resolved dynamically -- thread stops.",
         "decorators": [],
         "isAsync": false,
-        "returns": "Callable[[float, dict], float]"
+        "returns": "Callable[[float, dict], float]",
+        "paramTypes": {
+          "name": "str"
+        }
       },
       {
         "id": "module/select_model.fn/return@0",
@@ -1002,7 +1064,11 @@
         "docstring": "Drag coefficient model for subsonic flight.",
         "decorators": [],
         "isAsync": false,
-        "returns": "float"
+        "returns": "float",
+        "paramTypes": {
+          "corrected_velocity": "float",
+          "state": "dict"
+        }
       },
       {
         "id": "module/subsonic.fn/altitude_factor.assign",
@@ -1042,7 +1108,11 @@
         "docstring": "Drag coefficient model for supersonic flight.",
         "decorators": [],
         "isAsync": false,
-        "returns": "float"
+        "returns": "float",
+        "paramTypes": {
+          "corrected_velocity": "float",
+          "state": "dict"
+        }
       },
       {
         "id": "module/supersonic.fn/return@0",
@@ -1055,6 +1125,20 @@
         "value": "0.08 * math.log1p(corrected_velocity) * (1.0 + state[\"altitude\"] / 50000.0)",
         "nestsInnerCalls": true,
         "nestExtracted": false
+      },
+      {
+        "id": "module/supersonic.fn/math_log1p.call",
+        "type": "call",
+        "parentId": "module/supersonic.fn",
+        "line": 20,
+        "endLine": 20,
+        "col": 18,
+        "endCol": 48,
+        "funcName": "math.log1p",
+        "args": [
+          "corrected_velocity"
+        ],
+        "isEffect": false
       }
     ],
     "edges": [
@@ -1071,6 +1155,11 @@
       {
         "source": "module/supersonic.fn",
         "target": "module/supersonic.fn/return@0",
+        "type": "contains"
+      },
+      {
+        "source": "module/supersonic.fn",
+        "target": "module/supersonic.fn/math_log1p.call",
         "type": "contains"
       }
     ],

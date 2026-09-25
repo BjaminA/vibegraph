@@ -332,3 +332,20 @@ test("M-SKILL.2: the status-quo pin — no routed arg and empty routed are byte-
   assert.equal(renderRoutedBlock(undefined), "");
   assert.ok(!bare.includes("Routed context"), "no routed block without matches");
 });
+
+test("M-STACK.3: the project map carries a one-line stack summary when the index has one", () => {
+  const p = buildChatPrompt({
+    userText: "where does http leave?",
+    activeFile: "app.py",
+    projectFiles: ["app.py", "db.py"],
+    node: null,
+    thread: null,
+    stackSummary: "Stack (IR fact, from imports/calls/manifests): HTTP client: telemetry.http_client(wraps requests), requests; database: telemetry.storage(wraps sqlite3).",
+  });
+  const at = (re) => p.search(re);
+  assert.ok(at(/Project files: app\.py, db\.py/) < at(/Stack \(IR fact/), "files, then what they are built on");
+  assert.match(p, /telemetry\.http_client\(wraps requests\)/);
+  // Absent summary ⇒ byte-identical to the pre-M-STACK framing.
+  const bare = buildChatPrompt({ userText: "x", activeFile: "app.py", projectFiles: ["app.py", "db.py"], node: null, thread: null });
+  assert.doesNotMatch(bare, /Stack \(IR fact/);
+});

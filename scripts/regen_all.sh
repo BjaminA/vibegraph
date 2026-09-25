@@ -34,17 +34,17 @@ if [ -n "$dirty_src" ] && [ "${VG_ALLOW_DIRTY_FIXTURES:-}" != "1" ]; then
   exit 1
 fi
 
-echo "[1/4] sample_advanced.ir.json — single-file parser snapshot"
+echo "[1/5] sample_advanced.ir.json — single-file parser snapshot"
 python3 scripts/parse_cst.py test/fixtures/sample_advanced.py \
   > test/fixtures/sample_advanced.ir.json
 
-echo "[2/4] linked IRs — project / aero_demo / flask_demo (*.ir.json)"
+echo "[2/5] linked IRs — project / aero_demo / flask_demo (*.ir.json)"
 python3 scripts/regen_link_fixtures.py
 
-echo "[3/4] project envelopes — aero_demo / flask_demo (*.project.json)"
+echo "[3/5] project envelopes — aero_demo / flask_demo (*.project.json)"
 node scripts/regen_project_envelopes.mjs
 
-echo "[4/4] thread snapshots (*.thread.json)"
+echo "[4/5] thread snapshots (*.thread.json)"
 python3 scripts/extract_thread.py --seed-file main.py --seed-id module/compute_drag.fn \
   < test/fixtures/threads/aero_demo/aero_demo.ir.json \
   > test/fixtures/threads/aero_demo/aero_demo.thread.json
@@ -54,6 +54,13 @@ python3 scripts/extract_thread.py --seed-file db.py --seed-id module/insert.fn \
 python3 scripts/extract_thread.py --seed-file jobs.py --seed-id module/run_job.fn \
   < test/fixtures/threads/exc_demo/exc_demo.ir.json \
   > test/fixtures/threads/exc_demo/run_job.thread.json
+
+# M-CONTRACT (2026-09-07) — the polyglot envelope EMBEDS Python IR (and
+# bash / TS / C++), so a parser change drifts it too. Its own script
+# mirrors server.ts's per-language pipeline off the registry; it runs LAST
+# because it depends on nothing above and nothing above depends on it.
+echo "[5/5] polyglot envelope — shop_demo (*.project.json, four languages)"
+node --experimental-strip-types --no-warnings scripts/regen_polyglot.mjs
 
 echo
 echo "done. Inspect 'git diff' (confirm the drift is intended), then 'npm test'."

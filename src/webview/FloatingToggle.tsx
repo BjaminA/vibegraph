@@ -39,6 +39,7 @@ function FloatingToggle({
     : { right: rightInset ?? 20 };
   return (
     <button
+      data-floating-toggle={side}
       onClick={onToggle}
       title={open ? titleOpen : titleClosed}
       style={{

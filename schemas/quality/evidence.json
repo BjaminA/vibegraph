@@ -1,0 +1,178 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibegraph.dev/schemas/quality/evidence.json",
+  "title": "VibeGraph quality layer: evidence vocabulary",
+  "description": "Run 2 of the quality-layer brief (reviews/quality-layer/BRIEF.md, Part D). The shared definitions every other quality schema references: the five provenance kinds, the explicit Unknown, node references, the cost classes, and the CheckResult shape in which a pass MUST carry what it could not follow and no verdict can be a bare boolean. Nothing here is a config; it is the vocabulary configs are written in. Two provenance kinds can never enter a deterministic gate (model_judgement, self_report) and the schema says so with a const, not a comment.",
+  "$defs": {
+    "ProvenanceKind": {
+      "description": "Who is speaking. derived: a script over source, manifests or the IR. stated: a human, the orchestrator's confirmed brief, or an agent over MCP, with the record id. observed: a trace run (the overlay beside the IR, never in it). model_judgement: a model's verdict, with the model and prompt hash. self_report: a worker's own summary, labelled and never load-bearing.",
+      "enum": ["derived", "stated", "observed", "model_judgement", "self_report"]
+    },
+    "Derived": {
+      "type": "object",
+      "required": ["kind", "by", "commit", "at"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": { "const": "derived" },
+        "by": { "type": "string", "minLength": 1, "description": "The deriving module or script, e.g. thread_contract.ts, scripts/derive_stack_profile.mjs." },
+        "commit": { "type": "string", "minLength": 1, "description": "The repository commit the derivation read." },
+        "at": { "type": "string", "format": "date-time" }
+      }
+    },
+    "Stated": {
+      "type": "object",
+      "required": ["kind", "source", "id", "at"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": { "const": "stated" },
+        "source": { "enum": ["human", "orchestrator", "agent"], "description": "Mirrors ConstraintSource in constraint_store.ts." },
+        "id": { "type": "string", "minLength": 1, "description": "The constraint, policy or ruling id that states it." },
+        "at": { "type": "string", "format": "date-time" }
+      }
+    },
+    "Observed": {
+      "type": "object",
+      "required": ["kind", "run", "entryPointId", "stale", "at"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": { "const": "observed" },
+        "run": { "type": "string", "minLength": 1, "description": "The trace run id in .vibegraph/observations.json." },
+        "entryPointId": { "type": "string", "minLength": 1 },
+        "stale": { "type": "boolean", "description": "Per-file staleness as the observations store decides it; a stale observation may inform, never gate." },
+        "at": { "type": "string", "format": "date-time" }
+      }
+    },
+    "ModelJudgement": {
+      "type": "object",
+      "required": ["kind", "model", "promptHash", "at", "entersGate"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": { "const": "model_judgement" },
+        "model": { "type": "string", "minLength": 1, "description": "The audit label already used by PacketReview.model, e.g. claude:claude-opus-5." },
+        "promptHash": { "type": "string", "minLength": 1 },
+        "at": { "type": "string", "format": "date-time" },
+        "entersGate": { "const": false, "description": "A model's verdict never rewrites a check's verdict and never enters a deterministic gate." }
+      }
+    },
+    "SelfReport": {
+      "type": "object",
+      "required": ["kind", "by", "loadBearing", "entersGate"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": { "const": "self_report" },
+        "by": { "const": "worker" },
+        "loadBearing": { "const": false },
+        "entersGate": { "const": false }
+      }
+    },
+    "Provenance": {
+      "oneOf": [
+        { "$ref": "#/$defs/Derived" },
+        { "$ref": "#/$defs/Stated" },
+        { "$ref": "#/$defs/Observed" },
+        { "$ref": "#/$defs/ModelJudgement" },
+        { "$ref": "#/$defs/SelfReport" }
+      ]
+    },
+    "GateProvenance": {
+      "description": "The only provenances a deterministic gate may read. Structurally excludes model_judgement and self_report.",
+      "oneOf": [
+        { "$ref": "#/$defs/Derived" },
+        { "$ref": "#/$defs/Observed" },
+        { "$ref": "#/$defs/Stated" }
+      ]
+    },
+    "Unknown": {
+      "description": "A value that could not be derived and was not stated. Carries its reason. Never a plausible default.",
+      "type": "object",
+      "required": ["unknown", "reason"],
+      "additionalProperties": false,
+      "properties": {
+        "unknown": { "const": true },
+        "reason": { "type": "string", "minLength": 1 }
+      }
+    },
+    "NodeId": {
+      "description": "The IR's structural node id grammar (schemas/ir.schema.json NodeId).",
+      "type": "string",
+      "pattern": "^module(/[^/]+)*$"
+    },
+    "NodeRef": {
+      "description": "file:node, the form every offender and every supporting node takes, so a reject is actionable.",
+      "type": "string",
+      "pattern": "^[^:]+:module(/[^/]+)*$"
+    },
+    "FileOrNodeRef": {
+      "description": "Either a project-relative file path or a file:node reference. The file part must contain a slash or a dot, so a bare name (`SCHEMA`) is refused as an operand; a file with no extension and no directory cannot be told from a bare name here and is left to the verb's precondition (both operands must resolve to something the IR had).",
+      "type": "string",
+      "pattern": "^[^:]*[./][^:]*(:module(/[^/]+)*)?$"
+    },
+    "CostClass": {
+      "description": "Derived from a check's decision procedure, never asserted. local: one function subtree. thread: one thread traversal. delta: the packet's diffs only. graph: project-wide. observed: needs the trace overlay.",
+      "enum": ["local", "thread", "delta", "graph", "observed"]
+    },
+    "Verdict": { "enum": ["pass", "violated", "unverifiable"] },
+    "UnverifiableCause": {
+      "description": "Why the IR could not answer. dynamic: runtime dispatch that could be the target or guard (only observed or stated evidence lifts it). unresolved: a resolution gap the linker owes (a re-link may lift it). precondition: the verb is outside its competence here. no-such-name: the operand names nothing the IR knows. not-yet: a run-level check whose requiring packet has not run.",
+      "enum": ["dynamic", "unresolved", "precondition", "no-such-name", "not-yet", "depth-limit"]
+    },
+    "Pass": {
+      "type": "object",
+      "required": ["verdict", "reason", "notFollowed", "offenders", "provenance"],
+      "additionalProperties": false,
+      "properties": {
+        "verdict": { "const": "pass" },
+        "reason": { "type": "string", "minLength": 1 },
+        "notFollowed": {
+          "description": "What the check did NOT verify. Never empty: a pass that followed everything is a claim no static check can make.",
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "offenders": { "const": [] },
+        "provenance": { "$ref": "#/$defs/GateProvenance" }
+      }
+    },
+    "Violated": {
+      "type": "object",
+      "required": ["verdict", "reason", "offenders", "provenance"],
+      "additionalProperties": false,
+      "properties": {
+        "verdict": { "const": "violated" },
+        "reason": { "type": "string", "minLength": 1 },
+        "offenders": {
+          "description": "Never empty: a violation with no offender is not actionable and is refused.",
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/NodeRef" }
+        },
+        "provenance": { "$ref": "#/$defs/GateProvenance" }
+      }
+    },
+    "Unverifiable": {
+      "type": "object",
+      "required": ["verdict", "reason", "cause", "at", "offenders", "provenance"],
+      "additionalProperties": false,
+      "properties": {
+        "verdict": { "const": "unverifiable" },
+        "reason": { "type": "string", "minLength": 1 },
+        "cause": { "$ref": "#/$defs/UnverifiableCause" },
+        "at": {
+          "description": "The terminals or nodes that made it unverifiable. May be empty for precondition and no-such-name.",
+          "type": "array",
+          "items": { "$ref": "#/$defs/NodeRef" }
+        },
+        "offenders": { "const": [] },
+        "provenance": { "$ref": "#/$defs/GateProvenance" }
+      }
+    },
+    "CheckResult": {
+      "description": "Three verdicts, never two, never a boolean.",
+      "oneOf": [
+        { "$ref": "#/$defs/Pass" },
+        { "$ref": "#/$defs/Violated" },
+        { "$ref": "#/$defs/Unverifiable" }
+      ]
+    }
+  }
+}

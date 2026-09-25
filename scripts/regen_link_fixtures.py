@@ -40,6 +40,12 @@ FIXTURES = [
     (ROOT / "test" / "fixtures" / "threads" / "exc_demo",
      ["jobs.py", "app.py"],
      ROOT / "test" / "fixtures" / "threads" / "exc_demo" / "exc_demo.ir.json"),
+    # M-COMP — the same N+1 written six ways, so the round-trip verdict can
+    # be proven identical across spellings. Built because the census found
+    # ZERO effectful calls inside a comprehension in every other fixture.
+    (ROOT / "test" / "fixtures" / "comprehension" / "comp_demo",
+     ["fanout.py"],
+     ROOT / "test" / "fixtures" / "comprehension" / "comp_demo" / "comp_demo.ir.json"),
     # M19.1 — system-tier fixture. Backend .py only; the web/ frontend is
     # never parsed (LIGHT path) — the aggregator text-scans it instead.
     (ROOT / "test" / "fixtures" / "system" / "system_demo",

@@ -1,0 +1,11 @@
+telemetry.db
+backups/
+export.csv
+__pycache__/
+# runtime state lives here too, but the human-stated constraints ARE the example
+.vibegraph/*
+!.vibegraph/constraints.json
+# a ratified thread skill is authored knowledge too - the rule AND the
+# reason, inherited by every future agent on that thread - not runtime state
+!.vibegraph/thread-skills/
+!.vibegraph/thread-skills/**

@@ -8,11 +8,11 @@
   "additionalProperties": false,
   "properties": {
     "version": {
-      "description": "Project envelope schema version. v2.0 = M8.1 baseline; v2.1 = M19.1 adds `system`.",
-      "enum": ["2.1"]
+      "description": "Project envelope schema version. v2.0 = M8.1 baseline; v2.1 = M19.1 adds `system`; v2.2 = M-LANG1 (multi-language seam: per-file IRs may carry a `language` discriminator, and EntryPoint.framework is an open string — the closed Python-framework enum would have failed validation for every non-Python frontend). The server continues to emit 2.1 until a non-Python frontend is registered; both loosenings are additive, so 2.1 envelopes validate unchanged.",
+      "enum": ["2.1", "2.2"]
     },
     "files": {
-      "description": "Map of project-relative file path -> per-file IR (schemas/ir.schema.json, version 1.1). Validated structurally as object-of-objects here; per-file schema validation is the IR snapshot test's job (test:ir).",
+      "description": "Map of project-relative file path -> per-file IR (schemas/ir.schema.json). Validated structurally as object-of-objects here; per-file schema validation is the IR snapshot test's job (test:ir). v2.2 (M-LANG1): each per-file IR may carry a `language` discriminator (python|bash|jsts|cpp), server-stamped on v1.x IRs and frontend-emitted at IR 2.0; absence means python.",
       "type": "object",
       "additionalProperties": {
         "type": "object",
@@ -48,12 +48,186 @@
       "description": "PLAN-v7 Stage 3 (additive, OPTIONAL — no version bump; envelopes without it validate unchanged): the ratified architecture PLAN, when one exists. A LABELLED PLAN traceable to the user's description, NEVER honest IR — a SIBLING of `system`, composed with it only at render (planned subsystems ghost-render; ids that exist in the honest tier are already real). Persisted at <projectRoot>/.vibegraph/system-plan.json on human acceptance; becomes honest only when built code re-parses into matching subsystems.",
       "$ref": "#/$defs/SystemPlan"
     },
+    "workRun": {
+      "description": "M-AGENT1 (additive, OPTIONAL — no version bump; run-less envelopes validate unchanged): the Agent Manager's durable run — task → plan_work packets → per-packet status/evidence, persisted at <projectRoot>/.vibegraph/work-run.json on every transition. Two human gates are STRUCTURAL (draft→ratified and awaiting-review→done are transitions only a human message triggers); the orchestrator automates between them. Inner shape pinned by src/server/work_run.ts + test/work_run.test.mjs; validated structurally here.",
+      "type": "object",
+      "required": ["version", "task", "status", "packets"],
+      "properties": {
+        "version": { "enum": ["1"] },
+        "task": { "type": "string", "minLength": 1 },
+        "status": { "enum": ["draft", "ratified", "running", "paused", "done", "failed"] },
+        "packets": { "type": "array", "minItems": 1, "items": { "type": "object" } }
+      },
+      "additionalProperties": true
+    },
     "buildPlan": {
       "description": "PLAN-v7 Stage 5 (additive, OPTIONAL — no version bump): the ratified BUILD PLAN (the roadmap) + its live per-item status. A LABELLED PLAN and the orchestrator's durable state: persisted at <projectRoot>/.vibegraph/build-plan.json on ratification and re-persisted on every status transition, so a run survives reloads and resumes from disk. The human gate stays at every increment — the orchestrator automates BETWEEN gates, never through them.",
       "$ref": "#/$defs/BuildPlan"
+    },
+    "constraints": {
+      "description": "M-CONTRACT.3 (additive, OPTIONAL — no version bump): the STATED constraints (.vibegraph/constraints.json) the server attaches to a live envelope, when any exist. Declared here at M-STACK.1, which added the sibling below — `additionalProperties: false` had made a live constrained envelope fail validation. Inner shape pinned by src/server/constraint_store.ts; validated structurally here.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "kind", "text", "scope", "source"],
+        "properties": {
+          "id": { "type": "string" },
+          "kind": { "type": "string" },
+          "text": { "type": "string", "minLength": 1 },
+          "scope": { "type": "object" },
+          "source": { "enum": ["human", "orchestrator", "agent"] },
+          "policy": { "type": "object" }
+        },
+        "additionalProperties": true
+      }
+    },
+    "crossings": {
+      "description": "M-XLANG.1 (additive, OPTIONAL - no version bump; crossing-less envelopes validate unchanged): where a logic thread LEAVES its own language over HTTP, and which route in this project serves the path it calls. Derived from parsed data on both sides - the caller's URL argument reduced to a static path shape, and the receiver's route metadata from any language's discoverer (src/server/crossings.ts). WEIGHED, never resolved: `confidence` is path+method only when BOTH sides parsed a method, `ambiguous` names every candidate and claims none, `unmatched` means the path resolved but nothing here serves it, and `note` always says what the match could not establish. A crossing does NOT widen the thread - `threads[].filesReached` stays one language.",
+      "type": "object",
+      "required": ["all", "byThread"],
+      "additionalProperties": false,
+      "properties": {
+        "all": { "type": "array", "items": { "$ref": "#/$defs/Crossing" } },
+        "byThread": {
+          "type": "object",
+          "additionalProperties": { "type": "array", "items": { "$ref": "#/$defs/Crossing" } }
+        }
+      }
+    },
+    "stack": {
+      "description": "M-STACK.1 (additive, OPTIONAL — no version bump; stack-less envelopes validate unchanged): the STACK FACTS — which software tools the project uses, each with its role, origin, declared version (manifests only), the project funnel that wraps it, and the parse EVIDENCE behind it. Pure derivation from `files` + `threads` + the manifests on disk (src/server/stack.ts), rebuilt on every derived refresh and never persisted. A tool the taxonomy does not know is listed with role \"unknown\" — the spec names what it cannot classify. A stated DECISION about a tool is not here: that is a constraint of kind \"stack-policy\".",
+      "type": "object",
+      "required": ["tools", "byFile", "byThread"],
+      "additionalProperties": false,
+      "properties": {
+        "tools": { "type": "array", "items": { "$ref": "#/$defs/StackTool" } },
+        "byFile": { "type": "object", "additionalProperties": { "type": "array", "items": { "type": "string" } } },
+        "byThread": { "type": "object", "additionalProperties": { "type": "array", "items": { "type": "string" } } },
+        "byThreadCalled": {
+          "description": "M-BOUNDARY.2 (additive, OPTIONAL): entry point -> the tools a BOUNDARY of that thread actually reaches, as opposed to `byThread`, which is the tools PRESENT in the files it walks. Present is a superset of called; the difference is a dead dependency or a resolution gap, and both views are rendered so neither can be mistaken for the other. Absent when the index was built without thread nodes.",
+          "type": "object",
+          "additionalProperties": { "type": "array", "items": { "type": "string" } }
+        },
+        "localsByFile": {
+          "description": "M-RESOLVE (additive, OPTIONAL): per file, the local names its ASSIGNMENTS bind and what each was bound from (`valueKind`, plus `callTarget` when it was a call). A third of every unresolved receiver in the real fixtures is bound to a literal three lines up - `problems = []` above `problems.push` - so this is what makes that class free to resolve, with no run and no model. A name bound twice with different shapes is refused rather than guessed.",
+          "type": "object",
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["name", "valueKind"],
+              "additionalProperties": false,
+              "properties": {
+                "name": { "type": "string" },
+                "valueKind": { "type": "string" },
+                "callTarget": { "type": "string" }
+              }
+            }
+          }
+        },
+        "importsByFile": {
+          "description": "M-BOUNDARY.1 (additive, OPTIONAL): per file, the local names its imports bind and the specifier each came from, so a call's receiver head can be resolved to a tool by the server, the contract and the webview through one shared function (src/shared/stack_attribution.ts). `project` marks a specifier that resolves INSIDE this project - a call through it is project code, never a tool.",
+          "type": "object",
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["binding", "spec"],
+              "additionalProperties": false,
+              "properties": {
+                "binding": { "type": "string" },
+                "spec": { "type": "string" },
+                "project": { "type": "boolean" },
+                "nodeId": { "type": "string" }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "$defs": {
+    "Crossing": {
+      "description": "M-XLANG.1: one hop out of a thread's language or process. `kind` (M-FLOW.2, additive; absent = http): `http` — `path` is the static shape the caller's URL yields (`*` is an interpolated segment) and `targets` the routes that serve it; `command` — `path` is the string literal naming a script this project parses and a target's `route` is that parsed file; `tool` — `path` is an MCP tool name and the targets its registrations. Every candidate when ambiguous.",
+      "type": "object",
+      "required": ["entryPointId", "file", "nodeId", "callee", "path", "method", "targets", "confidence", "note"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": { "type": "string", "enum": ["http", "command", "tool"] },
+        "entryPointId": { "type": "string" },
+        "file": { "type": "string" },
+        "nodeId": { "type": "string" },
+        "callee": { "type": "string" },
+        "path": { "type": "string" },
+        "method": { "type": ["string", "null"] },
+        "methodAssumed": { "type": "boolean" },
+        "confidence": { "type": "string", "enum": ["path+method", "path", "ambiguous", "unmatched"] },
+        "note": { "type": "string" },
+        "targets": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["entryPointId", "route", "method"],
+            "additionalProperties": false,
+            "properties": {
+              "entryPointId": { "type": "string" },
+              "route": { "type": "string" },
+              "method": { "type": "string" },
+              "framework": { "type": ["string", "null"] },
+              "methodAssumed": { "type": "boolean" }
+            }
+          }
+        }
+      }
+    },
+    "StackTool": {
+      "description": "M-STACK.1: one software tool the project uses. `role` is the closed taxonomy set (src/shared/stack_taxonomy.ts); `origin` third-party / stdlib / project (a project module that funnels a tool — the proxy case — carries `wraps`). `evidence` is the parse sites that prove it: import / call / include, or `config` for a manifest-only fact (the M-LANG3 limit: .js/.jsx are not parsed, so for an unparsed web frontend the manifest is the only fact and is labelled as such).",
+      "type": "object",
+      "required": ["tool", "role", "origin", "files", "threads", "evidence"],
+      "additionalProperties": false,
+      "properties": {
+        "tool": { "type": "string", "minLength": 1 },
+        "role": {
+          "type": "string",
+          "enum": ["web-framework", "frontend", "http-client", "model-api", "agent-protocol", "platform", "db", "cache", "queue", "tensor", "data", "cloud", "infra", "process", "remote", "test", "build", "utility", "runtime", "unknown"]
+        },
+        "origin": { "type": "string", "enum": ["third-party", "stdlib", "project"] },
+        "version": { "type": "string" },
+        "roleSource": {
+          "description": "M-CMD.2 (additive, OPTIONAL): absent = a taxonomy table classified this tool; \"stated\" = a stack-policy in .vibegraph/constraints.json named it with a role because no table could.",
+          "type": "string",
+          "enum": ["stated"]
+        },
+        "roleStatedBy": { "description": "M-CMD.2: the id of the constraint that stated the role.", "type": "string" },
+        "roleStatedSource": { "description": "M-CMD.3 (additive, OPTIONAL): that constraint's source. \"agent\" = a model's classification from the classify pass, NOT human-reviewed; a human's statement outranks it.", "type": "string", "enum": ["human", "orchestrator", "agent"] },
+        "wraps": { "type": "array", "items": { "type": "string" } },
+        "home": {
+          "description": "M-BOUNDARY.1: origin \"project\" only - the file that IS the funnel. Its importers are listed in `files` too and sit BESIDE it, not inside it, which is the difference between a call that goes THROUGH the wrapper and one that merely lives in a file importing it.",
+          "type": "string"
+        },
+        "files": { "type": "array", "items": { "type": "string" } },
+        "threads": { "type": "array", "items": { "type": "string" } },
+        "calledOn": {
+          "description": "M-BOUNDARY.2 (additive, OPTIONAL): the threads with a BOUNDARY attributed to this tool - a subset of `threads`, which is file-level presence.",
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["file", "kind"],
+            "additionalProperties": false,
+            "properties": {
+              "file": { "type": "string" },
+              "nodeId": { "type": "string" },
+              "line": { "type": "integer" },
+              "kind": { "type": "string", "enum": ["import", "call", "include", "config"] }
+            }
+          }
+        }
+      }
+    },
     "BuildPlan": {
       "description": "PLAN-v7 Stage 5: an ordered, dependency-aware capability list decomposing the ratified SystemPlan. Foundation-first is STRUCTURAL: an item's needs[] may only reference ids declared BEFORE it (build order = declared order), making the graph a DAG by construction. groundedIn quotes the user's description or is null = INFERRED.",
       "type": "object",
@@ -138,7 +312,7 @@
     "SubsystemKind": {
       "description": "Closed set for v5 (PLAN-v5 §1.2). fs/subprocess/log effects are deliberately NOT subsystems (§5.4).",
       "type": "string",
-      "enum": ["frontend", "backend", "db", "cache", "external_http", "library"]
+      "enum": ["frontend", "backend", "db", "cache", "external_http", "library", "fs", "subprocess", "log"]
     },
     "Subsystem": {
       "description": "One architectural node. `id` grammar: bare kind (`frontend`/`backend`/`db`/`cache`/`library`) or `external_http:<host>` (one node per distinct host). Edge endpoints reference these ids, optionally endpoint-qualified as `<owner>:<entryPointId>` for backend/library origins.",
@@ -152,6 +326,11 @@
         "framework": {
           "description": "Backend/frontend framework discriminator (e.g. 'flask', 'React'). Null when not meaningful.",
           "type": ["string", "null"]
+        },
+        "threadRefs": {
+          "description": "PLAN-v5 5.3 (additive, OPTIONAL): every thread that TOUCHES this subsystem, by entryPointId - not only the ones whose entry point it owns. A thread belongs to as many subsystems as it reaches: an ingest route is a backend thread that also writes the db and posts a webhook. Derived from the effect edges' existing viaThread handles, so it needs no new evidence; absent when no thread reaches this card.",
+          "type": "array",
+          "items": { "type": "string" }
         },
         "endpointRefs": {
           "description": "Backend and library: the entryPoints[].id values the card owns — for backend, kind=route only (the M19.2 expand-to-reveal endpoints; effect edges may originate from non-route backend entry points too, not listed here); for library (M-NN-2), the routeless project's own non-manual entries (model/public_api/cli/test).",
@@ -203,7 +382,7 @@
         "effectKind": {
           "description": "System-tier effect classification (effect edges only). DISTINCT from the per-file IR EffectKind enum — `cache` is classified at the aggregation layer by name-match, not in the per-file IR (PLAN-v5 §6, Q6).",
           "type": "string",
-          "enum": ["db", "cache", "http"]
+          "enum": ["db", "cache", "http", "fs", "subprocess", "log"]
         },
         "viaThread": {
           "description": "effect edges: entryPoints[].id of the thread this edge was rolled up from — the drill-down back-pointer. Null for library origins with no entry point.",
@@ -253,9 +432,8 @@
           "type": "string"
         },
         "framework": {
-          "description": "Framework discriminator for kind=route / kind=cli / kind=model detections (e.g. 'flask', 'fastapi', 'django', 'argparse', 'click', 'typer', 'pytest', 'pytorch'). Null for kinds where framework is not meaningful. `pytorch` added with M-NN-2's library_only fixture — discover_entry_points.py had emitted it on kind=model since the Arch-view arc, but no committed envelope carried a model entry until then.",
-          "type": ["string", "null"],
-          "enum": [null, "argparse", "click", "typer", "flask", "fastapi", "django", "pytest", "pytorch"]
+          "description": "Framework discriminator for kind=route / kind=cli / kind=model detections. Null for kinds where framework is not meaningful. Well-known Python values: 'argparse', 'click', 'typer', 'flask', 'fastapi', 'django', 'pytest', 'pytorch' (`pytorch` added with M-NN-2's library_only fixture — discover_entry_points.py had emitted it on kind=model since the Arch-view arc, but no committed envelope carried a model entry until then). v2.2 (M-LANG1) OPENED this from a closed enum to a free string: each language frontend's discover step names its own frameworks (e.g. 'shell', 'express', 'fastify') — a closed list here would fail envelope validation for every non-Python frontend.",
+          "type": ["string", "null"]
         },
         "metadata": {
           "description": "Kind-specific extras — e.g. { 'route': '/users/<id>', 'method': 'GET' } for routes, { 'decorator': '@app.cli.command' } for CLI. Free-form object; consumers must check kind first.",

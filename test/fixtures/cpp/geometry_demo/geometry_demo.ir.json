@@ -1,0 +1,1008 @@
+{
+  "main.cpp": {
+    "version": "2.0",
+    "language": "cpp",
+    "nodes": [
+      {
+        "id": "module/geometry_h.import",
+        "type": "import",
+        "parentId": null,
+        "line": 6,
+        "endLine": 7,
+        "col": 0,
+        "endCol": 0,
+        "names": [
+          "geometry.h"
+        ]
+      },
+      {
+        "id": "module/cstdio.import",
+        "type": "import",
+        "parentId": null,
+        "line": 8,
+        "endLine": 9,
+        "col": 0,
+        "endCol": 0,
+        "names": [
+          "<cstdio>"
+        ]
+      },
+      {
+        "id": "module/cstdlib.import",
+        "type": "import",
+        "parentId": null,
+        "line": 9,
+        "endLine": 10,
+        "col": 0,
+        "endCol": 0,
+        "names": [
+          "<cstdlib>"
+        ]
+      },
+      {
+        "id": "module/clamp2.fn",
+        "type": "function_def",
+        "parentId": null,
+        "line": 12,
+        "endLine": 20,
+        "col": 0,
+        "endCol": 1,
+        "name": "clamp2",
+        "params": [
+          "T v",
+          "T lo",
+          "T hi"
+        ],
+        "docstring": null,
+        "returns": "T"
+      },
+      {
+        "id": "module/clamp2.fn/if@0",
+        "type": "if_stmt",
+        "parentId": "module/clamp2.fn",
+        "line": 13,
+        "endLine": 15,
+        "col": 2,
+        "endCol": 3,
+        "condition": "v < lo",
+        "hasElse": false
+      },
+      {
+        "id": "module/clamp2.fn/if@0/return@0",
+        "type": "return_stmt",
+        "parentId": "module/clamp2.fn/if@0",
+        "line": 14,
+        "endLine": 14,
+        "col": 4,
+        "endCol": 14,
+        "value": "lo"
+      },
+      {
+        "id": "module/clamp2.fn/if@1",
+        "type": "if_stmt",
+        "parentId": "module/clamp2.fn",
+        "line": 16,
+        "endLine": 18,
+        "col": 2,
+        "endCol": 3,
+        "condition": "v > hi",
+        "hasElse": false
+      },
+      {
+        "id": "module/clamp2.fn/if@1/return@0",
+        "type": "return_stmt",
+        "parentId": "module/clamp2.fn/if@1",
+        "line": 17,
+        "endLine": 17,
+        "col": 4,
+        "endCol": 14,
+        "value": "hi"
+      },
+      {
+        "id": "module/clamp2.fn/return@0",
+        "type": "return_stmt",
+        "parentId": "module/clamp2.fn",
+        "line": 19,
+        "endLine": 19,
+        "col": 2,
+        "endCol": 11,
+        "value": "v"
+      },
+      {
+        "id": "module/report.fn",
+        "type": "function_def",
+        "parentId": null,
+        "line": 22,
+        "endLine": 24,
+        "col": 0,
+        "endCol": 1,
+        "name": "report",
+        "params": [
+          "double value"
+        ],
+        "docstring": null,
+        "returns": "void"
+      },
+      {
+        "id": "module/report.fn/printf.call",
+        "type": "call",
+        "parentId": "module/report.fn",
+        "line": 23,
+        "endLine": 23,
+        "col": 2,
+        "endCol": 30,
+        "funcName": "printf",
+        "args": [
+          "\"value=%f\\n\"",
+          "value"
+        ],
+        "isEffect": true,
+        "effectKind": "log"
+      },
+      {
+        "id": "module/main.fn",
+        "type": "function_def",
+        "parentId": null,
+        "line": 27,
+        "endLine": 40,
+        "col": 0,
+        "endCol": 1,
+        "name": "main",
+        "params": [
+          "int argc",
+          "char** argv"
+        ],
+        "docstring": "Measure one circle, scale and clamp the total, write the report.",
+        "returns": "int"
+      },
+      {
+        "id": "module/main.fn/c.assign",
+        "type": "assignment",
+        "parentId": "module/main.fn",
+        "line": 28,
+        "endLine": 28,
+        "col": 2,
+        "endCol": 16,
+        "name": "c",
+        "valueKind": "call",
+        "preview": "(2.0)",
+        "callTarget": "Circle",
+        "args": [
+          "2.0"
+        ]
+      },
+      {
+        "id": "module/main.fn/a.assign",
+        "type": "assignment",
+        "parentId": "module/main.fn",
+        "line": 29,
+        "endLine": 29,
+        "col": 2,
+        "endCol": 22,
+        "name": "a",
+        "valueKind": "call",
+        "preview": "c.area()",
+        "callTarget": "c.area"
+      },
+      {
+        "id": "module/main.fn/total.assign",
+        "type": "assignment",
+        "parentId": "module/main.fn",
+        "line": 30,
+        "endLine": 30,
+        "col": 2,
+        "endCol": 33,
+        "name": "total",
+        "valueKind": "call",
+        "preview": "area_sum(&c, 1)",
+        "callTarget": "area_sum",
+        "args": [
+          "&c",
+          "1"
+        ]
+      },
+      {
+        "id": "module/main.fn/s.assign",
+        "type": "assignment",
+        "parentId": "module/main.fn",
+        "line": 31,
+        "endLine": 31,
+        "col": 2,
+        "endCol": 26,
+        "name": "s",
+        "valueKind": "call",
+        "preview": "scale(total)",
+        "callTarget": "scale",
+        "args": [
+          "total"
+        ]
+      },
+      {
+        "id": "module/main.fn/t.assign",
+        "type": "assignment",
+        "parentId": "module/main.fn",
+        "line": 32,
+        "endLine": 32,
+        "col": 2,
+        "endCol": 43,
+        "name": "t",
+        "valueKind": "call",
+        "preview": "clamp2<double>(s, 0.0, 100.0)",
+        "callTarget": "clamp2<double>",
+        "args": [
+          "s",
+          "0.0",
+          "100.0"
+        ]
+      },
+      {
+        "id": "module/main.fn/f.assign",
+        "type": "assignment",
+        "parentId": "module/main.fn",
+        "line": 33,
+        "endLine": 33,
+        "col": 2,
+        "endCol": 37,
+        "name": "f",
+        "valueKind": "call",
+        "preview": "fopen(\"report.txt\", \"w\")",
+        "callTarget": "fopen",
+        "args": [
+          "\"report.txt\"",
+          "\"w\""
+        ],
+        "effectKind": "fs"
+      },
+      {
+        "id": "module/main.fn/if@0",
+        "type": "if_stmt",
+        "parentId": "module/main.fn",
+        "line": 34,
+        "endLine": 36,
+        "col": 2,
+        "endCol": 3,
+        "condition": "f != nullptr",
+        "hasElse": false
+      },
+      {
+        "id": "module/main.fn/if@0/fprintf.call",
+        "type": "call",
+        "parentId": "module/main.fn/if@0",
+        "line": 35,
+        "endLine": 35,
+        "col": 4,
+        "endCol": 26,
+        "funcName": "fprintf",
+        "args": [
+          "f",
+          "\"%f\\n\"",
+          "t"
+        ],
+        "isEffect": true,
+        "effectKind": "log"
+      },
+      {
+        "id": "module/main.fn/report.call",
+        "type": "call",
+        "parentId": "module/main.fn",
+        "line": 37,
+        "endLine": 37,
+        "col": 2,
+        "endCol": 12,
+        "funcName": "report",
+        "args": [
+          "t"
+        ],
+        "isEffect": false
+      },
+      {
+        "id": "module/main.fn/system.call",
+        "type": "call",
+        "parentId": "module/main.fn",
+        "line": 38,
+        "endLine": 38,
+        "col": 2,
+        "endCol": 17,
+        "funcName": "system",
+        "args": [
+          "\"date\""
+        ],
+        "isEffect": true,
+        "effectKind": "subprocess"
+      },
+      {
+        "id": "module/main.fn/return@0",
+        "type": "return_stmt",
+        "parentId": "module/main.fn",
+        "line": 39,
+        "endLine": 39,
+        "col": 2,
+        "endCol": 11,
+        "value": "0"
+      }
+    ],
+    "edges": [
+      {
+        "source": "module/clamp2.fn",
+        "target": "module/clamp2.fn/if@0",
+        "type": "contains"
+      },
+      {
+        "source": "module/clamp2.fn/if@0",
+        "target": "module/clamp2.fn/if@0/return@0",
+        "type": "contains"
+      },
+      {
+        "source": "module/clamp2.fn",
+        "target": "module/clamp2.fn/if@1",
+        "type": "contains"
+      },
+      {
+        "source": "module/clamp2.fn/if@1",
+        "target": "module/clamp2.fn/if@1/return@0",
+        "type": "contains"
+      },
+      {
+        "source": "module/clamp2.fn",
+        "target": "module/clamp2.fn/return@0",
+        "type": "contains"
+      },
+      {
+        "source": "module/report.fn",
+        "target": "module/report.fn/printf.call",
+        "type": "contains"
+      },
+      {
+        "source": "module/main.fn",
+        "target": "module/main.fn/c.assign",
+        "type": "contains"
+      },
+      {
+        "source": "module/main.fn",
+        "target": "module/main.fn/a.assign",
+        "type": "contains"
+      },
+      {
+        "source": "module/main.fn",
+        "target": "module/main.fn/total.assign",
+        "type": "contains"
+      },
+      {
+        "source": "module/main.fn",
+        "target": "module/main.fn/s.assign",
+        "type": "contains"
+      },
+      {
+        "source": "module/main.fn",
+        "target": "module/main.fn/t.assign",
+        "type": "contains"
+      },
+      {
+        "source": "module/main.fn",
+        "target": "module/main.fn/f.assign",
+        "type": "contains"
+      },
+      {
+        "source": "module/main.fn",
+        "target": "module/main.fn/if@0",
+        "type": "contains"
+      },
+      {
+        "source": "module/main.fn/if@0",
+        "target": "module/main.fn/if@0/fprintf.call",
+        "type": "contains"
+      },
+      {
+        "source": "module/main.fn",
+        "target": "module/main.fn/report.call",
+        "type": "contains"
+      },
+      {
+        "source": "module/main.fn",
+        "target": "module/main.fn/system.call",
+        "type": "contains"
+      },
+      {
+        "source": "module/main.fn",
+        "target": "module/main.fn/return@0",
+        "type": "contains"
+      },
+      {
+        "source": "module/main.fn/report.call",
+        "target": "module/report.fn",
+        "type": "reference"
+      },
+      {
+        "source": "module/main.fn/c.assign",
+        "target": "module/Circle.class",
+        "type": "reference",
+        "targetFile": "geometry.h",
+        "qualifiedTarget": "geometry.h:Circle"
+      },
+      {
+        "source": "module/main.fn/total.assign",
+        "target": "module/area_sum.fn",
+        "type": "reference",
+        "targetFile": "geometry.cpp",
+        "qualifiedTarget": "geometry.cpp:area_sum"
+      }
+    ],
+    "symbolIndex": [
+      {
+        "sym": "function:clamp2",
+        "kind": "function",
+        "name": "clamp2",
+        "scope": "module",
+        "loc": {
+          "line": 12,
+          "endLine": 20,
+          "col": 0,
+          "endCol": 1
+        },
+        "signature": "T clamp2(T v, T lo, T hi)",
+        "docstring": null,
+        "source": "T clamp2(T v, T lo, T hi) {\n  if (v < lo) {\n    return lo;\n  }\n  if (v > hi) {\n    return hi;\n  }\n  return v;\n}"
+      },
+      {
+        "sym": "function:report",
+        "kind": "function",
+        "name": "report",
+        "scope": "module",
+        "loc": {
+          "line": 22,
+          "endLine": 24,
+          "col": 0,
+          "endCol": 1
+        },
+        "signature": "void report(double value)",
+        "docstring": null,
+        "source": "static void report(double value) {\n  printf(\"value=%f\\n\", value);\n}"
+      },
+      {
+        "sym": "function:main",
+        "kind": "function",
+        "name": "main",
+        "scope": "module",
+        "loc": {
+          "line": 27,
+          "endLine": 40,
+          "col": 0,
+          "endCol": 1
+        },
+        "signature": "int main(int argc, char** argv)",
+        "docstring": "Measure one circle, scale and clamp the total, write the report.",
+        "source": "int main(int argc, char** argv) {\n  Circle c(2.0);\n  double a = c.area();\n  double total = area_sum(&c, 1);\n  double s = scale(total);\n  double t = clamp2<double>(s, 0.0, 100.0);\n  auto* f = fopen(\"report.txt\", \"w\");\n  if (f != nullptr) {\n    fprintf(f, \"%f\\n\", t);\n  }\n  report(t);\n  system(\"date\");\n  return 0;\n}"
+      }
+    ],
+    "modulePath": "main.cpp"
+  },
+  "geometry.h": {
+    "version": "2.0",
+    "language": "cpp",
+    "nodes": [
+      {
+        "id": "module/Circle.class",
+        "type": "class_def",
+        "parentId": null,
+        "line": 7,
+        "endLine": 14,
+        "col": 0,
+        "endCol": 1,
+        "name": "Circle",
+        "bases": [],
+        "docstring": null
+      }
+    ],
+    "edges": [],
+    "symbolIndex": [
+      {
+        "sym": "class:Circle",
+        "kind": "class",
+        "name": "Circle",
+        "scope": "module",
+        "loc": {
+          "line": 7,
+          "endLine": 14,
+          "col": 0,
+          "endCol": 1
+        },
+        "signature": "class Circle",
+        "docstring": null,
+        "bases": [],
+        "source": "class Circle {\n public:\n  explicit Circle(double r);\n  double area() const;\n\n private:\n  double r_;\n}"
+      }
+    ],
+    "modulePath": "geometry.h"
+  },
+  "geometry.cpp": {
+    "version": "2.0",
+    "language": "cpp",
+    "nodes": [
+      {
+        "id": "module/geometry_h.import",
+        "type": "import",
+        "parentId": null,
+        "line": 1,
+        "endLine": 2,
+        "col": 0,
+        "endCol": 0,
+        "names": [
+          "geometry.h"
+        ]
+      },
+      {
+        "id": "module/cstdio.import",
+        "type": "import",
+        "parentId": null,
+        "line": 3,
+        "endLine": 4,
+        "col": 0,
+        "endCol": 0,
+        "names": [
+          "<cstdio>"
+        ]
+      },
+      {
+        "id": "module/PI.assign",
+        "type": "assignment",
+        "parentId": null,
+        "line": 5,
+        "endLine": 5,
+        "col": 0,
+        "endCol": 42,
+        "name": "PI",
+        "valueKind": "scalar",
+        "preview": "3.14159265358979"
+      },
+      {
+        "id": "module/Circle_Circle.fn",
+        "type": "function_def",
+        "parentId": null,
+        "line": 7,
+        "endLine": 7,
+        "col": 0,
+        "endCol": 35,
+        "name": "Circle::Circle",
+        "params": [
+          "double r"
+        ],
+        "docstring": null
+      },
+      {
+        "id": "module/Circle_area.fn",
+        "type": "function_def",
+        "parentId": null,
+        "line": 9,
+        "endLine": 11,
+        "col": 0,
+        "endCol": 1,
+        "name": "Circle::area",
+        "params": [],
+        "docstring": null,
+        "returns": "double"
+      },
+      {
+        "id": "module/Circle_area.fn/return@0",
+        "type": "return_stmt",
+        "parentId": "module/Circle_area.fn",
+        "line": 10,
+        "endLine": 10,
+        "col": 2,
+        "endCol": 22,
+        "value": "PI * r_ * r_"
+      },
+      {
+        "id": "module/area_sum.fn",
+        "type": "function_def",
+        "parentId": null,
+        "line": 14,
+        "endLine": 21,
+        "col": 0,
+        "endCol": 1,
+        "name": "area_sum",
+        "params": [
+          "const Circle* shapes",
+          "int count"
+        ],
+        "docstring": "Sum the areas of `count` circles, logging how many were folded in.",
+        "returns": "double"
+      },
+      {
+        "id": "module/area_sum.fn/total.assign",
+        "type": "assignment",
+        "parentId": "module/area_sum.fn",
+        "line": 15,
+        "endLine": 15,
+        "col": 2,
+        "endCol": 21,
+        "name": "total",
+        "valueKind": "scalar",
+        "preview": "0.0"
+      },
+      {
+        "id": "module/area_sum.fn/for@0",
+        "type": "for_loop",
+        "parentId": "module/area_sum.fn",
+        "line": 16,
+        "endLine": 18,
+        "col": 2,
+        "endCol": 3,
+        "target": "int i = 0; i < count; i++",
+        "iterName": ""
+      },
+      {
+        "id": "module/area_sum.fn/for@0/total.assign",
+        "type": "assignment",
+        "parentId": "module/area_sum.fn/for@0",
+        "line": 17,
+        "endLine": 17,
+        "col": 4,
+        "endCol": 30,
+        "name": "total",
+        "valueKind": "call",
+        "preview": "shapes[i].area()",
+        "callTarget": "shapes[i].area",
+        "augmented": "+="
+      },
+      {
+        "id": "module/area_sum.fn/printf.call",
+        "type": "call",
+        "parentId": "module/area_sum.fn",
+        "line": 19,
+        "endLine": 19,
+        "col": 2,
+        "endCol": 38,
+        "funcName": "printf",
+        "args": [
+          "\"summed %d shapes\\n\"",
+          "count"
+        ],
+        "isEffect": true,
+        "effectKind": "log"
+      },
+      {
+        "id": "module/area_sum.fn/return@0",
+        "type": "return_stmt",
+        "parentId": "module/area_sum.fn",
+        "line": 20,
+        "endLine": 20,
+        "col": 2,
+        "endCol": 15,
+        "value": "total"
+      },
+      {
+        "id": "module/scale.fn",
+        "type": "function_def",
+        "parentId": null,
+        "line": 23,
+        "endLine": 25,
+        "col": 0,
+        "endCol": 1,
+        "name": "scale",
+        "params": [
+          "double v"
+        ],
+        "docstring": null,
+        "returns": "double"
+      },
+      {
+        "id": "module/scale.fn/return@0",
+        "type": "return_stmt",
+        "parentId": "module/scale.fn",
+        "line": 24,
+        "endLine": 24,
+        "col": 2,
+        "endCol": 17,
+        "value": "v * 2.0"
+      },
+      {
+        "id": "module/scale.fn@1",
+        "type": "function_def",
+        "parentId": null,
+        "line": 27,
+        "endLine": 29,
+        "col": 0,
+        "endCol": 1,
+        "name": "scale",
+        "params": [
+          "double v",
+          "double factor"
+        ],
+        "docstring": null,
+        "returns": "double"
+      },
+      {
+        "id": "module/scale.fn@1/return@0",
+        "type": "return_stmt",
+        "parentId": "module/scale.fn@1",
+        "line": 28,
+        "endLine": 28,
+        "col": 2,
+        "endCol": 20,
+        "value": "v * factor"
+      }
+    ],
+    "edges": [
+      {
+        "source": "module/Circle_area.fn",
+        "target": "module/Circle_area.fn/return@0",
+        "type": "contains"
+      },
+      {
+        "source": "module/area_sum.fn",
+        "target": "module/area_sum.fn/total.assign",
+        "type": "contains"
+      },
+      {
+        "source": "module/area_sum.fn",
+        "target": "module/area_sum.fn/for@0",
+        "type": "contains"
+      },
+      {
+        "source": "module/area_sum.fn/for@0",
+        "target": "module/area_sum.fn/for@0/total.assign",
+        "type": "contains"
+      },
+      {
+        "source": "module/area_sum.fn",
+        "target": "module/area_sum.fn/printf.call",
+        "type": "contains"
+      },
+      {
+        "source": "module/area_sum.fn",
+        "target": "module/area_sum.fn/return@0",
+        "type": "contains"
+      },
+      {
+        "source": "module/scale.fn",
+        "target": "module/scale.fn/return@0",
+        "type": "contains"
+      },
+      {
+        "source": "module/scale.fn@1",
+        "target": "module/scale.fn@1/return@0",
+        "type": "contains"
+      }
+    ],
+    "symbolIndex": [
+      {
+        "sym": "function:Circle::Circle",
+        "kind": "function",
+        "name": "Circle::Circle",
+        "scope": "module",
+        "loc": {
+          "line": 7,
+          "endLine": 7,
+          "col": 0,
+          "endCol": 35
+        },
+        "signature": "Circle::Circle(double r)",
+        "docstring": null,
+        "source": "Circle::Circle(double r) : r_(r) {}"
+      },
+      {
+        "sym": "function:Circle::area",
+        "kind": "function",
+        "name": "Circle::area",
+        "scope": "module",
+        "loc": {
+          "line": 9,
+          "endLine": 11,
+          "col": 0,
+          "endCol": 1
+        },
+        "signature": "double Circle::area()",
+        "docstring": null,
+        "source": "double Circle::area() const {\n  return PI * r_ * r_;\n}"
+      },
+      {
+        "sym": "function:area_sum",
+        "kind": "function",
+        "name": "area_sum",
+        "scope": "module",
+        "loc": {
+          "line": 14,
+          "endLine": 21,
+          "col": 0,
+          "endCol": 1
+        },
+        "signature": "double area_sum(const Circle* shapes, int count)",
+        "docstring": "Sum the areas of `count` circles, logging how many were folded in.",
+        "source": "double area_sum(const Circle* shapes, int count) {\n  double total = 0.0;\n  for (int i = 0; i < count; i++) {\n    total += shapes[i].area();\n  }\n  printf(\"summed %d shapes\\n\", count);\n  return total;\n}"
+      },
+      {
+        "sym": "function:scale",
+        "kind": "function",
+        "name": "scale",
+        "scope": "module",
+        "loc": {
+          "line": 23,
+          "endLine": 25,
+          "col": 0,
+          "endCol": 1
+        },
+        "signature": "double scale(double v)",
+        "docstring": null,
+        "source": "double scale(double v) {\n  return v * 2.0;\n}"
+      },
+      {
+        "sym": "function:scale",
+        "kind": "function",
+        "name": "scale",
+        "scope": "module",
+        "loc": {
+          "line": 27,
+          "endLine": 29,
+          "col": 0,
+          "endCol": 1
+        },
+        "signature": "double scale(double v, double factor)",
+        "docstring": null,
+        "source": "double scale(double v, double factor) {\n  return v * factor;\n}"
+      }
+    ],
+    "modulePath": "geometry.cpp"
+  },
+  "geometry_test.cpp": {
+    "version": "2.0",
+    "language": "cpp",
+    "nodes": [
+      {
+        "id": "module/geometry_h.import",
+        "type": "import",
+        "parentId": null,
+        "line": 4,
+        "endLine": 5,
+        "col": 0,
+        "endCol": 0,
+        "names": [
+          "geometry.h"
+        ]
+      },
+      {
+        "id": "module/cstdio.import",
+        "type": "import",
+        "parentId": null,
+        "line": 6,
+        "endLine": 7,
+        "col": 0,
+        "endCol": 0,
+        "names": [
+          "<cstdio>"
+        ]
+      },
+      {
+        "id": "module/GeometrySuite_AreaOfUnitCircle.fn",
+        "type": "function_def",
+        "parentId": null,
+        "line": 8,
+        "endLine": 13,
+        "col": 0,
+        "endCol": 1,
+        "name": "GeometrySuite.AreaOfUnitCircle",
+        "params": [
+          "GeometrySuite",
+          "AreaOfUnitCircle"
+        ],
+        "docstring": null
+      },
+      {
+        "id": "module/GeometrySuite_AreaOfUnitCircle.fn/c.assign",
+        "type": "assignment",
+        "parentId": "module/GeometrySuite_AreaOfUnitCircle.fn",
+        "line": 9,
+        "endLine": 9,
+        "col": 2,
+        "endCol": 16,
+        "name": "c",
+        "valueKind": "call",
+        "preview": "(1.0)",
+        "callTarget": "Circle",
+        "args": [
+          "1.0"
+        ]
+      },
+      {
+        "id": "module/GeometrySuite_AreaOfUnitCircle.fn/a.assign",
+        "type": "assignment",
+        "parentId": "module/GeometrySuite_AreaOfUnitCircle.fn",
+        "line": 10,
+        "endLine": 10,
+        "col": 2,
+        "endCol": 22,
+        "name": "a",
+        "valueKind": "call",
+        "preview": "c.area()",
+        "callTarget": "c.area"
+      },
+      {
+        "id": "module/GeometrySuite_AreaOfUnitCircle.fn/total.assign",
+        "type": "assignment",
+        "parentId": "module/GeometrySuite_AreaOfUnitCircle.fn",
+        "line": 11,
+        "endLine": 11,
+        "col": 2,
+        "endCol": 33,
+        "name": "total",
+        "valueKind": "call",
+        "preview": "area_sum(&c, 1)",
+        "callTarget": "area_sum",
+        "args": [
+          "&c",
+          "1"
+        ]
+      },
+      {
+        "id": "module/GeometrySuite_AreaOfUnitCircle.fn/printf.call",
+        "type": "call",
+        "parentId": "module/GeometrySuite_AreaOfUnitCircle.fn",
+        "line": 12,
+        "endLine": 12,
+        "col": 2,
+        "endCol": 30,
+        "funcName": "printf",
+        "args": [
+          "\"%f %f\\n\"",
+          "a",
+          "total"
+        ],
+        "isEffect": true,
+        "effectKind": "log"
+      }
+    ],
+    "edges": [
+      {
+        "source": "module/GeometrySuite_AreaOfUnitCircle.fn",
+        "target": "module/GeometrySuite_AreaOfUnitCircle.fn/c.assign",
+        "type": "contains"
+      },
+      {
+        "source": "module/GeometrySuite_AreaOfUnitCircle.fn",
+        "target": "module/GeometrySuite_AreaOfUnitCircle.fn/a.assign",
+        "type": "contains"
+      },
+      {
+        "source": "module/GeometrySuite_AreaOfUnitCircle.fn",
+        "target": "module/GeometrySuite_AreaOfUnitCircle.fn/total.assign",
+        "type": "contains"
+      },
+      {
+        "source": "module/GeometrySuite_AreaOfUnitCircle.fn",
+        "target": "module/GeometrySuite_AreaOfUnitCircle.fn/printf.call",
+        "type": "contains"
+      },
+      {
+        "source": "module/GeometrySuite_AreaOfUnitCircle.fn/c.assign",
+        "target": "module/Circle.class",
+        "type": "reference",
+        "targetFile": "geometry.h",
+        "qualifiedTarget": "geometry.h:Circle"
+      },
+      {
+        "source": "module/GeometrySuite_AreaOfUnitCircle.fn/total.assign",
+        "target": "module/area_sum.fn",
+        "type": "reference",
+        "targetFile": "geometry.cpp",
+        "qualifiedTarget": "geometry.cpp:area_sum"
+      }
+    ],
+    "symbolIndex": [
+      {
+        "sym": "function:GeometrySuite.AreaOfUnitCircle",
+        "kind": "function",
+        "name": "GeometrySuite.AreaOfUnitCircle",
+        "scope": "module",
+        "loc": {
+          "line": 8,
+          "endLine": 13,
+          "col": 0,
+          "endCol": 1
+        },
+        "signature": "GeometrySuite.AreaOfUnitCircle(GeometrySuite, AreaOfUnitCircle)",
+        "docstring": null,
+        "source": "TEST(GeometrySuite, AreaOfUnitCircle) {\n  Circle c(1.0);\n  double a = c.area();\n  double total = area_sum(&c, 1);\n  printf(\"%f %f\\n\", a, total);\n}"
+      }
+    ],
+    "modulePath": "geometry_test.cpp"
+  }
+}

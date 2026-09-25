@@ -53,7 +53,7 @@ Output schema (thread JSON v1.0):
         "preview": str | null,      # e.g. literal return-value, or callTarget for terminals
         # container-only:
         "containerKind": "try" | "except" | "finally" | "while"
-                         | "for" | "if_then" | "if_else",
+                         | "for" | "if_then" | "if_else" | "comprehension",
       }
     ],
     "edges": [
@@ -83,7 +83,9 @@ lexicographically. This keeps the snapshot test stable across runs.
 """
 
 import argparse
+import os
 import json
+import re
 import sys
 from typing import Dict, List, Optional, Tuple
 
@@ -111,6 +113,210 @@ KNOWN_BUILTINS = frozenset({
 # Dynamic-dispatch builtins -- callTarget == one of these means "stops
 # here, runtime resolution required".
 DYNAMIC_BUILTINS = frozenset({"getattr", "setattr", "hasattr", "delattr"})
+
+# M-LANG2b — shell builtins a NON-PYTHON (bash) frontend emits as calls
+# but which are shell-internal: a known boundary ('external'), never a
+# resolution gap. Counterpart of NEUTRAL_BUILTINS in
+# scripts/frontends/bash/tables.mjs — keep them in sync (same documented
+# duplication class as scan_effects.py's tables; consolidation trigger =
+# a third consumer, per the CLAUDE.md abstraction rule).
+NONPYTHON_NEUTRAL_BUILTINS = frozenset({
+    "read", "test", "[", "[[", "trap", "exec", "command",
+    "type", "hash", "let", "local", "declare", "export", "readonly",
+})
+
+
+# M-LANG3 — JS/TS global builtins: a bare unresolved callee naming one
+# of these is a known runtime boundary ('external'), not a resolution
+# gap. Mirrors the role of KNOWN_BUILTINS for Python.
+JSTS_KNOWN_BUILTINS = frozenset({
+    "JSON", "Math", "Object", "Array", "Promise", "Number", "String",
+    "Boolean", "Date", "Map", "Set", "WeakMap", "WeakSet", "Symbol",
+    "RegExp", "Error", "TypeError", "RangeError", "SyntaxError",
+    "parseInt", "parseFloat", "isNaN", "isFinite", "structuredClone",
+    "setTimeout", "setInterval", "clearTimeout", "clearInterval",
+    "queueMicrotask", "BigInt", "Reflect", "Proxy", "Intl", "URL",
+    "URLSearchParams", "TextEncoder", "TextDecoder", "AbortController",
+    "Buffer", "process", "globalThis", "require", "String", "Atomics",
+    "encodeURIComponent", "decodeURIComponent", "encodeURI", "decodeURI",
+})
+
+
+def classify_jsts(call_node: dict, call_target: str, is_local: bool) -> str:
+    """M-LANG3 terminal classifier for the JS/TS frontend. The Python
+    classifier's SHAPE fits JS (dotted+local receiver → dynamic, dotted
+    external head → external, bare builtin → external, bare local →
+    dynamic, else a genuine gap) — only the tables and two JS-specific
+    dynamics differ:
+      * `import(...)` — genuine runtime module dispatch → dynamic;
+      * `this.x(...)` — instance state is runtime-bound → dynamic
+        (the R4 receiver-honesty rule, JS spelling)."""
+    if call_node.get("effectKind"):
+        return "external"
+    if call_target == "import":
+        return "dynamic"
+    if call_target.split(".", 1)[0] == "this":
+        return "dynamic"
+    if "." in call_target:
+        return "dynamic" if is_local else "external"
+    if call_target in JSTS_KNOWN_BUILTINS:
+        return "external"
+    if is_local:
+        return "dynamic"
+    return "unresolved"
+
+
+# M-RESOLVE, C++ spelling — the language's OWN runtime, reached by a bare
+# name. `strstr` is <cstring>; calling it `unresolved` claims the linker
+# failed at something findable, and C++'s honesty headline depends on
+# that marker MEANING the overload gap it was built for. Mirrors
+# JSTS_KNOWN_BUILTINS and RUST_PRELUDE.
+#
+# Written down rather than generated (the M-TABLES question): C++ has no
+# runtime to ask — `isCppStdHeader` is already a stated convention for
+# the same reason — so this is a list of the free functions that actually
+# appear, extended when a census shows more, never guessed wider.
+CPP_STD_CALLS = frozenset({
+    # <cstring>
+    "strstr", "strlen", "strcmp", "strncmp", "strcpy", "strncpy", "strcat",
+    "strchr", "strrchr", "strtok", "strdup", "memcpy", "memset", "memcmp",
+    "memmove",
+    # <cstdlib>
+    "atoi", "atof", "atol", "strtol", "strtod", "malloc", "calloc",
+    "realloc", "free", "abs", "labs", "rand", "srand", "qsort", "bsearch",
+    "getenv", "exit", "abort",
+    # <cmath>
+    "sqrt", "pow", "fabs", "floor", "ceil", "round", "sin", "cos", "tan",
+    "log", "log10", "exp", "fmod", "fmin", "fmax",
+    # <cstdio> — the non-effectful formatters (fopen/fread carry effects
+    # and never reach here)
+    "sprintf", "snprintf", "sscanf",
+    # <cctype>
+    "isdigit", "isalpha", "isalnum", "isspace", "tolower", "toupper",
+})
+
+# gtest/gmock assertion MACROS. A macro is not a function the linker
+# could ever resolve, so reporting one as a resolution gap is a claim
+# about our own completeness that is simply false.
+_GTEST_MACRO = re.compile(r"^(EXPECT|ASSERT)_[A-Z_]+$")
+
+
+def classify_cpp(call_node: dict, call_target: str, is_local: bool) -> str:
+    """M-LANG5a terminal classifier for the C++ frontend (no build
+    graph — honesty carries the weight):
+      * frontend-stamped effectKind → external (printf/fopen/system/…);
+      * template call (`clamp2<double>`) → dynamic — the dispatch is
+        COMPILE-TIME-resolved, which static single-file analysis
+        genuinely cannot see (the plan's named rule);
+      * `this->`/`this.` receiver → dynamic (instance state, R4);
+      * `ns::f` / `Class::f` qualified → external (a named boundary);
+      * member call on a local/param receiver (`c.area()`,
+        `shapes->at(i)`) → dynamic; on a non-local receiver → external;
+      * bare + local → dynamic; bare unresolved → UNRESOLVED — this is
+        where the OVERLOAD GAP honestly lands: the linker refuses to
+        pick among 2+ definitions, so the call is a resolution gap the
+        tooltip can name, never a guessed edge."""
+    if call_node.get("effectKind"):
+        return "external"
+    if "<" in call_target:
+        return "dynamic"
+    head = call_target.split("->", 1)[0].split(".", 1)[0]
+    if head == "this":
+        return "dynamic"
+    if "::" in call_target:
+        return "external"
+    if "." in call_target or "->" in call_target:
+        return "dynamic" if is_local else "external"
+    if is_local:
+        return "dynamic"
+    if call_target in CPP_STD_CALLS or _GTEST_MACRO.match(call_target):
+        return "external"
+    return "unresolved"
+
+
+# M-RUST — the Rust PRELUDE, the names in scope in every file without a
+# `use`. A bare callee naming one of these is the language's own runtime,
+# not a resolution gap: `Some(x)` CONSTRUCTS an Option, and reporting it
+# `unresolved` would claim the linker failed at something there was never
+# anything to find. Mirrors JSTS_KNOWN_BUILTINS.
+#
+# Unlike Python's stdlib (M-TABLES generates it, because 192 roots cannot
+# be remembered) the prelude is a short, closed list fixed by the language
+# itself, and there is no rustc here to ask — so it is written down, and
+# the reason it may be is that it is complete by definition rather than
+# by recollection.
+RUST_PRELUDE = frozenset({
+    # Option / Result variant constructors — the two that actually appear
+    # in call position constantly.
+    "Some", "None", "Ok", "Err",
+    # Conversion + container constructors reached bare.
+    "drop", "format", "vec", "String", "Vec", "Box", "Default",
+    "From", "Into", "TryFrom", "TryInto", "Clone", "ToString",
+})
+
+
+def classify_rust(call_node: dict, call_target: str, is_local: bool) -> str:
+    """M-RUST terminal classifier for the Rust frontend.
+
+    The Python classifier's SHAPE fits Rust (dotted+local receiver ->
+    dynamic, qualified head -> external, bare local -> dynamic, else a
+    genuine gap); what differs is what each SPELLING proves:
+
+      * frontend-stamped effectKind -> external (fs/process/log/http);
+      * a MACRO (`name!`) whose effect the table did not know -> external:
+        it expands to code this frontend cannot see, and saying
+        `unresolved` would claim a resolution gap where there is a
+        deliberate blind spot (§5.3 already flags the node);
+      * turbofish (`parse::<i64>`) -> dynamic: the dispatch is
+        COMPILE-TIME-resolved, the same call the C++ template rule makes;
+      * `self.` receiver -> dynamic (instance state, R4);
+      * any OTHER method call (`x.f`, `a.b().c`) -> dynamic when the head
+        is a local or a param, external otherwise. Rust's trait objects
+        are the honest case for this: `sink.deliver(..)` on a
+        `Box<dyn Sink>` IS runtime dispatch, and naming one impl would be
+        a guess;
+      * `::` path -> external (a named boundary the linker did not take);
+      * bare + local -> dynamic; bare unresolved -> UNRESOLVED, a real
+        resolution gap (Rust has no overloading, so unlike C++ this is
+        never the ambiguity case — it means the linker found nothing)."""
+    if call_node.get("effectKind"):
+        return "external"
+    if call_target.endswith("!"):
+        return "external"
+    if "::<" in call_target:
+        return "dynamic"
+    head = call_target.split(".", 1)[0]
+    if head == "self":
+        return "dynamic"
+    if "." in call_target:
+        return "dynamic" if is_local else "external"
+    if "::" in call_target:
+        return "external"
+    if call_target in RUST_PRELUDE:
+        return "external"
+    if is_local:
+        return "dynamic"
+    return "unresolved"
+
+
+def classify_nonpython(call_node: dict, call_target: str) -> str:
+    """M-LANG2b terminal classifier for non-Python frontends (bash first).
+
+    Decision (c) of PLAN-M-LANG: non-Python frontends stamp effectKind at
+    PARSE/LINK time (tables.mjs is the one vocabulary home), so the
+    extractor trusts the IR instead of keeping a per-language builtins
+    table: effect-bearing call -> 'external' (curl/psql/ssh/...);
+    '$'-interpolated callee or `eval` -> 'dynamic' (genuine runtime
+    dispatch, the R3 honesty split); neutral shell builtin -> 'external';
+    anything else -> 'unresolved' (a genuine gap -- e.g. a call into a
+    file the linker could not resolve)."""
+    if call_node.get("effectKind"):
+        return "external"
+    if "$" in call_target or call_target == "eval":
+        return "dynamic"
+    if call_target in NONPYTHON_NEUTRAL_BUILTINS:
+        return "external"
+    return "unresolved"
 
 
 # ─────────────────────────────────────────── helpers ─────────────────
@@ -151,6 +357,41 @@ def qualified(file_path: str, fn_id: str, ir: dict) -> str:
     return f"{module_path_from_file(file_path)}:{function_name(ir, fn_id)}"
 
 
+# M-FLOW.1 — a SCRIPT'S BODY IS ITS MAIN. A backend script with only
+# top-level statements has no function a thread could seed on, so the
+# whole invoked layer of a real codebase (77 .sh + 153 .mjs scripts run by
+# a platform command) had no thread. `MODULE_SEED` is the pseudo node id
+# a discoverer or a manual seed names for "the file's top level"; the
+# walk covers the statements that EXECUTE when the file runs — never a
+# function or class body merely defined there (a call to a local function
+# at top level still steps into it, through the usual resolution).
+MODULE_SEED = "module"
+
+
+def module_descendants(ir: dict) -> List[dict]:
+    """Top-level statements and what is structurally inside them, stopping
+    at every function_def / class_def: a definition is not executed by
+    being defined."""
+    by_parent: Dict[str, List[dict]] = {}
+    for n in ir.get("nodes", []):
+        by_parent.setdefault(n.get("parentId") or "", []).append(n)
+    out: List[dict] = []
+    stack = [""]
+    while stack:
+        pid = stack.pop()
+        for child in by_parent.get(pid, []):
+            if child.get("type") in ("function_def", "class_def"):
+                continue
+            out.append(child)
+            stack.append(child["id"])
+    return out
+
+
+def module_seed_node(file_path: str) -> dict:
+    return {"id": MODULE_SEED, "type": "module", "name": os.path.basename(file_path),
+            "parentId": None, "line": 1}
+
+
 def descendants(ir: dict, root_id: str) -> List[dict]:
     """All nodes structurally inside `root_id` (parentId chain)."""
     by_parent: Dict[str, List[dict]] = {}
@@ -180,9 +421,11 @@ def enclosing_if(call_id: str, if_ids: List[str]) -> Optional[str]:
 # promotes to thread "container" nodes. M17.2 shipped try / except /
 # finally / while; M17.3 adds for_loop and if_stmt (the latter split into
 # if_then / if_else arms by source position — see _if_arm_container).
+# M-COMP adds `comprehension` — a loop the renderer and the round-trip
+# detector had no way to see.
 CONTAINER_TYPES = frozenset({
     "try_stmt", "except_handler", "finally_block", "while_loop",
-    "for_loop", "if_stmt",
+    "for_loop", "if_stmt", "comprehension",
 })
 
 
@@ -230,12 +473,19 @@ def _container_kind_subtype(ir_node: dict) -> str:
         "finally_block": "finally",
         "while_loop": "while",
         "for_loop": "for",
+        "comprehension": "comprehension",
         # if_stmt resolves to if_then / if_else per arm in
         # _if_arm_container, never through this map.
     }.get(t, "unknown")
 
 
-def _container_label(ir_node: dict) -> str:
+#: How each language spells the separator in a for-each header. Absent =
+#: `in`, which is Python's and bash's and the safe default for a frontend
+#: that has not declared otherwise.
+_FOR_SEPARATOR = {"python": "in", "bash": "in", "jsts": "of", "cpp": ":", "rust": "in"}
+
+
+def _container_label(ir_node: dict, language: str = "python") -> str:
     """Human-readable label for the container's chip in the renderer.
     except / while / for carry their exception type / condition / loop
     header; try + finally are bare keyword labels. if_stmt is labelled
@@ -251,8 +501,40 @@ def _container_label(ir_node: dict) -> str:
         target = ir_node.get("target")
         iter_name = ir_node.get("iterName")
         if target and iter_name:
-            return f"for {target} in {iter_name}"
+            # M-LANG QA — the SEPARATOR is the language's own word, and
+            # where a language has more than one it is READ FROM THE
+            # SOURCE, never assumed: JS `for…in` walks keys and `for…of`
+            # walks values, so the frontend stamps `iterSep` and this
+            # prefers it. The per-language default covers the frontends
+            # with only one spelling. Hardcoding `in` made a C++ range-for
+            # read "for & raw in lines" for
+            # `for (const std::string& raw : lines)` — Python's word on
+            # C++ code, which is what the classic-for branch below already
+            # existed to avoid.
+            sep = ir_node.get("iterSep") or _FOR_SEPARATOR.get(language, "in")
+            return f"for {target} {sep} {iter_name}"
+        # M-LANG QA — a C-style loop has no iterable: the frontend puts
+        # the whole header in `target` and the "in" would read as
+        # Python ("for int i = 0; in i < count"). Python always emits
+        # both fields, so this branch never fires for Python.
+        if target:
+            return f"for {target}"
         return "for"
+    if sub == "comprehension":
+        # Reads like the loop it is, with the form named so the reader can
+        # find it in the source: "listcomp for u in urls".
+        #
+        # ONE WORD for the noun, deliberately. ThreadContainerNode's chip
+        # splits a label at its FIRST space into an uppercased head and a
+        # kept tail, so "list comp: for u in urls" would render "LIST  comp:
+        # for u in urls" — the form name broken across the two type styles.
+        kind = ir_node.get("compKind") or "list"
+        noun = "genexp" if kind == "generator" else f"{kind}comp"
+        target = ir_node.get("target")
+        iter_name = ir_node.get("iterName")
+        if target and iter_name:
+            return f"{noun} for {target} in {iter_name}"
+        return noun
     return sub
 
 
@@ -273,6 +555,12 @@ def _if_arm_container(file_path: str, if_ir: dict, call_line: int) -> Tuple[str,
     if else_line is not None and call_line >= else_line:
         return f"{base}#else", "if_else", "else"
     cond = if_ir.get("condition")
+    # M-LANG QA — flattened case/switch constructs (bash case, jsts/cpp
+    # switch) arrive as if_stmt with a self-labelling condition
+    # ("case \"$1\"", "switch (argc)"); prefixing "if" doubled the
+    # keyword ("if case …"). Cosmetic only, never classification.
+    if cond and (cond.startswith("case ") or cond.startswith("switch")):
+        return f"{base}#then", "if_then", cond
     return f"{base}#then", "if_then", (f"if {cond}" if cond else "if")
 
 
@@ -283,13 +571,26 @@ def resolve_same_file(ir: dict, call_target: str) -> Optional[str]:
     every local helper would misclassify as 'dynamic'."""
     if "." in call_target:
         return None  # qualified name -- not a same-file bare reference
+    matches: List[str] = []
     for n in ir.get("nodes", []):
         if n.get("type") == "function_def" and n.get("name") == call_target:
             # Only consider module-level defs (parentId None) -- nested
             # closures and class methods are out of scope for wave 2.
             if n.get("parentId") in (None, ""):
-                return n["id"]
-    return None
+                matches.append(n["id"])
+    if not matches:
+        return None
+    # M-CONTRACT.1 (polyglot fixture, 2026-09-06) — OVERLOAD HONESTY
+    # carried into the extractor: the C++ frontend refuses a same-file
+    # reference edge when a bare name has 2+ definitions (the compiler
+    # picks; guessing lies), but this fallback then picked the FIRST
+    # definition anyway and rendered the guess as a step. Two or more
+    # same-file definitions in a non-Python IR is ambiguous → None, so
+    # the call classifies `unresolved` (a named gap). Python is exempt
+    # (no overloads; every python thread snapshot stays byte-identical).
+    if ir.get("language", "python") != "python" and len(matches) > 1:
+        return None
+    return matches[0]
 
 
 def imported_name_map(ir: dict) -> Dict[str, str]:
@@ -394,7 +695,7 @@ def extract(project_ir: Dict[str, dict], seed_file: str, seed_id: str) -> dict:
     if seed_file not in project_ir:
         raise SystemExit(f"seed file not in project IR: {seed_file}")
     seed_ir = project_ir[seed_file]
-    if not find_node(seed_ir, seed_id):
+    if seed_id != MODULE_SEED and not find_node(seed_ir, seed_id):
         raise SystemExit(f"seed id not in {seed_file}: {seed_id}")
 
     nodes: List[dict] = []
@@ -473,7 +774,7 @@ def extract(project_ir: Dict[str, dict], seed_file: str, seed_id: str) -> dict:
             else:
                 ctr_id = _container_thread_id(file_path, ctr_ir["id"])
                 sub = _container_kind_subtype(ctr_ir)
-                label = _container_label(ctr_ir)
+                label = _container_label(ctr_ir, ir.get("language", "python"))
             if ctr_id not in nodes_by_id:
                 add_node({
                     "id": ctr_id,
@@ -667,7 +968,7 @@ def extract(project_ir: Dict[str, dict], seed_file: str, seed_id: str) -> dict:
         ir = project_ir[file_path]
         # M-FS8 — per-file import map for bare-name external classification.
         imports_map = imports_map_cache.setdefault(file_path, imported_name_map(ir))
-        fn = find_node(ir, fn_id) or {}
+        fn = find_node(ir, fn_id) or (module_seed_node(file_path) if fn_id == MODULE_SEED else {})
         thread_id = qualified(file_path, fn_id, ir)
         visited[key] = thread_id
         add_node({
@@ -680,7 +981,8 @@ def extract(project_ir: Dict[str, dict], seed_file: str, seed_id: str) -> dict:
         })
 
         # Collect descendants + if_stmt ids for conditional detection.
-        subtree = descendants(ir, fn_id)
+        # M-FLOW.1 — the module seed walks what RUNS at top level only.
+        subtree = module_descendants(ir) if fn_id == MODULE_SEED else descendants(ir, fn_id)
         if_ids = [n["id"] for n in subtree
                   if n.get("type") == "if_stmt" and n.get("hasElse")]
         # R3 — names bound by an assignment anywhere in this function. A
@@ -704,6 +1006,17 @@ def extract(project_ir: Dict[str, dict], seed_file: str, seed_id: str) -> dict:
             and n.get("name")
             and n.get("valueKind") == "call"
             and n.get("callTarget")
+            # An AUGMENTED assignment MUTATES the name, it does not bind it:
+            # `total += compute()` says nothing about what `total` IS. Read
+            # as a binding it produces a flatly false sentence in the
+            # tooltip — the C++ review fixture's `router += Router::parse(raw)`
+            # made `router.route` report "receiver 'router' is a local
+            # binding from net::Router::parse()", when `router` is
+            # default-constructed and never reassigned. The name stays in
+            # `local_assign_names` above, because a mutated name IS a local
+            # and a dotted call on it is still honest dynamic dispatch —
+            # only the claim about WHERE it came from is dropped.
+            and not n.get("augmented")
         }
         # §5.5a — a receiver is a runtime-bound local if its head name is
         # bound in THIS function by an assignment (above), a function
@@ -754,6 +1067,9 @@ def extract(project_ir: Dict[str, dict], seed_file: str, seed_id: str) -> dict:
                     "preview": n.get("preview"),
                     "line": n.get("line", 0),
                     "nested": bool(n.get("nested")),
+                    # M-LANG2b — non-Python classification trusts the
+                    # frontend-stamped effectKind (classify_nonpython).
+                    "effectKind": n.get("effectKind"),
                     **_nest_flags(n),
                 })
             elif t == "call":
@@ -767,6 +1083,7 @@ def extract(project_ir: Dict[str, dict], seed_file: str, seed_id: str) -> dict:
                     # projection collapses it (the seam guard) — no consumer
                     # sees expanded sub-calls unless it opts in.
                     "nested": bool(n.get("nested")),
+                    "effectKind": n.get("effectKind"),
                     **_nest_flags(n),
                 })
             elif t in ("return_stmt", "raise_stmt") and n.get("callTarget"):
@@ -892,8 +1209,52 @@ def extract(project_ir: Dict[str, dict], seed_file: str, seed_id: str) -> dict:
             # (a local var invoked here) from a true resolution gap. R4:
             # the check is on the HEAD of the target so `conn.execute`
             # with `conn = _get_conn()` reads as dynamic, not external.
+            # M-LANG2b: non-Python frontends classify via the IR's own
+            # effectKind/dynamic markers -- the Python builtins tables and
+            # the local-binding heuristics stay Python-only.
             head = call_target.split(".", 1)[0]
-            kind = classify_unresolved(call_target, head in local_binding_names)
+            lang = ir.get("language", "python")
+            if lang == "jsts":
+                kind = classify_jsts(call_node, call_target,
+                                     head in local_binding_names)
+            elif lang == "cpp":
+                # C++ receivers arrive as `x.f` OR `x->f` — the head
+                # check must strip both accessors AND subscripts
+                # (`shapes[i].area()` on a param) before the local test.
+                cpp_head = call_target.split("->", 1)[0].split(".", 1)[0]
+                cpp_head = cpp_head.split("[", 1)[0]
+                # C++ params carry full declarations ("const Circle*
+                # shapes") — the binding NAME is the last identifier
+                # token, unlike Python's name[=default] shape.
+                cpp_param_names = set()
+                for p_raw in (fn.get("params") or []):
+                    tokens = p_raw.replace("*", " ").replace("&", " ").split()
+                    if tokens:
+                        cpp_param_names.add(tokens[-1])
+                kind = classify_cpp(call_node, call_target,
+                                    cpp_head in (local_binding_names | cpp_param_names))
+            elif lang == "rust":
+                # Rust params are `pattern: Type`, so the binding NAME is
+                # the text before the first colon with the binding modes
+                # stripped — `mut buf: Vec<u8>` binds `buf`, and
+                # `&mut self` binds `self`. Unlike C++'s `const T* x` the
+                # name comes FIRST, so taking the last token would read
+                # the TYPE as the binding.
+                rust_head = call_target.split(".", 1)[0].split("[", 1)[0]
+                rust_param_names = set()
+                for p_raw in (fn.get("params") or []):
+                    binding = p_raw.split(":", 1)[0]
+                    for mode in ("&mut ", "&", "mut ", "ref "):
+                        binding = binding.replace(mode, "")
+                    binding = binding.strip()
+                    if binding:
+                        rust_param_names.add(binding)
+                kind = classify_rust(call_node, call_target,
+                                     rust_head in (local_binding_names | rust_param_names))
+            elif lang != "python":
+                kind = classify_nonpython(call_node, call_target)
+            else:
+                kind = classify_unresolved(call_target, head in local_binding_names)
             # M-FS8 — a bare name imported from an EXTERNAL module is an
             # external call with a known qualified target (flask.jsonify),
             # not a resolution gap. A PROJECT-module import with no ref
@@ -917,6 +1278,14 @@ def extract(project_ir: Dict[str, dict], seed_file: str, seed_id: str) -> dict:
             }
             if external_qualified:
                 node["qualifiedTarget"] = external_qualified
+            # M-LANG2b — non-Python external terminals carry the
+            # frontend-stamped effectKind so the renderer colours them
+            # from IR data instead of the Python-vocabulary tables in
+            # colour_for_node.ts. Gated off python so every existing
+            # thread snapshot stays byte-identical.
+            if (ir.get("language", "python") != "python"
+                    and kind == "external" and call_node.get("effectKind")):
+                node["effectKind"] = call_node["effectKind"]
             # R4 + §5.5a — a dotted dynamic terminal carries HOW its
             # receiver was bound, for the honest tooltip line. Only a
             # call-valued local assignment has a binding callee
@@ -950,6 +1319,12 @@ def extract(project_ir: Dict[str, dict], seed_file: str, seed_id: str) -> dict:
     seed_returns = [n for n in seed_ir.get("nodes", [])
                     if n.get("type") == "return_stmt"
                     and n["id"].startswith(seed_id + "/")]
+    # M-FLOW.1 — every id in a file starts with "module/", so the prefix
+    # would claim every function's returns for a module seed; only a
+    # return that EXECUTES at top level belongs to it (in practice none).
+    if seed_id == MODULE_SEED:
+        top_ids = {n["id"] for n in module_descendants(seed_ir)}
+        seed_returns = [n for n in seed_returns if n["id"] in top_ids]
     # §5.6a — the seed's placed call sites, for execution-order return
     # sourcing (the M24 flow pass stashed them per scope).
     seed_placed = next((ps for (fp, fid, _tid, ps) in flow_scopes

@@ -1,0 +1,85 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibegraph.dev/schemas/quality/generic_skill.json",
+  "title": "VibeGraph quality layer: generic skill manifest",
+  "description": "The structured view of one GENERIC skill (skills/<name>/SKILL.md): direction that is true of a KIND of code rather than of one thread, selected by a predicate over the stack profile and injected after the thread skill. A generic skill is the prose half of a quality dimension: every rule carries its why (M-WHY) and a BINDING to the check, pre-check or envelope fact that stands behind it — or says `judgement`, which may never be cited as enforced. A rule that binds to nothing does not exist. The refusal ledger is REQUIRED: what the source skill said that was not carried, and why, so the review travels with the rule (RUN1 4.3). Derived by scripts/skills_validate.mjs from the skill file; a human enables a skill per project in .vibegraph/skills.json.",
+  "type": "object",
+  "required": ["version", "name", "description", "skillVersion", "lastUpdated", "dimension", "applies_when", "binds", "derivedFrom", "evidence", "rules", "limits", "refused", "provenance"],
+  "additionalProperties": false,
+  "properties": {
+    "version": { "const": "1.0" },
+    "name": { "type": "string", "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$", "description": "kebab-case; equals the folder name (the local skill-author contract)." },
+    "description": {
+      "type": "string", "minLength": 1, "pattern": "^Use when ",
+      "description": "Opens with `Use when` and names the trigger, never the workflow: a description that summarises the steps gets followed INSTEAD of the skill (superpowers writing-skills, adopted). No length cap here: the numeric census forbids one, and the body ceiling in generic_skills.ts is derived from the injection budget."
+    },
+    "skillVersion": { "type": "string", "pattern": "^\\d+\\.\\d+$" },
+    "lastUpdated": { "type": "string", "format": "date" },
+    "dimension": {
+      "description": "The quality dimension this skill is the prose half of, or `retry` for the flow skill keyed to the retry task fact.",
+      "oneOf": [
+        { "$ref": "quality_model.json#/$defs/DimensionId" },
+        { "const": "retry" }
+      ]
+    },
+    "applies_when": { "$ref": "#/$defs/SkillPredicate" },
+    "binds": {
+      "description": "Every binding any rule uses. Consistency with rules[].binding is checked by the validator (a listed binding no rule uses, or a rule binding not listed, is refused).",
+      "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/Binding" }
+    },
+    "derivedFrom": {
+      "description": "RUN1 assertion ids the rules trace to. A skill no recovered assertion demanded does not exist (brief C.5).",
+      "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string", "pattern": "^(AR|PT|AS|TF|SP|VG)-\\d+$" }
+    },
+    "evidence": {
+      "description": "unvalidated until a paired with/without drill is recorded; then validated WITH the drill cited (if/then below). Advisory either way: a skill never changes gating.",
+      "enum": ["unvalidated", "validated"]
+    },
+    "drill": { "type": "string", "pattern": "^reviews/skills/drills/[a-z0-9-]+\\.md$" },
+    "rules": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/Rule" } },
+    "limits": {
+      "description": "What the bound checks do NOT verify, in the skill's own words — the pass's `notFollowed` made readable up front. Never empty: a skill that claims its checks see everything is the claim no static check can make.",
+      "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 }
+    },
+    "refused": {
+      "description": "The refusal ledger: what the source skill(s) said that was not carried, each with its reason.",
+      "type": "array", "minItems": 1, "items": {
+        "type": "object", "required": ["what", "reason"], "additionalProperties": false,
+        "properties": { "what": { "type": "string", "minLength": 1 }, "reason": { "type": "string", "minLength": 1 } }
+      }
+    },
+    "provenance": { "$ref": "evidence.json#/$defs/Derived" }
+  },
+  "if": { "properties": { "evidence": { "const": "validated" } }, "required": ["evidence"] },
+  "then": { "required": ["drill"] },
+  "$defs": {
+    "Binding": {
+      "description": "check:<verb> = a registered verb or grammar rule; precheck:<id> = a pre-check line in orchestration.ts by its RUN1/RUN3 name (no exported ids exist yet, gap G14); envelope:<fact> = a fact the envelope already delivers, which the rule teaches the reader to USE; judgement = irreducibly qualitative, never enforced, never cited as such.",
+      "type": "string",
+      "pattern": "^(check:(guards|not-in-loop|handles-failure|annotated|co-changes|callers-only|import-only|calls-through)|precheck:(loosening-loud|tests-touched|no-new-unattributed-boundary|added-tools|stack-policy|retry-notice)|envelope:[a-z][a-zA-Z0-9.-]*|judgement)$"
+    },
+    "Rule": {
+      "type": "object",
+      "required": ["id", "text", "why", "binding"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "pattern": "^r\\d+$" },
+        "text": { "type": "string", "minLength": 1 },
+        "why": { "type": "string", "minLength": 1, "description": "Never empty (M-WHY)." },
+        "binding": { "$ref": "#/$defs/Binding" }
+      }
+    },
+    "SkillPredicate": {
+      "description": "The quality model's predicate grammar plus the task leaf predicate.ts evaluates (TaskFacts). Defined inline so this schema does not depend on flow_spec's internal names. There is no `always`.",
+      "oneOf": [
+        { "type": "object", "required": ["all"], "additionalProperties": false, "properties": { "all": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/SkillPredicate" } } } },
+        { "type": "object", "required": ["any"], "additionalProperties": false, "properties": { "any": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/SkillPredicate" } } } },
+        { "type": "object", "required": ["not"], "additionalProperties": false, "properties": { "not": { "$ref": "#/$defs/SkillPredicate" } } },
+        { "type": "object", "required": ["fact", "has"], "additionalProperties": false, "properties": { "fact": { "$ref": "stack_profile.json#/$defs/FactName" }, "has": { "type": "string", "minLength": 1 } } },
+        { "type": "object", "required": ["fact", "absent"], "additionalProperties": false, "properties": { "fact": { "$ref": "stack_profile.json#/$defs/FactName" }, "absent": { "const": true } } },
+        { "type": "object", "required": ["regime"], "additionalProperties": false, "properties": { "regime": { "$ref": "stack_profile.json#/$defs/RegimeId" } } },
+        { "type": "object", "required": ["task", "is"], "additionalProperties": false, "properties": { "task": { "enum": ["constraintsRouted", "effectfulBoundaries", "systemPacket", "crossLanguage", "retry"] }, "is": { "type": "boolean" } } }
+      ]
+    }
+  }
+}

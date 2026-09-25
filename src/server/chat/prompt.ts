@@ -10,6 +10,7 @@
 // framing without booting a server.
 
 import type { RoutedThreadContext } from "../thread_remit.ts";
+import { languageForPath } from "../../shared/languages.ts";
 
 /** Selected-node context, already resolved by the caller. `file` is the
  * node's TRUE file (findNode hit, or findNodeFile fallback) in the
@@ -55,6 +56,13 @@ export interface ChatPromptArgs {
    * when the question matched nothing: the prompt is then byte-identical
    * to the pre-routing shape. */
   routed?: RoutedThreadContext[];
+  /** M-STACK.3 — one line naming the tools this project uses (IR fact),
+   * beside the project file list. Absent = no stack index. */
+  stackSummary?: string | null;
+  /** M-SKILLS.2 — rendered generic direction for the thread in view (or
+   * the top routed match), selected by the stack profile from the skills a
+   * human enabled for this project. Absent/empty = byte-identical prompt. */
+  genericSkills?: string | null;
 }
 
 const STEP_KINDS = new Set(["seed", "step"]);
@@ -144,11 +152,17 @@ export function renderRoutedBlock(routed: RoutedThreadContext[] | undefined): st
 
 export function buildChatPrompt(args: ChatPromptArgs): string {
   const parts: string[] = [
-    "You are an agent embedded in VibeGraph, a visual Python code explorer. The user is looking at a live graph of their project; your edits through the `mcp__vibegraph__*` tools update that graph automatically.",
+    // M-LANG6 — no longer "Python code explorer": four language
+    // frontends flow through the same graph.
+    "You are an agent embedded in VibeGraph, a visual code explorer (Python, Bash, TypeScript and C++ frontends). The user is looking at a live graph of their project; your edits through the `mcp__vibegraph__*` tools update that graph automatically.",
   ];
 
   if (args.projectFiles.length > 0) {
     parts.push("", `Project files: ${args.projectFiles.join(", ")}`);
+  }
+  // M-STACK.3 — the project MAP is files plus what they are built on.
+  if (args.stackSummary) {
+    parts.push(args.stackSummary);
   }
   if (args.activeFile) {
     parts.push("", `The user is currently viewing: ${args.activeFile}`);
@@ -163,7 +177,8 @@ export function buildChatPrompt(args: ChatPromptArgs): string {
       const pos = args.thread ? stepPosition(n, args.thread) : "";
       if (pos) parts.push(pos);
       if (n.source) {
-        parts.push("```python", n.source, "```");
+        // M-LANG6 — fence by the node's actual file language.
+        parts.push("```" + (languageForPath(n.file)?.fenceTag ?? "python"), n.source, "```");
       }
     } else {
       // Never silently drop the context block: state the gap so the
@@ -182,6 +197,11 @@ export function buildChatPrompt(args: ChatPromptArgs): string {
   const routedText = renderRoutedBlock(args.routed);
   if (routedText) {
     parts.push("", routedText);
+  }
+  // M-SKILLS.2 — after the routed threads and their skills, inside what
+  // they left of the same budget.
+  if (args.genericSkills) {
+    parts.push("", args.genericSkills.trim());
   }
 
   parts.push(

@@ -21,7 +21,7 @@
 import { spawn } from "child_process";
 // .ts extensions: run directly by node type-stripping in test:system-draft
 // (same convention as compose_draft.ts; esbuild resolves them fine).
-import { resolveClaudeBin } from "./run/synth_args.ts";
+import { resolveClaudeBin, spawnEnv } from "./run/synth_args.ts";
 import { validateSystemPlan } from "./system_plan.ts";
 import type { SystemPlan } from "../shared/protocol";
 
@@ -98,14 +98,15 @@ export interface SystemDraftResult {
 export function draftSystemPlan(description: string, cwd: string): Promise<SystemDraftResult> {
   const prompt = buildPrompt(description);
   // Model tier: thinking — architecture design.
-  const { cmd, args: pre } = resolveClaudeBin("thinking");
+  const spawnTarget = resolveClaudeBin("thinking");
+  const { cmd, args: pre } = spawnTarget;
   return new Promise((resolve) => {
     const child = spawn(
       cmd,
       [...pre, "-p", "--output-format", "json", "--strict-mcp-config",
         "--mcp-config", '{"mcpServers":{}}',
         "--dangerously-skip-permissions", "--", prompt],
-      { cwd, env: { ...process.env } },
+      { cwd, env: spawnEnv(spawnTarget) },
     );
     child.stdin?.end(); // 6d pre-flight: no open pipe — claude -p otherwise waits 3s for stdin per draft
     let out = "";

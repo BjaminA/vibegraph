@@ -37,6 +37,9 @@ async function marker(page, kind: "dynamic" | "unresolved") {
     kindLabel: el.getAttribute("data-kind-label"),
     iconName: el.getAttribute("data-icon-name"),
     accentVar: el.getAttribute("data-accent-var"),
+    // Ghosted by colour, not transparency, since the overlap pass: a
+    // translucent card let the edge bundles behind it show through.
+    ghosted: el.getAttribute("data-dimmed") === "true" && getComputedStyle(el).filter !== "none",
     opacity: parseFloat(getComputedStyle(el).opacity),
   }));
 }
@@ -62,6 +65,7 @@ test.describe("R3 — dynamic vs unresolved markers", () => {
     expect(dyn.iconName).toBe("Shuffle");
     expect(dyn.accentVar).toBe("--accent-warning");
     expect(dyn.opacity).toBeCloseTo(1, 1);
+    expect(dyn.ghosted).toBe(false);
 
     // unresolved = resolution gap: muted, HelpCircle "?", ghosted.
     // (lucide renamed HelpCircle → CircleQuestionMark; HelpCircle is now
@@ -69,13 +73,14 @@ test.describe("R3 — dynamic vs unresolved markers", () => {
     expect(unres.kindLabel).toBe("UNRESOLVED");
     expect(unres.iconName).toMatch(/help|question/i);
     expect(unres.accentVar).toBe("--text-muted");
-    expect(unres.opacity).toBeLessThan(0.95);
+    expect(unres.ghosted).toBe(true);
+    expect(unres.opacity).toBeCloseTo(1, 1); // opaque: nothing shows through a card
 
     // The honesty invariant: the two never collapse — they differ on
-    // accent, icon, AND opacity.
+    // accent, icon, AND ghosting.
     expect(dyn.accentVar).not.toBe(unres.accentVar);
     expect(dyn.iconName).not.toBe(unres.iconName);
-    expect(unres.opacity).toBeLessThan(dyn.opacity);
+    expect(unres.ghosted).not.toBe(dyn.ghosted);
 
     mkdirSync(REVIEW_DIR, { recursive: true });
     await page.screenshot({ path: join(REVIEW_DIR, "compute_drag.png"), fullPage: false });

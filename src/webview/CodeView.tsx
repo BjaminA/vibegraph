@@ -12,6 +12,7 @@
 
 import React, { useRef, useEffect, useState } from "react";
 import Editor, { type OnMount } from "@monaco-editor/react";
+import { monacoLanguageForPath } from "../shared/languages";
 import { X, Maximize2, Minimize2, WrapText } from "lucide-react";
 import { defineVibegraphDark, VIBEGRAPH_DARK } from "./themes/vibegraph-dark";
 import type { AstNode } from "./types";
@@ -183,10 +184,19 @@ export function CodeView({
         ...(fullscreen
           ? { top: 0, right: 0, bottom: 0, left: 0, width: "100%", minWidth: 0 }
           : { top: 0, bottom: dock.bottom ?? 0, right: dock.right, width: dock.width, minWidth: dock.minWidth }),
-        // The TopToolbar (z 1010) floats above this dock; reserve its band
-        // so the header row clears it instead of rendering behind it
-        // (same pattern as NodeEditorPanel).
-        paddingTop: 48,
+        // The TopToolbar floats above this dock at z 1010, so the dock
+        // must reserve its band or the header row renders BEHIND it — and
+        // a header row behind the toolbar is not merely ugly: its close
+        // button stops accepting clicks.
+        //
+        // This was a hardcoded 48 (= the one-row 43 + 5). The toolbar WRAPS
+        // to a second row at common widths — 72px tall at 1440 — so 48 was
+        // short by 24 and the toolbar sat on top of the close button. The
+        // toolbar already publishes its real bottom edge as
+        // --vg-toolbar-bottom for exactly this reason (TopToolbar.tsx); the
+        // chip strip, the changeset gate and four App.tsx surfaces bind to
+        // it. These two docks were the ones that never got converted.
+        paddingTop: "calc(var(--vg-toolbar-bottom, 43px) + 5px)",
         background: "var(--bg-canvas)",
         borderLeft: "2px solid color-mix(in oklab, var(--accent-thread) 27%, transparent)",
         display: "flex",
@@ -299,7 +309,7 @@ export function CodeView({
         ) : (
           <Editor
             height="100%"
-            language="python"
+            language={monacoLanguageForPath(filePath)}
             value={source}
             beforeMount={defineVibegraphDark}
             onMount={handleMount}

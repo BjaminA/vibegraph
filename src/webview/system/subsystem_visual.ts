@@ -16,6 +16,7 @@
 
 import {
   Server, AppWindow, Database, Zap, Globe, Library,
+  FolderOpen, TerminalSquare, ScrollText,
   type LucideIcon,
 } from "lucide-react";
 import type { SubsystemKind } from "../types";
@@ -35,6 +36,12 @@ const VISUAL: Record<SubsystemKind, SubsystemVisual> = {
   external_http: { accent: "--accent-io", icon: Globe },
   cache: { accent: "--accent-io-muted", icon: Zap },
   frontend: { accent: "--accent-config", icon: AppWindow },
+  // 5.4 - local-resource effects. They are I/O boundaries like db and
+  // http, so they stay in that family; muted, because a file read is a
+  // quieter architectural fact than a database.
+  fs: { accent: "--accent-io", icon: FolderOpen, quiet: true },
+  subprocess: { accent: "--accent-io", icon: TerminalSquare, quiet: true },
+  log: { accent: "--accent-io-muted", icon: ScrollText, quiet: true },
 };
 
 export function subsystemVisual(kind: SubsystemKind): SubsystemVisual {

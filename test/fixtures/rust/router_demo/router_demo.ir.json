@@ -1,0 +1,1849 @@
+{
+  "src/lib.rs": {
+    "version": "2.0",
+    "language": "rust",
+    "nodes": [
+      {
+        "id": "module/router.import",
+        "type": "import",
+        "parentId": null,
+        "line": 7,
+        "endLine": 7,
+        "col": 0,
+        "endCol": 15,
+        "names": [
+          "router"
+        ]
+      },
+      {
+        "id": "module/store.import",
+        "type": "import",
+        "parentId": null,
+        "line": 8,
+        "endLine": 8,
+        "col": 0,
+        "endCol": 14,
+        "names": [
+          "store"
+        ]
+      }
+    ],
+    "edges": [
+      {
+        "source": "module/router.import",
+        "target": "module/HashMap.import_from",
+        "type": "reference",
+        "targetFile": "src/router.rs",
+        "qualifiedTarget": "src/router.rs:module"
+      },
+      {
+        "source": "module/store.import",
+        "target": "module/fs.import_from",
+        "type": "reference",
+        "targetFile": "src/store.rs",
+        "qualifiedTarget": "src/store.rs:module"
+      }
+    ],
+    "symbolIndex": [],
+    "modulePath": "src/lib.rs",
+    "crateName": "router_demo",
+    "cratePath": "crate",
+    "crateRoot": true
+  },
+  "src/main.rs": {
+    "version": "2.0",
+    "language": "rust",
+    "nodes": [
+      {
+        "id": "module/router_demo_router.import_from",
+        "type": "import_from",
+        "parentId": null,
+        "line": 3,
+        "endLine": 3,
+        "col": 0,
+        "endCol": 65,
+        "module": "router_demo::router",
+        "names": [
+          "parse_line",
+          "DropSink",
+          "LogSink",
+          "Router"
+        ]
+      },
+      {
+        "id": "module/Store.import_from",
+        "type": "import_from",
+        "parentId": null,
+        "line": 4,
+        "endLine": 4,
+        "col": 0,
+        "endCol": 30,
+        "module": "router_demo::store",
+        "names": [
+          "Store"
+        ]
+      },
+      {
+        "id": "module/process.import_from",
+        "type": "import_from",
+        "parentId": null,
+        "line": 5,
+        "endLine": 5,
+        "col": 0,
+        "endCol": 17,
+        "module": "std",
+        "names": [
+          "process"
+        ]
+      },
+      {
+        "id": "module/line_count.fn",
+        "type": "function_def",
+        "parentId": null,
+        "line": 8,
+        "endLine": 10,
+        "col": 0,
+        "endCol": 1,
+        "name": "line_count",
+        "params": [
+          "raw: &str"
+        ],
+        "docstring": "How many lines the table holds, for the closing report.",
+        "isAsync": false,
+        "returns": "usize"
+      },
+      {
+        "id": "module/line_count.fn/return@0",
+        "type": "return_stmt",
+        "parentId": "module/line_count.fn",
+        "line": 9,
+        "endLine": 9,
+        "col": 4,
+        "endCol": 23,
+        "value": "raw.lines().count()",
+        "tailExpression": true,
+        "callTarget": "raw.lines().count",
+        "nestsInnerCalls": true,
+        "nestExtracted": true
+      },
+      {
+        "id": "module/line_count.fn/return@0/raw_lines.call",
+        "type": "call",
+        "parentId": "module/line_count.fn/return@0",
+        "line": 9,
+        "endLine": 9,
+        "col": 4,
+        "endCol": 15,
+        "funcName": "raw.lines",
+        "args": [],
+        "isEffect": false,
+        "callTarget": "raw.lines",
+        "preview": "raw.lines()",
+        "nested": true,
+        "nestedDepth": 1
+      },
+      {
+        "id": "module/main.fn",
+        "type": "function_def",
+        "parentId": null,
+        "line": 13,
+        "endLine": 35,
+        "col": 0,
+        "endCol": 1,
+        "name": "main",
+        "params": [],
+        "docstring": "Route every line of the table, then report what was routed.",
+        "isAsync": false
+      },
+      {
+        "id": "module/main.fn/store.assign",
+        "type": "assignment",
+        "parentId": "module/main.fn",
+        "line": 14,
+        "endLine": 14,
+        "col": 4,
+        "endCol": 41,
+        "name": "store",
+        "valueKind": "call",
+        "preview": "Store::open(\"table.txt\")",
+        "callTarget": "Store::open",
+        "args": [
+          "\"table.txt\""
+        ]
+      },
+      {
+        "id": "module/main.fn/router.assign",
+        "type": "assignment",
+        "parentId": "module/main.fn",
+        "line": 15,
+        "endLine": 15,
+        "col": 4,
+        "endCol": 35,
+        "name": "router",
+        "valueKind": "call",
+        "preview": "Router::new()",
+        "callTarget": "Router::new"
+      },
+      {
+        "id": "module/main.fn/router_add.call",
+        "type": "call",
+        "parentId": "module/main.fn",
+        "line": 16,
+        "endLine": 16,
+        "col": 4,
+        "endCol": 56,
+        "funcName": "router.add",
+        "args": [
+          "\"log\"",
+          "Box::new(LogSink { written: 0 })"
+        ],
+        "isEffect": false,
+        "nestsInnerCalls": true,
+        "nestExtracted": true
+      },
+      {
+        "id": "module/main.fn/router_add.call/Box_new.call",
+        "type": "call",
+        "parentId": "module/main.fn/router_add.call",
+        "line": 16,
+        "endLine": 16,
+        "col": 22,
+        "endCol": 54,
+        "funcName": "Box::new",
+        "args": [
+          "LogSink { written: 0 }"
+        ],
+        "isEffect": false,
+        "callTarget": "Box::new",
+        "preview": "Box::new(LogSink { written: 0 })",
+        "nested": true,
+        "nestedDepth": 1
+      },
+      {
+        "id": "module/main.fn/router_add.call@1",
+        "type": "call",
+        "parentId": "module/main.fn",
+        "line": 17,
+        "endLine": 17,
+        "col": 4,
+        "endCol": 43,
+        "funcName": "router.add",
+        "args": [
+          "\"drop\"",
+          "Box::new(DropSink)"
+        ],
+        "isEffect": false,
+        "nestsInnerCalls": true,
+        "nestExtracted": true
+      },
+      {
+        "id": "module/main.fn/router_add.call@1/Box_new.call",
+        "type": "call",
+        "parentId": "module/main.fn/router_add.call@1",
+        "line": 17,
+        "endLine": 17,
+        "col": 23,
+        "endCol": 41,
+        "funcName": "Box::new",
+        "args": [
+          "DropSink"
+        ],
+        "isEffect": false,
+        "callTarget": "Box::new",
+        "preview": "Box::new(DropSink)",
+        "nested": true,
+        "nestedDepth": 1
+      },
+      {
+        "id": "module/main.fn/store_raw_lines.call",
+        "type": "call",
+        "parentId": "module/main.fn",
+        "line": 19,
+        "endLine": 19,
+        "col": 16,
+        "endCol": 33,
+        "funcName": "store.raw.lines",
+        "args": [],
+        "isEffect": false
+      },
+      {
+        "id": "module/main.fn/for@0",
+        "type": "for_loop",
+        "parentId": "module/main.fn",
+        "line": 19,
+        "endLine": 26,
+        "col": 4,
+        "endCol": 5,
+        "target": "line",
+        "iterName": "store.raw.lines()",
+        "iterSep": "in"
+      },
+      {
+        "id": "module/main.fn/for@0/parse_line.call",
+        "type": "call",
+        "parentId": "module/main.fn/for@0",
+        "line": 20,
+        "endLine": 20,
+        "col": 36,
+        "endCol": 52,
+        "funcName": "parse_line",
+        "args": [
+          "line"
+        ],
+        "isEffect": false
+      },
+      {
+        "id": "module/main.fn/for@0/if@0",
+        "type": "if_stmt",
+        "parentId": "module/main.fn/for@0",
+        "line": 20,
+        "endLine": 25,
+        "col": 8,
+        "endCol": 9,
+        "condition": "let Some((key, value)) = parse_line(line)",
+        "hasElse": false
+      },
+      {
+        "id": "module/main.fn/for@0/if@0/router_route.call",
+        "type": "call",
+        "parentId": "module/main.fn/for@0/if@0",
+        "line": 21,
+        "endLine": 21,
+        "col": 18,
+        "endCol": 44,
+        "funcName": "router.route",
+        "args": [
+          "&key",
+          "&value"
+        ],
+        "isEffect": false
+      },
+      {
+        "id": "module/main.fn/for@0/if@0/if@0",
+        "type": "if_stmt",
+        "parentId": "module/main.fn/for@0/if@0",
+        "line": 21,
+        "endLine": 24,
+        "col": 12,
+        "endCol": 13,
+        "condition": "match router.route(&key, &value)",
+        "hasElse": false
+      },
+      {
+        "id": "module/main.fn/for@0/if@0/if@0/eprintln.call",
+        "type": "call",
+        "parentId": "module/main.fn/for@0/if@0/if@0",
+        "line": 23,
+        "endLine": 23,
+        "col": 31,
+        "endCol": 63,
+        "funcName": "eprintln!",
+        "args": [],
+        "isEffect": true,
+        "preview": "eprintln!(\"dropped: {}\", reason)",
+        "effectKind": "log"
+      },
+      {
+        "id": "module/main.fn/println.call",
+        "type": "call",
+        "parentId": "module/main.fn",
+        "line": 30,
+        "endLine": 30,
+        "col": 4,
+        "endCol": 70,
+        "funcName": "println!",
+        "args": [],
+        "isEffect": true,
+        "preview": "println!(\"routed {} of {}\", router.count, line_count(&store.raw))",
+        "effectKind": "log",
+        "nestsInnerCalls": true,
+        "nestExtracted": false
+      },
+      {
+        "id": "module/main.fn/println.call@1",
+        "type": "call",
+        "parentId": "module/main.fn",
+        "line": 32,
+        "endLine": 32,
+        "col": 4,
+        "endCol": 21,
+        "funcName": "println!",
+        "args": [],
+        "isEffect": true,
+        "preview": "println!(\"done\")",
+        "effectKind": "log"
+      },
+      {
+        "id": "module/main.fn/return@0",
+        "type": "return_stmt",
+        "parentId": "module/main.fn",
+        "line": 34,
+        "endLine": 34,
+        "col": 4,
+        "endCol": 20,
+        "value": "process::exit(0)",
+        "tailExpression": true,
+        "callTarget": "process::exit",
+        "effectKind": "subprocess"
+      }
+    ],
+    "edges": [
+      {
+        "source": "module/line_count.fn",
+        "target": "module/line_count.fn/return@0",
+        "type": "contains"
+      },
+      {
+        "source": "module/line_count.fn/return@0",
+        "target": "module/line_count.fn/return@0/raw_lines.call",
+        "type": "contains"
+      },
+      {
+        "source": "module/main.fn",
+        "target": "module/main.fn/store.assign",
+        "type": "contains"
+      },
+      {
+        "source": "module/main.fn",
+        "target": "module/main.fn/router.assign",
+        "type": "contains"
+      },
+      {
+        "source": "module/main.fn",
+        "target": "module/main.fn/router_add.call",
+        "type": "contains"
+      },
+      {
+        "source": "module/main.fn/router_add.call",
+        "target": "module/main.fn/router_add.call/Box_new.call",
+        "type": "contains"
+      },
+      {
+        "source": "module/main.fn",
+        "target": "module/main.fn/router_add.call@1",
+        "type": "contains"
+      },
+      {
+        "source": "module/main.fn/router_add.call@1",
+        "target": "module/main.fn/router_add.call@1/Box_new.call",
+        "type": "contains"
+      },
+      {
+        "source": "module/main.fn",
+        "target": "module/main.fn/store_raw_lines.call",
+        "type": "contains"
+      },
+      {
+        "source": "module/main.fn",
+        "target": "module/main.fn/for@0",
+        "type": "contains"
+      },
+      {
+        "source": "module/main.fn/for@0",
+        "target": "module/main.fn/for@0/parse_line.call",
+        "type": "contains"
+      },
+      {
+        "source": "module/main.fn/for@0",
+        "target": "module/main.fn/for@0/if@0",
+        "type": "contains"
+      },
+      {
+        "source": "module/main.fn/for@0/if@0",
+        "target": "module/main.fn/for@0/if@0/router_route.call",
+        "type": "contains"
+      },
+      {
+        "source": "module/main.fn/for@0/if@0",
+        "target": "module/main.fn/for@0/if@0/if@0",
+        "type": "contains"
+      },
+      {
+        "source": "module/main.fn/for@0/if@0/if@0",
+        "target": "module/main.fn/for@0/if@0/if@0/eprintln.call",
+        "type": "contains"
+      },
+      {
+        "source": "module/main.fn",
+        "target": "module/main.fn/println.call",
+        "type": "contains"
+      },
+      {
+        "source": "module/main.fn",
+        "target": "module/main.fn/println.call@1",
+        "type": "contains"
+      },
+      {
+        "source": "module/main.fn",
+        "target": "module/main.fn/return@0",
+        "type": "contains"
+      },
+      {
+        "source": "module/main.fn/store.assign",
+        "target": "module/Store.class/open.fn",
+        "type": "reference",
+        "targetFile": "src/store.rs",
+        "qualifiedTarget": "src/store.rs:Store::open"
+      },
+      {
+        "source": "module/main.fn/router.assign",
+        "target": "module/Router.class/new.fn",
+        "type": "reference",
+        "targetFile": "src/router.rs",
+        "qualifiedTarget": "src/router.rs:Router::new"
+      },
+      {
+        "source": "module/main.fn/for@0/parse_line.call",
+        "target": "module/parse_line.fn",
+        "type": "reference",
+        "targetFile": "src/router.rs",
+        "qualifiedTarget": "src/router.rs:parse_line"
+      }
+    ],
+    "symbolIndex": [
+      {
+        "sym": "function:line_count",
+        "kind": "function",
+        "name": "line_count",
+        "scope": "module",
+        "loc": {
+          "line": 8,
+          "endLine": 10,
+          "col": 0,
+          "endCol": 1
+        },
+        "signature": "fn line_count(raw: &str) -> usize",
+        "docstring": "How many lines the table holds, for the closing report.",
+        "source": "fn line_count(raw: &str) -> usize {\n    raw.lines().count()\n}"
+      },
+      {
+        "sym": "function:main",
+        "kind": "function",
+        "name": "main",
+        "scope": "module",
+        "loc": {
+          "line": 13,
+          "endLine": 35,
+          "col": 0,
+          "endCol": 1
+        },
+        "signature": "fn main()",
+        "docstring": "Route every line of the table, then report what was routed.",
+        "source": "fn main() {\n    let store = Store::open(\"table.txt\");\n    let mut router = Router::new();\n    router.add(\"log\", Box::new(LogSink { written: 0 }));\n    router.add(\"drop\", Box::new(DropSink));\n\n    for line in store.raw.lines() {\n        if let Some((key, value)) = parse_line(line) {\n            match router.route(&key, &value) {\n                Ok(()) => {}\n                Err(reason) => eprintln!(\"dropped: {}\", reason),\n            }\n        }\n    }\n\n    // A macro with a call inside: the argument is a TOKEN TREE, so the\n    // call is invisible to a tree walk and the node is flagged instead.\n    println!(\"routed {} of {}\", router.count, line_count(&store.raw));\n    // A macro with no call inside: nothing to flag.\n    println!(\"done\");\n\n    process::exit(0)\n}"
+      }
+    ],
+    "modulePath": "src/main.rs",
+    "crateName": "router_demo",
+    "cratePath": "crate",
+    "crateRoot": true
+  },
+  "src/router.rs": {
+    "version": "2.0",
+    "language": "rust",
+    "nodes": [
+      {
+        "id": "module/HashMap.import_from",
+        "type": "import_from",
+        "parentId": null,
+        "line": 3,
+        "endLine": 3,
+        "col": 0,
+        "endCol": 30,
+        "module": "std::collections",
+        "names": [
+          "HashMap"
+        ]
+      },
+      {
+        "id": "module/Sink.class",
+        "type": "class_def",
+        "parentId": null,
+        "line": 6,
+        "endLine": 8,
+        "col": 0,
+        "endCol": 1,
+        "name": "Sink",
+        "bases": [],
+        "docstring": "A sink accepts a routed payload, or says why it could not."
+      },
+      {
+        "id": "module/LogSink.class",
+        "type": "class_def",
+        "parentId": null,
+        "line": 11,
+        "endLine": 13,
+        "col": 0,
+        "endCol": 1,
+        "name": "LogSink",
+        "bases": [
+          "Sink"
+        ],
+        "docstring": "Writes every payload it is handed to stdout."
+      },
+      {
+        "id": "module/LogSink.class/deliver.fn",
+        "type": "function_def",
+        "parentId": "module/LogSink.class",
+        "line": 16,
+        "endLine": 20,
+        "col": 4,
+        "endCol": 5,
+        "name": "deliver",
+        "params": [
+          "&mut self",
+          "payload: &str"
+        ],
+        "docstring": null,
+        "isAsync": false,
+        "returns": "Result<(), String>"
+      },
+      {
+        "id": "module/LogSink.class/deliver.fn/self_written.assign",
+        "type": "assignment",
+        "parentId": "module/LogSink.class/deliver.fn",
+        "line": 17,
+        "endLine": 17,
+        "col": 8,
+        "endCol": 26,
+        "name": "self.written",
+        "valueKind": "scalar",
+        "preview": "1",
+        "augmented": "+="
+      },
+      {
+        "id": "module/LogSink.class/deliver.fn/println.call",
+        "type": "call",
+        "parentId": "module/LogSink.class/deliver.fn",
+        "line": 18,
+        "endLine": 18,
+        "col": 8,
+        "endCol": 37,
+        "funcName": "println!",
+        "args": [],
+        "isEffect": true,
+        "preview": "println!(\"log: {}\", payload)",
+        "effectKind": "log"
+      },
+      {
+        "id": "module/LogSink.class/deliver.fn/return@0",
+        "type": "return_stmt",
+        "parentId": "module/LogSink.class/deliver.fn",
+        "line": 19,
+        "endLine": 19,
+        "col": 8,
+        "endCol": 14,
+        "value": "Ok(())",
+        "tailExpression": true,
+        "callTarget": "Ok"
+      },
+      {
+        "id": "module/DropSink.class",
+        "type": "class_def",
+        "parentId": null,
+        "line": 24,
+        "endLine": 24,
+        "col": 0,
+        "endCol": 20,
+        "name": "DropSink",
+        "bases": [
+          "Sink"
+        ],
+        "docstring": "Accepts everything and keeps none of it."
+      },
+      {
+        "id": "module/DropSink.class/deliver.fn",
+        "type": "function_def",
+        "parentId": "module/DropSink.class",
+        "line": 27,
+        "endLine": 29,
+        "col": 4,
+        "endCol": 5,
+        "name": "deliver",
+        "params": [
+          "&mut self",
+          "_payload: &str"
+        ],
+        "docstring": null,
+        "isAsync": false,
+        "returns": "Result<(), String>"
+      },
+      {
+        "id": "module/DropSink.class/deliver.fn/return@0",
+        "type": "return_stmt",
+        "parentId": "module/DropSink.class/deliver.fn",
+        "line": 28,
+        "endLine": 28,
+        "col": 8,
+        "endCol": 14,
+        "value": "Ok(())",
+        "tailExpression": true,
+        "callTarget": "Ok"
+      },
+      {
+        "id": "module/Router.class",
+        "type": "class_def",
+        "parentId": null,
+        "line": 33,
+        "endLine": 36,
+        "col": 0,
+        "endCol": 1,
+        "name": "Router",
+        "bases": [],
+        "docstring": "Holds the named sinks and counts what it has routed."
+      },
+      {
+        "id": "module/Router.class/new.fn",
+        "type": "function_def",
+        "parentId": "module/Router.class",
+        "line": 40,
+        "endLine": 42,
+        "col": 4,
+        "endCol": 5,
+        "name": "new",
+        "params": [],
+        "docstring": "An empty router with no sinks registered.",
+        "isAsync": false,
+        "returns": "Router"
+      },
+      {
+        "id": "module/Router.class/new.fn/return@0",
+        "type": "return_stmt",
+        "parentId": "module/Router.class/new.fn",
+        "line": 41,
+        "endLine": 41,
+        "col": 8,
+        "endCol": 50,
+        "value": "Router { sinks: HashMap::new(), count: 0 }",
+        "tailExpression": true,
+        "nestsInnerCalls": true,
+        "nestExtracted": false
+      },
+      {
+        "id": "module/Router.class/add.fn",
+        "type": "function_def",
+        "parentId": "module/Router.class",
+        "line": 45,
+        "endLine": 47,
+        "col": 4,
+        "endCol": 5,
+        "name": "add",
+        "params": [
+          "&mut self",
+          "name: &str",
+          "sink: Box<dyn Sink>"
+        ],
+        "docstring": "Register a sink under a name.",
+        "isAsync": false
+      },
+      {
+        "id": "module/Router.class/add.fn/self_sinks_insert.call",
+        "type": "call",
+        "parentId": "module/Router.class/add.fn",
+        "line": 46,
+        "endLine": 46,
+        "col": 8,
+        "endCol": 50,
+        "funcName": "self.sinks.insert",
+        "args": [
+          "name.to_string()",
+          "sink"
+        ],
+        "isEffect": false,
+        "nestsInnerCalls": true,
+        "nestExtracted": true
+      },
+      {
+        "id": "module/Router.class/add.fn/self_sinks_insert.call/name_to_string.call",
+        "type": "call",
+        "parentId": "module/Router.class/add.fn/self_sinks_insert.call",
+        "line": 46,
+        "endLine": 46,
+        "col": 26,
+        "endCol": 42,
+        "funcName": "name.to_string",
+        "args": [],
+        "isEffect": false,
+        "callTarget": "name.to_string",
+        "preview": "name.to_string()",
+        "nested": true,
+        "nestedDepth": 1
+      },
+      {
+        "id": "module/Router.class/route.fn",
+        "type": "function_def",
+        "parentId": "module/Router.class",
+        "line": 54,
+        "endLine": 58,
+        "col": 4,
+        "endCol": 5,
+        "name": "route",
+        "params": [
+          "&mut self",
+          "name: &str",
+          "payload: &str"
+        ],
+        "docstring": "Route one payload to the named sink.\n\nThe `?` short-circuits when the name is unknown; the tail call is\nthe delivery itself, and it dispatches on a trait object, so which\n`deliver` runs is a genuine runtime question.",
+        "isAsync": false,
+        "returns": "Result<(), String>"
+      },
+      {
+        "id": "module/Router.class/route.fn/sink.assign",
+        "type": "assignment",
+        "parentId": "module/Router.class/route.fn",
+        "line": 55,
+        "endLine": 55,
+        "col": 8,
+        "endCol": 79,
+        "name": "sink",
+        "valueKind": "call",
+        "preview": "self.sinks.get_mut(name).ok_or_else(|| unknown_sink(name))?",
+        "callTarget": "self.sinks.get_mut(name).ok_or_else",
+        "args": [
+          "|| unknown_sink(name)"
+        ],
+        "nestsInnerCalls": true,
+        "nestExtracted": true
+      },
+      {
+        "id": "module/Router.class/route.fn/sink.assign/self_sinks_get_mut.call",
+        "type": "call",
+        "parentId": "module/Router.class/route.fn/sink.assign",
+        "line": 55,
+        "endLine": 55,
+        "col": 19,
+        "endCol": 43,
+        "funcName": "self.sinks.get_mut",
+        "args": [
+          "name"
+        ],
+        "isEffect": false,
+        "callTarget": "self.sinks.get_mut",
+        "preview": "self.sinks.get_mut(name)",
+        "nested": true,
+        "nestedDepth": 1
+      },
+      {
+        "id": "module/Router.class/route.fn/unknown_sink.call",
+        "type": "call",
+        "parentId": "module/Router.class/route.fn",
+        "line": 55,
+        "endLine": 55,
+        "col": 58,
+        "endCol": 76,
+        "funcName": "unknown_sink",
+        "args": [
+          "name"
+        ],
+        "isEffect": false
+      },
+      {
+        "id": "module/Router.class/route.fn/self_count.assign",
+        "type": "assignment",
+        "parentId": "module/Router.class/route.fn",
+        "line": 56,
+        "endLine": 56,
+        "col": 8,
+        "endCol": 24,
+        "name": "self.count",
+        "valueKind": "scalar",
+        "preview": "1",
+        "augmented": "+="
+      },
+      {
+        "id": "module/Router.class/route.fn/return@0",
+        "type": "return_stmt",
+        "parentId": "module/Router.class/route.fn",
+        "line": 57,
+        "endLine": 57,
+        "col": 8,
+        "endCol": 29,
+        "value": "sink.deliver(payload)",
+        "tailExpression": true,
+        "callTarget": "sink.deliver"
+      },
+      {
+        "id": "module/unknown_sink.fn",
+        "type": "function_def",
+        "parentId": null,
+        "line": 62,
+        "endLine": 64,
+        "col": 0,
+        "endCol": 1,
+        "name": "unknown_sink",
+        "params": [
+          "name: &str"
+        ],
+        "docstring": "The error text for a name no sink is registered under.",
+        "isAsync": false,
+        "returns": "String"
+      },
+      {
+        "id": "module/unknown_sink.fn/return@0",
+        "type": "return_stmt",
+        "parentId": "module/unknown_sink.fn",
+        "line": 63,
+        "endLine": 63,
+        "col": 4,
+        "endCol": 37,
+        "value": "format!(\"no sink named {}\", name)",
+        "tailExpression": true,
+        "callTarget": "format!"
+      },
+      {
+        "id": "module/parse_line.fn",
+        "type": "function_def",
+        "parentId": null,
+        "line": 67,
+        "endLine": 75,
+        "col": 0,
+        "endCol": 1,
+        "name": "parse_line",
+        "params": [
+          "line: &str"
+        ],
+        "docstring": "Split one `key: value` line, or None when it is not one.",
+        "isAsync": false,
+        "returns": "Option<(String, String)>"
+      },
+      {
+        "id": "module/parse_line.fn/parts.assign",
+        "type": "assignment",
+        "parentId": "module/parse_line.fn",
+        "line": 68,
+        "endLine": 68,
+        "col": 4,
+        "endCol": 40,
+        "name": "parts",
+        "valueKind": "call",
+        "preview": "line.splitn(2, ':')",
+        "callTarget": "line.splitn",
+        "args": [
+          "2",
+          "':'"
+        ]
+      },
+      {
+        "id": "module/parse_line.fn/key.assign",
+        "type": "assignment",
+        "parentId": "module/parse_line.fn",
+        "line": 69,
+        "endLine": 69,
+        "col": 4,
+        "endCol": 28,
+        "name": "key",
+        "valueKind": "call",
+        "preview": "parts.next()?",
+        "callTarget": "parts.next"
+      },
+      {
+        "id": "module/parse_line.fn/value.assign",
+        "type": "assignment",
+        "parentId": "module/parse_line.fn",
+        "line": 70,
+        "endLine": 70,
+        "col": 4,
+        "endCol": 30,
+        "name": "value",
+        "valueKind": "call",
+        "preview": "parts.next()?",
+        "callTarget": "parts.next"
+      },
+      {
+        "id": "module/parse_line.fn/key_trim.call",
+        "type": "call",
+        "parentId": "module/parse_line.fn",
+        "line": 71,
+        "endLine": 71,
+        "col": 10,
+        "endCol": 20,
+        "funcName": "key.trim",
+        "args": [],
+        "isEffect": false
+      },
+      {
+        "id": "module/parse_line.fn/if@0",
+        "type": "if_stmt",
+        "parentId": "module/parse_line.fn",
+        "line": 71,
+        "endLine": 74,
+        "col": 4,
+        "endCol": 5,
+        "condition": "match key.trim()",
+        "hasElse": false
+      },
+      {
+        "id": "module/parse_line.fn/if@0/Some.call",
+        "type": "call",
+        "parentId": "module/parse_line.fn/if@0",
+        "line": 73,
+        "endLine": 73,
+        "col": 13,
+        "endCol": 60,
+        "funcName": "Some",
+        "args": [
+          "(k.to_string(), value.trim().to_string())"
+        ],
+        "isEffect": false,
+        "nestsInnerCalls": true,
+        "nestExtracted": false
+      }
+    ],
+    "edges": [
+      {
+        "source": "module/LogSink.class",
+        "target": "module/LogSink.class/deliver.fn",
+        "type": "contains"
+      },
+      {
+        "source": "module/LogSink.class/deliver.fn",
+        "target": "module/LogSink.class/deliver.fn/self_written.assign",
+        "type": "contains"
+      },
+      {
+        "source": "module/LogSink.class/deliver.fn",
+        "target": "module/LogSink.class/deliver.fn/println.call",
+        "type": "contains"
+      },
+      {
+        "source": "module/LogSink.class/deliver.fn",
+        "target": "module/LogSink.class/deliver.fn/return@0",
+        "type": "contains"
+      },
+      {
+        "source": "module/DropSink.class",
+        "target": "module/DropSink.class/deliver.fn",
+        "type": "contains"
+      },
+      {
+        "source": "module/DropSink.class/deliver.fn",
+        "target": "module/DropSink.class/deliver.fn/return@0",
+        "type": "contains"
+      },
+      {
+        "source": "module/Router.class",
+        "target": "module/Router.class/new.fn",
+        "type": "contains"
+      },
+      {
+        "source": "module/Router.class/new.fn",
+        "target": "module/Router.class/new.fn/return@0",
+        "type": "contains"
+      },
+      {
+        "source": "module/Router.class",
+        "target": "module/Router.class/add.fn",
+        "type": "contains"
+      },
+      {
+        "source": "module/Router.class/add.fn",
+        "target": "module/Router.class/add.fn/self_sinks_insert.call",
+        "type": "contains"
+      },
+      {
+        "source": "module/Router.class/add.fn/self_sinks_insert.call",
+        "target": "module/Router.class/add.fn/self_sinks_insert.call/name_to_string.call",
+        "type": "contains"
+      },
+      {
+        "source": "module/Router.class",
+        "target": "module/Router.class/route.fn",
+        "type": "contains"
+      },
+      {
+        "source": "module/Router.class/route.fn",
+        "target": "module/Router.class/route.fn/sink.assign",
+        "type": "contains"
+      },
+      {
+        "source": "module/Router.class/route.fn/sink.assign",
+        "target": "module/Router.class/route.fn/sink.assign/self_sinks_get_mut.call",
+        "type": "contains"
+      },
+      {
+        "source": "module/Router.class/route.fn",
+        "target": "module/Router.class/route.fn/unknown_sink.call",
+        "type": "contains"
+      },
+      {
+        "source": "module/Router.class/route.fn",
+        "target": "module/Router.class/route.fn/self_count.assign",
+        "type": "contains"
+      },
+      {
+        "source": "module/Router.class/route.fn",
+        "target": "module/Router.class/route.fn/return@0",
+        "type": "contains"
+      },
+      {
+        "source": "module/unknown_sink.fn",
+        "target": "module/unknown_sink.fn/return@0",
+        "type": "contains"
+      },
+      {
+        "source": "module/parse_line.fn",
+        "target": "module/parse_line.fn/parts.assign",
+        "type": "contains"
+      },
+      {
+        "source": "module/parse_line.fn",
+        "target": "module/parse_line.fn/key.assign",
+        "type": "contains"
+      },
+      {
+        "source": "module/parse_line.fn",
+        "target": "module/parse_line.fn/value.assign",
+        "type": "contains"
+      },
+      {
+        "source": "module/parse_line.fn",
+        "target": "module/parse_line.fn/key_trim.call",
+        "type": "contains"
+      },
+      {
+        "source": "module/parse_line.fn",
+        "target": "module/parse_line.fn/if@0",
+        "type": "contains"
+      },
+      {
+        "source": "module/parse_line.fn/if@0",
+        "target": "module/parse_line.fn/if@0/Some.call",
+        "type": "contains"
+      },
+      {
+        "source": "module/Router.class/route.fn/unknown_sink.call",
+        "target": "module/unknown_sink.fn",
+        "type": "reference"
+      }
+    ],
+    "symbolIndex": [
+      {
+        "sym": "class:Sink",
+        "kind": "class",
+        "name": "Sink",
+        "scope": "module",
+        "loc": {
+          "line": 6,
+          "endLine": 8,
+          "col": 0,
+          "endCol": 1
+        },
+        "signature": "trait Sink",
+        "docstring": "A sink accepts a routed payload, or says why it could not.",
+        "bases": [],
+        "source": "pub trait Sink {\n    fn deliver(&mut self, payload: &str) -> Result<(), String>;\n}"
+      },
+      {
+        "sym": "class:LogSink",
+        "kind": "class",
+        "name": "LogSink",
+        "scope": "module",
+        "loc": {
+          "line": 11,
+          "endLine": 13,
+          "col": 0,
+          "endCol": 1
+        },
+        "signature": "struct LogSink",
+        "docstring": "Writes every payload it is handed to stdout.",
+        "bases": [
+          "Sink"
+        ],
+        "source": "pub struct LogSink {\n    pub written: usize,\n}"
+      },
+      {
+        "sym": "function:deliver",
+        "kind": "method",
+        "name": "deliver",
+        "scope": "module/LogSink.class",
+        "loc": {
+          "line": 16,
+          "endLine": 20,
+          "col": 4,
+          "endCol": 5
+        },
+        "signature": "fn deliver(&mut self, payload: &str) -> Result<(), String>",
+        "docstring": null,
+        "source": "fn deliver(&mut self, payload: &str) -> Result<(), String> {\n        self.written += 1;\n        println!(\"log: {}\", payload);\n        Ok(())\n    }"
+      },
+      {
+        "sym": "class:DropSink",
+        "kind": "class",
+        "name": "DropSink",
+        "scope": "module",
+        "loc": {
+          "line": 24,
+          "endLine": 24,
+          "col": 0,
+          "endCol": 20
+        },
+        "signature": "struct DropSink",
+        "docstring": "Accepts everything and keeps none of it.",
+        "bases": [
+          "Sink"
+        ],
+        "source": "pub struct DropSink;"
+      },
+      {
+        "sym": "function:deliver",
+        "kind": "method",
+        "name": "deliver",
+        "scope": "module/DropSink.class",
+        "loc": {
+          "line": 27,
+          "endLine": 29,
+          "col": 4,
+          "endCol": 5
+        },
+        "signature": "fn deliver(&mut self, _payload: &str) -> Result<(), String>",
+        "docstring": null,
+        "source": "fn deliver(&mut self, _payload: &str) -> Result<(), String> {\n        Ok(())\n    }"
+      },
+      {
+        "sym": "class:Router",
+        "kind": "class",
+        "name": "Router",
+        "scope": "module",
+        "loc": {
+          "line": 33,
+          "endLine": 36,
+          "col": 0,
+          "endCol": 1
+        },
+        "signature": "struct Router",
+        "docstring": "Holds the named sinks and counts what it has routed.",
+        "bases": [],
+        "source": "pub struct Router {\n    sinks: HashMap<String, Box<dyn Sink>>,\n    pub count: usize,\n}"
+      },
+      {
+        "sym": "function:new",
+        "kind": "method",
+        "name": "new",
+        "scope": "module/Router.class",
+        "loc": {
+          "line": 40,
+          "endLine": 42,
+          "col": 4,
+          "endCol": 5
+        },
+        "signature": "fn new() -> Router",
+        "docstring": "An empty router with no sinks registered.",
+        "source": "pub fn new() -> Router {\n        Router { sinks: HashMap::new(), count: 0 }\n    }"
+      },
+      {
+        "sym": "function:add",
+        "kind": "method",
+        "name": "add",
+        "scope": "module/Router.class",
+        "loc": {
+          "line": 45,
+          "endLine": 47,
+          "col": 4,
+          "endCol": 5
+        },
+        "signature": "fn add(&mut self, name: &str, sink: Box<dyn Sink>)",
+        "docstring": "Register a sink under a name.",
+        "source": "pub fn add(&mut self, name: &str, sink: Box<dyn Sink>) {\n        self.sinks.insert(name.to_string(), sink);\n    }"
+      },
+      {
+        "sym": "function:route",
+        "kind": "method",
+        "name": "route",
+        "scope": "module/Router.class",
+        "loc": {
+          "line": 54,
+          "endLine": 58,
+          "col": 4,
+          "endCol": 5
+        },
+        "signature": "fn route(&mut self, name: &str, payload: &str) -> Result<(), String>",
+        "docstring": "Route one payload to the named sink.\n\nThe `?` short-circuits when the name is unknown; the tail call is\nthe delivery itself, and it dispatches on a trait object, so which\n`deliver` runs is a genuine runtime question.",
+        "source": "pub fn route(&mut self, name: &str, payload: &str) -> Result<(), String> {\n        let sink = self.sinks.get_mut(name).ok_or_else(|| unknown_sink(name))?;\n        self.count += 1;\n        sink.deliver(payload)\n    }"
+      },
+      {
+        "sym": "function:unknown_sink",
+        "kind": "function",
+        "name": "unknown_sink",
+        "scope": "module",
+        "loc": {
+          "line": 62,
+          "endLine": 64,
+          "col": 0,
+          "endCol": 1
+        },
+        "signature": "fn unknown_sink(name: &str) -> String",
+        "docstring": "The error text for a name no sink is registered under.",
+        "source": "pub fn unknown_sink(name: &str) -> String {\n    format!(\"no sink named {}\", name)\n}"
+      },
+      {
+        "sym": "function:parse_line",
+        "kind": "function",
+        "name": "parse_line",
+        "scope": "module",
+        "loc": {
+          "line": 67,
+          "endLine": 75,
+          "col": 0,
+          "endCol": 1
+        },
+        "signature": "fn parse_line(line: &str) -> Option<(String, String)>",
+        "docstring": "Split one `key: value` line, or None when it is not one.",
+        "source": "pub fn parse_line(line: &str) -> Option<(String, String)> {\n    let mut parts = line.splitn(2, ':');\n    let key = parts.next()?;\n    let value = parts.next()?;\n    match key.trim() {\n        \"\" => None,\n        k => Some((k.to_string(), value.trim().to_string())),\n    }\n}"
+      }
+    ],
+    "modulePath": "src/router.rs",
+    "crateName": "router_demo",
+    "cratePath": "crate::router"
+  },
+  "src/store.rs": {
+    "version": "2.0",
+    "language": "rust",
+    "nodes": [
+      {
+        "id": "module/fs.import_from",
+        "type": "import_from",
+        "parentId": null,
+        "line": 3,
+        "endLine": 3,
+        "col": 0,
+        "endCol": 12,
+        "module": "std",
+        "names": [
+          "fs"
+        ]
+      },
+      {
+        "id": "module/Store.class",
+        "type": "class_def",
+        "parentId": null,
+        "line": 6,
+        "endLine": 8,
+        "col": 0,
+        "endCol": 1,
+        "name": "Store",
+        "bases": [],
+        "docstring": "A routing table loaded from a file."
+      },
+      {
+        "id": "module/Store.class/open.fn",
+        "type": "function_def",
+        "parentId": "module/Store.class",
+        "line": 15,
+        "endLine": 18,
+        "col": 4,
+        "endCol": 5,
+        "name": "open",
+        "params": [
+          "path: &str"
+        ],
+        "docstring": "Read the table at `path`.\n\nThe fs boundary this thread leaves through: `fs::read_to_string`\nis std, called by path, and the effect table stamps it.",
+        "isAsync": false,
+        "returns": "Store"
+      },
+      {
+        "id": "module/Store.class/open.fn/raw.assign",
+        "type": "assignment",
+        "parentId": "module/Store.class/open.fn",
+        "line": 16,
+        "endLine": 16,
+        "col": 8,
+        "endCol": 63,
+        "name": "raw",
+        "valueKind": "call",
+        "preview": "fs::read_to_string(path).unwrap_or_default()",
+        "callTarget": "fs::read_to_string(path).unwrap_or_default",
+        "nestsInnerCalls": true,
+        "nestExtracted": true
+      },
+      {
+        "id": "module/Store.class/open.fn/raw.assign/fs_read_to_string.call",
+        "type": "call",
+        "parentId": "module/Store.class/open.fn/raw.assign",
+        "line": 16,
+        "endLine": 16,
+        "col": 18,
+        "endCol": 42,
+        "funcName": "fs::read_to_string",
+        "args": [
+          "path"
+        ],
+        "isEffect": true,
+        "callTarget": "fs::read_to_string",
+        "preview": "fs::read_to_string(path)",
+        "nested": true,
+        "nestedDepth": 1,
+        "effectKind": "fs"
+      },
+      {
+        "id": "module/Store.class/open.fn/return@0",
+        "type": "return_stmt",
+        "parentId": "module/Store.class/open.fn",
+        "line": 17,
+        "endLine": 17,
+        "col": 8,
+        "endCol": 21,
+        "value": "Store { raw }",
+        "tailExpression": true
+      },
+      {
+        "id": "module/Store.class/as_json.fn",
+        "type": "function_def",
+        "parentId": "module/Store.class",
+        "line": 21,
+        "endLine": 23,
+        "col": 4,
+        "endCol": 5,
+        "name": "as_json",
+        "params": [
+          "&self"
+        ],
+        "docstring": "The table as JSON, through the one declared third-party crate.",
+        "isAsync": false,
+        "returns": "String"
+      },
+      {
+        "id": "module/Store.class/as_json.fn/return@0",
+        "type": "return_stmt",
+        "parentId": "module/Store.class/as_json.fn",
+        "line": 22,
+        "endLine": 22,
+        "col": 8,
+        "endCol": 60,
+        "value": "serde_json::to_string(&self.raw).unwrap_or_default()",
+        "tailExpression": true,
+        "callTarget": "serde_json::to_string(&self.raw).unwrap_or_default",
+        "nestsInnerCalls": true,
+        "nestExtracted": true
+      },
+      {
+        "id": "module/Store.class/as_json.fn/return@0/serde_json_to_string.call",
+        "type": "call",
+        "parentId": "module/Store.class/as_json.fn/return@0",
+        "line": 22,
+        "endLine": 22,
+        "col": 8,
+        "endCol": 40,
+        "funcName": "serde_json::to_string",
+        "args": [
+          "&self.raw"
+        ],
+        "isEffect": false,
+        "callTarget": "serde_json::to_string",
+        "preview": "serde_json::to_string(&self.raw)",
+        "nested": true,
+        "nestedDepth": 1
+      }
+    ],
+    "edges": [
+      {
+        "source": "module/Store.class",
+        "target": "module/Store.class/open.fn",
+        "type": "contains"
+      },
+      {
+        "source": "module/Store.class/open.fn",
+        "target": "module/Store.class/open.fn/raw.assign",
+        "type": "contains"
+      },
+      {
+        "source": "module/Store.class/open.fn/raw.assign",
+        "target": "module/Store.class/open.fn/raw.assign/fs_read_to_string.call",
+        "type": "contains"
+      },
+      {
+        "source": "module/Store.class/open.fn",
+        "target": "module/Store.class/open.fn/return@0",
+        "type": "contains"
+      },
+      {
+        "source": "module/Store.class",
+        "target": "module/Store.class/as_json.fn",
+        "type": "contains"
+      },
+      {
+        "source": "module/Store.class/as_json.fn",
+        "target": "module/Store.class/as_json.fn/return@0",
+        "type": "contains"
+      },
+      {
+        "source": "module/Store.class/as_json.fn/return@0",
+        "target": "module/Store.class/as_json.fn/return@0/serde_json_to_string.call",
+        "type": "contains"
+      }
+    ],
+    "symbolIndex": [
+      {
+        "sym": "class:Store",
+        "kind": "class",
+        "name": "Store",
+        "scope": "module",
+        "loc": {
+          "line": 6,
+          "endLine": 8,
+          "col": 0,
+          "endCol": 1
+        },
+        "signature": "struct Store",
+        "docstring": "A routing table loaded from a file.",
+        "bases": [],
+        "source": "pub struct Store {\n    pub raw: String,\n}"
+      },
+      {
+        "sym": "function:open",
+        "kind": "method",
+        "name": "open",
+        "scope": "module/Store.class",
+        "loc": {
+          "line": 15,
+          "endLine": 18,
+          "col": 4,
+          "endCol": 5
+        },
+        "signature": "fn open(path: &str) -> Store",
+        "docstring": "Read the table at `path`.\n\nThe fs boundary this thread leaves through: `fs::read_to_string`\nis std, called by path, and the effect table stamps it.",
+        "source": "pub fn open(path: &str) -> Store {\n        let raw = fs::read_to_string(path).unwrap_or_default();\n        Store { raw }\n    }"
+      },
+      {
+        "sym": "function:as_json",
+        "kind": "method",
+        "name": "as_json",
+        "scope": "module/Store.class",
+        "loc": {
+          "line": 21,
+          "endLine": 23,
+          "col": 4,
+          "endCol": 5
+        },
+        "signature": "fn as_json(&self) -> String",
+        "docstring": "The table as JSON, through the one declared third-party crate.",
+        "source": "pub fn as_json(&self) -> String {\n        serde_json::to_string(&self.raw).unwrap_or_default()\n    }"
+      }
+    ],
+    "modulePath": "src/store.rs",
+    "crateName": "router_demo",
+    "cratePath": "crate::store"
+  },
+  "tests/router_test.rs": {
+    "version": "2.0",
+    "language": "rust",
+    "nodes": [
+      {
+        "id": "module/router_demo_router.import_from",
+        "type": "import_from",
+        "parentId": null,
+        "line": 3,
+        "endLine": 3,
+        "col": 0,
+        "endCol": 55,
+        "module": "router_demo::router",
+        "names": [
+          "parse_line",
+          "LogSink",
+          "Router"
+        ]
+      },
+      {
+        "id": "module/routes_to_named_sink.fn",
+        "type": "function_def",
+        "parentId": null,
+        "line": 7,
+        "endLine": 12,
+        "col": 0,
+        "endCol": 1,
+        "name": "routes_to_named_sink",
+        "params": [],
+        "docstring": "A registered sink receives the payload.",
+        "isAsync": false,
+        "decorators": [
+          "test"
+        ],
+        "decoratorLine": 6
+      },
+      {
+        "id": "module/routes_to_named_sink.fn/router.assign",
+        "type": "assignment",
+        "parentId": "module/routes_to_named_sink.fn",
+        "line": 8,
+        "endLine": 8,
+        "col": 4,
+        "endCol": 35,
+        "name": "router",
+        "valueKind": "call",
+        "preview": "Router::new()",
+        "callTarget": "Router::new"
+      },
+      {
+        "id": "module/routes_to_named_sink.fn/router_add.call",
+        "type": "call",
+        "parentId": "module/routes_to_named_sink.fn",
+        "line": 9,
+        "endLine": 9,
+        "col": 4,
+        "endCol": 56,
+        "funcName": "router.add",
+        "args": [
+          "\"log\"",
+          "Box::new(LogSink { written: 0 })"
+        ],
+        "isEffect": false,
+        "nestsInnerCalls": true,
+        "nestExtracted": true
+      },
+      {
+        "id": "module/routes_to_named_sink.fn/router_add.call/Box_new.call",
+        "type": "call",
+        "parentId": "module/routes_to_named_sink.fn/router_add.call",
+        "line": 9,
+        "endLine": 9,
+        "col": 22,
+        "endCol": 54,
+        "funcName": "Box::new",
+        "args": [
+          "LogSink { written: 0 }"
+        ],
+        "isEffect": false,
+        "callTarget": "Box::new",
+        "preview": "Box::new(LogSink { written: 0 })",
+        "nested": true,
+        "nestedDepth": 1
+      },
+      {
+        "id": "module/routes_to_named_sink.fn/outcome.assign",
+        "type": "assignment",
+        "parentId": "module/routes_to_named_sink.fn",
+        "line": 10,
+        "endLine": 10,
+        "col": 4,
+        "endCol": 47,
+        "name": "outcome",
+        "valueKind": "call",
+        "preview": "router.route(\"log\", \"hello\")",
+        "callTarget": "router.route",
+        "args": [
+          "\"log\"",
+          "\"hello\""
+        ]
+      },
+      {
+        "id": "module/routes_to_named_sink.fn/assert.call",
+        "type": "call",
+        "parentId": "module/routes_to_named_sink.fn",
+        "line": 11,
+        "endLine": 11,
+        "col": 4,
+        "endCol": 29,
+        "funcName": "assert!",
+        "args": [],
+        "isEffect": false,
+        "preview": "assert!(outcome.is_ok())",
+        "nestsInnerCalls": true,
+        "nestExtracted": false
+      },
+      {
+        "id": "module/unknown_sink_errors.fn",
+        "type": "function_def",
+        "parentId": null,
+        "line": 16,
+        "endLine": 20,
+        "col": 0,
+        "endCol": 1,
+        "name": "unknown_sink_errors",
+        "params": [],
+        "docstring": "An unregistered name is an error, not a panic.",
+        "isAsync": false,
+        "decorators": [
+          "test"
+        ],
+        "decoratorLine": 15
+      },
+      {
+        "id": "module/unknown_sink_errors.fn/router.assign",
+        "type": "assignment",
+        "parentId": "module/unknown_sink_errors.fn",
+        "line": 17,
+        "endLine": 17,
+        "col": 4,
+        "endCol": 35,
+        "name": "router",
+        "valueKind": "call",
+        "preview": "Router::new()",
+        "callTarget": "Router::new"
+      },
+      {
+        "id": "module/unknown_sink_errors.fn/outcome.assign",
+        "type": "assignment",
+        "parentId": "module/unknown_sink_errors.fn",
+        "line": 18,
+        "endLine": 18,
+        "col": 4,
+        "endCol": 48,
+        "name": "outcome",
+        "valueKind": "call",
+        "preview": "router.route(\"nope\", \"hello\")",
+        "callTarget": "router.route",
+        "args": [
+          "\"nope\"",
+          "\"hello\""
+        ]
+      },
+      {
+        "id": "module/unknown_sink_errors.fn/assert.call",
+        "type": "call",
+        "parentId": "module/unknown_sink_errors.fn",
+        "line": 19,
+        "endLine": 19,
+        "col": 4,
+        "endCol": 30,
+        "funcName": "assert!",
+        "args": [],
+        "isEffect": false,
+        "preview": "assert!(outcome.is_err())",
+        "nestsInnerCalls": true,
+        "nestExtracted": false
+      },
+      {
+        "id": "module/parse_line_needs_a_colon.fn",
+        "type": "function_def",
+        "parentId": null,
+        "line": 24,
+        "endLine": 26,
+        "col": 0,
+        "endCol": 1,
+        "name": "parse_line_needs_a_colon",
+        "params": [],
+        "docstring": "A line without a colon is not a pair.",
+        "isAsync": false,
+        "decorators": [
+          "test"
+        ],
+        "decoratorLine": 23
+      },
+      {
+        "id": "module/parse_line_needs_a_colon.fn/assert.call",
+        "type": "call",
+        "parentId": "module/parse_line_needs_a_colon.fn",
+        "line": 25,
+        "endLine": 25,
+        "col": 4,
+        "endCol": 51,
+        "funcName": "assert!",
+        "args": [],
+        "isEffect": false,
+        "preview": "assert!(parse_line(\"no colon here\").is_none())",
+        "nestsInnerCalls": true,
+        "nestExtracted": false
+      }
+    ],
+    "edges": [
+      {
+        "source": "module/routes_to_named_sink.fn",
+        "target": "module/routes_to_named_sink.fn/router.assign",
+        "type": "contains"
+      },
+      {
+        "source": "module/routes_to_named_sink.fn",
+        "target": "module/routes_to_named_sink.fn/router_add.call",
+        "type": "contains"
+      },
+      {
+        "source": "module/routes_to_named_sink.fn/router_add.call",
+        "target": "module/routes_to_named_sink.fn/router_add.call/Box_new.call",
+        "type": "contains"
+      },
+      {
+        "source": "module/routes_to_named_sink.fn",
+        "target": "module/routes_to_named_sink.fn/outcome.assign",
+        "type": "contains"
+      },
+      {
+        "source": "module/routes_to_named_sink.fn",
+        "target": "module/routes_to_named_sink.fn/assert.call",
+        "type": "contains"
+      },
+      {
+        "source": "module/unknown_sink_errors.fn",
+        "target": "module/unknown_sink_errors.fn/router.assign",
+        "type": "contains"
+      },
+      {
+        "source": "module/unknown_sink_errors.fn",
+        "target": "module/unknown_sink_errors.fn/outcome.assign",
+        "type": "contains"
+      },
+      {
+        "source": "module/unknown_sink_errors.fn",
+        "target": "module/unknown_sink_errors.fn/assert.call",
+        "type": "contains"
+      },
+      {
+        "source": "module/parse_line_needs_a_colon.fn",
+        "target": "module/parse_line_needs_a_colon.fn/assert.call",
+        "type": "contains"
+      },
+      {
+        "source": "module/routes_to_named_sink.fn/router.assign",
+        "target": "module/Router.class/new.fn",
+        "type": "reference",
+        "targetFile": "src/router.rs",
+        "qualifiedTarget": "src/router.rs:Router::new"
+      },
+      {
+        "source": "module/unknown_sink_errors.fn/router.assign",
+        "target": "module/Router.class/new.fn",
+        "type": "reference",
+        "targetFile": "src/router.rs",
+        "qualifiedTarget": "src/router.rs:Router::new"
+      }
+    ],
+    "symbolIndex": [
+      {
+        "sym": "function:routes_to_named_sink",
+        "kind": "function",
+        "name": "routes_to_named_sink",
+        "scope": "module",
+        "loc": {
+          "line": 7,
+          "endLine": 12,
+          "col": 0,
+          "endCol": 1
+        },
+        "signature": "fn routes_to_named_sink()",
+        "docstring": "A registered sink receives the payload.",
+        "source": "fn routes_to_named_sink() {\n    let mut router = Router::new();\n    router.add(\"log\", Box::new(LogSink { written: 0 }));\n    let outcome = router.route(\"log\", \"hello\");\n    assert!(outcome.is_ok());\n}"
+      },
+      {
+        "sym": "function:unknown_sink_errors",
+        "kind": "function",
+        "name": "unknown_sink_errors",
+        "scope": "module",
+        "loc": {
+          "line": 16,
+          "endLine": 20,
+          "col": 0,
+          "endCol": 1
+        },
+        "signature": "fn unknown_sink_errors()",
+        "docstring": "An unregistered name is an error, not a panic.",
+        "source": "fn unknown_sink_errors() {\n    let mut router = Router::new();\n    let outcome = router.route(\"nope\", \"hello\");\n    assert!(outcome.is_err());\n}"
+      },
+      {
+        "sym": "function:parse_line_needs_a_colon",
+        "kind": "function",
+        "name": "parse_line_needs_a_colon",
+        "scope": "module",
+        "loc": {
+          "line": 24,
+          "endLine": 26,
+          "col": 0,
+          "endCol": 1
+        },
+        "signature": "fn parse_line_needs_a_colon()",
+        "docstring": "A line without a colon is not a pair.",
+        "source": "fn parse_line_needs_a_colon() {\n    assert!(parse_line(\"no colon here\").is_none());\n}"
+      }
+    ],
+    "modulePath": "tests/router_test.rs",
+    "crateName": "router_demo",
+    "cratePath": "crate",
+    "crateRoot": true
+  }
+}

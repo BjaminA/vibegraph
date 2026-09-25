@@ -21,6 +21,10 @@ import type { NodeExplanation } from "../server/explain";
 import type { DynamicObservation } from "../server/observe";
 import type { ThreadAgentResult } from "../server/thread_agent";
 import type { WorkPlan } from "../server/plan_work";
+import type { ThreadContract } from "../server/thread_contract";
+import type { Constraint } from "../server/constraint_store";
+import type { StackIndex, StackTool } from "../server/stack";
+import type { Crossing } from "../server/crossings";
 
 export type RewriteOp =
   | "replace_node"
@@ -72,6 +76,9 @@ export interface VibegraphMcpContext {
     op: RewriteOp;
     payload: Record<string, unknown>;
     filePath?: string;
+    /** M-ORCH.4 — set by a WORKER session's MCP URL (`/mcp?packet=p3`):
+     *  the edit is confined to that packet's edit scope. */
+    packetId?: string;
   }): Promise<{ success: boolean; message?: string; errorKind?: string; delta?: IrDelta }>;
 
   /** Insert new code via scripts/cst_rewrite.py (compose palette path). */
@@ -80,7 +87,17 @@ export interface VibegraphMcpContext {
     source: string;
     anchorNodeId?: string;
     filePath?: string;
+    packetId?: string;
   }): Promise<{ success: boolean; message?: string; delta?: IrDelta }>;
+
+  /** M-ORCH.3 — create a NEW Python module through cst_rewrite's
+   *  create_file. Allowed ONLY while a run packet is RUNNING and lists the
+   *  path among its files (the human confirmed that list at the objective
+   *  gate); refuses existing files, non-Python paths, and paths outside the
+   *  project. Re-parses, links, and refreshes derived data on success.
+   *  M-ORCH.4 — `packetId` names the calling worker's packet (its MCP URL);
+   *  without it, only an unambiguous single running packet qualifies. */
+  createFile(path: string, source: string, packetId?: string): Promise<{ ok: boolean; message: string }>;
 
   /** Run scripts/extract_thread.py against a seed node id, returning the thread payload. */
   extractThread(seedNodeId: string, filePath?: string): Promise<unknown>;
@@ -231,6 +248,21 @@ export interface VibegraphMcpContext {
   }): Promise<DynamicObservation>;
 
   /**
+   * PLAN-M-RUNTIME phase 3 — run ONE entry point under the tracer and record
+   * what every call site it touched actually called. The batch form of
+   * observeDynamicTarget, with the same floor: an effectful path returns
+   * requires-confirmation + a token and NOTHING has run.
+   *
+   * The result is an OVERLAY stored beside the IR (.vibegraph/
+   * observations.json), never merged into it — every annotated node keeps
+   * its `dynamic` / `unresolved` kind, because one run can lie.
+   */
+  traceEntryPoint(args: {
+    entryPointId: string;
+    effectConsent?: string;
+  }): Promise<unknown>;
+
+  /**
    * D1 (PLAN-v6) — spawn a subagent whose context is BOUNDED to one thread
    * (compact projection + ratified thread-skill + blind-spot roll-up + adjacent
    * threads), with an escalation protocol so it refuses honestly rather than
@@ -257,4 +289,92 @@ export interface VibegraphMcpContext {
    * the human ratifies. Never spawns anything.
    */
   planWork(task: string, maxPackets?: number): WorkPlan;
+  /** M-AGENT2 — draft an Agent Manager work run from a task (plan_work
+   *  decomposition → DRAFT). Returns a human-readable summary or an
+   *  error string. RATIFICATION IS NOT EXPOSED here: only the human,
+   *  in the board, can ratify a run or approve a packet. M-ORCH — `mode`
+   *  "orchestrated" asks for an orchestrator brief; the human still
+   *  confirms the objective in the board before anything runs. */
+  startWorkRun(
+    task: string,
+    mode?: "gated" | "orchestrated",
+    // M-ORCH.4 — lanes (packets in flight at once, edit scopes disjoint)
+    // and the review policy ("pre-checks" approves deterministic-clean
+    // packets without a model; "full" reads every diff).
+    opts?: { parallel?: number; review?: "full" | "pre-checks"; autonomous?: boolean },
+  ): { ok: boolean; message: string };
+
+  /**
+   * M-CONTRACT.2 — the thread contract for an entry point: what enters
+   * (params), what leaves (declared return + return previews), every
+   * effectful external call with its literal text, round trips inside
+   * loops, cross-thread adjacency, and where static knowledge ends — IR
+   * FACT. Plus the STATED constraints routed to the thread (each with its
+   * source). Read-only.
+   */
+  threadContract(entryPointId: string): {
+    contract: ThreadContract | null;
+    constraints: Constraint[];
+    rendered: { contract: string | null; constraints: string | null };
+    error?: string;
+  };
+  /**
+   * M-CONTRACT.3 — state a constraint (payload schema / proxy / backend
+   * call / perf lever / invariant / objective) scoped to threads, files, or
+   * everything. Persisted to .vibegraph/constraints.json with source
+   * "agent" — it injects into prompts LABELLED as agent-stated, never as
+   * human-authoritative. Returns the stored record or a validation error.
+   */
+  stateConstraint(input: unknown): { ok: true; constraint: Constraint } | { ok: false; error: string };
+  /** M-CONTRACT.3 — every stored constraint (read-only). */
+  listConstraints(): Constraint[];
+
+  /**
+   * M-STACK.1 — the STACK FACTS: which software tools this project uses,
+   * each with its role, origin (third-party / stdlib / a PROJECT module
+   * that funnels one — the proxy case), declared version (manifests only),
+   * and the parse EVIDENCE behind it. Pass an entryPointId for one
+   * thread's slice. Read-only, IR-derived; a tool the taxonomy does not
+   * know is listed with role "unknown", never classified by guess.
+   * `spec` is the rendered SYSTEM SPEC — the facts WITH the policies
+   * stated about each tool and any disagreement between the two; the
+   * same block the brief, the workers and the chat receive.
+   */
+  stack(entryPointId?: string): {
+    index: StackIndex;
+    thread?: { entryPointId: string; tools: StackTool[]; called?: string[] };
+    spec: string;
+    error?: string;
+  };
+
+  /**
+   * M-XLANG.1 - the CROSSINGS: every HTTP hop that leaves a thread's own
+   * language, with the route(s) in this project that serve the path. The
+   * match is over parsed data on both sides (the caller's URL argument,
+   * the receiver's route metadata) and it is WEIGHED, never resolved: two
+   * routes that both serve a path come back as two, a framework's default
+   * method is labelled as an assumption, and the base URL is never
+   * followed. A thread's own `filesReached` is untouched by a crossing.
+   */
+  crossings(entryPointId?: string): {
+    all: Crossing[];
+    thread?: { entryPointId: string; crossings: Crossing[] };
+    error?: string;
+  };
+
+  /**
+   * M-ARCH.1 - the DERIVED architecture: clusters of entry points (a
+   * framework's family × a package root), the boundary tools their threads
+   * call, and the edges between them with a protocol read from the fact
+   * (a hop's kind, a tool's role) and refs to the call sites.
+   */
+  architecture(): { model: import("../shared/protocol").ArchModelRecord | null; error?: string };
+
+  /**
+   * M-ARCH.4 - ask the thinking-tier model for deployment/trust groups,
+   * names, a primary path and a narrative, grounded against the derived
+   * model, the infra manifests and the docs. Stored PENDING; only a human
+   * ratifies (in the GUI). Spends tokens.
+   */
+  proposeArchitecture(): Promise<{ ok: boolean; error?: string; groups?: number; names?: number; refused?: number; model?: import("../shared/protocol").ArchModelRecord | null }>;
 }

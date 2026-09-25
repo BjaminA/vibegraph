@@ -35,6 +35,8 @@ const KIND_LABEL: Record<Kind, string> = {
 export interface ThreadInteractionData {
   entryPointId: string;
   label: string;
+  /** set when another thread shares this label (shared/entry_labels.ts). */
+  suffix?: string;
   kind: Kind;
   file: string;
   onOpenThread?: (entryPointId: string) => void;
@@ -50,7 +52,7 @@ export function colourForThreadId(id: string): string {
   return `var(--thread-file-hue-${h % 8})`;
 }
 
-export function ThreadInteractionNode({ data }: { data: ThreadInteractionData }) {
+export function ThreadInteractionNode({ data }: { data: ThreadInteractionData & { focused?: boolean } }) {
   const [hover, setHover] = useState(false);
   const Icon = KIND_ICON[data.kind] ?? Pin;
   const a = colourForThreadId(data.entryPointId);
@@ -62,13 +64,18 @@ export function ThreadInteractionNode({ data }: { data: ThreadInteractionData })
       data-entry-kind={data.kind}
       data-entry-point-id={data.entryPointId}
       data-accent={a}
+      // M-ZOOM - the thread the reader zoomed OUT of, so the system plane
+      // opens where they left rather than at the top of a map.
+      {...(data.focused ? { "data-thread-focused": "true" } : {})}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
       style={{
         minWidth: 180,
         maxWidth: 240,
         background: "var(--bg-node)",
-        border: `1px solid color-mix(in oklab, ${a} ${hover ? 70 : 45}%, transparent)`,
+        border: `1px solid color-mix(in oklab, ${a} ${data.focused ? 95 : hover ? 70 : 45}%, transparent)`,
+        outline: data.focused ? `1px solid color-mix(in oklab, ${a} 55%, transparent)` : "none",
+        outlineOffset: 3,
         borderRadius: 12,
         padding: "10px 14px",
         transform: hover ? "translateY(-2px) scale(1.02)" : "none",
@@ -101,6 +108,7 @@ export function ThreadInteractionNode({ data }: { data: ThreadInteractionData })
             }}
           >
             {data.label}
+            {data.suffix && <span data-entry-suffix style={{ color: "var(--text-muted)", fontWeight: 400 }}>{` · ${data.suffix}`}</span>}
           </div>
           <div
             style={{

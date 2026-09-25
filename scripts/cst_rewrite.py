@@ -330,8 +330,19 @@ def _transfer_leading_lines(orig_stmt, new_stmts: list):
     first = new_stmts[0]
     if not hasattr(first, "leading_lines"):
         return new_stmts
+    # M-ORCH.4 (polyglot e2e finding): a DECORATED def's code_for_node — what
+    # vibegraph_get_node_source hands a worker — begins with the node's own
+    # leading blank lines, and _parse_stmts hands them back on the first new
+    # statement. Prepending the original's blank lines AGAIN doubled the gap
+    # above the decorator and the confinement check read it as an escape.
+    # When the caller already sent the gap back (blank lines only, at least
+    # as many as the original), keep theirs; a caller-supplied comment still
+    # gets the original gap in front of it, as before.
+    new_leading = tuple(first.leading_lines)
+    if new_leading and len(new_leading) >= len(leading) and all(l.comment is None for l in new_leading):
+        return new_stmts
     new_stmts[0] = first.with_changes(
-        leading_lines=tuple(leading) + tuple(first.leading_lines)
+        leading_lines=tuple(leading) + new_leading
     )
     return new_stmts
 
@@ -1691,7 +1702,16 @@ def apply(
             raise
         pos = wrapper.resolve(meta.PositionProvider)
         p = pos[target]
-        target_span = (p.start.line, p.end.line)
+        start_line = p.start.line
+        # A decorated def/class's PositionProvider span starts at `def` /
+        # `class`, but code_for_node (what get_node_source returns) INCLUDES
+        # the decorators — the node a caller reads and writes back is the
+        # decorated one. Widen the span to the first decorator so a decorator
+        # edit is inside the target, never an "escape" of its own head.
+        decorators = getattr(target, "decorators", None) or ()
+        if decorators:
+            start_line = min(start_line, pos[decorators[0]].start.line)
+        target_span = (start_line, p.end.line)
 
     # 2. Apply op
     if op == "replace_node":

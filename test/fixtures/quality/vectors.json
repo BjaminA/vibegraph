@@ -1,0 +1,255 @@
+{
+  "_": "Test vectors for schemas/quality/*.json, consumed by test/quality_schemas.test.mjs. These are test INPUTS, not configs: the brief (C.8) requires every shipped config to be derived by a script or human-stated with provenance, and none of these ships. Each `invalid` entry states the discipline it pins.",
+  "evidence.json#/$defs/CheckResult": {
+    "valid": [
+      { "verdict": "pass", "reason": "all 2 function(s) calling notify also call should_notify", "notFollowed": ["order and control flow", "exception short-circuits"], "offenders": [], "provenance": { "kind": "derived", "by": "constraint_grammar.ts", "commit": "07e325b", "at": "2026-09-12T10:00:00.000Z" } },
+      { "verdict": "violated", "reason": "notify is called from a function that never calls should_notify", "offenders": ["telemetry/ingest.py:module/ingest.fn/notify.call"], "provenance": { "kind": "derived", "by": "constraint_grammar.ts", "commit": "07e325b", "at": "2026-09-12T10:00:00.000Z" } },
+      { "verdict": "unverifiable", "reason": "one runtime-dispatched call could be notify", "cause": "dynamic", "at": ["telemetry/alerts.py:module/evaluate.fn/self_hook.call"], "offenders": [], "provenance": { "kind": "observed", "run": "trace-1", "entryPointId": "telemetry/alerts.py:evaluate", "stale": false, "at": "2026-09-12T10:00:00.000Z" } }
+    ],
+    "invalid": [
+      { "why": "a bare boolean is not a verdict", "instance": true },
+      { "why": "a pass must carry what it could not follow", "instance": { "verdict": "pass", "reason": "r", "notFollowed": [], "offenders": [], "provenance": { "kind": "derived", "by": "t", "commit": "c", "at": "2026-09-12T10:00:00.000Z" } } },
+      { "why": "a violation must name an offender", "instance": { "verdict": "violated", "reason": "r", "offenders": [], "provenance": { "kind": "derived", "by": "t", "commit": "c", "at": "2026-09-12T10:00:00.000Z" } } },
+      { "why": "an offender is file:node, not a bare name", "instance": { "verdict": "violated", "reason": "r", "offenders": ["notify"], "provenance": { "kind": "derived", "by": "t", "commit": "c", "at": "2026-09-12T10:00:00.000Z" } } },
+      { "why": "a model's judgement never enters a gate", "instance": { "verdict": "pass", "reason": "r", "notFollowed": ["x"], "offenders": [], "provenance": { "kind": "model_judgement", "model": "m", "promptHash": "h", "at": "2026-09-12T10:00:00.000Z", "entersGate": false } } },
+      { "why": "a self-report never enters a gate", "instance": { "verdict": "pass", "reason": "r", "notFollowed": ["x"], "offenders": [], "provenance": { "kind": "self_report", "by": "worker", "loadBearing": false, "entersGate": false } } },
+      { "why": "an unverifiable must say why", "instance": { "verdict": "unverifiable", "reason": "r", "at": [], "offenders": [], "provenance": { "kind": "derived", "by": "t", "commit": "c", "at": "2026-09-12T10:00:00.000Z" } } },
+      { "why": "a pass carries no offenders", "instance": { "verdict": "pass", "reason": "r", "notFollowed": ["x"], "offenders": ["a.py:module/f.fn"], "provenance": { "kind": "derived", "by": "t", "commit": "c", "at": "2026-09-12T10:00:00.000Z" } } }
+    ]
+  },
+  "evidence.json#/$defs/Provenance": {
+    "valid": [
+      { "kind": "model_judgement", "model": "claude:claude-opus-5", "promptHash": "sha256:abc", "at": "2026-09-12T10:00:00.000Z", "entersGate": false },
+      { "kind": "self_report", "by": "worker", "loadBearing": false, "entersGate": false },
+      { "kind": "stated", "source": "human", "id": "c3", "at": "2026-09-07T09:00:00.000Z" }
+    ],
+    "invalid": [
+      { "why": "a model judgement cannot claim to enter a gate", "instance": { "kind": "model_judgement", "model": "m", "promptHash": "h", "at": "2026-09-12T10:00:00.000Z", "entersGate": true } },
+      { "why": "a self-report cannot be load-bearing", "instance": { "kind": "self_report", "by": "worker", "loadBearing": true, "entersGate": false } },
+      { "why": "a derived provenance names its commit", "instance": { "kind": "derived", "by": "t", "at": "2026-09-12T10:00:00.000Z" } }
+    ]
+  },
+  "evidence.json#/$defs/Unknown": {
+    "valid": [ { "unknown": true, "reason": "only a trace can say which loops iterate" } ],
+    "invalid": [
+      { "why": "an unknown carries its reason", "instance": { "unknown": true } },
+      { "why": "unknown is never false", "instance": { "unknown": false, "reason": "r" } }
+    ]
+  },
+  "check_grammar.json#/$defs/Check": {
+    "valid": [
+      { "rule": "callers-only", "target": "notify", "files": ["telemetry/alerts.py"] },
+      { "rule": "import-only", "tool": "requests", "files": ["telemetry/http_client.py"] },
+      { "rule": "calls-through", "target": "notify", "through": "should_notify" },
+      { "rule": "guards", "target": "notify", "guard": "should_notify" },
+      { "rule": "not-in-loop", "target": "execute", "role": "db", "except": ["insert_readings"] },
+      { "rule": "not-in-loop", "role": "http-client" },
+      { "rule": "handles-failure", "scope": "thread" },
+      { "rule": "annotated", "at": "entry-point" },
+      { "rule": "co-changes", "when": "telemetry/storage.py:module/SCHEMA.assign", "require": "telemetry/migrations.py" }
+    ],
+    "invalid": [
+      { "why": "an unknown verb is refused, never coerced", "instance": { "rule": "reachable", "target": "helper" } },
+      { "why": "not-in-loop needs a target or a role", "instance": { "rule": "not-in-loop" } },
+      { "why": "not-in-loop's role is a taxonomy role", "instance": { "rule": "not-in-loop", "role": "database" } },
+      { "why": "guards needs its guard", "instance": { "rule": "guards", "target": "notify" } },
+      { "why": "callers-only nowhere is not a rule", "instance": { "rule": "callers-only", "target": "notify" } },
+      { "why": "co-changes operands are files or file:node refs, not bare names", "instance": { "rule": "co-changes", "when": "SCHEMA", "require": "migrations" } },
+      { "why": "no threshold operand exists on any verb", "instance": { "rule": "not-in-loop", "role": "db", "maxCalls": 3 } }
+    ]
+  },
+  "stack_profile.json": {
+    "valid": [
+      {
+        "version": "1.0",
+        "project": "examples/fleet-telemetry",
+        "provenance": { "kind": "derived", "by": "scripts/derive_stack_profile.mjs", "commit": "07e325b", "at": "2026-09-12T10:00:00.000Z" },
+        "facts": {
+          "languages": { "value": ["python", "jsts", "bash", "cpp"], "confidence": "exact", "supportingNodes": ["telemetry/app.py:module", "gateway/server.ts:module"], "readFrom": "files[].language" },
+          "entryKinds": { "value": ["route", "cli", "test"], "confidence": "exact", "supportingNodes": ["telemetry/app.py:module/ingest_route.fn"], "readFrom": "entryPoints[].kind" },
+          "rolesCalled": { "value": ["db", "http-client"], "confidence": "attributed", "supportingNodes": ["telemetry/storage.py:module/insert_readings.fn/executemany.call"], "readFrom": "stack.byThreadCalled" },
+          "funnels": { "value": ["telemetry.http_client", "telemetry.storage"], "confidence": "exact", "supportingNodes": ["telemetry/http_client.py:module"], "readFrom": "stack.tools[].wraps" },
+          "testsPresent": { "value": true, "confidence": "exact", "supportingNodes": ["telemetry/tests/test_alerts.py:module"], "readFrom": "entryPoints[].kind" }
+        },
+        "regimes": [
+          { "id": "http-service", "derivedFrom": ["entryKinds"] },
+          { "id": "polyglot", "derivedFrom": ["languages"] }
+        ],
+        "unknowns": [
+          { "fact": "hotPaths", "reason": "only a trace can say which loops iterate" },
+          { "fact": "consumers", "reason": "the BI job that reads /export is not in the code; c2 states it" }
+        ],
+        "threads": {
+          "telemetry/app.py:ingest_route": {
+            "facts": {
+              "entryKinds": { "value": ["route"], "confidence": "exact", "supportingNodes": ["telemetry/app.py:module/ingest_route.fn"], "readFrom": "entryPoints[].kind" },
+              "effectfulLoops": { "value": true, "confidence": "attributed", "supportingNodes": ["telemetry/ingest.py:module/ingest.fn/for@0"], "readFrom": "contract.roundTrips" }
+            },
+            "regimes": [ { "id": "http-service", "derivedFrom": ["entryKinds"] } ]
+          }
+        }
+      }
+    ],
+    "invalid": [
+      { "why": "a fact with no supporting node is an assertion", "instance": { "version": "1.0", "project": "p", "provenance": { "kind": "derived", "by": "s", "commit": "c", "at": "2026-09-12T10:00:00.000Z" }, "facts": { "languages": { "value": ["python"], "confidence": "exact", "supportingNodes": [], "readFrom": "files[].language" } }, "regimes": [ { "id": "cli-tool", "derivedFrom": ["entryKinds"] } ], "unknowns": [], "threads": {} } },
+      { "why": "confidence is ordinal, never a number", "instance": { "version": "1.0", "project": "p", "provenance": { "kind": "derived", "by": "s", "commit": "c", "at": "2026-09-12T10:00:00.000Z" }, "facts": { "languages": { "value": ["python"], "confidence": 0.9, "supportingNodes": ["a.py:module"], "readFrom": "files[].language" } }, "regimes": [ { "id": "cli-tool", "derivedFrom": ["entryKinds"] } ], "unknowns": [], "threads": {} } },
+      { "why": "a regime names the facts that fired it", "instance": { "version": "1.0", "project": "p", "provenance": { "kind": "derived", "by": "s", "commit": "c", "at": "2026-09-12T10:00:00.000Z" }, "facts": {}, "regimes": [ { "id": "cli-tool", "derivedFrom": [] } ], "unknowns": [], "threads": {} } },
+      { "why": "an unknown regime carries a reason", "instance": { "version": "1.0", "project": "p", "provenance": { "kind": "derived", "by": "s", "commit": "c", "at": "2026-09-12T10:00:00.000Z" }, "facts": {}, "regimes": [ { "id": "unknown", "derivedFrom": ["languages"] } ], "unknowns": [], "threads": {} } },
+      { "why": "a profile is derived, never stated", "instance": { "version": "1.0", "project": "p", "provenance": { "kind": "stated", "source": "human", "id": "x", "at": "2026-09-12T10:00:00.000Z" }, "facts": {}, "regimes": [ { "id": "cli-tool", "derivedFrom": ["entryKinds"] } ], "unknowns": [], "threads": {} } },
+      { "why": "a fact outside the catalogue is refused", "instance": { "version": "1.0", "project": "p", "provenance": { "kind": "derived", "by": "s", "commit": "c", "at": "2026-09-12T10:00:00.000Z" }, "facts": { "vibes": { "value": true, "confidence": "exact", "supportingNodes": ["a.py:module"], "readFrom": "x" } }, "regimes": [ { "id": "cli-tool", "derivedFrom": ["entryKinds"] } ], "unknowns": [], "threads": {} } },
+      { "why": "an undeclarable fact goes under unknowns with a reason, not as a default value", "instance": { "version": "1.0", "project": "p", "provenance": { "kind": "derived", "by": "s", "commit": "c", "at": "2026-09-12T10:00:00.000Z" }, "facts": {}, "regimes": [ { "id": "cli-tool", "derivedFrom": ["entryKinds"] } ], "unknowns": [ { "fact": "hotPaths" } ], "threads": {} } }
+    ]
+  },
+  "quality_model.json": {
+    "valid": [
+      {
+        "version": "1.0",
+        "provenance": { "kind": "derived", "by": "scripts/derive_quality_model.mjs", "commit": "07e325b", "at": "2026-09-12T10:00:00.000Z" },
+        "dimensions": [
+          {
+            "id": "boundary-integrity",
+            "text": "A boundary the code leaves through is governed by the guard the humans named; the reviewer once approved prose that the IR contradicted.",
+            "applies_when": { "all": [ { "regime": "http-service" }, { "fact": "rolesCalled", "has": "http-client" } ] },
+            "checks": [ { "check": { "rule": "guards", "target": "notify", "guard": "should_notify" }, "costClass": "local", "forcedBy": ["AR-6", "PT-2", "AS-8", "AS-9", "c3"], "calibration": { "unknown": true, "reason": "Run 3 has not run" } } ],
+            "evidenceClass": "A",
+            "mode": "advisory",
+            "threshold": { "unknown": true, "reason": "no number before calibration" },
+            "calibration": { "unknown": true, "reason": "Run 3 has not run" }
+          },
+          {
+            "id": "repetition-cost",
+            "text": "A per-item external call inside a loop is a round trip per item.",
+            "applies_when": { "any": [ { "fact": "effectfulLoops", "has": "true" }, { "fact": "rolesCalled", "has": "db" } ] },
+            "checks": [ { "check": { "rule": "not-in-loop", "role": "db", "except": ["insert_readings"] }, "costClass": "thread", "forcedBy": ["AS-10", "c5"] } ],
+            "evidenceClass": "A",
+            "mode": "advisory",
+            "threshold": { "unknown": true, "reason": "no number before calibration" },
+            "calibration": { "unknown": true, "reason": "Run 3 has not run" }
+          }
+        ]
+      }
+    ],
+    "invalid": [
+      { "why": "a dimension cannot apply everywhere: no always, every dimension names a fact", "instance": { "version": "1.0", "provenance": { "kind": "derived", "by": "s", "commit": "c", "at": "2026-09-12T10:00:00.000Z" }, "dimensions": [ { "id": "failure-visibility", "text": "t", "applies_when": { "always": true }, "checks": [ { "check": { "rule": "handles-failure", "scope": "thread" }, "costClass": "local", "forcedBy": ["AS-7"] } ], "evidenceClass": "A", "mode": "advisory", "threshold": { "unknown": true, "reason": "r" }, "calibration": { "unknown": true, "reason": "r" } } ] } },
+      { "why": "gate-blocking without a calibration record is refused", "instance": { "version": "1.0", "provenance": { "kind": "derived", "by": "s", "commit": "c", "at": "2026-09-12T10:00:00.000Z" }, "dimensions": [ { "id": "failure-visibility", "text": "t", "applies_when": { "fact": "languages", "has": "python" }, "checks": [ { "check": { "rule": "handles-failure", "scope": "thread" }, "costClass": "local", "forcedBy": ["AS-7"], "calibration": { "unknown": true, "reason": "r" } } ], "evidenceClass": "A", "mode": "gate-blocking", "threshold": { "unknown": true, "reason": "r" }, "calibration": { "unknown": true, "reason": "r" } } ] } },
+      { "why": "a check binding names the assertions that forced it", "instance": { "version": "1.0", "provenance": { "kind": "derived", "by": "s", "commit": "c", "at": "2026-09-12T10:00:00.000Z" }, "dimensions": [ { "id": "failure-visibility", "text": "t", "applies_when": { "fact": "languages", "has": "python" }, "checks": [ { "check": { "rule": "handles-failure", "scope": "thread" }, "costClass": "local", "forcedBy": [] } ], "evidenceClass": "A", "mode": "advisory", "threshold": { "unknown": true, "reason": "r" }, "calibration": { "unknown": true, "reason": "r" } } ] } },
+      { "why": "a threshold is Unknown or a calibrated record, never a bare number", "instance": { "version": "1.0", "provenance": { "kind": "derived", "by": "s", "commit": "c", "at": "2026-09-12T10:00:00.000Z" }, "dimensions": [ { "id": "failure-visibility", "text": "t", "applies_when": { "fact": "languages", "has": "python" }, "checks": [ { "check": { "rule": "handles-failure", "scope": "thread" }, "costClass": "local", "forcedBy": ["AS-7"] } ], "evidenceClass": "A", "mode": "advisory", "threshold": 3, "calibration": { "unknown": true, "reason": "r" } } ] } },
+      { "why": "a qualitative dimension never enters the model", "instance": { "version": "1.0", "provenance": { "kind": "derived", "by": "s", "commit": "c", "at": "2026-09-12T10:00:00.000Z" }, "dimensions": [ { "id": "failure-visibility", "text": "t", "applies_when": { "fact": "languages", "has": "python" }, "checks": [ { "check": { "rule": "handles-failure", "scope": "thread" }, "costClass": "local", "forcedBy": ["AS-7"] } ], "evidenceClass": "C", "mode": "advisory", "threshold": { "unknown": true, "reason": "r" }, "calibration": { "unknown": true, "reason": "r" } } ] } },
+      { "why": "a dimension outside the five is a schema change, not a config edit", "instance": { "version": "1.0", "provenance": { "kind": "derived", "by": "s", "commit": "c", "at": "2026-09-12T10:00:00.000Z" }, "dimensions": [ { "id": "naming", "text": "t", "applies_when": { "fact": "languages", "has": "python" }, "checks": [ { "check": { "rule": "handles-failure", "scope": "thread" }, "costClass": "local", "forcedBy": ["AS-7"] } ], "evidenceClass": "A", "mode": "advisory", "threshold": { "unknown": true, "reason": "r" }, "calibration": { "unknown": true, "reason": "r" } } ] } }
+    ]
+  },
+  "flow_spec.json": {
+    "valid": [
+      {
+        "version": "1.0",
+        "provenance": { "kind": "derived", "by": "scripts/derive_flow_spec.mjs", "commit": "07e325b", "at": "2026-09-12T10:00:00.000Z" },
+        "archetypes": [
+          {
+            "id": "constrained-thread-edit",
+            "text": "A thread with human-stated constraints routed to it: the win measured on fleet-telemetry.",
+            "applies_when": { "all": [ { "task": "constraintsRouted", "is": true }, { "task": "systemPacket", "is": false } ] },
+            "grouping": "coupling-chain",
+            "ordering": { "rule": "dependencies-first", "plus": ["after", "read-after-write"] },
+            "gates": { "objective": { "by": "human" }, "packetReview": { "policy": "pre-checks" }, "escalation": { "to": "human" } },
+            "mandatoryEvidence": ["derived"],
+            "escalateSurface": [
+              { "trigger": "repeated-violation", "to": "human", "text": "the same constraint violated on the retry: a rule problem, not a worker problem" },
+              { "trigger": "plan-problem", "to": "human", "text": "a different constraint violated on the retry: the packet is mis-scoped" }
+            ],
+            "overhead": { "unknown": true, "reason": "no paired run recorded since M-BATCH; reviews/h2h2 predates warm sessions" },
+            "cheaperLane": {
+              "when": { "all": [ { "task": "constraintsRouted", "is": false }, { "task": "effectfulBoundaries", "is": false }, { "task": "systemPacket", "is": false } ] },
+              "then": { "reviewPolicy": "pre-checks", "orchestratorTask": "verbatim", "warmSession": "preferred", "modelReview": "on-needs-eyes", "objectiveGate": "human" }
+            }
+          },
+          {
+            "id": "autonomous-thread-edit",
+            "text": "AUTONOMY: the human is out of the loop by a recorded ruling; the orchestrator confirms the objective when the brief lands and an escalation ends its packet as failed with the reason kept.",
+            "applies_when": { "all": [ { "task": "systemPacket", "is": false }, { "fact": "languages", "has": "python" } ] },
+            "grouping": "coupling-chain",
+            "ordering": { "rule": "dependencies-first", "plus": ["after", "read-after-write"] },
+            "gates": { "objective": { "by": "orchestrator", "underRuling": { "source": "human", "id": "ruling:2026-09-12:human-out-of-the-loop", "at": "2026-09-12T16:00:00.000Z" } }, "packetReview": { "policy": "pre-checks" }, "escalation": { "to": "failed-with-reason" } },
+            "mandatoryEvidence": ["derived"],
+            "escalateSurface": [ { "trigger": "repeated-violation", "to": "orchestrator", "text": "the same constraint violated on the retry ends the packet as failed" } ],
+            "overhead": { "unknown": true, "reason": "no paired autonomous run recorded yet" },
+            "cheaperLane": {
+              "when": { "task": "constraintsRouted", "is": false },
+              "then": { "reviewPolicy": "pre-checks", "orchestratorTask": "verbatim", "warmSession": "preferred", "modelReview": "on-needs-eyes", "objectiveGate": "human" }
+            }
+          }
+        ]
+      }
+    ],
+    "invalid": [
+      { "why": "an orchestrator-confirmed objective must name the human ruling it acts under (AUTONOMY is a ruling, not a default)", "instance": { "version": "1.0", "provenance": { "kind": "derived", "by": "s", "commit": "c", "at": "2026-09-12T10:00:00.000Z" }, "archetypes": [ { "id": "a", "text": "t", "applies_when": { "task": "retry", "is": true }, "grouping": "thread", "ordering": { "rule": "dependencies-first", "plus": [] }, "gates": { "objective": { "by": "orchestrator" }, "packetReview": { "policy": "pre-checks" }, "escalation": { "to": "failed-with-reason" } }, "mandatoryEvidence": ["derived"], "escalateSurface": [ { "trigger": "no-bytes-changed", "to": "human", "text": "t" } ], "overhead": { "unknown": true, "reason": "r" }, "cheaperLane": { "when": { "task": "constraintsRouted", "is": false }, "then": { "reviewPolicy": "pre-checks", "orchestratorTask": "verbatim", "warmSession": "preferred", "modelReview": "on-needs-eyes", "objectiveGate": "human" } } } ] } },
+      { "why": "an escalation goes to a human or ends failed-with-reason; it never goes to the orchestrator to approve", "instance": { "version": "1.0", "provenance": { "kind": "derived", "by": "s", "commit": "c", "at": "2026-09-12T10:00:00.000Z" }, "archetypes": [ { "id": "a", "text": "t", "applies_when": { "task": "retry", "is": true }, "grouping": "thread", "ordering": { "rule": "dependencies-first", "plus": [] }, "gates": { "objective": { "by": "human" }, "packetReview": { "policy": "pre-checks" }, "escalation": { "to": "orchestrator" } }, "mandatoryEvidence": ["derived"], "escalateSurface": [ { "trigger": "no-bytes-changed", "to": "human", "text": "t" } ], "overhead": { "unknown": true, "reason": "r" }, "cheaperLane": { "when": { "task": "constraintsRouted", "is": false }, "then": { "reviewPolicy": "pre-checks", "orchestratorTask": "verbatim", "warmSession": "preferred", "modelReview": "on-needs-eyes", "objectiveGate": "human" } } } ] } },
+      { "why": "a self-report can never be mandatory evidence", "instance": { "version": "1.0", "provenance": { "kind": "derived", "by": "s", "commit": "c", "at": "2026-09-12T10:00:00.000Z" }, "archetypes": [ { "id": "a", "text": "t", "applies_when": { "task": "retry", "is": true }, "grouping": "thread", "ordering": { "rule": "dependencies-first", "plus": [] }, "gates": { "objective": { "by": "human" }, "packetReview": { "policy": "pre-checks" }, "escalation": { "to": "human" } }, "mandatoryEvidence": ["self_report"], "escalateSurface": [ { "trigger": "no-bytes-changed", "to": "human", "text": "t" } ], "overhead": { "unknown": true, "reason": "r" }, "cheaperLane": { "when": { "task": "constraintsRouted", "is": false }, "then": { "reviewPolicy": "pre-checks", "orchestratorTask": "verbatim", "warmSession": "preferred", "modelReview": "on-needs-eyes", "objectiveGate": "human" } } } ] } },
+      { "why": "overhead is a measured record or Unknown, never a number typed in", "instance": { "version": "1.0", "provenance": { "kind": "derived", "by": "s", "commit": "c", "at": "2026-09-12T10:00:00.000Z" }, "archetypes": [ { "id": "a", "text": "t", "applies_when": { "task": "retry", "is": true }, "grouping": "thread", "ordering": { "rule": "dependencies-first", "plus": [] }, "gates": { "objective": { "by": "human" }, "packetReview": { "policy": "pre-checks" }, "escalation": { "to": "human" } }, "mandatoryEvidence": ["derived"], "escalateSurface": [ { "trigger": "no-bytes-changed", "to": "human", "text": "t" } ], "overhead": 4.5, "cheaperLane": { "when": { "task": "constraintsRouted", "is": false }, "then": { "reviewPolicy": "pre-checks", "orchestratorTask": "verbatim", "warmSession": "preferred", "modelReview": "on-needs-eyes", "objectiveGate": "human" } } } ] } },
+      { "why": "the cheaper lane is one lane, not a menu: its then is fixed", "instance": { "version": "1.0", "provenance": { "kind": "derived", "by": "s", "commit": "c", "at": "2026-09-12T10:00:00.000Z" }, "archetypes": [ { "id": "a", "text": "t", "applies_when": { "task": "retry", "is": true }, "grouping": "thread", "ordering": { "rule": "dependencies-first", "plus": [] }, "gates": { "objective": { "by": "human" }, "packetReview": { "policy": "pre-checks" }, "escalation": { "to": "human" } }, "mandatoryEvidence": ["derived"], "escalateSurface": [ { "trigger": "no-bytes-changed", "to": "human", "text": "t" } ], "overhead": { "unknown": true, "reason": "r" }, "cheaperLane": { "when": { "task": "constraintsRouted", "is": false }, "then": { "reviewPolicy": "pre-checks", "orchestratorTask": "verbatim", "warmSession": "preferred", "modelReview": "on-needs-eyes", "objectiveGate": "orchestrator" } } } ] } }
+    ]
+  },
+  "acceptance.json": {
+    "valid": [
+      {
+        "version": "1.0",
+        "packetId": "p3",
+        "entryPointId": "telemetry/alerts.py:evaluate",
+        "provenance": { "kind": "derived", "by": "orchestration.ts", "commit": "07e325b", "at": "2026-09-12T10:00:00.000Z" },
+        "computedAt": "2026-09-12T10:00:00.000Z",
+        "scope": { "files": ["telemetry/alerts.py"], "declaredBy": "brief" },
+        "invariants": [
+          { "kind": "edits-inside-scope" },
+          { "kind": "every-edited-file-reparsed" },
+          { "kind": "entry-point-signature-unchanged", "exception": { "reason": "the brief adds a region parameter to evaluate", "provenance": { "kind": "stated", "source": "orchestrator", "id": "brief:p3", "at": "2026-09-12T09:00:00.000Z" } } },
+          { "kind": "loosening-loud" }
+        ],
+        "checks": [
+          { "check": { "rule": "callers-only", "target": "notify", "files": ["telemetry/alerts.py"] }, "mode": "gate-blocking", "mustBe": "pass", "basis": { "constraintId": "c3" } },
+          { "check": { "rule": "guards", "target": "notify", "guard": "should_notify" }, "mode": "advisory", "mustBe": "pass-or-reviewed-unverifiable", "basis": { "dimension": "boundary-integrity", "calibration": { "unknown": true, "reason": "candidate awaits human false-positive review" } } }
+        ],
+        "evidenceRequired": ["derived"],
+        "advisories": [ { "kind": "tests-touched", "text": "the delta touched no test file" } ],
+        "closingBar": "inside telemetry/alerts.py; re-parsed; c3 callers-only passes; nothing loosened; evidence derived"
+      }
+    ],
+    "invalid": [
+      { "why": "a gate-blocking check names what entitles it to gate", "instance": { "version": "1.0", "packetId": "p", "entryPointId": "e", "provenance": { "kind": "derived", "by": "o", "commit": "c", "at": "2026-09-12T10:00:00.000Z" }, "computedAt": "2026-09-12T10:00:00.000Z", "scope": { "files": ["a.py"], "declaredBy": "thread" }, "invariants": [ { "kind": "edits-inside-scope" } ], "checks": [ { "check": { "rule": "guards", "target": "n", "guard": "g" }, "mode": "gate-blocking", "mustBe": "pass" } ], "evidenceRequired": ["derived"], "advisories": [], "closingBar": "b" } },
+      { "why": "an exception to an invariant is stated, never derived", "instance": { "version": "1.0", "packetId": "p", "entryPointId": "e", "provenance": { "kind": "derived", "by": "o", "commit": "c", "at": "2026-09-12T10:00:00.000Z" }, "computedAt": "2026-09-12T10:00:00.000Z", "scope": { "files": ["a.py"], "declaredBy": "thread" }, "invariants": [ { "kind": "bytes-changed", "exception": { "reason": "r", "provenance": { "kind": "derived", "by": "o", "commit": "c", "at": "2026-09-12T10:00:00.000Z" } } } ], "checks": [], "evidenceRequired": ["derived"], "advisories": [], "closingBar": "b" } },
+      { "why": "an acceptance is derived, never stated", "instance": { "version": "1.0", "packetId": "p", "entryPointId": "e", "provenance": { "kind": "stated", "source": "human", "id": "x", "at": "2026-09-12T10:00:00.000Z" }, "computedAt": "2026-09-12T10:00:00.000Z", "scope": { "files": ["a.py"], "declaredBy": "thread" }, "invariants": [ { "kind": "edits-inside-scope" } ], "checks": [], "evidenceRequired": ["derived"], "advisories": [], "closingBar": "b" } },
+      { "why": "required evidence is derived, observed or stated; never a model's judgement", "instance": { "version": "1.0", "packetId": "p", "entryPointId": "e", "provenance": { "kind": "derived", "by": "o", "commit": "c", "at": "2026-09-12T10:00:00.000Z" }, "computedAt": "2026-09-12T10:00:00.000Z", "scope": { "files": ["a.py"], "declaredBy": "thread" }, "invariants": [ { "kind": "edits-inside-scope" } ], "checks": [], "evidenceRequired": ["model_judgement"], "advisories": [], "closingBar": "b" } }
+    ]
+  },
+  "skill_manifest.json": {
+    "valid": [
+      {
+        "version": "1.0",
+        "entryPointId": "telemetry/alerts.py:evaluate",
+        "status": "ratified",
+        "stale": false,
+        "stamp": { "sourceHash": "sha256:aaa", "rulesHash": "sha256:bbb", "snapshotPresent": true },
+        "rules": [
+          {
+            "id": "r1",
+            "text": "Page operators only through notify, after should_notify's dedup.",
+            "why": "a flapping sensor once paged the on-call forty times in a minute",
+            "nodes": ["telemetry/alerts.py:module/evaluate.fn/notify.call", "telemetry/alerts.py:module/should_notify.fn"],
+            "source": "constraint",
+            "boundTo": { "constraintId": "c3", "rule": "calls-through" }
+          }
+        ],
+        "staling": [
+          { "on": "step-changed", "action": "stale", "reaffirm": "human" },
+          { "on": "rule-changed", "action": "stale", "reaffirm": "human" },
+          { "on": "constraint-contradiction", "action": "stale", "reaffirm": "human" }
+        ],
+        "provenance": { "kind": "derived", "by": "scripts/derive_skill_manifest.mjs", "commit": "07e325b", "at": "2026-09-12T10:00:00.000Z" }
+      }
+    ],
+    "invalid": [
+      { "why": "a rule carries its why", "instance": { "version": "1.0", "entryPointId": "e", "status": "draft", "stamp": { "sourceHash": "h", "rulesHash": { "unknown": true, "reason": "pre-M-WHY stamp" }, "snapshotPresent": false }, "rules": [ { "id": "r", "text": "t", "why": "", "nodes": ["a.py:module/f.fn"], "source": "human" } ], "staling": [ { "on": "step-changed", "action": "stale", "reaffirm": "human" } ], "provenance": { "kind": "derived", "by": "s", "commit": "c", "at": "2026-09-12T10:00:00.000Z" } } },
+      { "why": "a rule cites the nodes it governs", "instance": { "version": "1.0", "entryPointId": "e", "status": "draft", "stamp": { "sourceHash": "h", "rulesHash": "h2", "snapshotPresent": false }, "rules": [ { "id": "r", "text": "t", "why": "w", "nodes": [], "source": "human" } ], "staling": [ { "on": "step-changed", "action": "stale", "reaffirm": "human" } ], "provenance": { "kind": "derived", "by": "s", "commit": "c", "at": "2026-09-12T10:00:00.000Z" } } },
+      { "why": "status is draft or ratified; a third state is not fail-safe", "instance": { "version": "1.0", "entryPointId": "e", "status": "approved", "stamp": { "sourceHash": "h", "rulesHash": "h2", "snapshotPresent": false }, "rules": [], "staling": [ { "on": "step-changed", "action": "stale", "reaffirm": "human" } ], "provenance": { "kind": "derived", "by": "s", "commit": "c", "at": "2026-09-12T10:00:00.000Z" } } },
+      { "why": "staling can only stale; there is no auto-ratify", "instance": { "version": "1.0", "entryPointId": "e", "status": "draft", "stamp": { "sourceHash": "h", "rulesHash": "h2", "snapshotPresent": false }, "rules": [], "staling": [ { "on": "step-changed", "action": "ratify", "reaffirm": "human" } ], "provenance": { "kind": "derived", "by": "s", "commit": "c", "at": "2026-09-12T10:00:00.000Z" } } }
+    ]
+  }
+}

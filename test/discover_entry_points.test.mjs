@@ -243,3 +243,40 @@ test("factory handlers are dedup'd: create_app itself is not a route; no double-
   const ids = routes.map((r) => `${r.file}:${r.irNodeId}`);
   assert.equal(new Set(ids).size, ids.length, "route entries must be unique per function");
 });
+
+test("nested-call __main__ idioms are entries: sys.exit(main(...)) form", () => {
+  // 2026-08-30 (case-1 sensorhub finding): the canonical CLI tail puts
+  // the real entry call one level down as an M-NEST nested call node —
+  // the old direct-child rule silently dropped the entry point.
+  const src = [
+    "import sys",
+    "",
+    "def main(argv):",
+    '    """Run the tool."""',
+    "    return 0",
+    "",
+    'if __name__ == "__main__":',
+    "    sys.exit(main(sys.argv))",
+    "",
+  ].join("\n");
+  const tmpPy = join(ROOT, "test", ".tmp_nested_main.py");
+  writeFileSync(tmpPy, src);
+  try {
+    const parsed = spawnSync("python3", [join(ROOT, "scripts", "parse_cst.py"), tmpPy], {
+      env: { ...process.env, PYTHONPATH: PYDEPS }, encoding: "utf-8", cwd: ROOT,
+    });
+    assert.equal(parsed.status, 0, parsed.stderr);
+    const ir = JSON.parse(parsed.stdout);
+    const r = spawnSync("python3", [DISCOVER], {
+      env: { ...process.env, PYTHONPATH: PYDEPS }, encoding: "utf-8", cwd: ROOT,
+      input: JSON.stringify({ files: { "tool.py": ir } }),
+    });
+    assert.equal(r.status, 0, r.stderr);
+    const entries = JSON.parse(r.stdout).entryPoints;
+    assert.equal(entries.length, 1, JSON.stringify(entries));
+    assert.equal(entries[0].kind, "cli");
+    assert.equal(entries[0].irNodeId, "module/main.fn");
+  } finally {
+    unlinkSync(tmpPy);
+  }
+});

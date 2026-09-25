@@ -80,7 +80,12 @@ KNOWN_BUILTINS = frozenset({
     "ZeroDivisionError", "OSError", "IOError",
 })
 DYNAMIC_BUILTINS = frozenset({"getattr", "setattr", "hasattr", "delattr"})
-LOOP_TYPES = frozenset({"for_loop", "while_loop"})
+# M-COMP — a comprehension belongs here for the same reason a for_loop
+# does: every element of it runs, so a call in one MAY have run in a prior
+# iteration even when it sits textually after the stop node. Leaving it out
+# would under-approximate the top-frame bound, and this floor's rule is that
+# it over-refuses rather than under-refuses.
+LOOP_TYPES = frozenset({"for_loop", "while_loop", "comprehension"})
 
 
 # ── helpers (DUPLICATED from extract_thread.py) ───────────────────────────
@@ -147,6 +152,93 @@ def enclosing_module_function(ir: dict, node_id: str) -> Optional[str]:
             return parent["id"]
         cur = parent
     return None
+
+
+def import_time_files(project_ir: Dict[str, dict], seed_file: str) -> List[str]:
+    """Every project file whose TOP LEVEL executes when `seed_file` runs.
+
+    run_to_node.py executes the analyzed module with `runpy.run_path`, so the
+    seed file's module level runs — and Python executes a module's top level
+    on first import, so every project module it imports (transitively) runs
+    too. Resolved exactly, not guessed: each IR carries `modulePath`, and an
+    import node carries `module` / `names`, so the two sides join.
+
+    A third-party import resolves to nothing here and is skipped: its side
+    effects are not ours to scan and never were.
+    """
+    by_module: Dict[str, str] = {}
+    for path, ir in project_ir.items():
+        mp = ir.get("modulePath")
+        if isinstance(mp, str) and mp:
+            by_module[mp] = path
+    out: List[str] = []
+    queue: List[str] = [seed_file]
+    seen: Set[str] = set()
+    while queue:
+        f = queue.pop(0)
+        if f in seen:
+            continue
+        seen.add(f)
+        ir = project_ir.get(f)
+        if ir is None:
+            continue
+        out.append(f)
+        for n in ir.get("nodes", []):
+            if n.get("type") not in ("import", "import_from"):
+                continue
+            mod = n.get("module") if isinstance(n.get("module"), str) else None
+            specs: List[str] = [mod] if mod else []
+            for nm in (n.get("names") or []):
+                if not isinstance(nm, str):
+                    continue
+                # `import a.b` names the module; `from a import b` needs both
+                # halves joined, because `b` may itself be a module.
+                specs.append(nm)
+                if mod:
+                    specs.append(f"{mod}.{nm}")
+            for spec in specs:
+                tgt = by_module.get(spec)
+                if tgt and tgt not in seen:
+                    queue.append(tgt)
+    return out
+
+
+def import_time_offenses(project_ir: Dict[str, dict], seed_file: str) -> List[dict]:
+    """Effects that run at IMPORT time — before the entry function is called.
+
+    THE HOLE THIS CLOSES (measured 2026-09-10, both ways against this very
+    script): `Scan.visit` walks `descendants(ir, fn_id)` — the entry
+    function's subtree. A module-level statement is not a descendant of any
+    function, so it was never scanned:
+
+        DB = sqlite3.connect("prod.db")   # module level  -> pure=True
+
+    and run_to_node.py then executed it via runpy. No exotic syntax needed;
+    that is simply how a project holds a connection or a client.
+
+    "Import time" is anything NOT inside a function — module level AND class
+    bodies, both of which Python executes on import. `enclosing_module_function`
+    returning None is exactly that predicate.
+    """
+    offs: List[dict] = []
+    for f in import_time_files(project_ir, seed_file):
+        ir = project_ir.get(f) or {}
+        for n in sorted(ir.get("nodes", []), key=lambda m: m.get("id", "")):
+            ek = n.get("effectKind")
+            if not ek:
+                continue
+            if enclosing_module_function(ir, n["id"]) is not None:
+                continue  # inside a function: runs when called, not on import
+            offs.append({
+                "kind": "effect",
+                "target": n.get("callTarget") or n.get("funcName") or n["id"],
+                "effectKind": ek,
+                "file": f,
+                "line": n.get("line", 0),
+                "reason": f"side effect ({ek}) at IMPORT time in {f}:{n.get('line', 0)}"
+                          " — module level runs before the entry function does",
+            })
+    return offs
 
 
 def loop_ancestor_ids(ir: dict, node_id: str) -> Set[str]:
@@ -426,6 +518,9 @@ def main() -> None:
 
     if args.list_effects:
         scan = Scan(project_ir, emit_resolution=False, stop_on_offense=False)
+        # Import-time effects FIRST: they run before the entry function does,
+        # and consent has to cover everything the run performs.
+        scan.offenses.extend(import_time_offenses(project_ir, seed_file))
         scan.visit(seed_file, seed_id, stop_id, stop_line)
         # Canonical order so the consent token over this set is stable
         # regardless of walk order (server HMACs the serialized list).
@@ -440,7 +535,10 @@ def main() -> None:
         return
 
     scan = Scan(project_ir, args.emit_resolution)
-    offense = scan.visit(seed_file, seed_id, stop_id, stop_line)
+    # The gate short-circuits on the FIRST offense, and an import-time effect
+    # is the first thing that happens — so it is checked first.
+    import_time = import_time_offenses(project_ir, seed_file)
+    offense = import_time[0] if import_time else scan.visit(seed_file, seed_id, stop_id, stop_line)
     out = {
         "pure": offense is None,
         "reason": "confidently pure path" if offense is None else offense["reason"],

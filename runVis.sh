@@ -4,8 +4,10 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 if [ -z "$1" ]; then
-  echo "Usage: ./runVis.sh <path-to-python-file>      Single file"
-  echo "       ./runVis.sh <path-to-directory>        Project (all .py files)"
+  echo "Usage: ./runVis.sh <path-to-directory>        A project: Python, TypeScript, bash, C++ and Rust files"
+  echo "       ./runVis.sh <path-to-file>             One file"
+  echo ""
+  echo "Then open http://localhost:4200 (PORT=... to change it). Guide: docs/guide/VISUALISATION.md"
   echo ""
   echo "Examples:"
   echo "  ./runVis.sh test/fixtures/sample_advanced.py"

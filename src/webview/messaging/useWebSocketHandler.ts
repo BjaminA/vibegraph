@@ -12,6 +12,14 @@ import type { Thread } from "../threads";
 import type { ReadmeStatus } from "../ReadmeBadge";
 import type { ThreadSkillRecord, ArtifactRecordWire } from "../types";
 import { buildLayout, buildProjectLayout, astEdgesToFlow, applyFilters } from "../layout";
+import { dismissBootScreen } from "../boot";
+
+/** The server's choice of first view (VG_START_VIEW, a meta tag in the page
+ *  shell): "architecture" (default) or "index". */
+function startView(): "architecture" | "index" {
+  const v = document.querySelector('meta[name="vg-start-view"]')?.getAttribute("content");
+  return v === "index" ? "index" : "architecture";
+}
 
 // All the state App.tsx exposes to the message handler. Refs are mutable
 // (the handler updates astNodesRef.current etc. directly), setters trigger
@@ -77,6 +85,25 @@ export interface WebSocketHandlerActions {
   setBuildPlan: React.Dispatch<React.SetStateAction<BuildPlan | null>>;
   setPendingBuildPlan: React.Dispatch<React.SetStateAction<BuildPlan | null>>;
   setBuildRunState: React.Dispatch<React.SetStateAction<BuildRunState>>;
+  // M-AGENT2 — the Agent Manager run (envelope sibling). Optional so
+  // non-board consumers of the handler need no change.
+  setWorkRun?: React.Dispatch<React.SetStateAction<import("../../shared/protocol").WorkRun | null>>;
+  // M-CONTRACT.3 — stated constraints (envelope sibling). Optional, same rule.
+  setConstraints?: React.Dispatch<React.SetStateAction<import("../../shared/protocol").ConstraintRecord[]>>;
+  // M-STACK.1 — the stack facts ride the envelope; absent → no index.
+  setStack?: React.Dispatch<React.SetStateAction<import("../../shared/protocol").StackIndexRecord | null>>;
+  // M-XLANG.1 - the crossings ride the envelope the same way (absent = none).
+  setCrossings?: React.Dispatch<React.SetStateAction<import("../../shared/protocol").CrossingIndexRecord | null>>;
+  // M-ARCH.2 - the derived architecture model rides the envelope (absent = none).
+  setArchitecture?: React.Dispatch<React.SetStateAction<import("../../shared/protocol").ArchModelRecord | null>>;
+  /** M-ARCH.4 — the propose / ratify / reject round trip's state. */
+  setArchPropose?: React.Dispatch<React.SetStateAction<{ busy: boolean; error: string | null; working?: "propose" | "revise" | null }>>;
+  setObservations?: React.Dispatch<React.SetStateAction<import("../../shared/protocol").ObservationStoreRecord | null>>;
+  // M-PROVIDER — the server's tier settings (source of truth) and endpoint probe results. Optional, same rule.
+  setModelTiers?: React.Dispatch<React.SetStateAction<import("../../shared/model_tiers").TierSettings>>;
+  setEndpointProbe?: (probe: import("../ModelTiersPanel").EndpointProbeResult) => void;
+  // M-SKILLS.2 — the server's generic-skill enable file + catalogue (source of truth). Optional, same rule.
+  setSkillsState?: (state: import("../../shared/generic_skills_wire").SkillsConfigPayload) => void;
   // M26.4 — count of derived refreshes in flight (refreshDerived and the
   // watcher's full pass can overlap, so this is a counter, not a flag).
   // TopToolbar pulses while > 0.
@@ -112,12 +139,31 @@ export function useWebSocketHandler(actions: WebSocketHandlerActions, deps: WebS
     setEntryPoints, setProjectThreads, setSystem, setSystemPlan,
     setPendingSystemPlan, setProjectMode, setPendingChangeset,
     setBuildPlan, setPendingBuildPlan, setBuildRunState, setRefreshesInFlight,
-    setReadmeStatus, setThreadSkills, setArtifacts, setViewMode,
+    setReadmeStatus, setThreadSkills, setArtifacts, setViewMode, setWorkRun, setConstraints, setStack, setCrossings, setArchitecture, setArchPropose,
+    setObservations,
+    setModelTiers, setEndpointProbe, setSkillsState,
   } = actions;
   const { zoomLevel, activeFilePath, hiddenNodeIds, nodeFilters } = deps;
 
   useEffect(() => {
     const handler = (msg: any) => {
+      // The boot screen (server-painted, src/shared/boot_markup.ts) stays up
+      // until the first parse result — or an error, which must be readable.
+      if (msg.type === "ast-update" || msg.type === "project-update" || msg.type === "error") dismissBootScreen();
+      if (msg.type === "model-tiers") {
+        // M-PROVIDER — the server owns the settings; the panel renders them.
+        setModelTiers?.(msg.payload);
+        return;
+      }
+      if (msg.type === "model-endpoint-probe") {
+        setEndpointProbe?.(msg.payload);
+        return;
+      }
+      if (msg.type === "skills-config") {
+        // M-SKILLS.2 — the server owns the enable file; the panel renders it.
+        setSkillsState?.(msg.payload);
+        return;
+      }
       if (msg.type === "ast-update") {
         const payload: AstPayload = msg.payload;
         astNodesRef.current = payload.nodes;
@@ -145,6 +191,15 @@ export function useWebSocketHandler(actions: WebSocketHandlerActions, deps: WebS
         // PLAN-v7 Stage 5 — the roadmap rides the same way; every status
         // transition rebroadcasts, so this IS the live run progress.
         setBuildPlan(msg.payload.buildPlan ?? null);
+        // M-AGENT2 — the Agent Manager run rides the same way.
+        setWorkRun?.(msg.payload.workRun ?? null);
+        // M-CONTRACT.3 — stated constraints ride the same way (absent → none).
+        setConstraints?.(msg.payload.constraints ?? []);
+        // M-STACK.1 — the stack facts ride the same way (absent → no index).
+        setStack?.(msg.payload.stack ?? null);
+        setCrossings?.(msg.payload.crossings ?? null);
+        setArchitecture?.(msg.payload.architecture ?? null);
+        setObservations?.(msg.payload.observations ?? null);
         // M26.2 — re-resolve the selection against the fresh envelope.
         // Structural ids are file-scoped, so look in the active file
         // first; without one, rebind only on a project-unique hit (the
@@ -184,7 +239,20 @@ export function useWebSocketHandler(actions: WebSocketHandlerActions, deps: WebS
           // re-parse or plan ratification. Only the initial "diagram"
           // state (pre-first-load) defaults to index; a deliberate view
           // choice survives envelope refreshes.
-          if ((msg.payload.entryPoints ?? []).length > 0) {
+          //
+          // 2026-09-24 — the first view is the ARCHITECTURE OVERVIEW (the
+          // System view's map, Overview lens) whenever the project has a
+          // derived architecture: the whole system first, threads on demand.
+          // The server's VG_START_VIEW=index restores the launchpad (the e2e
+          // suites pin it; see playwright.config.ts).
+          const archFirst = startView() === "architecture" && (msg.payload.architecture?.nodes?.length ?? 0) > 0;
+          if (archFirst) {
+            try {
+              localStorage.setItem("vg-system-mode", "map");
+              localStorage.setItem("vg-arch-lens", "overview");
+            } catch { /* the map still opens; only the remembered mode is lost */ }
+            setViewMode((v) => (v === "diagram" ? "system" : v));
+          } else if ((msg.payload.entryPoints ?? []).length > 0) {
             setViewMode((v) => (v === "diagram" ? "index" : v));
           } else {
             setZoomLevel("project");
@@ -222,6 +290,11 @@ export function useWebSocketHandler(actions: WebSocketHandlerActions, deps: WebS
           setPendingProposal(null);
           setComposeError(msg.payload.error ?? "Nothing to propose");
         }
+      } else if (msg.type === "arch-proposal") {
+        // M-ARCH.4 — the model itself arrives on the next project-update
+        // (the envelope carries stated + proposed groups); this only ends
+        // the in-flight state and surfaces a failure verbatim.
+        setArchPropose?.({ busy: false, working: null, error: msg.payload.ok ? null : (msg.payload.error ?? "the proposal failed") });
       } else if (msg.type === "system-proposal") {
         // PLAN-v7 Stage 3 — boundary-validated architecture proposal. Held
         // as a SIBLING overlay (pendingSystemPlan); never merged into the

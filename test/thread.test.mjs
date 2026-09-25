@@ -133,10 +133,17 @@ test("aero_demo thread carries every ambiguity marker the renderer draws", () =>
 test("§A: a repeated terminal de-collapses to one node per call site", () => {
   const thread = runExtractor(AERO_IR, SEED_FILE, SEED_ID);
   const gets = thread.nodes.filter((n) => n.label === "conditions.get");
-  assert.equal(gets.length, 2, "conditions.get is called at 2 sites → 2 distinct terminals");
-  // Additive id scheme: first occurrence bare, repeat suffixed.
+  // THREE sites, not two, since M-SWEEP W1 (2026-09-10). processing.py calls
+  // conditions.get on lines 19, 23 and 24 — line 19 sits inside a DICT
+  // LITERAL, an expression position the parser did not walk, so a third of
+  // this function's dynamic dispatches was invisible. The rule under test
+  // (a repeated call SITE is a distinct ordered event, never collapsed) is
+  // unchanged; two was an inventory of what happened to be visible.
+  assert.equal(gets.length, 3, "conditions.get is called at 3 sites → 3 distinct terminals");
+  // Additive id scheme: first occurrence bare, repeats suffixed.
   const ids = gets.map((n) => n.id).sort();
-  assert.deepStrictEqual(ids, ["dynamic:conditions.get", "dynamic:conditions.get@1"]);
+  assert.deepStrictEqual(ids,
+    ["dynamic:conditions.get", "dynamic:conditions.get@1", "dynamic:conditions.get@2"]);
   // Each terminal is navigable — a real, distinct call-site irNodeId (no None).
   for (const n of gets) {
     assert.ok(n.irNodeId && n.irNodeId.startsWith("module/"), `terminal ${n.id} must carry a real call-site irNodeId`);
@@ -381,10 +388,15 @@ test("M24: if forks — predecessor → both arms, nested elif composes via the 
   // Exactly these three forks — no phantom arms.
   assert.equal(forks.length, 3, `expected 3 fork edges, got ${forks.length}`);
 
-  // The try→finally join inside insert (reached via cmd_create) also
-  // surfaces in this thread.
+  // The try→finally joins inside BOTH db functions this thread reaches.
+  //
+  // `db:query` joined the list at M-SWEEP W1 (2026-09-10): cmd_list opens
+  // with `for u in list_users():`, and a call written as a `for` ITERABLE
+  // emitted no node before the sweep — so the CLI's read path never reached
+  // the database at all, while its write path (cmd_create → insert) did.
   const flows = thread.edges.filter((e) => e.kind === "flow");
   assert.deepStrictEqual(flows.map((e) => [e.from, e.to, e.label]), [
+    ["db:query.fn/try@0", "db:query.fn/finally@0", "always"],
     ["db:insert.fn/try@0", "db:insert.fn/finally@0", "always"],
   ]);
 });

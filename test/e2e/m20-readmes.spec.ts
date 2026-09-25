@@ -1,6 +1,36 @@
 /**
  * M20.2 — dynamic-README badge states + refresh affordance (PLAN-v5 §2).
  *
+ * PARKED 2026-09-11 — THE SUBJECT OF THIS SPEC IS UNMOUNTED.
+ *
+ * `0ae39ca` ("retire the per-thread README chip", 2026-08-04) removed the
+ * badge these three tests drive. Its reasoning, in its own words: "THE
+ * THREAD README WAS THE SKILL, BADLY... the skill does it strictly better
+ * — shape-gated sections, citations checked against real IR nodes, human
+ * ratification, staleness with a snapshot diff, and — the deciding
+ * difference — it actually REACHES an agent through remit routing. The
+ * README reached nothing." That commit updated thread-chrome-overlap for
+ * the shorter strip and missed this file, so it has been red ever since,
+ * pointing at an element that does not exist.
+ *
+ * Parked rather than deleted, per the rule the M10 -> M25 chat revival
+ * earned: a feature taken out of the UI keeps its code, so bringing it
+ * back is a remount and not a rewrite. Everything behind these tests is
+ * still live — readme_store, the generation path, every scope, and the
+ * MCP resources external consumers read.
+ *
+ * NOTHING IS UNCOVERED BY THIS PARK. The state machine these three tests
+ * assert through a browser is pinned directly in test/readme_store.test.mjs
+ * ("hash match -> fresh, mismatch -> stale" and "absent README is a
+ * well-formed not-generated result"), which cannot rot when a chip moves.
+ * What replaced the chip has its own e2e: the thread skill badge
+ * (test:e2e-skill, test:e2e-skill-stale) and the project-scope README
+ * panel (test:e2e-vibereadme).
+ *
+ * Left inside test:e2e-system deliberately: a spec that prints as SKIPPED
+ * with its reason is visible parking. Deleting the line from the script
+ * would only hide it. To revive, remount the badge and drop the skip below.
+ *
  * Deterministic: the badge state machine (none / fresh / stale) is driven
  * by the on-disk store + the server's current-IR hash, so we seed READMEs
  * to disk and assert the rendered state — no LLM in the loop. The actual
@@ -42,6 +72,10 @@ async function openThread(page, entryPointId: string) {
 }
 
 test.describe("M20.2 — README badge", () => {
+  // PARKED — see the header. The badge was unmounted by 0ae39ca; the state
+  // machine it rendered is pinned in test/readme_store.test.mjs instead.
+  test.skip(true, "PARKED: the per-thread README chip was retired in 0ae39ca; " +
+    "its state machine is covered by test:readme, its successor by test:e2e-skill");
   test.skip(!IS_SYSTEM, "Requires VG_FIXTURE=test/fixtures/system/system_demo");
 
   test.afterAll(() => {

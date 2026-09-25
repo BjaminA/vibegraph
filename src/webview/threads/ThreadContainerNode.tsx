@@ -24,7 +24,7 @@
 //   try / finally / while → --accent-thread (Family 1, control flow)
 //   except                → --accent-error  (only red — exception path)
 
-import React from "react";
+import React, { useRef } from "react";
 import { Handle, Position, useStore, type NodeProps } from "@xyflow/react";
 import type { ContainerKind } from "./types";
 import { tierForZoom, lodLabelFontSize } from "./lod";
@@ -43,7 +43,15 @@ export const TARGET_PORTS = 5;
 export interface ThreadContainerData {
   containerKind: ContainerKind;
   label: string;
+  /** other blocks around the very same cards, folded into this box */
+  alsoIn?: number;
   accentVar: string;
+  /** The container's own identity, so its CHIP can open the same tooltip
+   *  every other node opens. A `for`/`if`/`while`/`try` has source and
+   *  showed none: hovering one did nothing at all, in every language. */
+  nodeId?: string;
+  irNodeId?: string | null;
+  file?: string | null;
   // M24 — flow/fork edges terminate ON containers, so they carry the
   // same orientation-aware hidden handles as ThreadNode.
   orientation?: "vertical" | "horizontal";
@@ -78,7 +86,29 @@ const TINT = {
 export function ThreadContainerNode({ data }: NodeProps) {
   const d = data as unknown as ThreadContainerData;
   const accentVar = d.accentVar ?? "--accent-thread";
-  const chipText = formatChipLabel(d.label, d.containerKind);
+  const chipText = formatChipLabel(d.label, d.containerKind)
+    + (d.alsoIn ? ` · +${d.alsoIn} more block${d.alsoIn === 1 ? "" : "s"}` : "");
+  // The CHIP is the hover target, not the region: the region spans every
+  // child, so a tooltip bound to it would open whenever the cursor
+  // crossed a loop. A container with no IR identity (the synthetic
+  // `nest` container has none) stays inert rather than opening an empty
+  // tooltip.
+  const chipRef = useRef<HTMLDivElement>(null);
+  const chipHoverable = !!d.nodeId && !!d.irNodeId && !!d.file;
+  const emitChip = (type: "vg-thread-node-hover" | "vg-thread-node-leave" | "vg-thread-node-click") => {
+    const rect = chipRef.current?.getBoundingClientRect();
+    document.dispatchEvent(new CustomEvent(type, {
+      detail: {
+        nodeId: d.nodeId,
+        irNodeId: d.irNodeId,
+        file: d.file,
+        kind: "container",
+        label: d.label,
+        preview: null,
+        anchor: rect ? { left: rect.left, top: rect.top, width: rect.width, height: rect.height } : null,
+      },
+    }));
+  };
   const tint = d.containerKind === "if_else" ? TINT.if_else : TINT.default;
   // M-NA7 — semantic zoom: below the full tier the chip scales with
   // inverse zoom (like ThreadNode's LOD label) so control-flow regions
@@ -133,10 +163,16 @@ export function ThreadContainerNode({ data }: NodeProps) {
       />
       <div
         className="vg-thread-container-chip"
+        data-container-chip={d.containerKind}
+        onMouseEnter={chipHoverable ? () => emitChip("vg-thread-node-hover") : undefined}
+        onMouseLeave={chipHoverable ? () => emitChip("vg-thread-node-leave") : undefined}
+        onClick={chipHoverable ? (e) => { e.stopPropagation(); emitChip("vg-thread-node-click"); } : undefined}
+        ref={chipRef}
         style={{
           position: "absolute",
           top: -10,
           left: 12,
+          cursor: chipHoverable ? "pointer" : "default",
           padding: "2px 8px",
           background: `color-mix(in oklab, var(${accentVar}) ${tint.chipBg}%, var(--bg-canvas))`,
           border: `1px solid color-mix(in oklab, var(${accentVar}) ${tint.chipBorder}%, transparent)`,

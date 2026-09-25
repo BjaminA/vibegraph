@@ -2,7 +2,7 @@ import React from "react";
 import { ValueKindIcon } from "./icons";
 import { NodeActionStrip } from "./NodeActionStrip";
 import { NodeHandles } from "./NodeHandles";
-import { TextLine } from "../util/TextLine";
+import { TextLine, UNCLAMPED } from "../util/TextLine";
 
 interface Props {
   data: {
@@ -101,7 +101,7 @@ export function AssignmentNode({ data }: Props) {
         <TextLine
           text={text}
           maxChars={data.charBudget ?? 36}
-          clampLines={Math.max(3, text.split("\n").length)}
+          clampLines={UNCLAMPED}
           style={{
             // Kind-tinted but lifted hard toward --text-primary: the raw
             // stroke (grey for call/dict/set) was too dim to read as code.
@@ -150,7 +150,7 @@ function CompactRow({ data, theme }: {
       <TextLine
         text={text}
         maxChars={data.charBudget ?? 28}
-        clampLines={Math.max(3, text.split("\n").length)}
+        clampLines={UNCLAMPED}
         style={{
           color: `color-mix(in oklab, ${theme.stroke} 40%, var(--text-primary))`,
           fontSize: 11, fontFamily: "monospace",

@@ -244,6 +244,7 @@ export function ThreadNode({ id, data }: NodeProps) {
       data-route-method={d.routeMethod ?? ""}
       data-file-hue={d.fileHueIndex != null ? String(d.fileHueIndex) : undefined}
       data-file-depth={d.fileDepth != null ? String(d.fileDepth) : undefined}
+      data-dimmed={shape.dimmed ? "true" : undefined}
       className={[
         "vg-thread-node",
         `vg-thread-node-${d.kind}`,
@@ -260,7 +261,11 @@ export function ThreadNode({ id, data }: NodeProps) {
         fontFamily: "var(--font-mono)",
         fontSize: isSeed ? "var(--fsm-13)" : "var(--fsm-12)",
         color: "var(--text-primary)",
-        opacity: shape.dimmed ? 0.85 : 1,
+        // Opaque even when dimmed: at 0.85 the edge bundles behind a card
+        // showed through it (overlap audit). A dimmed card (an unresolved
+        // call — a resolution gap) is ghosted by colour instead.
+        opacity: 1,
+        filter: shape.dimmed ? "saturate(0.55) brightness(0.85)" : undefined,
         boxShadow: isSeed ? "var(--shadow-panel)" : "var(--shadow-control)",
         transition: `transform var(--motion-hover-dur) var(--motion-hover-ease)`,
         // M9.3 — feed the per-file hue into the ::before pseudo-element

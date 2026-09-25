@@ -1,6 +1,6 @@
 {
   "app.py": {
-    "version": "1.3",
+    "version": "1.5",
     "nodes": [
       {
         "id": "module/flask.import_from",
@@ -50,6 +50,20 @@
         ]
       },
       {
+        "id": "module/app_route.call",
+        "type": "call",
+        "parentId": null,
+        "line": 20,
+        "endLine": 20,
+        "col": 1,
+        "endCol": 20,
+        "funcName": "app.route",
+        "args": [
+          "\"/users\""
+        ],
+        "isEffect": false
+      },
+      {
         "id": "module/list_users_route.fn",
         "type": "function_def",
         "parentId": null,
@@ -64,7 +78,8 @@
           "app.route(\"/users\")"
         ],
         "isAsync": false,
-        "returns": null
+        "returns": null,
+        "decoratorLine": 20
       },
       {
         "id": "module/list_users_route.fn/users.assign",
@@ -91,6 +106,33 @@
         "callTarget": "jsonify"
       },
       {
+        "id": "module/list_users_route.fn/comp@0",
+        "type": "comprehension",
+        "parentId": "module/list_users_route.fn",
+        "line": 23,
+        "endLine": 23,
+        "col": 19,
+        "endCol": 84,
+        "compKind": "list",
+        "target": "u",
+        "iterName": "users"
+      },
+      {
+        "id": "module/app_route.call@1",
+        "type": "call",
+        "parentId": null,
+        "line": 26,
+        "endLine": 26,
+        "col": 1,
+        "endCol": 47,
+        "funcName": "app.route",
+        "args": [
+          "\"/users/<int:uid>\"",
+          "[\"GET\"]"
+        ],
+        "isEffect": false
+      },
+      {
         "id": "module/get_user_route.fn",
         "type": "function_def",
         "parentId": null,
@@ -107,7 +149,8 @@
           "app.route(\"/users/<int:uid>\", methods=[\"GET\"])"
         ],
         "isAsync": false,
-        "returns": null
+        "returns": null,
+        "decoratorLine": 26
       },
       {
         "id": "module/get_user_route.fn/user.assign",
@@ -149,6 +192,20 @@
         "nestExtracted": false
       },
       {
+        "id": "module/get_user_route.fn/if@0/jsonify.call",
+        "type": "call",
+        "parentId": "module/get_user_route.fn/if@0",
+        "line": 30,
+        "endLine": 30,
+        "col": 15,
+        "endCol": 46,
+        "funcName": "jsonify",
+        "args": [
+          "{\"error\": \"not found\"}"
+        ],
+        "isEffect": false
+      },
+      {
         "id": "module/get_user_route.fn/return@0",
         "type": "return_stmt",
         "parentId": "module/get_user_route.fn",
@@ -158,6 +215,20 @@
         "endCol": 77,
         "value": "jsonify({\"uid\": user.uid, \"name\": user.name, \"email\": user.email})",
         "callTarget": "jsonify"
+      },
+      {
+        "id": "module/app_post.call",
+        "type": "call",
+        "parentId": null,
+        "line": 34,
+        "endLine": 34,
+        "col": 1,
+        "endCol": 19,
+        "funcName": "app.post",
+        "args": [
+          "\"/users\""
+        ],
+        "isEffect": false
       },
       {
         "id": "module/create_user_route.fn",
@@ -174,7 +245,8 @@
           "app.post(\"/users\")"
         ],
         "isAsync": false,
-        "returns": null
+        "returns": null,
+        "decoratorLine": 34
       },
       {
         "id": "module/create_user_route.fn/body.assign",
@@ -217,9 +289,28 @@
         "value": "jsonify({\"uid\": user.uid}), 201",
         "nestsInnerCalls": true,
         "nestExtracted": false
+      },
+      {
+        "id": "module/create_user_route.fn/jsonify.call",
+        "type": "call",
+        "parentId": "module/create_user_route.fn",
+        "line": 38,
+        "endLine": 38,
+        "col": 11,
+        "endCol": 37,
+        "funcName": "jsonify",
+        "args": [
+          "{\"uid\": user.uid}"
+        ],
+        "isEffect": false
       }
     ],
     "edges": [
+      {
+        "source": "module/app_route.call",
+        "target": "module/app.assign",
+        "type": "reference"
+      },
       {
         "source": "module/list_users_route.fn",
         "target": "module/list_users_route.fn/users.assign",
@@ -229,6 +320,16 @@
         "source": "module/list_users_route.fn",
         "target": "module/list_users_route.fn/return@0",
         "type": "contains"
+      },
+      {
+        "source": "module/list_users_route.fn",
+        "target": "module/list_users_route.fn/comp@0",
+        "type": "contains"
+      },
+      {
+        "source": "module/app_route.call@1",
+        "target": "module/app.assign",
+        "type": "reference"
       },
       {
         "source": "module/get_user_route.fn",
@@ -246,9 +347,19 @@
         "type": "contains"
       },
       {
+        "source": "module/get_user_route.fn/if@0",
+        "target": "module/get_user_route.fn/if@0/jsonify.call",
+        "type": "contains"
+      },
+      {
         "source": "module/get_user_route.fn",
         "target": "module/get_user_route.fn/return@0",
         "type": "contains"
+      },
+      {
+        "source": "module/app_post.call",
+        "target": "module/app.assign",
+        "type": "reference"
       },
       {
         "source": "module/create_user_route.fn",
@@ -266,6 +377,18 @@
         "type": "contains"
       },
       {
+        "source": "module/create_user_route.fn",
+        "target": "module/create_user_route.fn/jsonify.call",
+        "type": "contains"
+      },
+      {
+        "source": "module/app_route.call",
+        "target": "module/app.assign",
+        "type": "reference",
+        "qualifiedTarget": "flask:Flask.route",
+        "viaLocal": "app"
+      },
+      {
         "source": "module/list_users_route.fn/users.assign",
         "target": "module/list_users.fn",
         "type": "reference",
@@ -273,11 +396,25 @@
         "qualifiedTarget": "models:list_users"
       },
       {
+        "source": "module/app_route.call@1",
+        "target": "module/app.assign",
+        "type": "reference",
+        "qualifiedTarget": "flask:Flask.route",
+        "viaLocal": "app"
+      },
+      {
         "source": "module/get_user_route.fn/user.assign",
         "target": "module/find_user.fn",
         "type": "reference",
         "targetFile": "models.py",
         "qualifiedTarget": "models:find_user"
+      },
+      {
+        "source": "module/app_post.call",
+        "target": "module/app.assign",
+        "type": "reference",
+        "qualifiedTarget": "flask:Flask.post",
+        "viaLocal": "app"
       },
       {
         "source": "module/create_user_route.fn/user.assign",
@@ -379,6 +516,18 @@
         "decorators": [],
         "isAsync": false,
         "returns": null
+      },
+      {
+        "id": "module/cmd_list.fn/list_users.call",
+        "type": "call",
+        "parentId": "module/cmd_list.fn",
+        "line": 15,
+        "endLine": 15,
+        "col": 13,
+        "endCol": 25,
+        "funcName": "list_users",
+        "args": [],
+        "isEffect": false
       },
       {
         "id": "module/cmd_list.fn/for@0",
@@ -666,6 +815,11 @@
     "edges": [
       {
         "source": "module/cmd_list.fn",
+        "target": "module/cmd_list.fn/list_users.call",
+        "type": "contains"
+      },
+      {
+        "source": "module/cmd_list.fn",
         "target": "module/cmd_list.fn/for@0",
         "type": "contains"
       },
@@ -758,6 +912,13 @@
         "source": "module/if@0/main.call",
         "target": "module/main.fn",
         "type": "reference"
+      },
+      {
+        "source": "module/cmd_list.fn/list_users.call",
+        "target": "module/list_users.fn",
+        "type": "reference",
+        "targetFile": "models.py",
+        "qualifiedTarget": "models:list_users"
       },
       {
         "source": "module/cmd_create.fn/user.assign",
@@ -1208,7 +1369,7 @@
     "modulePath": "db"
   },
   "models.py": {
-    "version": "1.3",
+    "version": "1.5",
     "nodes": [
       {
         "id": "module/dataclasses.import_from",
@@ -1250,7 +1411,8 @@
         "decorators": [
           "dataclass"
         ],
-        "docstring": null
+        "docstring": null,
+        "decoratorLine": 13
       },
       {
         "id": "module/User.class/uid.assign",
@@ -1409,9 +1571,35 @@
         "endLine": 30,
         "col": 4,
         "endCol": 64,
-        "value": "[User(uid=r[0], name=r[1], email=r[2]) for r in rows]",
-        "nestsInnerCalls": true,
-        "nestExtracted": false
+        "value": "[User(uid=r[0], name=r[1], email=r[2]) for r in rows]"
+      },
+      {
+        "id": "module/list_users.fn/comp@0",
+        "type": "comprehension",
+        "parentId": "module/list_users.fn",
+        "line": 30,
+        "endLine": 30,
+        "col": 11,
+        "endCol": 64,
+        "compKind": "list",
+        "target": "r",
+        "iterName": "rows"
+      },
+      {
+        "id": "module/list_users.fn/comp@0/User.call",
+        "type": "call",
+        "parentId": "module/list_users.fn/comp@0",
+        "line": 30,
+        "endLine": 30,
+        "col": 12,
+        "endCol": 49,
+        "funcName": "User",
+        "args": [
+          "r[0]",
+          "r[1]",
+          "r[2]"
+        ],
+        "isEffect": false
       },
       {
         "id": "module/create_user.fn",
@@ -1516,6 +1704,21 @@
         "source": "module/list_users.fn",
         "target": "module/list_users.fn/return@0",
         "type": "contains"
+      },
+      {
+        "source": "module/list_users.fn",
+        "target": "module/list_users.fn/comp@0",
+        "type": "contains"
+      },
+      {
+        "source": "module/list_users.fn/comp@0",
+        "target": "module/list_users.fn/comp@0/User.call",
+        "type": "contains"
+      },
+      {
+        "source": "module/list_users.fn/comp@0/User.call",
+        "target": "module/User.class",
+        "type": "reference"
       },
       {
         "source": "module/create_user.fn",
@@ -1713,6 +1916,21 @@
         "callTarget": "list_users"
       },
       {
+        "id": "module/test_list_returns_users.fn/isinstance.call",
+        "type": "call",
+        "parentId": "module/test_list_returns_users.fn",
+        "line": 19,
+        "endLine": 19,
+        "col": 11,
+        "endCol": 34,
+        "funcName": "isinstance",
+        "args": [
+          "users",
+          "list"
+        ],
+        "isEffect": false
+      },
+      {
         "id": "module/_helper_not_a_test.fn",
         "type": "function_def",
         "parentId": null,
@@ -1752,6 +1970,11 @@
       {
         "source": "module/test_list_returns_users.fn",
         "target": "module/test_list_returns_users.fn/users.assign",
+        "type": "contains"
+      },
+      {
+        "source": "module/test_list_returns_users.fn",
+        "target": "module/test_list_returns_users.fn/isinstance.call",
         "type": "contains"
       },
       {

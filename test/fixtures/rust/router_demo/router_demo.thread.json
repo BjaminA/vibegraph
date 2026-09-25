@@ -1,0 +1,549 @@
+{
+  "threads": [
+    {
+      "version": "1.0",
+      "seed": {
+        "file": "src/main.rs",
+        "irNodeId": "module/main.fn",
+        "qualifiedName": "src/main.rs:main"
+      },
+      "nodes": [
+        {
+          "id": "src/main.rs:main",
+          "kind": "seed",
+          "label": "main",
+          "file": "src/main.rs",
+          "irNodeId": "module/main.fn",
+          "preview": "Route every line of the table, then report what was routed."
+        },
+        {
+          "id": "external:eprintln!",
+          "kind": "external",
+          "label": "eprintln!",
+          "file": null,
+          "irNodeId": "module/main.fn/for@0/if@0/if@0/eprintln.call",
+          "preview": "eprintln!(\"dropped: {}\", reason)",
+          "effectKind": "log"
+        },
+        {
+          "id": "src/main.rs:main.fn/for@0/if@0/if@0#then",
+          "kind": "container",
+          "containerKind": "if_then",
+          "label": "if match router.route(&key, &value)",
+          "file": "src/main.rs",
+          "irNodeId": "module/main.fn/for@0/if@0/if@0",
+          "preview": null
+        },
+        {
+          "id": "src/main.rs:main.fn/for@0/if@0#then",
+          "kind": "container",
+          "containerKind": "if_then",
+          "label": "if let Some((key, value)) = parse_line(line)",
+          "file": "src/main.rs",
+          "irNodeId": "module/main.fn/for@0/if@0",
+          "preview": null
+        },
+        {
+          "id": "src/main.rs:main.fn/for@0",
+          "kind": "container",
+          "containerKind": "for",
+          "label": "for line in store.raw.lines()",
+          "file": "src/main.rs",
+          "irNodeId": "module/main.fn/for@0",
+          "preview": null
+        },
+        {
+          "id": "dynamic:router.route",
+          "kind": "dynamic",
+          "label": "router.route",
+          "file": null,
+          "irNodeId": "module/main.fn/for@0/if@0/router_route.call",
+          "preview": "router.route",
+          "receiverBoundKind": "local-call",
+          "receiverBoundFrom": "Router::new"
+        },
+        {
+          "id": "src/router.rs:parse_line",
+          "kind": "step",
+          "label": "parse_line",
+          "file": "src/router.rs",
+          "irNodeId": "module/parse_line.fn",
+          "preview": "Split one `key: value` line, or None when it is not one."
+        },
+        {
+          "id": "external:Some",
+          "kind": "external",
+          "label": "Some",
+          "file": null,
+          "irNodeId": "module/parse_line.fn/if@0/Some.call",
+          "preview": "Some",
+          "nestsInnerCalls": true,
+          "nestExtracted": false
+        },
+        {
+          "id": "src/router.rs:parse_line.fn/if@0#then",
+          "kind": "container",
+          "containerKind": "if_then",
+          "label": "if match key.trim()",
+          "file": "src/router.rs",
+          "irNodeId": "module/parse_line.fn/if@0",
+          "preview": null
+        },
+        {
+          "id": "dynamic:parts.next",
+          "kind": "dynamic",
+          "label": "parts.next",
+          "file": null,
+          "irNodeId": "module/parse_line.fn/key.assign",
+          "preview": "parts.next()?",
+          "receiverBoundKind": "local-call",
+          "receiverBoundFrom": "line.splitn"
+        },
+        {
+          "id": "dynamic:key.trim",
+          "kind": "dynamic",
+          "label": "key.trim",
+          "file": null,
+          "irNodeId": "module/parse_line.fn/key_trim.call",
+          "preview": "key.trim",
+          "receiverBoundKind": "local-call",
+          "receiverBoundFrom": "parts.next"
+        },
+        {
+          "id": "dynamic:line.splitn",
+          "kind": "dynamic",
+          "label": "line.splitn",
+          "file": null,
+          "irNodeId": "module/parse_line.fn/parts.assign",
+          "preview": "line.splitn(2, ':')"
+        },
+        {
+          "id": "dynamic:parts.next@1",
+          "kind": "dynamic",
+          "label": "parts.next",
+          "file": null,
+          "irNodeId": "module/parse_line.fn/value.assign",
+          "preview": "parts.next()?",
+          "receiverBoundKind": "local-call",
+          "receiverBoundFrom": "line.splitn"
+        },
+        {
+          "id": "external:println!",
+          "kind": "external",
+          "label": "println!",
+          "file": null,
+          "irNodeId": "module/main.fn/println.call",
+          "preview": "println!(\"routed {} of {}\", router.count, line_count(&store.raw))",
+          "nestsInnerCalls": true,
+          "nestExtracted": false,
+          "effectKind": "log"
+        },
+        {
+          "id": "external:println!@1",
+          "kind": "external",
+          "label": "println!",
+          "file": null,
+          "irNodeId": "module/main.fn/println.call@1",
+          "preview": "println!(\"done\")",
+          "effectKind": "log"
+        },
+        {
+          "id": "external:process::exit",
+          "kind": "external",
+          "label": "process::exit",
+          "file": null,
+          "irNodeId": "module/main.fn/return@0",
+          "preview": "process::exit(0)"
+        },
+        {
+          "id": "src/router.rs:Router.new",
+          "kind": "step",
+          "label": "new",
+          "file": "src/router.rs",
+          "irNodeId": "module/Router.class/new.fn",
+          "preview": "An empty router with no sinks registered."
+        },
+        {
+          "id": "dynamic:router.add",
+          "kind": "dynamic",
+          "label": "router.add",
+          "file": null,
+          "irNodeId": "module/main.fn/router_add.call",
+          "preview": "router.add",
+          "nestsInnerCalls": true,
+          "nestExtracted": true,
+          "receiverBoundKind": "local-call",
+          "receiverBoundFrom": "Router::new"
+        },
+        {
+          "id": "external:Box::new",
+          "kind": "external",
+          "label": "Box::new",
+          "file": null,
+          "irNodeId": "module/main.fn/router_add.call/Box_new.call",
+          "preview": "Box::new(LogSink { written: 0 })",
+          "nested": true
+        },
+        {
+          "id": "dynamic:router.add@1",
+          "kind": "dynamic",
+          "label": "router.add",
+          "file": null,
+          "irNodeId": "module/main.fn/router_add.call@1",
+          "preview": "router.add",
+          "nestsInnerCalls": true,
+          "nestExtracted": true,
+          "receiverBoundKind": "local-call",
+          "receiverBoundFrom": "Router::new"
+        },
+        {
+          "id": "external:Box::new@1",
+          "kind": "external",
+          "label": "Box::new",
+          "file": null,
+          "irNodeId": "module/main.fn/router_add.call@1/Box_new.call",
+          "preview": "Box::new(DropSink)",
+          "nested": true
+        },
+        {
+          "id": "src/store.rs:Store.open",
+          "kind": "step",
+          "label": "open",
+          "file": "src/store.rs",
+          "irNodeId": "module/Store.class/open.fn",
+          "preview": "Read the table at `path`.\n\nThe fs boundary this thread leaves through: `fs::read_to_string`\nis std, called by path, and the effect table stamps it."
+        },
+        {
+          "id": "external:fs::read_to_string(path).unwrap_or_default",
+          "kind": "external",
+          "label": "fs::read_to_string(path).unwrap_or_default",
+          "file": null,
+          "irNodeId": "module/Store.class/open.fn/raw.assign",
+          "preview": "fs::read_to_string(path).unwrap_or_default()",
+          "nestsInnerCalls": true,
+          "nestExtracted": true
+        },
+        {
+          "id": "external:fs::read_to_string",
+          "kind": "external",
+          "label": "fs::read_to_string",
+          "file": null,
+          "irNodeId": "module/Store.class/open.fn/raw.assign/fs_read_to_string.call",
+          "preview": "fs::read_to_string(path)",
+          "nested": true,
+          "effectKind": "fs"
+        },
+        {
+          "id": "dynamic:store.raw.lines",
+          "kind": "dynamic",
+          "label": "store.raw.lines",
+          "file": null,
+          "irNodeId": "module/main.fn/store_raw_lines.call",
+          "preview": "store.raw.lines",
+          "receiverBoundKind": "local-call",
+          "receiverBoundFrom": "Store::open"
+        },
+        {
+          "id": "src/main.rs:main:return@0",
+          "kind": "return",
+          "label": "return",
+          "file": "src/main.rs",
+          "irNodeId": "module/main.fn/return@0",
+          "preview": "process::exit(0)"
+        }
+      ],
+      "edges": [
+        {
+          "from": "src/main.rs:main",
+          "to": "external:eprintln!",
+          "kind": "direct",
+          "irSource": "module/main.fn/for@0/if@0/if@0/eprintln.call"
+        },
+        {
+          "from": "src/main.rs:main.fn/for@0/if@0/if@0#then",
+          "to": "external:eprintln!",
+          "kind": "contains",
+          "irSource": "module/main.fn/for@0/if@0/if@0"
+        },
+        {
+          "from": "src/main.rs:main.fn/for@0/if@0#then",
+          "to": "src/main.rs:main.fn/for@0/if@0/if@0#then",
+          "kind": "contains",
+          "irSource": "module/main.fn/for@0/if@0"
+        },
+        {
+          "from": "src/main.rs:main.fn/for@0",
+          "to": "src/main.rs:main.fn/for@0/if@0#then",
+          "kind": "contains",
+          "irSource": "module/main.fn/for@0"
+        },
+        {
+          "from": "src/main.rs:main",
+          "to": "dynamic:router.route",
+          "kind": "direct",
+          "irSource": "module/main.fn/for@0/if@0/router_route.call"
+        },
+        {
+          "from": "src/main.rs:main.fn/for@0/if@0#then",
+          "to": "dynamic:router.route",
+          "kind": "contains",
+          "irSource": "module/main.fn/for@0/if@0"
+        },
+        {
+          "from": "src/router.rs:parse_line",
+          "to": "external:Some",
+          "kind": "direct",
+          "irSource": "module/parse_line.fn/if@0/Some.call"
+        },
+        {
+          "from": "src/router.rs:parse_line.fn/if@0#then",
+          "to": "external:Some",
+          "kind": "contains",
+          "irSource": "module/parse_line.fn/if@0"
+        },
+        {
+          "from": "src/router.rs:parse_line",
+          "to": "dynamic:parts.next",
+          "kind": "direct",
+          "irSource": "module/parse_line.fn/key.assign"
+        },
+        {
+          "from": "src/router.rs:parse_line",
+          "to": "dynamic:key.trim",
+          "kind": "direct",
+          "irSource": "module/parse_line.fn/key_trim.call"
+        },
+        {
+          "from": "src/router.rs:parse_line",
+          "to": "dynamic:line.splitn",
+          "kind": "direct",
+          "irSource": "module/parse_line.fn/parts.assign"
+        },
+        {
+          "from": "src/router.rs:parse_line",
+          "to": "dynamic:parts.next@1",
+          "kind": "direct",
+          "irSource": "module/parse_line.fn/value.assign"
+        },
+        {
+          "from": "src/main.rs:main",
+          "to": "src/router.rs:parse_line",
+          "kind": "direct",
+          "irSource": "module/main.fn/for@0/parse_line.call"
+        },
+        {
+          "from": "src/main.rs:main.fn/for@0",
+          "to": "src/router.rs:parse_line",
+          "kind": "contains",
+          "irSource": "module/main.fn/for@0"
+        },
+        {
+          "from": "src/main.rs:main",
+          "to": "external:println!",
+          "kind": "direct",
+          "irSource": "module/main.fn/println.call"
+        },
+        {
+          "from": "src/main.rs:main",
+          "to": "external:println!@1",
+          "kind": "direct",
+          "irSource": "module/main.fn/println.call@1"
+        },
+        {
+          "from": "src/main.rs:main",
+          "to": "external:process::exit",
+          "kind": "direct",
+          "irSource": "module/main.fn/return@0"
+        },
+        {
+          "from": "src/main.rs:main",
+          "to": "src/router.rs:Router.new",
+          "kind": "direct",
+          "irSource": "module/main.fn/router.assign"
+        },
+        {
+          "from": "src/main.rs:main",
+          "to": "dynamic:router.add",
+          "kind": "direct",
+          "irSource": "module/main.fn/router_add.call"
+        },
+        {
+          "from": "src/main.rs:main",
+          "to": "external:Box::new",
+          "kind": "direct",
+          "irSource": "module/main.fn/router_add.call/Box_new.call"
+        },
+        {
+          "from": "src/main.rs:main",
+          "to": "dynamic:router.add@1",
+          "kind": "direct",
+          "irSource": "module/main.fn/router_add.call@1"
+        },
+        {
+          "from": "src/main.rs:main",
+          "to": "external:Box::new@1",
+          "kind": "direct",
+          "irSource": "module/main.fn/router_add.call@1/Box_new.call"
+        },
+        {
+          "from": "src/store.rs:Store.open",
+          "to": "external:fs::read_to_string(path).unwrap_or_default",
+          "kind": "direct",
+          "irSource": "module/Store.class/open.fn/raw.assign"
+        },
+        {
+          "from": "src/store.rs:Store.open",
+          "to": "external:fs::read_to_string",
+          "kind": "direct",
+          "irSource": "module/Store.class/open.fn/raw.assign/fs_read_to_string.call"
+        },
+        {
+          "from": "src/main.rs:main",
+          "to": "src/store.rs:Store.open",
+          "kind": "direct",
+          "irSource": "module/main.fn/store.assign"
+        },
+        {
+          "from": "src/main.rs:main",
+          "to": "dynamic:store.raw.lines",
+          "kind": "direct",
+          "irSource": "module/main.fn/store_raw_lines.call"
+        },
+        {
+          "from": "external:process::exit",
+          "to": "src/main.rs:main:return@0",
+          "kind": "direct",
+          "irSource": "module/main.fn/return@0"
+        },
+        {
+          "from": "dynamic:parts.next@1",
+          "to": "src/router.rs:parse_line.fn/if@0#then",
+          "kind": "conditional",
+          "irSource": "module/parse_line.fn/if@0"
+        },
+        {
+          "from": "src/main.rs:main.fn/for@0",
+          "to": "src/main.rs:main.fn/for@0/if@0#then",
+          "kind": "conditional",
+          "irSource": "module/main.fn/for@0/if@0"
+        },
+        {
+          "from": "src/main.rs:main.fn/for@0/if@0#then",
+          "to": "src/main.rs:main.fn/for@0/if@0/if@0#then",
+          "kind": "conditional",
+          "irSource": "module/main.fn/for@0/if@0/if@0"
+        }
+      ],
+      "entryPointId": "src/main.rs:main",
+      "filesReached": [
+        "src/main.rs",
+        "src/router.rs",
+        "src/store.rs"
+      ]
+    },
+    {
+      "version": "1.0",
+      "seed": {
+        "file": "tests/router_test.rs",
+        "irNodeId": "module/routes_to_named_sink.fn",
+        "qualifiedName": "tests/router_test.rs:routes_to_named_sink"
+      },
+      "nodes": [
+        {
+          "id": "tests/router_test.rs:routes_to_named_sink",
+          "kind": "seed",
+          "label": "routes_to_named_sink",
+          "file": "tests/router_test.rs",
+          "irNodeId": "module/routes_to_named_sink.fn",
+          "preview": "A registered sink receives the payload."
+        },
+        {
+          "id": "external:assert!",
+          "kind": "external",
+          "label": "assert!",
+          "file": null,
+          "irNodeId": "module/routes_to_named_sink.fn/assert.call",
+          "preview": "assert!(outcome.is_ok())",
+          "nestsInnerCalls": true,
+          "nestExtracted": false
+        },
+        {
+          "id": "dynamic:router.route",
+          "kind": "dynamic",
+          "label": "router.route",
+          "file": null,
+          "irNodeId": "module/routes_to_named_sink.fn/outcome.assign",
+          "preview": "router.route(\"log\", \"hello\")",
+          "receiverBoundKind": "local-call",
+          "receiverBoundFrom": "Router::new"
+        },
+        {
+          "id": "src/router.rs:Router.new",
+          "kind": "step",
+          "label": "new",
+          "file": "src/router.rs",
+          "irNodeId": "module/Router.class/new.fn",
+          "preview": "An empty router with no sinks registered."
+        },
+        {
+          "id": "dynamic:router.add",
+          "kind": "dynamic",
+          "label": "router.add",
+          "file": null,
+          "irNodeId": "module/routes_to_named_sink.fn/router_add.call",
+          "preview": "router.add",
+          "nestsInnerCalls": true,
+          "nestExtracted": true,
+          "receiverBoundKind": "local-call",
+          "receiverBoundFrom": "Router::new"
+        },
+        {
+          "id": "external:Box::new",
+          "kind": "external",
+          "label": "Box::new",
+          "file": null,
+          "irNodeId": "module/routes_to_named_sink.fn/router_add.call/Box_new.call",
+          "preview": "Box::new(LogSink { written: 0 })",
+          "nested": true
+        }
+      ],
+      "edges": [
+        {
+          "from": "tests/router_test.rs:routes_to_named_sink",
+          "to": "external:assert!",
+          "kind": "direct",
+          "irSource": "module/routes_to_named_sink.fn/assert.call"
+        },
+        {
+          "from": "tests/router_test.rs:routes_to_named_sink",
+          "to": "dynamic:router.route",
+          "kind": "direct",
+          "irSource": "module/routes_to_named_sink.fn/outcome.assign"
+        },
+        {
+          "from": "tests/router_test.rs:routes_to_named_sink",
+          "to": "src/router.rs:Router.new",
+          "kind": "direct",
+          "irSource": "module/routes_to_named_sink.fn/router.assign"
+        },
+        {
+          "from": "tests/router_test.rs:routes_to_named_sink",
+          "to": "dynamic:router.add",
+          "kind": "direct",
+          "irSource": "module/routes_to_named_sink.fn/router_add.call"
+        },
+        {
+          "from": "tests/router_test.rs:routes_to_named_sink",
+          "to": "external:Box::new",
+          "kind": "direct",
+          "irSource": "module/routes_to_named_sink.fn/router_add.call/Box_new.call"
+        }
+      ],
+      "entryPointId": "tests/router_test.rs:routes_to_named_sink",
+      "filesReached": [
+        "tests/router_test.rs",
+        "src/router.rs"
+      ]
+    }
+  ]
+}

@@ -24,6 +24,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import Editor, { type OnMount } from "@monaco-editor/react";
+import { monacoLanguageForPath } from "../../shared/languages";
 import { CODE_WRAP_OPTIONS } from "../monaco_options";
 import { ChevronsRight, ChevronsLeft, Inbox, FileCode2 } from "lucide-react";
 import type { Thread } from "./types";
@@ -74,12 +75,16 @@ export function ExternalEffectsPanel(props: ExternalEffectsPanelProps) {
         // toolbar's chips and pointer events go to them instead.
         top: "calc(var(--vg-toolbar-bottom, 43px) + 16px)",
         right: 0,
-        bottom: 0,
+        // Clear of the floating chat button (FloatingToggle: bottom 20, 40
+        // tall) — flush to the bottom it sat on the panel's last rows.
+        bottom: 72,
         width: open ? PANEL_W_EXPANDED : PANEL_W_COLLAPSED,
         background: "var(--bg-node)",
         borderLeft: "1px solid var(--border-edge)",
         borderTop: "1px solid var(--border-edge)",
         borderTopLeftRadius: 8,
+        borderBottomLeftRadius: 8,
+        borderBottom: "1px solid var(--border-edge)",
         display: "flex",
         flexDirection: "column",
         overflow: "hidden",
@@ -433,7 +438,7 @@ function EditContextBody(props: { editContext: EditContext }) {
         ) : (
           <Editor
             height="100%"
-            language="python"
+            language={monacoLanguageForPath(editContext.file)}
             value={source}
             beforeMount={defineVibegraphDark}
             theme={VIBEGRAPH_DARK}

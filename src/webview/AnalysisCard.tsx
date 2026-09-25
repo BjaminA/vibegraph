@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Search, X, AlertCircle } from "lucide-react";
 import { bridge, type ExtensionMessage } from "./types";
+import { belowToolbar } from "./TopToolbar";
 
 interface Props {
   activeFilePath: string | null;
@@ -49,7 +50,8 @@ export function AnalysisCard({ activeFilePath, onClose }: Props) {
     <div
       style={{
         position: "fixed",
-        top: 56,
+        // Was a hardcoded 56 — see belowToolbar: the band wraps.
+        top: belowToolbar(16),
         right: 18,
         width: 320,
         background: "var(--bg-node)",

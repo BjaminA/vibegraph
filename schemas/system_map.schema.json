@@ -1,0 +1,176 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibegraph.dev/schemas/system_map.schema.json",
+  "title": "VibeGraph system map",
+  "description": "architecture.vibegraph.json: the architecture model with every lens of the map as data, the hierarchy, the start-here story, the subsystem tier and the thread graph. Built by src/server/system_map.ts. Every node, edge and group carries its source: derived (read from the code), stated (a person decided it) or proposed (a model suggested it, unratified).",
+  "type": "object",
+  "required": ["format", "version", "title", "generator", "commit", "summary", "legend", "startHere", "hierarchy", "nodes", "edges", "groups", "views", "entryPoints", "subsystems", "threads", "unplaced", "notes", "proposal"],
+  "additionalProperties": false,
+  "$defs": {
+    "source": { "enum": ["derived", "stated", "proposed"] },
+    "ids": { "type": "array", "items": { "type": "string" } },
+    "ref": {
+      "type": "object",
+      "required": ["file"],
+      "properties": { "file": { "type": "string" }, "nodeId": { "type": "string" }, "text": { "type": "string" } }
+    },
+    "node": {
+      "type": "object",
+      "required": ["id", "kind", "label", "sublabel", "category", "source", "threads", "refs"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^(cluster|tool|tools|hub|actor):" },
+        "kind": { "enum": ["cluster", "tool", "hub", "actor"] },
+        "label": { "type": "string" },
+        "sublabel": { "type": "string" },
+        "category": { "type": "string" },
+        "source": { "$ref": "#/$defs/source" },
+        "group": { "type": "string" },
+        "parent": { "type": "string" },
+        "threads": { "$ref": "#/$defs/ids" },
+        "refs": { "type": "array", "items": { "$ref": "#/$defs/ref" } }
+      }
+    },
+    "edge": {
+      "type": "object",
+      "required": ["id", "from", "to", "kind", "protocol", "protocolBasis", "count", "threads", "confidence", "refs", "source"],
+      "properties": {
+        "id": { "type": "string" },
+        "from": { "type": "string" },
+        "to": { "type": "string" },
+        "kind": { "enum": ["http", "command", "tool", "uses"] },
+        "protocol": { "type": "string", "minLength": 1 },
+        "protocolBasis": { "type": "string", "minLength": 1 },
+        "count": { "type": "integer", "minimum": 0 },
+        "threads": { "$ref": "#/$defs/ids" },
+        "confidence": { "enum": ["path+method", "path", "ambiguous", "called"] },
+        "refs": { "type": "array", "items": { "$ref": "#/$defs/ref" } },
+        "source": { "$ref": "#/$defs/source" }
+      }
+    },
+    "group": {
+      "type": "object",
+      "required": ["id", "kind", "label", "wraps", "source"],
+      "properties": {
+        "id": { "type": "string" },
+        "kind": { "type": "string" },
+        "label": { "type": "string" },
+        "wraps": { "$ref": "#/$defs/ids" },
+        "parent": { "type": "string" },
+        "source": { "$ref": "#/$defs/source" },
+        "evidence": { "$ref": "#/$defs/ids" }
+      }
+    },
+    "groupTree": {
+      "type": "object",
+      "required": ["id", "label", "kind", "source", "members", "groups"],
+      "properties": {
+        "id": { "type": "string" },
+        "label": { "type": "string" },
+        "kind": { "type": "string" },
+        "source": { "$ref": "#/$defs/source" },
+        "evidence": { "$ref": "#/$defs/ids" },
+        "members": { "$ref": "#/$defs/ids" },
+        "groups": { "type": "array", "items": { "$ref": "#/$defs/groupTree" } }
+      }
+    },
+    "view": {
+      "type": "object",
+      "required": ["label", "purpose", "nodes", "edges", "reshaped", "hidden"],
+      "additionalProperties": false,
+      "properties": {
+        "label": { "type": "string" },
+        "purpose": { "type": "string", "minLength": 1 },
+        "nodes": { "$ref": "#/$defs/ids" },
+        "edges": { "$ref": "#/$defs/ids" },
+        "reshaped": {
+          "type": "object",
+          "required": ["nodes", "edges"],
+          "properties": {
+            "nodes": { "type": "array", "items": { "$ref": "#/$defs/node" } },
+            "edges": { "type": "array", "items": { "$ref": "#/$defs/edge" } }
+          }
+        },
+        "hidden": {
+          "type": "object",
+          "required": ["tools", "processes"],
+          "properties": { "tools": { "$ref": "#/$defs/ids" }, "processes": { "$ref": "#/$defs/ids" } }
+        }
+      }
+    }
+  },
+  "properties": {
+    "format": { "const": "vibegraph.system-map" },
+    "version": { "const": 1 },
+    "title": { "type": "string" },
+    "generator": { "type": "string" },
+    "commit": { "type": ["string", "null"] },
+    "summary": { "type": "object", "additionalProperties": { "type": "integer", "minimum": 0 } },
+    "legend": { "type": "object", "additionalProperties": { "type": "object", "additionalProperties": { "type": "string" } } },
+    "startHere": {
+      "type": "object",
+      "required": ["primaryPath", "story"],
+      "properties": {
+        "primaryPath": {
+          "oneOf": [
+            { "type": "null" },
+            { "type": "object", "required": ["entryPoints", "source"], "properties": { "entryPoints": { "$ref": "#/$defs/ids" }, "source": { "enum": ["stated", "proposed"] } } }
+          ]
+        },
+        "story": {
+          "type": "array",
+          "items": { "type": "object", "required": ["title", "caption", "nodes", "edges"], "properties": { "nodes": { "$ref": "#/$defs/ids" }, "edges": { "$ref": "#/$defs/ids" } } }
+        }
+      }
+    },
+    "hierarchy": {
+      "type": "object",
+      "required": ["groups", "ungrouped"],
+      "properties": { "groups": { "type": "array", "items": { "$ref": "#/$defs/groupTree" } }, "ungrouped": { "$ref": "#/$defs/ids" } }
+    },
+    "nodes": { "type": "array", "items": { "$ref": "#/$defs/node" } },
+    "edges": { "type": "array", "items": { "$ref": "#/$defs/edge" } },
+    "groups": { "type": "array", "items": { "$ref": "#/$defs/group" } },
+    "views": {
+      "type": "object",
+      "required": ["birdseye", "overview", "tools", "flows", "payloads", "trust"],
+      "additionalProperties": false,
+      "properties": {
+        "birdseye": { "$ref": "#/$defs/view" },
+        "overview": { "$ref": "#/$defs/view" },
+        "tools": { "$ref": "#/$defs/view" },
+        "flows": { "$ref": "#/$defs/view" },
+        "payloads": { "$ref": "#/$defs/view" },
+        "trust": { "$ref": "#/$defs/view" }
+      }
+    },
+    "entryPoints": {
+      "type": "array",
+      "items": { "type": "object", "required": ["id", "kind", "label", "file"], "properties": { "process": { "type": "string" } } }
+    },
+    "subsystems": {
+      "oneOf": [
+        { "type": "null" },
+        { "type": "object", "required": ["subsystems", "edges"], "properties": { "subsystems": { "type": "array" }, "edges": { "type": "array" } } }
+      ]
+    },
+    "threads": {
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "required": ["calls", "hops"],
+          "properties": {
+            "calls": { "type": "array", "items": { "type": "object", "required": ["from", "to", "count"] } },
+            "hops": { "type": "array", "items": { "type": "object", "required": ["from", "to", "path", "confidence"] } }
+          }
+        }
+      ]
+    },
+    "unplaced": {
+      "type": "object",
+      "required": ["tests", "unmatchedHops", "toolsPresentNotCalled", "unattributedBoundaries"]
+    },
+    "notes": { "type": "array", "items": { "type": "string" } },
+    "proposal": { "type": ["object", "null"] }
+  }
+}

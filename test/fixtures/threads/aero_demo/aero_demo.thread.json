@@ -31,12 +31,13 @@
       "preview": "Fill in missing condition fields. Branches on whether temperature\n    was supplied; both arms call other functions and return a full dict."
     },
     {
-      "id": "processing:density_from_temperature",
-      "kind": "step",
-      "label": "density_from_temperature",
-      "file": "processing.py",
-      "irNodeId": "module/density_from_temperature.fn",
-      "preview": "Ideal-gas-law density estimate at sea-level pressure."
+      "id": "dynamic:conditions.get",
+      "kind": "dynamic",
+      "label": "conditions.get",
+      "file": null,
+      "irNodeId": "module/normalize_conditions.fn/if@0/conditions_get.call",
+      "preview": "conditions.get",
+      "receiverBoundKind": "param"
     },
     {
       "id": "processing:normalize_conditions.fn/if@0#then",
@@ -48,7 +49,15 @@
       "preview": null
     },
     {
-      "id": "dynamic:conditions.get",
+      "id": "processing:density_from_temperature",
+      "kind": "step",
+      "label": "density_from_temperature",
+      "file": "processing.py",
+      "irNodeId": "module/density_from_temperature.fn",
+      "preview": "Ideal-gas-law density estimate at sea-level pressure."
+    },
+    {
+      "id": "dynamic:conditions.get@1",
       "kind": "dynamic",
       "label": "conditions.get",
       "file": null,
@@ -66,7 +75,7 @@
       "preview": null
     },
     {
-      "id": "dynamic:conditions.get@1",
+      "id": "dynamic:conditions.get@2",
       "kind": "dynamic",
       "label": "conditions.get",
       "file": null,
@@ -97,6 +106,14 @@
       "file": "processing.py",
       "irNodeId": "module/apply_correction_factor.fn",
       "preview": "Combine velocity and density into a corrected airspeed.\n    Calls math.sqrt \u2014 a library boundary the thread must mark as external."
+    },
+    {
+      "id": "external:math.sqrt",
+      "kind": "external",
+      "label": "math.sqrt",
+      "file": null,
+      "irNodeId": "module/apply_correction_factor.fn/math_sqrt.call",
+      "preview": "math.sqrt"
     },
     {
       "id": "dynamic:model",
@@ -148,6 +165,18 @@
     },
     {
       "from": "processing:normalize_conditions",
+      "to": "dynamic:conditions.get",
+      "kind": "conditional",
+      "irSource": "module/normalize_conditions.fn/if@0/conditions_get.call"
+    },
+    {
+      "from": "processing:normalize_conditions.fn/if@0#then",
+      "to": "dynamic:conditions.get",
+      "kind": "contains",
+      "irSource": "module/normalize_conditions.fn/if@0"
+    },
+    {
+      "from": "processing:normalize_conditions",
       "to": "processing:density_from_temperature",
       "kind": "conditional",
       "irSource": "module/normalize_conditions.fn/if@0/density.assign"
@@ -160,25 +189,25 @@
     },
     {
       "from": "processing:normalize_conditions",
-      "to": "dynamic:conditions.get",
+      "to": "dynamic:conditions.get@1",
       "kind": "conditional",
       "irSource": "module/normalize_conditions.fn/if@0/density.assign@1"
     },
     {
       "from": "processing:normalize_conditions.fn/if@0#else",
-      "to": "dynamic:conditions.get",
+      "to": "dynamic:conditions.get@1",
       "kind": "contains",
       "irSource": "module/normalize_conditions.fn/if@0"
     },
     {
       "from": "processing:normalize_conditions",
-      "to": "dynamic:conditions.get@1",
+      "to": "dynamic:conditions.get@2",
       "kind": "conditional",
       "irSource": "module/normalize_conditions.fn/if@0/velocity.assign"
     },
     {
       "from": "processing:normalize_conditions.fn/if@0#else",
-      "to": "dynamic:conditions.get@1",
+      "to": "dynamic:conditions.get@2",
       "kind": "contains",
       "irSource": "module/normalize_conditions.fn/if@0"
     },
@@ -199,6 +228,12 @@
       "to": "data:load_aircraft_config",
       "kind": "direct",
       "irSource": "module/compute_drag.fn/config.assign"
+    },
+    {
+      "from": "processing:apply_correction_factor",
+      "to": "external:math.sqrt",
+      "kind": "direct",
+      "irSource": "module/apply_correction_factor.fn/math_sqrt.call"
     },
     {
       "from": "main:compute_drag",

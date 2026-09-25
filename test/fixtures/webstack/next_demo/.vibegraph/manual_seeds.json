@@ -1,0 +1,7 @@
+{
+  "seeds": [
+    { "file": "bin/orders-cli", "irNodeId": "module/dispatch.fn" },
+    { "file": "scripts/ingest.mjs", "irNodeId": "module/ingest.fn" },
+    { "file": "lib/nope.ts", "irNodeId": "module/gone.fn" }
+  ]
+}

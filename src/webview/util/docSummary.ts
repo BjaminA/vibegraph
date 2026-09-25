@@ -21,6 +21,8 @@
 // title attribute) and in the editor. Cutting there is a legibility choice,
 // not silent truncation: it's marked by the clamp and reachable on hover.
 
+import { wrapCount } from "./wrapCount";
+
 /** Wrap width in characters. Also the cap on the docstring's contribution to
  *  card WIDTH (buildLayout.contentLen), which is what makes the line-count
  *  prediction safe: the card is sized at ~7px/char (a mono advance) while the
@@ -28,9 +30,15 @@
  *  always fits in at most the predicted number of lines — never more. */
 export const DOC_WRAP_CHARS = 72;
 
-/** Rendered line ceiling. The clamp enforces it, so header height stays
- *  bounded even if the prediction below is pessimistic. */
-export const DOC_MAX_LINES = 2;
+/** Rendered line ceiling. Unbounded since 2026-09-25 (Ben: cards fit all
+ *  their text, nothing clipped): docLineCount derives the height from the
+ *  card's real width, so the band is exactly as tall as the summary it
+ *  paints. The summary is still the first paragraph — detail stays on hover. */
+export const DOC_MAX_LINES = 1000;
+
+/** Average advance of 11px italic Inter, rounded UP so the prediction can
+ *  only over-reserve (a capital-heavy summary still fits). */
+export const DOC_CHAR_W = 6.2;
 
 /** Height reserved per rendered docstring line (11px × 1.25, rounded up). */
 export const DOC_LINE_H = 14;
@@ -42,9 +50,11 @@ export function docSummary(docstring: string | null | undefined): string {
   return firstPara.replace(/\s+/g, " ").trim();
 }
 
-/** Rendered lines the summary will occupy: 0, or 1..DOC_MAX_LINES. */
-export function docLineCount(docstring: string | null | undefined): number {
+/** Rendered lines the summary will occupy in a text column `textWidthPx`
+ *  wide (without one, at DOC_WRAP_CHARS per line); 0 when there is none. */
+export function docLineCount(docstring: string | null | undefined, textWidthPx?: number): number {
   const summary = docSummary(docstring);
   if (!summary) return 0;
-  return Math.min(DOC_MAX_LINES, Math.ceil(summary.length / DOC_WRAP_CHARS));
+  const cpl = textWidthPx ? Math.max(8, Math.floor(textWidthPx / DOC_CHAR_W)) : DOC_WRAP_CHARS;
+  return wrapCount(summary, cpl);
 }

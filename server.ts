@@ -1,3 +1,4 @@
+import { bootMarkup } from "./src/shared/boot_markup";
 import * as http from "http";
 import * as fs from "fs";
 import * as path from "path";
@@ -12,6 +13,35 @@ import { forwardChatEvent } from "./src/server/chat/forward";
 import { buildChatPrompt, buildStagePrompt, buildTurnPreamble, renderRoutedBlock, type ChatNodeContext, type ChatThreadContext, type ChatTurnContext } from "./src/server/chat/prompt";
 import { buildRemitIndex, matchQuestion, matchNode, mergeMatches, applyRoutingBudget, SKILL_INJECTION_BUDGET_CHARS, type ThreadRemit, type RoutedThreadContext, type RoutingCandidate } from "./src/server/thread_remit";
 import { planWork } from "./src/server/plan_work";
+// M-STACK (PLAN-M-STACK.md) — stack facts (pure, IR-derived) + the system
+// spec that renders them WITH the stated policies bound to each tool.
+import { buildStackIndex, contractStackForFile, stackForThread, stackCalledOnThread, toolsAddedByDelta, type StackIndex } from "./src/server/stack";
+import { buildCrossingIndex, type CrossingIndex } from "./src/server/crossings";
+import { archModelForEnvelope } from "./src/server/arch_envelope";
+import { applyArchStore, loadArchStore, saveArchStore, ratifyProposal, rejectProposal } from "./src/server/arch_store";
+import { buildProposePrompt, docExcerpts, parseProposal } from "./src/server/arch_propose";
+import { readInfraManifests } from "./src/server/infra_manifests";
+import { readManualSeeds } from "./src/server/manual_seeds";
+import type { ArchModelRecord } from "./src/shared/protocol";
+// M-STACK.3 — the SYSTEM SPEC: the one render of stack facts WITH the
+// policies stated about each tool. Every prompt that needs the stack
+// reads this, so they cannot drift into four different summaries.
+import { formatSystemSpec, stackSummaryLine, packetStackLine } from "./src/server/stack_spec";
+import {
+  checkConstraint, describeCheck, isConstraintCheck,
+  type CheckFacts, type ReferenceFact, type UnresolvedFact,
+} from "./src/server/constraint_grammar";
+// Quality layer (reviews/quality-layer/RUN3.md §9/§10) — the five Run 1
+// verbs in the live pre-checks, gated by their calibration standings; the
+// closing bar computed at the objective gate.
+import { buildQualityFacts } from "./src/server/quality/facts";
+import { run1Registry, isRun1Check, describeRun1Check } from "./src/server/quality/verbs/index";
+import { verbMayGate, calibratedVerbs } from "./src/server/quality/standings";
+import { deriveStackProfile } from "./src/server/quality/profile";
+import { deriveQualityModel } from "./src/server/quality/model";
+import { computeAcceptance } from "./src/server/quality/acceptance";
+import type { QualityFacts, RunDelta } from "./src/server/quality/check_registry";
+import { execFileSync } from "node:child_process";
 import { buildArtifactIndex, detectMissingArtifacts, missingArtifactFor, isArtifactPath, type ArtifactRecord } from "./src/server/artifact_index";
 import { planSweep, runSweep } from "./src/server/skill_sweep";
 import { parseReviseStageBlock, applyItemRevision } from "./src/server/build_plan_modify";
@@ -20,6 +50,8 @@ import { getReadme as readReadmeFromStore, writeReadme, sourceHashOf, PROJECT_RE
 import { VIBEREADME_REQUIRED_SECTIONS, validateVibeReadmeBody } from "./src/server/vibereadme_contract";
 import {
   getThreadSkill as readThreadSkillFromStore,
+  readStoredThreadSkill,
+  threadSkillKey,
   writeThreadSkill,
   ratifyThreadSkill,
   reaffirmThreadSkill,
@@ -30,8 +62,15 @@ import {
   isAuthoritative as threadSkillAuthoritative,
   type ThreadSkillResult,
 } from "./src/server/thread_skill_store";
+// M-CRYSTAL.2 — the stamp and its rules block are a pure module now, so the
+// export (no server) reads a stored skill through the SAME function.
+import { skillRulesBlock, threadSkillStamp as stampThreadSkill } from "./src/server/thread_skill_stamp";
 import { extractFunctionSource } from "./src/server/intent_extract";
-import { synthesizeArgs, resolveClaudeBin } from "./src/server/run/synth_args";
+import { synthesizeArgs, resolveClaudeBin, spawnEnv, setShimPath, getModelTiers, type SpawnTarget } from "./src/server/run/synth_args";
+// M-PROVIDER — model routes on disk + the local-endpoint probe; the local chat backend.
+import { loadModelRoutes, saveModelRoutes, probeOllamaEndpoint } from "./src/server/model_store";
+import { OllamaChatBackend } from "./src/server/chat/ollama_backend";
+import { LOCAL_CHAT_MODEL_ID } from "./src/shared/chat_models";
 import { arraylikeParams, arraylikeDeclineReason } from "./src/server/run/arg_shape";
 import { draftInsertion } from "./src/server/compose_draft";
 import { validateSystemPlan, loadSystemPlan, persistSystemPlan } from "./src/server/system_plan";
@@ -54,28 +93,96 @@ import type { Thread } from "./src/webview/threads/types";
 import { computeThreadBlindSpots, formatBlindSpotsBlock } from "./src/webview/threads/blindSpots";
 import { computeThreadAssertions } from "./src/webview/threads/threadAssertions";
 import { validateCitations as validateCitationsCore, isGroundedSkill } from "./src/server/citations";
-import { validateSkillBody, skillBodyOverBudget } from "./src/server/skill_contract";
+import { draftThreadSkill } from "./src/server/thread_skill_draft";
 import { computeBlastRadius, type BlastFile, type BlastThread } from "./src/server/blast_radius";
 import { diffIR, type IrDelta } from "./src/server/ir_delta";
+// M-LANG1 — the language-frontend registry (PLAN-M-LANG.md). File
+// discovery, watching, and parse spawns dispatch through it; python is
+// the only registered frontend until M-LANG2.
+import {
+  languageForPath, languageForFile, isSourceFile, shouldSkipDir,
+  parseCommand, batchParseCommand, moduleIdentity,
+  linkCommand, discoverCommand, discoverProjectCommand, rewriteCommand,
+  type LanguageInfo,
+} from "./src/server/languages";
+// The capability table itself lives in the SHARED registry (the webview
+// reads the same one), and the run gate has to be the same fact on both
+// sides or an affordance and its operation drift apart.
+import { capabilitiesForPath } from "./src/shared/languages";
+import { assessBashTrace, BASH_TRACE_LIMITS } from "./src/server/bash_floor";
+import { BASH_KEYWORDS, BASH_SHELL_BUILTINS } from "./src/shared/stack_taxonomy";
+// M-AGENT1 (PLAN-M-AGENT.md) — the Agent Manager spine (pure, tested).
+import {
+  draftWorkRun, loadWorkRun, persistWorkRun, WORK_RUN_FILE,
+  setRunStatus, setPacketStatus, packetTransitionError,
+  runOutcome, runSummary, MAX_PACKET_ATTEMPTS,
+  // M-ORCH.4 — lanes: the scheduler fills them with disjoint edit scopes.
+  editScopeOf, inFlightPackets, startablePackets, MAX_LANES,
+  warmSessionFor, clearWorkerSessions, MAX_SESSION_PACKETS,
+  type WorkRun, type RunPacket, type PacketEvidence,
+} from "./src/server/work_run";
+import { AUTONOMY_RULING, resolveEscalationAutonomously } from "./src/server/work_run";
+import { addSpend, costOf, emptySpend, type SpendKind } from "./src/server/spend";
+import { derivedGate } from "./src/server/quality/derived_gate";
+// M-AGENT3 — the worker-session contract (prompt, output block, diff).
+import { buildWorkerPrompt, buildSystemWorkerPrompt, parsePacketResult, lineDiff, WORKER_TURN_BUDGET } from "./src/server/work_worker";
+// M-CONTRACT (PLAN-M-CONTRACT.md) — the thread contract (IR fact) and the
+// stated-constraint store (provenance-labelled), both pure + tested.
+import { computeThreadContract, formatContractBlock, summarizeContract, type ThreadContract } from "./src/server/thread_contract";
+import {
+  loadConstraints, addConstraint, removeConstraint, routeConstraints, formatConstraintsBlock,
+  validateConstraintInput, findDuplicate, type Constraint, type ConstraintSource,
+} from "./src/server/constraint_store";
+// M-ORCH — the holistic orchestrator (brief + review), pure + tested.
+import {
+  buildBriefPrompt, parseBrief, unavailableBrief, packetTaskText, briefThreadSummaries,
+  preCheckReport, buildReviewPrompt, parseVerdict, noChangePackets, materializeSystemPackets, applyBriefOrdering,
+  stackPolicyInputs,
+} from "./src/server/orchestration";
+import type { PacketReview } from "./src/shared/protocol";
 import { explainPrompt, EXPLAIN_ATTRIBUTION, type NodeExplanation } from "./src/server/explain";
 import { OBSERVE_NOTE, type DynamicObservation } from "./src/server/observe";
+import {
+  clearTraceRun, hashSource, joinTraceToNodes, markStaleness, observationsForNode,
+  readObservations, writeTraceRun, type TraceRun, type TracedSite,
+} from "./src/server/observations";
 import { buildThreadAgentPrompt, isEscalation, renderAgentProjection, type ThreadAgentResult } from "./src/server/thread_agent";
-import { deriveThreadCalls } from "./src/webview/system/threadInteraction";
+import { deriveThreadCalls, threadAdjacency } from "./src/webview/system/threadInteraction";
+import { refreshExportedArchitecture } from "./src/server/arch_refresh";
 import { isKnownChatModel } from "./src/shared/chat_models";
-import { sanitiseTiers, type ModelTier } from "./src/shared/model_tiers";
+import { sanitiseTiers, resolveTierRoute, routeLabel, DEFAULT_LOCAL, type ModelTier } from "./src/shared/model_tiers";
 import { setModelTiers } from "./src/server/run/synth_args";
+// M-SKILLS.2 — generic direction skills: shipped with VibeGraph, enabled
+// per analysed project, selected by the stack profile, injected after the
+// thread skill under the same budget.
+import {
+  loadGenericSkills, readSkillsConfig, saveSkillsConfig, sanitiseSkillsConfig, selectGenericSkills,
+  renderGenericSkillsBlock, packetTaskFacts, catalogueOf, auditOf, describeAudit,
+  type GenericSkill, type SkillsConfig,
+} from "./src/server/generic_skills";
+import { mergeRelinked, ParseGenerations } from "./src/server/relink";
 
 // When bundled, __dirname = dist/, so go up one level for project root
 const PROJECT_ROOT = path.join(__dirname, "..");
-const SCRIPT_PATH = path.join(PROJECT_ROOT, "scripts", "parse_cst.py");
-const LINKER_SCRIPT = path.join(PROJECT_ROOT, "scripts", "cross_file_link.py");
+// M-PROVIDER — a tier routed to a local model spawns this shim in place of claude.
+setShimPath(path.join(PROJECT_ROOT, "scripts", "vg_ollama_shim.mjs"));
+// M-SKILLS.2 — the six generic skills ship with VibeGraph (skills/); the
+// ENABLE file is per analysed project and is read below. A skill that fails
+// its own contract is refused at boot and named, never half-loaded.
+const genericSkillsLoaded = loadGenericSkills(path.join(PROJECT_ROOT, "skills"));
+for (const [name, ps] of Object.entries(genericSkillsLoaded.problems)) console.warn(`  [skills] ${name}: ${ps.join("; ")}`);
+const GENERIC_SKILLS: GenericSkill[] = genericSkillsLoaded.skills;
+// (parse_cst.py's path moved into src/server/languages.ts — M-LANG1: the
+// registry owns per-language parse commands; the consts below stay until
+// their scripts gain a second-language variant.)
 const RUN_BLOCK_SCRIPT = path.join(PROJECT_ROOT, "scripts", "run_block.py");
 const RUN_TO_NODE_SCRIPT = path.join(PROJECT_ROOT, "scripts", "run_to_node.py");
+const TRACE_RUN_SCRIPT = path.join(PROJECT_ROOT, "scripts", "trace_run.py");
+const TRACE_BASH_SCRIPT = path.join(PROJECT_ROOT, "scripts", "trace_bash.mjs");
 const SCAN_EFFECTS_SCRIPT = path.join(PROJECT_ROOT, "scripts", "scan_effects.py");
 const CHECK_LITERALS_SCRIPT = path.join(PROJECT_ROOT, "scripts", "check_literals.py");
 const REWRITE_SCRIPT = path.join(PROJECT_ROOT, "scripts", "cst_rewrite.py");
 const EXTRACT_THREAD_SCRIPT = path.join(PROJECT_ROOT, "scripts", "extract_thread.py");
-const DISCOVER_ENTRY_POINTS_SCRIPT = path.join(PROJECT_ROOT, "scripts", "discover_entry_points.py");
 const BUILD_SYSTEM_TIER_SCRIPT = path.join(PROJECT_ROOT, "scripts", "build_system_tier.py");
 const CHECK_PROJECT_DEPS_SCRIPT = path.join(PROJECT_ROOT, "scripts", "check_project_deps.py");
 const RESOLVE_EXTERNAL_SCRIPT = path.join(PROJECT_ROOT, "scripts", "resolve_external_callable.py");
@@ -130,6 +237,137 @@ function remitIndex(): ThreadRemit[] {
 // Pure derivation; ships in the v2.1 envelope so the system view (M19.2)
 // renders without round-tripping. Empty in single-file mode.
 let latestSystem: { subsystems: any[]; edges: any[] } = { subsystems: [], edges: [] };
+
+// M-STACK.1 (PLAN-M-STACK.md) — the STACK FACTS: which software tools the
+// project uses, with the parse evidence behind each. Pure derivation over
+// the relative-keyed file map + threads + the manifests at inputPath;
+// rebuilt with the rest of the derived state, never persisted. Rides the
+// envelope as an OPTIONAL sibling of `constraints`.
+let latestStack: StackIndex = { tools: [], byFile: {}, byThread: {} };
+
+// M-XLANG.1 (PLAN-M-V5FORKS.md) - CROSSINGS: where a thread leaves its own
+// language over HTTP and which route serves it. Pure derivation over the
+// relative-keyed map + entry points + threads, rebuilt with the rest of
+// the derived state, never persisted. Rides the envelope as an OPTIONAL
+// sibling of `stack`.
+let latestCrossings: CrossingIndex = { all: [], byThread: {} };
+
+function rebuildCrossings(relFiles: typeof projectParse): void {
+  try {
+    latestCrossings = buildCrossingIndex({
+      files: relFiles as any,
+      entryPoints: latestEntryPoints as any,
+      threads: latestThreads as any,
+    });
+  } catch (e: any) {
+    console.warn(`  [Crossings] index failed: ${e?.message ?? e}`);
+    latestCrossings = { all: [], byThread: {} };
+  }
+}
+
+// M-ARCH.1 (PLAN-M-ARCH.md) — the derived architecture: clusters of entry
+// points, boundary tools, and the edges the hops and contracts already say,
+// each with a protocol read from the fact. Rebuilt after the crossings (it
+// aggregates them); rides the envelope as an OPTIONAL sibling of `system`.
+let latestArch: ArchModelRecord | null = null;
+// M-ARCH.4 — the derived model held apart from the stated/proposed layer,
+// so ratify / reject / a new proposal re-apply without re-deriving.
+let latestArchDerived: ArchModelRecord | null = null;
+
+function rebuildArch(relFiles: typeof projectParse): void {
+  try {
+    latestArchDerived = archModelForEnvelope(
+      { files: relFiles as any, entryPoints: latestEntryPoints as any, threads: latestThreads as any },
+      latestStack, latestCrossings, isDirectory ? inputPath : null, undefined, { applyStore: false },
+    );
+    reapplyArchStore();
+  } catch (e: any) {
+    console.warn(`  [Architecture] model failed: ${e?.message ?? e}`);
+    latestArch = null;
+    latestArchDerived = null;
+  }
+}
+
+function reapplyArchStore(): void {
+  if (!latestArchDerived) { latestArch = null; return; }
+  try {
+    latestArch = isDirectory ? applyArchStore(latestArchDerived, loadArchStore(inputPath)) : latestArchDerived;
+  } catch (e: any) {
+    console.warn(`  [Architecture] stated layer failed to apply: ${e?.message ?? e}`);
+    latestArch = latestArchDerived;
+  }
+}
+
+// M-ARCH.4 — the ONE token-spending path of the architecture layer. The
+// model sees the derived model, the deployment facts and doc excerpts, and
+// may propose groups / names / a primary path / a narrative; the reply is
+// grounded against what it was shown and stored PENDING. Nothing it says
+// becomes stated until a human ratifies (arch-ratify, GUI only).
+async function archProposeCore(guidance?: string): Promise<{ ok: boolean; error?: string; refused?: number; groups?: number; names?: number }> {
+  if (!isDirectory) return { ok: false, error: "the architecture layer needs a project directory" };
+  if (!latestArchDerived || !latestArchDerived.nodes.length) return { ok: false, error: "no derived architecture yet — the project has not finished parsing" };
+  if (!claudeCliAvailable) return { ok: false, error: "the claude CLI is unavailable — can't propose an architecture" };
+  const facts = readInfraManifests(inputPath).facts;
+  const docs = docExcerpts(inputPath, latestArchDerived);
+  // Modify (the M-GF3 gate): a revision re-drafts the PENDING proposal with
+  // the person's words; the same grounding floor applies to what comes back.
+  const pending = loadArchStore(inputPath).proposal;
+  const g = typeof guidance === "string" ? guidance.trim() : "";
+  if (g && !pending) return { ok: false, error: "there is no pending proposal to modify" };
+  const prompt = buildProposePrompt(latestArchDerived, facts, docs, g && pending ? { previous: pending, guidance: g } : undefined);
+  const text = await _runReadmeLlm(prompt, "thinking", "gen");
+  if (text === null) return { ok: false, error: `the model returned nothing${genFailureSuffix()}` };
+  const parsed = parseProposal(text, latestArchDerived, facts, docs, { model: tierLabel("thinking") });
+  if (!parsed.proposal) return { ok: false, error: parsed.error ?? "the reply was not a usable proposal" };
+  const store = loadArchStore(inputPath);
+  store.proposal = parsed.proposal;
+  saveArchStore(inputPath, store);
+  reapplyArchStore();
+  broadcastProjectUpdate();
+  refreshArchDocs();
+  return { ok: true, groups: parsed.proposal.groups.length, names: Object.keys(parsed.proposal.names).length, refused: parsed.proposal.refused.length };
+}
+
+/** After a proposal changes, the exported architecture documents follow it
+ *  (src/server/arch_refresh.ts) — an agent reading .vibegraph/knowledge must
+ *  not see the map from before the person decided. */
+function refreshArchDocs(): void {
+  if (!isDirectory || !latestArch) return;
+  try {
+    const r = refreshExportedArchitecture(inputPath, latestArch, {
+      entryPoints: latestEntryPoints as any, system: latestSystem as any,
+      threadGraph: deriveThreadCalls(latestThreads as any, latestEntryPoints as any, latestCrossings),
+      tool: "VibeGraph (live server)",
+    });
+    if (r.written.length) console.log(`  [Architecture] refreshed ${r.written.join(", ")}`);
+    if (r.stale.length) console.log(`  [Architecture] not refreshed (needs the CLI's git provenance): ${r.stale.join(", ")}`);
+  } catch (e: any) {
+    console.warn(`  [Architecture] exported documents not refreshed: ${e?.message ?? e}`);
+  }
+}
+
+function archDecide(decision: "ratify" | "reject"): { ok: boolean; error?: string } {
+  if (!isDirectory) return { ok: false, error: "the architecture layer needs a project directory" };
+  const store = loadArchStore(inputPath);
+  if (!store.proposal) return { ok: false, error: "there is no pending architecture proposal" };
+  saveArchStore(inputPath, decision === "ratify" ? ratifyProposal(store) : rejectProposal(store));
+  reapplyArchStore();
+  broadcastProjectUpdate();
+  refreshArchDocs();
+  return { ok: true };
+}
+
+function rebuildStack(relFiles: typeof projectParse): void {
+  try {
+    latestStack = buildStackIndex(
+      { files: relFiles as any, threads: latestThreads as any },
+      isDirectory ? inputPath : undefined,
+    );
+  } catch (e: any) {
+    console.warn(`  [Stack] index failed: ${e?.message ?? e}`);
+    latestStack = { tools: [], byFile: {}, byThread: {} };
+  }
+}
 
 // NEXT-ACTIONS §2 (project-env awareness) — third-party import roots the
 // analyzed project declares that are NOT importable from the runtime's
@@ -196,6 +434,28 @@ if (!fs.existsSync(inputPath)) {
 }
 
 const isDirectory = fs.statSync(inputPath).isDirectory();
+// M-ARCH.2 — the TS parser reads tsconfig `paths` relative to the project,
+// and it is handed absolute paths: every frontend spawn inherits the root.
+if (isDirectory) process.env.VG_PROJECT_ROOT = inputPath;
+// M-PROVIDER — .vibegraph/models.json is the source of truth for model
+// routes (a headless driver and the board must route the same way).
+{
+  const stored = isDirectory ? loadModelRoutes(inputPath) : null;
+  if (stored) {
+    setModelTiers(stored);
+    console.log(`[models] routes loaded: ${(["thinking", "routine", "worker"] as ModelTier[]).map((t) => `${t}=${routeLabel(resolveTierRoute(t, stored))}`).join(" ")}`);
+  }
+}
+// M-SKILLS.2 — .vibegraph/skills.json: which generic skills this project
+// enabled, with who and when. Off by default; a malformed file enables
+// nothing and says so rather than half-applying.
+let skillsConfig: SkillsConfig = { version: "1.0", enabled: [] };
+if (isDirectory) {
+  const loaded = readSkillsConfig(inputPath);
+  skillsConfig = loaded.config;
+  for (const p of loaded.problems) console.warn(`  [skills] ${p}`);
+  console.log(`[skills] ${GENERIC_SKILLS.length} shipped; enabled here: ${skillsConfig.enabled.join(", ") || "(none)"}`);
+}
 // resolvedPyFile: the .py file (single-file mode) or project root dir (directory mode — only used for watching)
 const resolvedPyFile = inputPath;
 
@@ -226,22 +486,34 @@ if (process.env.VG_CLAUDE_BIN) {
 // ── Python parsing ────────────────────────────────────────────────────────────
 
 function parseOneFile(filePath: string, modulePath?: string): Promise<any> {
-  const argv = [SCRIPT_PATH, filePath];
-  if (modulePath) argv.push("--module-path", modulePath);
+  // M-LANG1 — dispatch through the language registry. Unregistered
+  // extensions reject loudly rather than being fed to the wrong parser.
+  const lang = langOf(filePath);
+  if (!lang) {
+    return Promise.reject(new Error(`No language frontend registered for: ${filePath}`));
+  }
+  const cmd = parseCommand(lang, path.join(PROJECT_ROOT, "scripts"), filePath, modulePath);
+  // Server-stamps the discriminator (like `filePath`): parse_cst.py emits
+  // v1.5 IRs with no language field; frontends emitting IR 2.0 carry their own.
+  const stamp = (parsed: any) => ({ language: lang.id, ...parsed });
   return new Promise((resolve, reject) => {
-    const opts = { timeout: 10000, env: pythonEnv() };
-    execFile("python3", argv, opts, (err, stdout, stderr) => {
-      if (err) {
-        execFile("python", argv, opts, (err2, stdout2, stderr2) => {
+    const opts = { timeout: 10000, env: cmd.needsPythonEnv ? pythonEnv() : process.env };
+    execFile(cmd.bin, cmd.argv, opts, (err, stdout, stderr) => {
+      if (err && cmd.fallbackBin) {
+        execFile(cmd.fallbackBin, cmd.argv, opts, (err2, stdout2, stderr2) => {
           if (err2) {
             reject(new Error(stderr || stderr2 || "Parser failed (libcst missing? run runVis.sh to bootstrap)"));
             return;
           }
-          try { resolve(JSON.parse(stdout2)); } catch { reject(new Error(`Parse failed: ${filePath}`)); }
+          try { resolve(stamp(JSON.parse(stdout2))); } catch { reject(new Error(`Parse failed: ${filePath}`)); }
         });
         return;
       }
-      try { resolve(JSON.parse(stdout)); } catch { reject(new Error(`Parse failed: ${filePath}`)); }
+      if (err) {
+        reject(new Error(stderr || "Parser failed"));
+        return;
+      }
+      try { resolve(stamp(JSON.parse(stdout))); } catch { reject(new Error(`Parse failed: ${filePath}`)); }
     });
   });
 }
@@ -250,28 +522,41 @@ function parseFile(): Promise<any> {
   return parseOneFile(resolvedPyFile);
 }
 
-// M4a — convert an absolute file path under inputPath to a dotted module
-// name. Matches cross_file_link.py:file_to_module_path. Stripping
-// __init__.py treats the package as the importable name.
+// M4a — convert an absolute file path under inputPath to its language-
+// defined module identity (Python: dotted path matching
+// cross_file_link.py:file_to_module_path; __init__.py collapses to the
+// package name). M-LANG1 moved the per-language rule into the registry.
 function fileToModulePath(filePath: string): string {
+  const lang = langOf(filePath);
   const rel = path.relative(inputPath, filePath);
-  const parts = rel.split(path.sep);
-  if (parts[parts.length - 1] === "__init__.py") {
-    parts.pop();
-  } else if (parts[parts.length - 1].endsWith(".py")) {
-    parts[parts.length - 1] = parts[parts.length - 1].slice(0, -3);
-  }
-  return parts.filter(Boolean).join(".");
+  if (!lang) return rel.split(path.sep).filter(Boolean).join("/");
+  return moduleIdentity(lang, rel);
 }
 
-// M4a — run the cross-file linker on the per-file IRs and return the
-// enriched map. Falls through to the input on any error (the diagram
-// view still renders, just without cross-file edges).
-function runCrossFileLink(files: typeof projectParse): Promise<typeof projectParse> {
+// M-LANG2b — split a project map into per-language sub-maps (keyed by
+// each file's registered language; unregistered extensions can't be in
+// projectParse — findSourceFiles filters them at discovery).
+function filesByLanguage(files: typeof projectParse): Map<LanguageInfo, typeof projectParse> {
+  const out = new Map<LanguageInfo, typeof projectParse>();
+  for (const [f, ir] of Object.entries(files)) {
+    const lang = langOf(f);
+    if (!lang) continue;
+    let bucket = out.get(lang);
+    if (!bucket) { bucket = {}; out.set(lang, bucket); }
+    bucket[f] = ir;
+  }
+  return out;
+}
+
+// Generic stdin-JSON → stdout-JSON spawn used by the per-language
+// derived-data fan-outs. Resolves null on any failure (callers fall
+// back per stage, keeping the M4a "diagram still renders" contract).
+function spawnDerived(cmd: { bin: string; argv: string[]; needsPythonEnv: boolean },
+                      payload: unknown, label: string): Promise<any | null> {
   return new Promise((resolve) => {
-    const child = spawn("python3", [LINKER_SCRIPT], {
+    const child = spawn(cmd.bin, cmd.argv, {
       stdio: ["pipe", "pipe", "pipe"],
-      env: pythonEnv(),
+      env: cmd.needsPythonEnv ? pythonEnv() : process.env,
     });
     let stdout = "";
     let stderr = "";
@@ -279,16 +564,64 @@ function runCrossFileLink(files: typeof projectParse): Promise<typeof projectPar
     child.stderr.on("data", (b) => { stderr += b.toString(); });
     child.on("close", () => {
       try {
-        const parsed = JSON.parse(stdout);
-        resolve(parsed.files ?? files);
+        resolve(JSON.parse(stdout));
       } catch {
-        if (stderr) console.warn(`  [Project] cross-file linker failed — ${stderr.split("\n")[0]}`);
-        resolve(files);
+        if (stderr) console.warn(`  [Project] ${label} failed — ${stderr.split("\n")[0]}`);
+        resolve(null);
       }
     });
-    child.stdin.write(JSON.stringify({ files }));
+    child.stdin.write(JSON.stringify(payload));
     child.stdin.end();
   });
+}
+
+// M4a — run the cross-file linkers on the per-file IRs and return the
+// enriched map. M-LANG2b: one linker spawn PER LANGUAGE, each seeing
+// only its own files (a bash IR can never be mutated by the Python
+// linker's conventions, and vice versa). Falls through to the input
+// subset on any error (the diagram view still renders, just without
+// cross-file edges). Threads never cross languages — PLAN-v5 §5.1's
+// separate fork.
+async function runCrossFileLink(files: typeof projectParse): Promise<typeof projectParse> {
+  const merged: typeof projectParse = {};
+  for (const [lang, subset] of filesByLanguage(files)) {
+    const cmd = linkCommand(lang, path.join(PROJECT_ROOT, "scripts"));
+    if (!cmd) { Object.assign(merged, subset); continue; }
+    const parsed = await spawnDerived(cmd, { files: subset }, `${lang.id} cross-file linker`);
+    Object.assign(merged, parsed?.files ?? subset);
+  }
+  return merged;
+}
+
+// Re-linking is a read-modify-write across an await; anything that patches
+// the map meanwhile (a worker's chokepoint edit, a rejected packet's
+// restore, an evidence re-parse, a created file) would be reverted in
+// memory by the linker's output while its bytes stayed on disk — the
+// stack pre-check e2e read an EMPTY IR delta for a file whose text diff
+// showed `import requests`, and approved it (src/server/relink.ts).
+// Every in-memory patch bumps its file's generation; the merge keeps any
+// entry patched since the link started. parseAllFiles guards its own full
+// pass the same way with self-edit stamps.
+// VG_TRACE_MAP=<file>: append one line per live-map event (patch, re-link,
+// refresh, full pass, restore, review). Diagnostic only; off by default.
+const TRACE_MAP = process.env.VG_TRACE_MAP;
+function traceMap(line: string): void {
+  if (!TRACE_MAP) return;
+  try { fs.appendFileSync(TRACE_MAP, `${new Date().toISOString()} ${line}\n`); } catch { /* trace only */ }
+}
+const parseGens = new ParseGenerations();
+function touchParsed(file: string): void {
+  parseGens.touch(file);
+  traceMap(`touch ${path.basename(file)}`);
+}
+async function relinkProjectParse(): Promise<void> {
+  const snap = parseGens.snapshot();
+  traceMap("relink start");
+  const linked = await runCrossFileLink(projectParse);
+  const changed = parseGens.changedSince(snap);
+  const kept = Object.keys(projectParse).filter(changed).map((f) => path.basename(f));
+  projectParse = mergeRelinked(projectParse, linked, changed);
+  traceMap(`relink end kept=[${kept.join(",")}]`);
 }
 
 // M8.2.4 — pipe the linked project IR through discover_entry_points.py.
@@ -296,33 +629,37 @@ function runCrossFileLink(files: typeof projectParse): Promise<typeof projectPar
 // diagram view stays usable either way. Manual seeds: looks for
 // `<project root>/.vibegraph/manual_seeds.json` and passes the path
 // through if it exists.
-function runDiscoverEntryPoints(files: typeof projectParse): Promise<any[]> {
-  return new Promise((resolve) => {
-    const args = [DISCOVER_ENTRY_POINTS_SCRIPT];
-    const seedsPath = path.join(inputPath, ".vibegraph", "manual_seeds.json");
-    if (fs.existsSync(seedsPath)) {
-      args.push("--manual-seeds", seedsPath);
+async function runDiscoverEntryPoints(files: typeof projectParse): Promise<any[]> {
+  // M-LANG2b: one discover spawn per language over its own subset;
+  // entries concatenate. Manual seeds stay on the Python discoverer
+  // (they're validated against its rules; a bash manual-seed story is
+  // the arc's later work).
+  const entries: any[] = [];
+  for (const [lang, subset] of filesByLanguage(files)) {
+    const cmd = discoverCommand(lang, path.join(PROJECT_ROOT, "scripts"));
+    if (!cmd) continue;
+    const argv = [...cmd.argv];
+    if (lang.id === "python") {
+      const seedsPath = path.join(inputPath, ".vibegraph", "manual_seeds.json");
+      if (fs.existsSync(seedsPath)) argv.push("--manual-seeds", seedsPath);
     }
-    const child = spawn("python3", args, {
-      stdio: ["pipe", "pipe", "pipe"],
-      env: pythonEnv(),
-    });
-    let stdout = "";
-    let stderr = "";
-    child.stdout.on("data", (b) => { stdout += b.toString(); });
-    child.stderr.on("data", (b) => { stderr += b.toString(); });
-    child.on("close", () => {
-      try {
-        const parsed = JSON.parse(stdout);
-        resolve(parsed.entryPoints ?? []);
-      } catch {
-        if (stderr) console.warn(`  [Project] entry-point discovery failed — ${stderr.split("\n")[0]}`);
-        resolve([]);
-      }
-    });
-    child.stdin.write(JSON.stringify({ files }));
-    child.stdin.end();
-  });
+    const parsed = await spawnDerived({ ...cmd, argv }, { files: subset },
+      `${lang.id} entry-point discovery`);
+    entries.push(...(parsed?.entryPoints ?? []));
+  }
+  // M-FLOW.2 — project-level discovery over the WHOLE map: a script another
+  // file names by a literal is run, whatever its own file says.
+  const extra = await spawnDerived(discoverProjectCommand(path.join(PROJECT_ROOT, "scripts")), { files, entryPoints: entries },
+    "project-level entry-point discovery");
+  entries.push(...(extra?.entryPoints ?? []));
+  // M-ARCH.2 — manual seeds in EVERY language (the CLI's reader); the Python
+  // discoverer above already honours Python ones, so ids are deduped.
+  if (isDirectory) {
+    const { seeds, unresolved } = readManualSeeds(inputPath, files as any);
+    for (const seed of seeds) if (!entries.some((e) => e.id === seed.id)) entries.push(seed);
+    for (const u of unresolved) console.warn(`  [Project] manual seed ${u.seed} not used: ${u.reason}`);
+  }
+  return entries;
 }
 
 // NEXT-ACTIONS §2 — probe the analyzed project's third-party import
@@ -347,7 +684,14 @@ function runCheckProjectDeps(files: typeof projectParse): Promise<{ module: stri
         resolve([]);
       }
     });
-    child.stdin.write(JSON.stringify({ files }));
+    // M-LANG2b — dep-probing is a Python concept (find_spec over import
+    // roots); bash IRs' `source` imports would read as bogus missing
+    // modules. Only the python subset goes in.
+    const pyFiles: typeof projectParse = {};
+    for (const [f, ir] of Object.entries(files)) {
+      if (langOf(f)?.id === "python") pyFiles[f] = ir;
+    }
+    child.stdin.write(JSON.stringify({ files: pyFiles }));
     child.stdin.end();
   });
 }
@@ -429,28 +773,54 @@ function runBuildSystemTier(
 
 // ── Directory helpers ─────────────────────────────────────────────────────────
 
-function findPyFiles(dir: string): string[] {
+// M-LANG1 — walks for every REGISTERED language's extensions (just .py
+// until M-LANG2 registers bash), so discovery cannot change before a
+// frontend exists. Skip rules live in the registry alongside the table.
+function findSourceFiles(dir: string): string[] {
   const results: string[] = [];
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const full = path.join(dir, entry.name);
-    if (entry.isDirectory() && !entry.name.startsWith(".") && entry.name !== "__pycache__" && entry.name !== "node_modules") {
-      results.push(...findPyFiles(full));
-    } else if (entry.isFile() && entry.name.endsWith(".py")) {
+    if (entry.isDirectory() && !shouldSkipDir(entry.name)) {
+      results.push(...findSourceFiles(full));
+    } else if (entry.isFile() && isSourceFile(entry.name, full)) {
       results.push(full);
+      noteExtensionless(full);
     }
   }
   return results;
+}
+
+// M-ARCH.2 — an extensionless `#!` script (`bin/orders-cli`) has a language
+// only by its first line. The CLI's walker (M-CMD.1) records it; the server
+// looked every file up by extension, so the script was never parsed and no
+// thread saw it. The walker records what it found here, keyed both ways,
+// and every language lookup in this file goes through langOf().
+const extensionlessLang = new Map<string, LanguageInfo>();
+function noteExtensionless(full: string): void {
+  if (languageForPath(full)) return;
+  const lang = languageForFile(path.basename(full), full);
+  if (!lang) return;
+  extensionlessLang.set(full, lang);
+  if (isDirectory) extensionlessLang.set(path.relative(inputPath, full).split(path.sep).join("/"), lang);
+}
+function langOf(file: string): LanguageInfo | null {
+  return languageForPath(file) ?? extensionlessLang.get(file) ?? null;
 }
 
 // M6 wave 3b -- batch every file through one python3 process so libcst's
 // cold-import cost is paid once per project parse, not once per file.
 // Falls back to per-file parses if the batch run produces no usable
 // output (parser old enough not to know --batch, or a startup error).
-function parseAllFilesBatch(files: string[]): Promise<typeof projectParse> {
+// M-LANG1 — one batch spawn PER LANGUAGE present in the file set (each
+// frontend speaks the same --batch stdin contract as parse_cst.py), the
+// results merged into one map with the language stamped per file. With
+// only python registered this is exactly the old single-spawn behaviour.
+function runOneBatch(lang: LanguageInfo, files: string[]): Promise<typeof projectParse> {
+  const cmd = batchParseCommand(lang, path.join(PROJECT_ROOT, "scripts"));
   return new Promise((resolve) => {
-    const child = spawn("python3", [SCRIPT_PATH, "--batch"], {
+    const child = spawn(cmd.bin, cmd.argv, {
       stdio: ["pipe", "pipe", "pipe"],
-      env: pythonEnv(),
+      env: cmd.needsPythonEnv ? pythonEnv() : process.env,
     });
     let stdout = "";
     let stderr = "";
@@ -462,9 +832,13 @@ function parseAllFilesBatch(files: string[]): Promise<typeof projectParse> {
         for (const [f, msg] of Object.entries(parsed.errors ?? {})) {
           console.warn(`  [Project] parse error: ${f} — ${msg}`);
         }
-        resolve(parsed.files ?? {});
+        const out: typeof projectParse = {};
+        for (const [f, ir] of Object.entries(parsed.files ?? {})) {
+          out[f] = { language: lang.id, ...(ir as object) } as any;
+        }
+        resolve(out);
       } catch {
-        if (stderr) console.warn(`  [Project] batch parser failed — ${stderr.split("\n")[0]}`);
+        if (stderr) console.warn(`  [Project] ${lang.id} batch parser failed — ${stderr.split("\n")[0]}`);
         resolve({});
       }
     });
@@ -475,10 +849,31 @@ function parseAllFilesBatch(files: string[]): Promise<typeof projectParse> {
   });
 }
 
+async function parseAllFilesBatch(files: string[]): Promise<typeof projectParse> {
+  const byLang = new Map<LanguageInfo, string[]>();
+  for (const f of files) {
+    const lang = langOf(f);
+    if (!lang) continue; // findSourceFiles only returns registered extensions
+    const bucket = byLang.get(lang);
+    if (bucket) bucket.push(f); else byLang.set(lang, [f]);
+  }
+  const merged: typeof projectParse = {};
+  for (const [lang, langFiles] of byLang) {
+    Object.assign(merged, await runOneBatch(lang, langFiles));
+  }
+  return merged;
+}
+
+let fullPassRunning = false;
 async function parseAllFiles(): Promise<void> {
   if (!isDirectory) return;
-  const startedAt = Date.now();
-  const files = findPyFiles(inputPath);
+  fullPassRunning = true;
+  try { await parseAllFilesInner(); } finally { fullPassRunning = false; }
+}
+async function parseAllFilesInner(): Promise<void> {
+  const genSnap = parseGens.snapshot();
+  traceMap("fullpass start");
+  const files = findSourceFiles(inputPath);
   let next = await parseAllFilesBatch(files);
   // Per-file fallback covers the case where the batch run failed
   // entirely (empty result) -- preserves the previous behaviour rather
@@ -497,22 +892,21 @@ async function parseAllFiles(): Promise<void> {
     );
     next = perFile;
   }
-  // M26.1 follow-up — a full pass races the edit chokepoint: the batch
-  // read each file from disk at some unknown time ≥ startedAt, so an
-  // in-memory patch that landed since then may be NEWER than what the
-  // batch saw — merging `next` verbatim would clobber the edit out of
-  // the graph (on disk but invisible until the next external event).
-  // Prefer the chokepoint-patched IR for those files; when the batch
-  // DID see the post-edit bytes the two are equivalent.
-  for (const f of Object.keys(next)) {
-    const stamp = selfEditStamps.get(path.basename(f));
-    if (stamp !== undefined && stamp >= startedAt && projectParse[f]) {
-      next[f] = projectParse[f];
-    }
-  }
   // M4a: run the cross-file linker before broadcasting so the renderer
   // gets cross-file `reference` edges in the same project-update payload.
-  projectParse = await runCrossFileLink(next);
+  const linkedNext = await runCrossFileLink(next);
+  // M26.1 follow-up: a full pass races the edit chokepoint. The batch read
+  // each file from disk at some unknown time after it started, so an
+  // in-memory patch that landed since (before OR during the link) may be
+  // NEWER than what the batch saw; merging `linkedNext` verbatim would
+  // clobber the edit out of the graph (on disk but invisible until the
+  // next external event). Per-file generations, the same rule every
+  // re-link applies (relinkProjectParse): a patched entry wins, a file
+  // deleted meanwhile stays deleted.
+  const changed = parseGens.changedSince(genSnap);
+  for (const f of Object.keys(projectParse)) if (changed(f)) linkedNext[f] = projectParse[f];
+  for (const f of Object.keys(linkedNext)) if (changed(f) && !(f in projectParse)) delete linkedNext[f];
+  projectParse = linkedNext;
   // M8.2.4 / M8.3.1: discovery + extraction both run over the relative-
   // keyed view so their outputs (entryPoints[].file, threads[].seed.file
   // and threads[].filesReached[]) ship relative paths, matching the
@@ -523,11 +917,15 @@ async function parseAllFiles(): Promise<void> {
     latestEntryPoints = await runDiscoverEntryPoints(relFiles);
     latestThreads = await runExtractAllThreads(relFiles, latestEntryPoints);
     latestSystem = await runBuildSystemTier(relFiles, latestEntryPoints, latestThreads);
+    rebuildStack(relFiles);
+    rebuildCrossings(relFiles);
+    rebuildArch(relFiles);
     latestMissingDeps = await runCheckProjectDeps(relFiles);
     broadcastProjectUpdate();
     broadcastProjectWarnings();
   } finally {
     broadcastGraphRefresh("done");
+    traceMap("fullpass end");
   }
 }
 
@@ -549,20 +947,25 @@ let derivedQueued = false;
 
 async function refreshDerived(): Promise<void> {
   if (!isDirectory) return;
-  if (derivedRunning) { derivedQueued = true; return; }
+  if (derivedRunning) { derivedQueued = true; traceMap("refresh queued"); return; }
   derivedRunning = true;
+  traceMap("refresh start");
   broadcastGraphRefresh("started");
   try {
-    projectParse = await runCrossFileLink(projectParse);
+    await relinkProjectParse();
     const relFiles = relativeProjectFiles();
     latestEntryPoints = await runDiscoverEntryPoints(relFiles);
     latestThreads = await runExtractAllThreads(relFiles, latestEntryPoints);
     latestSystem = await runBuildSystemTier(relFiles, latestEntryPoints, latestThreads);
+    rebuildStack(relFiles);
+    rebuildCrossings(relFiles);
+    rebuildArch(relFiles);
     latestMissingDeps = await runCheckProjectDeps(relFiles);
     broadcastProjectUpdate();
     broadcastProjectWarnings();
   } finally {
     broadcastGraphRefresh("done");
+    traceMap("refresh end");
     derivedRunning = false;
     if (derivedQueued) {
       derivedQueued = false;
@@ -575,9 +978,34 @@ function scheduleDerivedRefresh(): void {
   if (!isDirectory) return;
   if (derivedTimer) clearTimeout(derivedTimer);
   derivedTimer = setTimeout(() => {
+    derivedTimer = undefined;
     refreshDerived().catch((e: any) =>
       console.warn(`  [Derived] refresh failed: ${e?.message ?? e}`));
   }, 250);
+}
+
+// M-ORCH.4 — evidence must be read from a SETTLED envelope. A worker's
+// last edit schedules the debounced refresh above; reading threads and
+// contracts before it lands reports a stale thread — or, on a four-language
+// fixture whose refresh outlasts the worker's exit, a momentarily ABSENT
+// one (the polyglot e2e escalated "entry point no longer in the envelope"
+// on a packet that had merely added a comment). Run a pending refresh now
+// and wait for anything in flight, bounded.
+async function settleDerived(): Promise<void> {
+  if (!isDirectory) return;
+  const deadline = Date.now() + 30_000;
+  while (Date.now() < deadline) {
+    if (derivedTimer) {
+      clearTimeout(derivedTimer);
+      derivedTimer = undefined;
+      try { await refreshDerived(); } catch (e: any) { console.warn(`  [Derived] settle refresh failed: ${e?.message ?? e}`); }
+      continue;
+    }
+    if (derivedRunning || derivedQueued || fullPassRunning) { await new Promise((r) => setTimeout(r, 50)); continue; }
+    traceMap("settle done");
+    return;
+  }
+  console.warn("  [Derived] settle timed out after 30s — evidence may read a stale envelope");
 }
 
 // M26.1 — the fs watcher can't tell our own writes from external ones.
@@ -589,8 +1017,27 @@ const selfEditStamps = new Map<string, number>();
 function noteSelfEdit(filePath: string): void {
   selfEditStamps.set(path.basename(filePath), Date.now());
 }
+// The stamp alone was not enough: the chokepoint stamped AFTER its
+// re-parse, hundreds of ms after the rewriter's write, so a write that
+// followed a >2 s quiet period reached the watcher before any fresh stamp
+// and launched the full pass mid-packet. A write we are about to make is
+// marked in flight from before the rewriter runs until it returns.
+const selfEditsInFlight = new Map<string, number>();
+function beginSelfEdit(filePath: string): void {
+  const k = path.basename(filePath);
+  selfEditsInFlight.set(k, (selfEditsInFlight.get(k) ?? 0) + 1);
+  noteSelfEdit(filePath);
+}
+function endSelfEdit(filePath: string): void {
+  const k = path.basename(filePath);
+  const n = (selfEditsInFlight.get(k) ?? 1) - 1;
+  if (n <= 0) selfEditsInFlight.delete(k); else selfEditsInFlight.set(k, n);
+  noteSelfEdit(filePath);
+}
 function isRecentSelfEdit(filename: string): boolean {
-  const t = selfEditStamps.get(path.basename(filename));
+  const k = path.basename(filename);
+  if (selfEditsInFlight.has(k)) return true;
+  const t = selfEditStamps.get(k);
   return t !== undefined && Date.now() - t < 2000;
 }
 
@@ -607,6 +1054,10 @@ function buildProjectEnvelope(): {
   system: { subsystems: any[]; edges: any[] };
   systemPlan?: import("./src/shared/protocol").SystemPlan;
   buildPlan?: BuildPlan;
+  workRun?: WorkRun;
+  constraints?: Constraint[];
+  stack?: StackIndex;
+  crossings?: CrossingIndex;
 } {
   const files = relativeProjectFiles();
   const symbolIndex: any[] = [];
@@ -618,6 +1069,10 @@ function buildProjectEnvelope(): {
   // byte-identical to pre-Stage-3 ones.
   const plan = getSystemPlan();
   const roadmap = getBuildPlan();
+  // M-CONTRACT.3 — stated constraints ride as an OPTIONAL sibling too
+  // (present only when at least one exists; read fresh from disk so an
+  // MCP-stated constraint and a GUI-stated one share one truth).
+  const constraints = isDirectory ? loadConstraints(readmeRootDir()) : [];
   return {
     version: "2.1",
     files,
@@ -627,7 +1082,1288 @@ function buildProjectEnvelope(): {
     system: latestSystem,
     ...(plan ? { systemPlan: plan } : {}),
     ...(roadmap ? { buildPlan: roadmap } : {}),
+    // M-AGENT1 — the work run rides as an OPTIONAL sibling (systemPlan
+    // precedent): run-less envelopes stay byte-identical.
+    ...(getWorkRun() ? { workRun: getWorkRun()! } : {}),
+    ...(constraints.length ? { constraints } : {}),
+    // M-STACK.1 — the stack facts ride as an OPTIONAL sibling too
+    // (present only when the index found something; stack-less envelopes
+    // stay byte-identical to pre-M-STACK ones).
+    ...(latestStack.tools.length ? { stack: latestStack } : {}),
+    // M-XLANG.1 - the cross-language crossings, when any were found.
+    ...(latestCrossings.all.length ? { crossings: latestCrossings } : {}),
+    // M-ARCH.1 - the derived architecture, when it has anything to draw.
+    ...(latestArch && latestArch.nodes.length ? { architecture: latestArch } : {}),
+    // PLAN-M-RUNTIME phase 3 - the TRACE OVERLAY, when a run has produced
+    // one. Read from disk rather than held in memory: it is the only
+    // derived-looking thing here that a HUMAN authorised and that survives a
+    // restart, so the file is the truth and this is a projection of it. An
+    // untraced project's envelope stays byte-identical to a pre-phase-3 one.
+    ...(observationsForEnvelope()),
   };
+}
+
+/** The stored overlay, or nothing. Never throws: a project with no
+ *  observations must render exactly as it did before phase 3 existed.
+ *
+ *  Staleness is computed HERE rather than stored, because the server is the
+ *  side that has the files — and because a stored staleness flag would
+ *  itself go stale the moment someone saved. */
+function observationsForEnvelope(): { observations?: ReturnType<typeof readObservations> } {
+  try {
+    const store = readObservations(readmeRootDir());
+    if (!Object.keys(store.runs).length) return {};
+    const root = analyzedRoot();
+    markStaleness(store, (file) => {
+      try { return fs.readFileSync(path.join(root, file), "utf-8"); }
+      catch { return null; }
+    });
+    return { observations: store };
+  } catch {
+    return {};
+  }
+}
+
+// ── M-AGENT1 — the Agent Manager orchestrator (PLAN-M-AGENT.md) ──────────────
+// Sequences the pure work_run.ts transitions BETWEEN the two human gates
+// (plan ratification; per-packet evidence review) — never through them.
+// Every transition persists to .vibegraph/work-run.json and rides the
+// envelope, so the run survives restarts (PAUSED) and the board renders
+// from the same data channel as everything else. v1: ONE run, SERIAL
+// packets; the worker is the M-AGENT1 STUB — it gathers REAL structural
+// evidence (thread assertions + blind spots) but performs no edits.
+// The real worker session (chat-backend spawn shape, tool allowlist,
+// turn budget) lands in M-AGENT3.
+
+let workRun: WorkRun | null = null;
+
+function getWorkRun(): WorkRun | null {
+  // The server is the single writer of an ACTIVE run — an in-memory
+  // draft/ratified/running/paused run is never clobbered by a file
+  // change. Disk is consulted when there is no run in memory (boot,
+  // discard) or the in-memory run is TERMINAL (done/failed = history,
+  // supersedable by a newly appearing file — restart recovery, a
+  // seeded state). loadWorkRun applies the restart rule (running →
+  // paused).
+  if (!isDirectory) return workRun;
+  if (!workRun || workRun.status === "done" || workRun.status === "failed") {
+    const fromDisk = loadWorkRun(inputPath);
+    if (fromDisk) workRun = fromDisk;
+  }
+  return workRun;
+}
+
+function commitWorkRun(): void {
+  if (workRun && isDirectory) persistWorkRun(inputPath, workRun);
+  broadcastProjectUpdate();
+}
+
+function workRunError(ws: WebSocket, error: string): void {
+  ws.send(JSON.stringify({ type: "work-run-error", payload: { error } }));
+}
+
+// M-ORCH — ONE draft path for the board and the MCP launcher: plan_work
+// (with M-CONTRACT annotations) → DRAFT run carrying its `mode`. Returns
+// the error message, or null when the draft was committed. In
+// "orchestrated" mode the orchestrator brief is drafted asynchronously
+// after the commit; the board shows the objective gate either way.
+// M-ORCH.4 — lanes: the orchestrated default runs independent packets in
+// parallel (their edit scopes are disjoint by construction); the gated
+// default stays serial so a human reads one diff at a time unless they
+// ask otherwise.
+const DEFAULT_LANES_ORCHESTRATED = 3;
+
+interface RunStartOptions { parallel?: number; review?: "full" | "pre-checks"; autonomous?: boolean }
+
+function createDraftRun(task: unknown, mode: "gated" | "orchestrated", opts: RunStartOptions = {}): string | null {
+  if (!isDirectory) return "work runs need a project directory";
+  if (typeof task !== "string" || !task.trim()) return "empty task";
+  if (opts.parallel !== undefined && (!Number.isInteger(opts.parallel) || opts.parallel < 1 || opts.parallel > MAX_LANES)) {
+    return `parallel must be an integer 1..${MAX_LANES}`;
+  }
+  if (opts.review !== undefined && opts.review !== "full" && opts.review !== "pre-checks") return "review must be full | pre-checks";
+  if (opts.autonomous && mode !== "orchestrated") return "autonomous runs are orchestrated runs — autonomy takes over the objective gate, which only that mode has";
+  const existing = getWorkRun();
+  if (existing && !["done", "failed"].includes(existing.status)) {
+    return `a run is already ${existing.status} — one active run in v1`;
+  }
+  const plan = planWork({
+    task,
+    threads: latestThreads as never[],
+    entryPoints: latestEntryPoints as never[],
+    skillFor: (entryPointId) => readThreadSkill(entryPointId),
+    contractFor: (entryPointId) => packetContractFor(entryPointId),
+  });
+  if (plan.packets.length === 0) return plan.planNote;
+  workRun = draftWorkRun(plan);
+  workRun.mode = mode;
+  workRun.parallel = opts.parallel ?? (mode === "orchestrated" ? DEFAULT_LANES_ORCHESTRATED : 1);
+  if (mode === "orchestrated") workRun.review = opts.review ?? "pre-checks";
+  // AUTONOMY — the run carries the ruling it acts under from the draft on,
+  // so the board, the run file and the summary all say it.
+  if (opts.autonomous) workRun.autonomy = { mode: "autonomous", ruling: AUTONOMY_RULING, ratifiedBy: "orchestrator", escalationsResolved: 0 };
+  commitWorkRun();
+  if (mode === "orchestrated") void draftOrchestrationBrief(workRun);
+  return null;
+}
+
+function handleWorkRunStart(payload: unknown, ws: WebSocket): void {
+  const p = (payload ?? {}) as { task?: unknown; mode?: unknown; parallel?: unknown; review?: unknown; autonomous?: unknown };
+  const mode = p.mode === "orchestrated" ? "orchestrated" : "gated";
+  const opts: RunStartOptions = {};
+  if (p.parallel !== undefined) opts.parallel = typeof p.parallel === "number" ? p.parallel : Number.NaN;
+  if (p.review !== undefined) opts.review = p.review as RunStartOptions["review"];
+  if (p.autonomous === true) opts.autonomous = true;
+  const err = createDraftRun(p.task, mode, opts);
+  if (err) workRunError(ws, err);
+}
+
+function handleWorkRunRatify(ws: WebSocket): void {
+  const run = getWorkRun();
+  if (!run) { workRunError(ws, "no run to ratify"); return; }
+  // M-ORCH — in orchestrated mode ratification IS the objective gate:
+  // the human confirms the brief (or, when it is honestly unavailable,
+  // the bare task). A brief still drafting cannot be confirmed — the
+  // human has not seen it yet.
+  if (run.mode === "orchestrated" && run.orchestration?.status === "drafting") {
+    workRunError(ws, "the orchestrator brief is still drafting — wait for the objective, or discard the draft");
+    return;
+  }
+  const err = ratifyWorkRun(run);
+  if (err) workRunError(ws, err);
+}
+
+// The objective gate's EFFECTS, shared by the human's confirmation and an
+// AUTONOMOUS run's self-confirmation (ruling:2026-09-12:human-out-of-the-loop):
+// stored constraints, stack policies, no-change packets, the brief's
+// ordering, system packets. One function, so the two paths cannot drift.
+function ratifyWorkRun(run: WorkRun): string | null {
+  const err = setRunStatus(run, "ratified") ?? setRunStatus(run, "running");
+  if (err) return err;
+  if (run.mode === "orchestrated" && run.orchestration?.status === "ready") {
+    // The brief's global constraints become STATED constraints on the
+    // human's confirmation — source "orchestrator", never "human".
+    const ids: string[] = [];
+    let restated = 0;
+    for (const g of run.orchestration.globalConstraints) {
+      const v = validateConstraintInput({ ...g, note: `orchestrator brief for run: ${run.task.slice(0, 80)}` });
+      if (!v.ok || !isDirectory) continue;
+      // H2H #2 finding: a brief RESTATES the constraints it was shown —
+      // never persist a twin of an existing (often human-authoritative) one.
+      if (findDuplicate(loadConstraints(readmeRootDir()), v.value.text)) { restated++; continue; }
+      ids.push(addConstraint(readmeRootDir(), v.value, "orchestrator").id);
+    }
+    // M-STACK.4 — the brief's TOOL proposals become `stack-policy`
+    // constraints HERE and only here: the human confirmed them with the
+    // objective. Same source ("orchestrator"), same duplicate check.
+    // Nothing is installed — a policy is a decision, not an act.
+    let tools = 0;
+    for (const input of stackPolicyInputs(run)) {
+      if (!isDirectory) continue;
+      if (findDuplicate(loadConstraints(readmeRootDir()), input.text)) { restated++; continue; }
+      ids.push(addConstraint(readmeRootDir(), input, "orchestrator").id);
+      tools++;
+    }
+    run.orchestration.storedConstraintIds = ids;
+    if (tools) run.orchestration.note += `. ${tools} proposed tool(s) stored as stack policies — no package was installed`;
+    if (restated) run.orchestration.note += `. ${restated} global constraint(s) restated existing ones — not stored twice`;
+    // M-ORCH.2 — packets the confirmed brief marked "no change needed"
+    // are settled HERE, at the objective gate: pending → no-change with
+    // the brief's reason recorded as the review. No worker is spawned,
+    // no evidence exists, and the summary says so.
+    for (const { id, reason } of noChangePackets(run)) {
+      if (setPacketStatus(run, id, "no-change") === null) {
+        const packet = run.packets.find((p) => p.id === id);
+        if (packet) packet.review = { by: "orchestrator", verdict: "approve", reason: `no change needed (confirmed brief): ${reason}`, at: new Date().toISOString() };
+      }
+    }
+    // M-ORCH.4 — the brief's `after` ordering becomes real dependencies
+    // now (on-disk dependencies the call graph cannot see); a cycle is
+    // refused and named.
+    const orderingProblems = applyBriefOrdering(run);
+    if (orderingProblems.length) run.orchestration.note += `. ${orderingProblems.join("; ")}`;
+    // M-ORCH.3 — the brief's SYSTEM packets become run packets NOW, on the
+    // human's confirmation: work no thread owns, still one bounded worker
+    // each, still through the chokepoint, ordered after the plan packets
+    // that own their files.
+    const systemPackets = materializeSystemPackets(run);
+    if (systemPackets.length) {
+      run.packets.push(...systemPackets);
+      run.orchestration.note += `. ${systemPackets.length} system packet(s) confirmed: ${systemPackets.map((p) => `${p.id} ${p.plan.qualifiedName}`).join("; ")}`;
+    }
+  }
+  // Quality layer — the closing bar per packet, computed HERE at the
+  // objective gate (human-confirmed or autonomous) and shipped to the worker.
+  attachAcceptance(run);
+  commitWorkRun();
+  void advanceWorkRun();
+  return null;
+}
+
+// M-AGENT4 review semantics, shared by the human gate and the M-ORCH
+// orchestrator: approve keeps the edits; the FIRST rejection sends the
+// packet back for ONE re-draft (its work restored first); the second —
+// and every escalation resolution — is final. `review` is recorded on
+// the packet so the board and summary say WHO decided and why.
+async function applyPacketReview(
+  run: WorkRun, packetId: string, approve: boolean, review: PacketReview,
+): Promise<string | null> {
+  const packet = run.packets.find((x) => x.id === packetId);
+  const retry = !approve
+    && packet?.status === "awaiting-review"
+    && (packet?.attempts ?? MAX_PACKET_ATTEMPTS) < MAX_PACKET_ATTEMPTS;
+  const next = approve ? "done" : retry ? "pending" : "failed";
+  const illegal = packetTransitionError(run, packetId, next);
+  if (illegal) return illegal;
+  // M-AGENT3 — Reject UNDOES the packet: restore the pre-packet snapshot
+  // (re-parse + re-link ride along) BEFORE the status flips. With lanes
+  // (M-ORCH.4) another packet's commit can persist the run mid-await, and
+  // a "failed"/"pending" packet whose rejected bytes are still on disk is
+  // a lie a reader can act on (the stack pre-check e2e read exactly that).
+  // Approve keeps the edits and drops the snapshot; either way this
+  // attempt's snapshot is done.
+  if (packet) {
+    if (approve) dropPacketSnapshot(packet.id);
+    else await restorePacketSnapshot(packet);
+  }
+  const err = setPacketStatus(run, packetId, next);
+  if (err) return err;
+  if (packet) packet.review = review;
+  return null;
+}
+
+async function handleWorkRunReview(payload: unknown, ws: WebSocket): Promise<void> {
+  const run = getWorkRun();
+  const p = payload as { packetId?: unknown; approve?: unknown; reason?: unknown } | null;
+  if (!run || typeof p?.packetId !== "string" || typeof p?.approve !== "boolean") {
+    workRunError(ws, "bad review payload");
+    return;
+  }
+  const err = await applyPacketReview(run, p.packetId, p.approve, {
+    by: "human",
+    verdict: p.approve ? "approve" : "reject",
+    reason: typeof p.reason === "string" && p.reason.trim() ? p.reason.trim().slice(0, 400) : "(human gate)",
+    at: new Date().toISOString(),
+  });
+  if (err) { workRunError(ws, err); return; }
+  commitWorkRun();
+  void advanceWorkRun();
+}
+
+function handleWorkRunPauseResume(resume: boolean, ws: WebSocket): void {
+  const run = getWorkRun();
+  if (!run) { workRunError(ws, "no run"); return; }
+  const err = setRunStatus(run, resume ? "running" : "paused");
+  if (err) { workRunError(ws, err); return; }
+  commitWorkRun();
+  if (resume) void advanceWorkRun();
+}
+
+function handleWorkRunDiscard(ws: WebSocket): void {
+  const run = getWorkRun();
+  if (!run) { workRunError(ws, "no run"); return; }
+  // Discard is DELETION, not a transition — and only a DRAFT may be
+  // deleted: anything past ratification is history the board keeps.
+  if (run.status !== "draft") { workRunError(ws, `only a draft can be discarded (run is ${run.status})`); return; }
+  workRun = null;
+  try { fs.rmSync(path.join(inputPath, WORK_RUN_FILE), { force: true }); } catch { /* best-effort */ }
+  broadcastProjectUpdate();
+}
+
+// M-ORCH.4 — the scheduler fills the run's LANES: every startable packet
+// (dependencies done, edit scope disjoint from everything in flight) is
+// marked running in ONE synchronous pass — no await between the pick and
+// the transition, so overlapping calls can never double-start a packet —
+// then each worker runs on its own promise and re-enters here when it
+// finishes. With parallel = 1 this is the M-AGENT serial loop, unchanged.
+async function advanceWorkRun(): Promise<void> {
+  const run = getWorkRun();
+  if (!run || run.status !== "running") return;
+  const starting = startablePackets(run);
+  if (starting.length) {
+    for (const p of starting) setPacketStatus(run, p.id, "running");
+    commitWorkRun();
+    if (starting.length > 1 || inFlightPackets(run).length > starting.length) {
+      console.log(`  [WorkRun] lanes ×${run.parallel ?? 1}: started ${starting.map((p) => p.id).join(", ")} (${inFlightPackets(run).length} in flight)`);
+    }
+    for (const p of starting) void runOnePacket(run, p);
+    return;
+  }
+  if (inFlightPackets(run).length) return; // workers mid-flight or gates pending
+  const outcome = runOutcome(run);
+  if (outcome) {
+    setRunStatus(run, outcome);
+    // M-AGENT4 — the honest completion report rides the terminal run.
+    run.summary = runSummary(run);
+    commitWorkRun();
+  }
+}
+
+// AUTONOMY (ruling:2026-09-12:human-out-of-the-loop) — under an autonomous run an
+// escalation has no human to return to. It is resolved as a FAILED packet
+// with its reason kept (dependents skip, the summary names the ruling);
+// it is never approved. On a run that is not autonomous these are no-ops.
+async function autonomyResolve(run: WorkRun, packetId: string, reason: string): Promise<void> {
+  if (!run.autonomy) return;
+  // RESTORE FIRST, exactly as the human reject path does (see `decide`).
+  // FAILED means the packet's work is UNDONE — that is what the status
+  // means to a reader, what cascadeSkips assumes of its dependents, and
+  // what the summary states out loud ("their edits were restored"). This
+  // path set the status and left the bytes on disk, so an autonomous run
+  // reported a floor that had not held: the 2026-09-22 local-worker drill
+  // ended with a worker's destructive rewrite of three telemetry files
+  // still in the tree, under a summary saying they were restored. A
+  // claimed floor that did not hold is worse than no floor, because the
+  // claim is what gets believed.
+  const packet = run.packets.find((x) => x.id === packetId);
+  if (packet) await restorePacketSnapshot(packet);
+  const err = resolveEscalationAutonomously(run, packetId, reason);
+  if (err) console.warn(`  [WorkRun] autonomy could not resolve ${packetId}: ${err}`);
+}
+async function autonomyEscalate(run: WorkRun, packet: RunPacket, reason: string): Promise<void> {
+  if (!run.autonomy) return;
+  const err = setPacketStatus(run, packet.id, "escalated", { escalation: { reason } });
+  if (err) { console.warn(`  [WorkRun] autonomy could not escalate ${packet.id}: ${err}`); return; }
+  await autonomyResolve(run, packet.id, reason);
+  void advanceWorkRun();
+}
+
+async function runOnePacket(run: WorkRun, packet: RunPacket): Promise<void> {
+  const outcome = await runPacketWorker(packet);
+  if (workRun !== run) return; // the run was discarded/replaced while the worker ran
+  if (outcome.kind === "escalate") {
+    setPacketStatus(run, packet.id, "escalated", {
+      ...(outcome.evidence ? { evidence: outcome.evidence } : {}),
+      escalation: { reason: outcome.reason },
+    });
+    await autonomyResolve(run, packet.id, outcome.reason);
+    commitWorkRun();
+    // An escalation is surfaced on the board while INDEPENDENT packets
+    // proceed — dependents are blocked by dependsOn already.
+    void advanceWorkRun();
+    return;
+  }
+  // The run may have been paused meanwhile; the packet transition is
+  // still legal (running → awaiting-review) and the gate simply waits.
+  setPacketStatus(run, packet.id, "awaiting-review", { evidence: outcome.evidence });
+  commitWorkRun(); // STOP — the reviewer judges the evidence
+  if (run.mode === "orchestrated") {
+    // M-SWEEP W5 — fill the freed lane BEFORE waiting on the verdict.
+    //
+    // This used to await the review and only then advance, so a lane freed
+    // by a finished worker sat idle for the whole review — including for a
+    // packet with nothing to do with the one being judged. On the fleet
+    // drill that is a model spawn's worth of wall clock per packet, times
+    // every packet.
+    //
+    // Safe because the guards were already there, not because we hope:
+    //   * inFlightPackets INCLUDES awaiting-review, so startablePackets
+    //     refuses anything not lane-compatible with the packet under
+    //     review — a reader of a file it changed still waits;
+    //   * a rejection restores only THAT packet's snapshot, over files
+    //     laneCompatible has already guaranteed disjoint from whatever
+    //     started meanwhile.
+    // So the only thing that changes is which packets are allowed to be
+    // running while a reviewer reads — and those are exactly the packets
+    // the scheduler would have started anyway a few seconds later.
+    void advanceWorkRun();
+    // M-ORCH — the human delegated this gate at the objective gate. The
+    // packet is ALREADY at awaiting-review on disk, so a reviewer that
+    // fails leaves the human gate exactly where it was — never approved
+    // on silence.
+    await orchestratorReview(run, packet, outcome.evidence);
+    return;
+  }
+  // Gated: the human reviews; other lanes (if any) keep moving.
+  void advanceWorkRun();
+}
+
+// ── M-ORCH (PLAN-M-CONTRACT.md) — the orchestrator's two spawns ─────────────
+// Both are one-shot `claude -p` text spawns through the shared gen runner
+// (VG_CLAUDE_BIN-stubbable, cwd = the analyzed project, no tools): the
+// brief reads the packets' contracts; the reviewer reads the packet's
+// SERVER-collected evidence. Neither edits anything.
+
+async function draftOrchestrationBrief(run: WorkRun): Promise<void> {
+  run.orchestration = { ...unavailableBrief("drafting"), status: "drafting", note: "orchestrator brief drafting…" };
+  commitWorkRun();
+  const summaries = briefThreadSummaries(run, (entryPointId) => {
+    const ctx = threadContractFor(entryPointId);
+    return ctx.contract
+      ? {
+        contract: ctx.rendered.contract, constraints: ctx.rendered.constraints,
+        language: ctx.contract.language,
+        // M-STACK.3 — the compact per-packet tool line the brief reads
+        // when it chooses which existing tool a packet's task uses.
+        stack: packetStackLine(latestStack, entryPointId),
+      }
+      : null;
+  });
+  const projectStack = formatSystemSpec(latestStack, isDirectory ? loadConstraints(readmeRootDir()) : []);
+  const text = claudeCliAvailable
+    ? await _runReadmeLlm(buildBriefPrompt({ task: run.task, packets: run.packets, threads: summaries, projectStack }), "thinking", "brief")
+    : null;
+  // The draft may have been discarded or replaced while the spawn ran.
+  if (workRun !== run) return;
+  // Known threads for system-packet integration points: every entry point,
+  // not just the plan's (a migration may integrate with a thread the task
+  // never named).
+  const parsed = parseBrief(text, run, new Set(latestEntryPoints.map((e: any) => e.id as string)));
+  run.orchestration = parsed
+    ? { ...parsed.orchestration, model: tierLabel("thinking") }
+    : unavailableBrief(text === null ? (claudeCliAvailable ? "spawn failed" : "claude CLI unavailable") : "no valid vg-orchestration block");
+  if (parsed?.problems.length) console.warn(`  [Orchestrator] brief problems: ${parsed.problems.join("; ")}`);
+  commitWorkRun();
+  // AUTONOMY — the brief has landed (ready, or honestly unavailable, in
+  // which case the bare task runs exactly as a human could have confirmed
+  // it): the run confirms its own objective under the ruling it carries.
+  if (run.autonomy && workRun === run) {
+    const err = ratifyWorkRun(run);
+    if (err) { console.warn(`  [WorkRun] autonomy could not confirm the objective: ${err}`); return; }
+    run.autonomy.ratifiedAt = new Date().toISOString();
+    commitWorkRun();
+  }
+}
+
+// M-GRAMMAR's check facts are built by src/server/quality/facts.ts
+// (buildQualityFacts — "the grammar's four fields, as server.ts builds
+// them"), read from the live relative-keyed map AFTER settleDerived() by
+// qualityFactsFor above. The copy that used to live here had no caller
+// left; M-CRYSTAL.3's `check` command found it while looking for the one
+// facts builder to share, and there already was one.
+
+/** The analysed project's own commit, for derived provenance. */
+function projectCommitLabel(): string {
+  try {
+    return execFileSync("git", ["rev-parse", "--short", "HEAD"], { cwd: readmeRootDir(), encoding: "utf-8", stdio: ["ignore", "pipe", "ignore"] }).trim() || "unversioned";
+  } catch { return "unversioned"; }
+}
+
+/** The run's combined server-collected delta, for `co-changes`: every
+ *  packet's diffs so far; `complete` once no packet is still to run. */
+function runDeltaOf(run: WorkRun | null): RunDelta | null {
+  if (!run) return null;
+  const entries: RunDelta["entries"][number][] = [];
+  for (const p of run.packets) for (const d of p.evidence?.diffs ?? []) entries.push({ packetId: p.id, file: d.file, nodeId: d.nodeId, change: "changed" });
+  return { entries, complete: !run.packets.some((p) => p.status === "pending" || p.status === "running") };
+}
+
+/** Quality layer — the facts a check reads: the live envelope after
+ *  settleDerived(), the stack index, the packet's thread and edit scope,
+ *  the run's delta. `unresolved` stays deliberately GENEROUS (any call node
+ *  with no reference edge), so a checker says "unverifiable" sooner than it
+ *  claims a pass it has not earned. */
+function qualityFactsFor(run: WorkRun | null, packet: RunPacket | null): QualityFacts {
+  return buildQualityFacts({
+    envelope: { files: relativeProjectFiles() as never, threads: latestThreads, entryPoints: latestEntryPoints },
+    root: readmeRootDir(), commit: projectCommitLabel(), stack: latestStack,
+    ...(packet && packet.plan.kind !== "system" ? { entryPointId: packet.plan.entryPointId } : {}),
+    ...(run && packet ? { scopeFiles: editScopeOf(run, packet) } : {}),
+    runDelta: runDeltaOf(run),
+  });
+}
+
+interface RoutedCheckResult {
+  id: string; source: string; described: string; rule: string;
+  verdict: "pass" | "violated" | "unverifiable"; reason: string;
+  /** May this check REJECT? A STATED clause gates on its verb's standing
+   *  (standings.ts). A DERIVED binding additionally needs its dimension
+   *  calibrated AND an offender this packet introduced — see `newOffenders`. */
+  gates: boolean;
+  /** Derived bindings only: the offenders absent from the gate-time
+   *  baseline. Empty means the violation is inherited, so it advises. */
+  newOffenders?: string[];
+}
+
+/** An offender ref as the baseline stores it, comparable across runs. */
+function offenderRefs(r: { offenders?: readonly unknown[] }): string[] {
+  return (r.offenders ?? []).map((o) =>
+    typeof o === "string" ? o : `${(o as { file?: string }).file ?? ""}:${(o as { node?: string }).node ?? ""}`);
+}
+
+/** M-GRAMMAR + quality layer — evaluate every routed constraint that carries
+ *  a checkable half, and every derived quality-model binding the packet's
+ *  acceptance lists. The three M-GRAMMAR verbs run as before; a Run 1 verb
+ *  runs through the registry and may reject only when its calibration
+ *  record reads MAY-GATE; a derived binding is always advisory. Malformed
+ *  checks are DROPPED with a warning rather than coerced. */
+function evaluateRoutedChecks(run: WorkRun | null, packet: RunPacket | null, constraints: Constraint[]): RoutedCheckResult[] {
+  const clausesOf = (c: Constraint) => [...(c.checks ?? []), ...(c.check ? [c.check] : [])];
+  const withChecks = constraints.filter((c) => clausesOf(c).length > 0);
+  const derived = (packet?.acceptance?.checks ?? []).filter((c) => c.basis && typeof c.basis.dimension === "string");
+  if (!withChecks.length && !derived.length) return [];
+  const facts = qualityFactsFor(run, packet);
+  const registry = run1Registry();
+  const out: RoutedCheckResult[] = [];
+  const evalClause = (id: string, source: string, clause: unknown, mayGate: boolean, baseline?: readonly string[]) => {
+    if (isConstraintCheck(clause)) {
+      const r = checkConstraint(facts, clause);
+      out.push({ id, source, described: describeCheck(clause), rule: clause.rule, verdict: r.verdict, reason: r.reason, gates: mayGate });
+      return;
+    }
+    if (isRun1Check(clause)) {
+      const r = registry.run(facts, clause);
+      const row: RoutedCheckResult = {
+        id, source, described: describeRun1Check(clause), rule: clause.rule,
+        verdict: r.verdict, reason: r.reason,
+        gates: mayGate && verbMayGate(clause.rule),
+      };
+      // A DERIVED binding carries a baseline: what this same check already
+      // reported before any packet ran. src/server/quality/derived_gate.ts
+      // owns the rule and the reason it gives.
+      if (source === "derived") {
+        const d = derivedGate({
+          mode: mayGate ? "gate-blocking" : "advisory",
+          verbMayGate: verbMayGate(clause.rule),
+          verdict: r.verdict,
+          current: offenderRefs(r as { offenders?: readonly unknown[] }),
+          baseline,
+        });
+        row.gates = d.gates;
+        row.newOffenders = d.newOffenders;
+        if (r.verdict === "violated" && !d.gates) row.reason = `${r.reason}. Not rejected: ${d.why}`;
+      }
+      out.push(row);
+      return;
+    }
+    console.warn(`  [Constraint] ${id} has a malformed check — not evaluated`);
+  };
+  for (const c of withChecks) for (const clause of clausesOf(c)) evalClause(c.id, c.source, clause, true);
+  // A derived binding that IS a stated clause (the model derives guards
+  // from calls-through and not-in-loop from a perf-lever) has already run
+  // above with the constraint as its basis; running it twice would put
+  // the same verdict in the evidence under two names.
+  const stated = new Set(withChecks.flatMap((c) => clausesOf(c).map((cl) => JSON.stringify(cl))));
+  for (const d of derived) {
+    if (stated.has(JSON.stringify(d.check))) continue;
+    // Gate-blocking only once the dimension's every binding is calibrated
+    // (model.ts) — and then only on an offender absent from the baseline.
+    const mayGate = d.mode === "gate-blocking";
+    evalClause(`derived:${String(d.basis.dimension)}`, "derived", d.check, mayGate, d.baseline?.offenders ?? []);
+  }
+  return out;
+}
+
+/** M-SKILLS.2 — the stack profile as it stands NOW, for the skill selector
+ *  at every worker spawn, thread-agent spawn and chat turn, and for the
+ *  objective gate. Computed fresh each call rather than memoised: a memo
+ *  keyed on object identity would go stale if the thread list were ever
+ *  mutated in place instead of replaced, and a stale profile selecting a
+ *  skill for the wrong thread is the "node in the wrong place" class. The
+ *  cost is one envelope walk (milliseconds on the fleet example). */
+function liveStackProfile(): ReturnType<typeof deriveStackProfile>["profile"] {
+  const env = { files: relativeProjectFiles() as never, threads: latestThreads, entryPoints: latestEntryPoints };
+  return deriveStackProfile(env as never, latestStack, { project: readmeRootDir(), commit: projectCommitLabel() }).profile;
+}
+
+/** The `skills-config` wire payload: the enable file plus the shipped
+ *  catalogue with each skill's breadth MEASURED on this project. */
+function skillsConfigPayload(): { config: SkillsConfig; catalogue: ReturnType<typeof catalogueOf> } {
+  let profile: ReturnType<typeof liveStackProfile> | null = null;
+  if (isDirectory) { try { profile = liveStackProfile(); } catch (e: any) { console.warn(`  [skills] profile unavailable for the catalogue: ${e?.message ?? e}`); } }
+  return { config: skillsConfig, catalogue: catalogueOf(GENERIC_SKILLS, profile) };
+}
+
+/** Quality layer — the packet's CLOSING BAR, computed at the objective gate
+ *  from the envelope (derived stack profile + quality model + routed
+ *  constraints) and stored on the packet: the worker reads it in its prompt
+ *  and the review runs the same check list. A failure to compute it is
+ *  logged and leaves the packet without one; it never blocks the gate. */
+function attachAcceptance(run: WorkRun): void {
+  if (!isDirectory) return;
+  try {
+    const commit = projectCommitLabel();
+    const profile = liveStackProfile();
+    const constraints = loadConstraints(readmeRootDir());
+    const { model } = deriveQualityModel(profile, constraints, { commit });
+    const calibrated = calibratedVerbs();
+    for (const packet of run.packets) {
+      const isSystem = packet.plan.kind === "system";
+      const routed = isSystem
+        ? routeConstraints(constraints, {
+          entryPointId: null,
+          filesReached: packet.plan.filesReached,
+          stack: [...new Set(packet.plan.filesReached.flatMap((f) => latestStack.byFile[f] ?? []))],
+        })
+        : threadContractFor(packet.plan.entryPointId).constraints;
+      const contract = packet.plan.contract as (RunPacket["plan"]["contract"] & { crossesInto?: string[] }) | undefined;
+      const scoped = editScopeOf(run, packet);
+      packet.acceptance = computeAcceptance({
+        packetId: packet.id, entryPointId: packet.plan.entryPointId,
+        scope: { files: scoped.length ? scoped : packet.plan.filesReached, declaredBy: run.orchestration?.packetTasks?.[packet.id]?.files?.length ? "brief" : "thread" },
+        routedConstraints: routed, profile, model, calibrated,
+        // M-SKILLS.2 — ONE task-facts builder for the gate and the spawn.
+        task: packetTaskFacts({
+          priorAttempts: packet.attempts, kind: packet.plan.kind,
+          effects: (contract?.effects ?? null) as Record<string, number> | null, crossesInto: contract?.crossesInto ?? null,
+          routedCount: routed.length,
+        }),
+        commit,
+      }) as unknown as RunPacket["acceptance"];
+      attachDerivedBaseline(run, packet);
+    }
+  } catch (e) {
+    console.warn(`  [WorkRun] acceptance not computed: ${(e as Error).message}`);
+  }
+}
+
+/**
+ * What each DERIVED gate already reported, before any packet ran.
+ *
+ * A stated constraint gates on its own terms: a human said the rule, so a
+ * violation is a violation whoever wrote the code. A derived dimension has
+ * no such mandate — it is inferred from the stack, and the codebase it is
+ * inferred from usually already violates it somewhere. Without this,
+ * letting derived bindings gate would reject a packet for the tree it
+ * inherited: measured on h2h3 arm A, whose p1 carried a derived
+ * resolvability violation naming three functions that were unannotated
+ * before the run began.
+ *
+ * NAMED LIMIT, and it is the one `unattributedBefore` already has: the
+ * baseline is the tree at the OBJECTIVE GATE, so an offender an EARLIER
+ * packet introduced reads as new to a later one. Bounded in practice —
+ * the rejection names the offending node, so who wrote it is visible —
+ * and the alternative (re-deriving per packet start) costs a parse per
+ * packet for a case no run has yet produced.
+ */
+function attachDerivedBaseline(run: WorkRun, packet: RunPacket): void {
+  const checks = packet.acceptance?.checks ?? [];
+  const derived = checks.filter((c) => c.mode === "gate-blocking" && typeof (c.basis as { dimension?: unknown })?.dimension === "string");
+  if (!derived.length) return;
+  const facts = qualityFactsFor(run, packet);
+  const registry = run1Registry();
+  const at = new Date().toISOString();
+  for (const c of derived) {
+    if (!isRun1Check(c.check)) continue;
+    try {
+      const r = registry.run(facts, c.check);
+      c.baseline = { offenders: offenderRefs(r as { offenders?: readonly unknown[] }), verdict: r.verdict, at };
+    } catch (e) {
+      // No baseline means no derived gate for this check: `gates` needs a
+      // baseline array, and an absent one leaves the binding advisory.
+      console.warn(`  [WorkRun] ${packet.id}: no baseline for ${String(c.check.rule)} — it stays advisory: ${(e as Error).message}`);
+    }
+  }
+}
+
+async function orchestratorReview(run: WorkRun, packet: RunPacket, evidence: PacketEvidence): Promise<void> {
+  const decide = async (verdict: PacketReview["verdict"], reason: string, by: PacketReview["by"] = "orchestrator", model?: string) => {
+    const review: PacketReview = { by, verdict, reason, at: new Date().toISOString(), ...(model ? { model } : {}) };
+    if (verdict === "escalate") {
+      const err = setPacketStatus(run, packet.id, "escalated", { escalation: { reason } });
+      if (!err) packet.review = review;
+      if (!err) await autonomyResolve(run, packet.id, reason);
+    } else {
+      await applyPacketReview(run, packet.id, verdict === "approve", review);
+    }
+    commitWorkRun();
+    void advanceWorkRun();
+  };
+  // M-ORCH.4 — the deterministic pre-checks read the packet's EDIT SCOPE
+  // and, for a thread packet, its entry-point contract AFTER the edit.
+  // Under the "pre-checks" review policy a structurally clean packet is
+  // APPROVED here with `by: "pre-checks"` — no model spawn; anything the
+  // checks cannot vouch for is handed to the model with the reasons named.
+  const ctx = threadContractFor(packet.plan.entryPointId);
+  const contractAfter = packet.plan.kind === "system"
+    ? undefined
+    : (ctx.contract ? summarizeContract(ctx.contract) : null);
+  if (contractAfter === null) {
+    console.warn(`  [WorkRun] ${packet.id}: no contract for ${packet.plan.entryPointId} after the edit (${ctx.error ?? "unknown"}); threads now: ${latestThreads.map((t: any) => t.entryPointId).filter((id: string) => id.startsWith(packet.plan.entryPointId.split(":")[0])).join(", ") || "(none in that file)"}`);
+  }
+  // M-STACK.5 — the STACK pre-check: the tools this edit introduced (from
+  // the IR delta's new import/include/command nodes, resolved against the
+  // settled index) against the policies routed to this packet. A forbidden
+  // tool is a fact, so it costs no spawn to catch; a tool the project has
+  // never used is a dependency decision, so it is handed to the reviewer.
+  const routedPolicies = (packet.plan.kind === "system"
+    ? routeConstraints(isDirectory ? loadConstraints(readmeRootDir()) : [], {
+      entryPointId: null,
+      filesReached: packet.plan.filesReached,
+      stack: [...new Set(packet.plan.filesReached.flatMap((f) => latestStack.byFile[f] ?? []))],
+    })
+    : ctx.constraints)
+    .filter((c): c is Constraint & { policy: NonNullable<Constraint["policy"]> } => !!c.policy)
+    .map((c) => ({ id: c.id, source: c.source, policy: c.policy }));
+  // M-BOUNDARY.3 — hand the check the POST-edit IR of the files this packet
+  // changed, so an added CALL is attributed (not just an added import): a
+  // call added to a file that already imports the tool introduces no import
+  // node at all, and the import-only reading found nothing while the policy
+  // was plainly broken.
+  const afterFiles: Record<string, { nodes?: any[]; language?: string }> = {};
+  for (const d of evidence.diffs) {
+    const ir = projectParse[resolveProjectPath(d.file)];
+    if (ir) afterFiles[d.file] = ir;
+  }
+  const addedTools = toolsAddedByDelta(
+    latestStack,
+    Array.isArray(evidence.irDelta) ? (evidence.irDelta as Array<{ file?: string; delta?: unknown }>) : [],
+    evidence.diffs.map((d) => d.file),
+    afterFiles,
+  );
+  traceMap(`review ${packet.id} attempt=${packet.attempts} added=[${addedTools.map((t) => `${t.tool}@${t.file}`).join(",")}] delta=${JSON.stringify((Array.isArray(evidence.irDelta) ? (evidence.irDelta as any[]) : []).map((d: any) => ({ file: d.file, added: (d.delta?.nodesAdded ?? []).map((n: any) => n.id), created: d.delta?.created })))} stackSites=[${latestStack.tools.filter((t) => t.origin !== "project").flatMap((t) => t.evidence.filter((e) => evidence.diffs.some((d) => d.file === e.file)).map((e) => `${t.tool}:${e.file}:${e.nodeId ?? "-"}`)).join(",")}]`);
+  const report = preCheckReport(packet, evidence, {
+    scope: editScopeOf(run, packet),
+    autoApprove: (run.review ?? "pre-checks") === "pre-checks",
+    contractAfter: contractAfter === undefined ? undefined : contractAfter && { params: contractAfter.params, returns: contractAfter.returns },
+    addedTools,
+    policies: routedPolicies,
+    // M-GRAMMAR — the same routed set, minus the prose: what the IR can
+    // actually settle about this packet's edit.
+    constraintChecks: evaluateRoutedChecks(
+      run, packet,
+      packet.plan.kind === "system"
+        ? routeConstraints(isDirectory ? loadConstraints(readmeRootDir()) : [], {
+          entryPointId: null,
+          filesReached: packet.plan.filesReached,
+          stack: [...new Set(packet.plan.filesReached.flatMap((f) => latestStack.byFile[f] ?? []))],
+        })
+        : ctx.constraints,
+    ),
+    // RUN1 4.2 — no-new-unattributed-boundary, from the contract summaries.
+    unattributedBefore: packet.plan.contract?.unattributed,
+    unattributedAfter: contractAfter?.unattributed,
+  });
+  // The audit trail rides the evidence: what the pre-checks verified and
+  // why (if at all) a model was asked.
+  evidence.preCheck = { passed: report.passed, needsEyes: report.needsEyes, advisories: report.advisories };
+  if (report.decision) {
+    const pre = report.decision;
+    await decide(pre.verdict, pre.verdict === "approve" ? pre.reason : `pre-check: ${pre.reason}`, pre.verdict === "approve" ? "pre-checks" : "orchestrator");
+    return;
+  }
+  if (!claudeCliAvailable) {
+    run.orchestration = { ...(run.orchestration ?? unavailableBrief("no brief")), note: `${run.orchestration?.note ?? ""}; reviewer unavailable for ${packet.id} — human gate`.replace(/^; /, "") };
+    await autonomyEscalate(run, packet, "reviewer unavailable (no claude CLI) — no human gate under autonomy");
+    commitWorkRun();
+    return;
+  }
+  const prompt = buildReviewPrompt({
+    run, packet, evidence,
+    task: packetTaskText(run, packet).task,
+    contract: ctx.rendered.contract,
+    constraints: ctx.rendered.constraints,
+    preCheckNotes: report.needsEyes,
+  });
+  const text = await _runReadmeLlm(prompt, "thinking", "review");
+  if (workRun !== run || packet.status !== "awaiting-review") return; // the human acted meanwhile
+  const verdict = parseVerdict(text);
+  if (!verdict) {
+    // Honest fallback: NO verdict is not an approval. The packet stays at
+    // the human gate and the run says why.
+    run.orchestration = { ...(run.orchestration ?? unavailableBrief("no brief")), note: `${run.orchestration?.note ?? ""}; reviewer gave no verdict for ${packet.id} — human gate`.replace(/^; /, "") };
+    await autonomyEscalate(run, packet, "the reviewer gave no verdict — not an approval, and no human gate under autonomy");
+    commitWorkRun();
+    return;
+  }
+  await decide(verdict.verdict, verdict.reason, "orchestrator", tierLabel("thinking"));
+}
+
+// ── M-AGENT3 — the real worker (PLAN-M-AGENT decisions 1+3) ─────────────
+// One bounded headless claude session per packet: the GUI chat's exact
+// tool posture (vibegraph MCP tools; raw file tools DENIED — every edit
+// goes through the CST chokepoint), a turn budget, and a remit rule
+// whose only outside move is escalation. Evidence is collected by the
+// SERVER from snapshots — never trusted from the worker's self-report.
+
+const WORK_SNAP_DIR = path.join(".vibegraph", "work-snapshots");
+
+function packetSnapshotDir(packetId: string): string {
+  return path.join(inputPath, WORK_SNAP_DIR, packetId);
+}
+
+// Snapshot the packet thread's files BEFORE the worker runs — the
+// restore source for Reject, and the diff baseline for the evidence
+// card. Persisted (not memory) so a restart mid-review can still
+// restore.
+// M-ORCH.4 — the snapshot covers the packet's EDIT SCOPE (the brief's
+// declared files, else the thread's files): the only files this worker
+// can change, and the only files a Reject may restore — a parallel packet
+// owning a neighbouring file is never rolled back by someone else's
+// rejection.
+function snapshotPacketFiles(packet: RunPacket, scope: string[] = packet.plan.filesReached): Record<string, string> {
+  const map: Record<string, string> = {};
+  // M-ORCH.3 — a SYSTEM packet may CREATE files: remember which of its
+  // files did not exist, so Reject can delete them (a restore that only
+  // rewrites known bytes would leave a rejected creation on disk).
+  const absent: string[] = [];
+  for (const rel of scope) {
+    const abs = resolveProjectPath(rel);
+    try { map[rel] = fs.readFileSync(abs, "utf-8"); } catch { absent.push(rel); }
+  }
+  const dir = packetSnapshotDir(packet.id);
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, "manifest.json"), JSON.stringify({ files: map, absent }), "utf-8");
+  return map;
+}
+
+function loadPacketSnapshot(packetId: string): { files: Record<string, string>; absent: string[] } | null {
+  try {
+    const raw = JSON.parse(fs.readFileSync(path.join(packetSnapshotDir(packetId), "manifest.json"), "utf-8"));
+    if (!raw.files) return null;
+    return { files: raw.files, absent: Array.isArray(raw.absent) ? raw.absent : [] };
+  } catch { return null; }
+}
+
+function dropPacketSnapshot(packetId: string): void {
+  try { fs.rmSync(packetSnapshotDir(packetId), { recursive: true, force: true }); } catch { /* best-effort */ }
+}
+
+// Reject = the packet's work is UNDONE: restore the snapshot bytes,
+// re-parse the touched files, re-link — the same live-refresh shape as
+// the edit chokepoint's rollback.
+async function restorePacketSnapshot(packet: RunPacket): Promise<void> {
+  const snap = loadPacketSnapshot(packet.id);
+  if (!snap) return;
+  // M-BATCH — putting the tree back makes every live worker session's
+  // picture of it WRONG, and a worker that believes a stale tree is worse
+  // than one that knows nothing. Every session is dropped, not just this
+  // packet's: any of them may have read a file this restore is rewinding.
+  const activeRun = getWorkRun();
+  if (activeRun) clearWorkerSessions(activeRun);
+  traceMap(`restore ${packet.id} start`);
+  let restored = false;
+  for (const [rel, content] of Object.entries(snap.files)) {
+    const abs = resolveProjectPath(rel);
+    const current = fs.existsSync(abs) ? fs.readFileSync(abs, "utf-8") : null;
+    if (current === content) continue;
+    fs.writeFileSync(abs, content, "utf-8");
+    noteSelfEdit(abs);
+    try {
+      // Parse FIRST, assign after. `map[k] = await f()` evaluates `map`
+      // BEFORE the await, so a re-link or full pass that replaced the map
+      // meanwhile left this entry in an orphaned object: the live map kept
+      // the rejected bytes' IR, the next packet's "before" already held the
+      // forbidden import, its delta was empty, and the pre-checks approved
+      // it (the stack pre-check e2e, ~1 in 8). test:relink pins the pattern.
+      const restoredIR = await parseOneFile(abs, isDirectory ? fileToModulePath(abs) : undefined);
+      projectParse[abs] = restoredIR;
+      touchParsed(abs);
+    } catch (e: any) {
+      console.warn(`  [WorkRun] restore re-parse failed for ${rel}: ${e?.message ?? e}`);
+    }
+    restored = true;
+  }
+  // M-ORCH.3 — files the packet CREATED (absent before) are deleted on
+  // Reject and dropped from the live map: the rejected work is undone.
+  for (const rel of snap.absent) {
+    const abs = resolveProjectPath(rel);
+    if (!fs.existsSync(abs)) continue;
+    try { fs.unlinkSync(abs); } catch { /* best-effort */ }
+    noteSelfEdit(abs);
+    delete projectParse[abs];
+    touchParsed(abs);
+    restored = true;
+  }
+  if (restored) {
+    try { await relinkProjectParse(); } catch { /* linker fall-through keeps map */ }
+    broadcastProjectUpdate();
+    scheduleDerivedRefresh();
+  }
+  traceMap(`restore ${packet.id} end`);
+  dropPacketSnapshot(packet.id);
+}
+
+type WorkerOutcome =
+  | { kind: "review"; evidence: PacketEvidence }
+  | { kind: "escalate"; reason: string; evidence: PacketEvidence | null };
+
+// One bounded worker session: the chat backend's tool posture in one-shot
+// -p form (vibegraph MCP only, raw writes denied, turn budget). Shared by
+// thread packets and M-ORCH.3 system packets.
+// M-ORCH.4 — the worker's MCP URL names its packet (`/mcp?packet=p3`): the
+// MCP session scopes every write tool to that packet, so the chokepoint
+// can confine edits to the packet's edit scope while other packets run.
+// M-PROVIDER — the route label for audit trails ("who did the work").
+function tierLabel(tier: ModelTier): string {
+  // ONE label path. There were two: `resolveClaudeBin` reconciles the
+  // tier's own model with one pinned through VG_CLAUDE_BIN, and
+  // `routeLabel` alone never saw the env — so every audit field fed from
+  // here (orchestration.model, review.model, packet.workerModel) still
+  // recorded "claude:default" for a drill run as `claude --model
+  // claude-opus-5`. The M-STACK close-out fixed the first path and left
+  // this one, which the M-BOUNDARY drill then reported wrongly.
+  // Delegating is the fix that cannot drift again.
+  return resolveClaudeBin(tier).label;
+}
+
+// M-BATCH — `resume` carries a previous packet's session id. The MCP config
+// is rebuilt for THIS packet either way, so a resumed worker is re-bound to
+// the new packet and the chokepoint still refuses edits outside its scope:
+// the session carries CONTEXT across packets, never AUTHORITY.
+/**
+ * Add one model spawn to the ACTIVE run's cost ledger.
+ *
+ * Both headless spawn sites parse the CLI's result envelope and, before
+ * this, read `.result` and dropped `total_cost_usd` — so a run could say
+ * which models ran and never what they cost (h2h3's report had to leave
+ * the orchestrated arm's cost column empty while printing every plain
+ * arm's). A spawn with no run in flight (a README, a chat turn) is not
+ * charged to anything; that is right, and it is why this is a no-op then.
+ */
+function chargeRun(kind: SpendKind, envelope: unknown): void {
+  const run = getWorkRun();
+  if (!run || run.status === "done" || run.status === "failed") return;
+  run.spend = addSpend(run.spend ?? emptySpend(), kind, costOf(envelope));
+}
+
+function spawnWorkerSession(
+  prompt: string, packetId: string, resume?: string | null,
+): Promise<{ result: string | null; sessionId: string | null }> {
+  return new Promise((resolve) => {
+    // M-PROVIDER — workers have their own tier (the small local axe can go
+    // here without going to the brief and the review); a local route gets
+    // the long timeout — a 25-turn session on a laptop model is slow.
+    const spawnTarget = resolveClaudeBin("worker");
+    const { cmd, args: pre, timeoutMs } = spawnTarget;
+    const mcpCfg = JSON.stringify({ mcpServers: { vibegraph: { type: "http", url: `http://localhost:${port}/mcp?packet=${encodeURIComponent(packetId)}` } } });
+    execFile(
+      cmd,
+      [...pre, "-p", "--output-format", "json", "--strict-mcp-config",
+        "--mcp-config", mcpCfg, "--dangerously-skip-permissions",
+        "--disallowedTools", CHAT_DENIED_TOOLS.join(","),
+        "--max-turns", String(WORKER_TURN_BUDGET),
+        ...(resume ? ["--resume", resume] : []),
+        prompt],
+      { cwd: analyzedRoot(), env: spawnEnv(spawnTarget), timeout: timeoutMs, maxBuffer: 32 * 1024 * 1024 },
+      (err, stdout) => {
+        if (err && !stdout) { chargeRun("worker", null); resolve({ result: null, sessionId: null }); return; }
+        try {
+          const j = JSON.parse(stdout);
+          chargeRun("worker", j);
+          resolve({
+            result: j.result ?? null,
+            sessionId: typeof j.session_id === "string" ? j.session_id : null,
+          });
+        } catch { chargeRun("worker", null); resolve({ result: null, sessionId: null }); }
+      },
+    );
+  });
+}
+
+/** M-BATCH — run one packet's worker, resuming a warm session when the rule
+ *  in work_run.ts says one applies, and recording the session this packet
+ *  ended up in so the NEXT packet on these files can inherit it. */
+async function spawnPacketWorker(packet: RunPacket, prompt: string): Promise<string | null> {
+  const run = getWorkRun();
+  const warm = run ? warmSessionFor(run, packet) : null;
+  if (warm) {
+    console.log(`  [WorkRun] ${packet.id} resumes ${warm.from}'s worker session `
+      + `(${warm.carried + 1}/${MAX_SESSION_PACKETS} packets) — no cold spawn`);
+  }
+  const { result, sessionId } = await spawnWorkerSession(prompt, packet.id, warm?.sessionId);
+  if (sessionId) {
+    packet.sessionId = sessionId;
+    packet.sessionPackets = (warm?.carried ?? 0) + 1;
+  }
+  return result;
+}
+
+// Snapshot-vs-current diffs + per-file IR delta over EVERY file the packet
+// may touch — including files it CREATED (absent from the snapshot: the
+// diff is the whole file, the delta names the new node count).
+async function collectPacketDiffs(
+  packet: RunPacket, snap: Record<string, string>, beforeIR: Record<string, any>,
+  scope: string[] = packet.plan.filesReached,
+): Promise<{ diffs: PacketEvidence["diffs"]; irDelta: unknown | null }> {
+  const diffs: PacketEvidence["diffs"] = [];
+  for (const rel of scope) {
+    const abs = resolveProjectPath(rel);
+    const pre = snap[rel] ?? "";
+    const cur = fs.existsSync(abs) ? fs.readFileSync(abs, "utf-8") : "";
+    if (cur !== pre) diffs.push({ file: rel, nodeId: null, diff: lineDiff(pre, cur) });
+  }
+  if (!diffs.length) return { diffs, irDelta: null };
+  const irDelta: unknown[] = [];
+  for (const d of diffs) {
+    const abs = resolveProjectPath(d.file);
+    let after = projectParse[abs];
+    // Evidence must not depend on the watcher's timing: a file this packet
+    // just CREATED (or re-created on a retry) can be missing from the live
+    // map when the watcher's full pass lands mid-packet (the system-packet
+    // e2e flaked on exactly that — `delta: null` for a file on disk). Parse
+    // it now; the delta is a fact about the bytes, not about the map.
+    if (!after && fs.existsSync(abs)) {
+      try {
+        after = await parseOneFile(abs, isDirectory ? fileToModulePath(abs) : undefined);
+        projectParse[abs] = after;
+        touchParsed(abs);
+      } catch (e: any) {
+        console.warn(`  [WorkRun] evidence re-parse failed for ${d.file}: ${e?.message ?? e}`);
+      }
+    }
+    const importIds = (ir: any) => ((ir?.nodes ?? []) as Array<{ id: string }>).map((n) => n.id).filter((id) => /import|include/.test(id));
+    traceMap(`evidence ${packet.id} ${d.file} before=[${importIds(beforeIR[d.file]).join(",")}] after=[${importIds(after).join(",")}]`);
+    irDelta.push({
+      file: d.file,
+      delta: after
+        ? (beforeIR[d.file] ? diffIR(beforeIR[d.file], after) : { created: true, nodes: after.nodes?.length ?? 0 })
+        : null,
+    });
+  }
+  return { diffs, irDelta };
+}
+
+// M-ORCH.3 — the SYSTEM packet worker: work no thread owns (a migration,
+// a new module, an integration point), proposed by the brief and
+// CONFIRMED by the human at the objective gate. Same session posture as
+// a thread packet, a different bundle: no projection (there is no thread),
+// the contracts of the threads it INTEGRATES with, the constraints routed
+// to its files, and the create-file tool for NEW Python modules. Evidence
+// is server-collected the same way; there are no thread assertions.
+async function runSystemPacketWorker(packet: RunPacket): Promise<WorkerOutcome> {
+  const run = getWorkRun();
+  // A system packet's edit scope IS its confirmed file list.
+  const snap = snapshotPacketFiles(packet, packet.plan.filesReached);
+  const beforeIR: Record<string, any> = {};
+  for (const rel of Object.keys(snap)) {
+    const abs = resolveProjectPath(rel);
+    if (projectParse[abs]) beforeIR[rel] = JSON.parse(JSON.stringify(projectParse[abs]));
+  }
+  const integrates = packet.plan.integrates ?? [];
+  const contracts = integrates
+    .map((ep) => threadContractFor(ep).rendered.contract)
+    .filter((c): c is string => !!c);
+  const constraints = isDirectory
+    ? formatConstraintsBlock(routeConstraints(loadConstraints(readmeRootDir()), {
+      entryPointId: null,
+      filesReached: packet.plan.filesReached,
+      // M-STACK.2 — a system packet has no thread, so its stack is the
+      // union over the files it may touch (the ones that already exist).
+      stack: [...new Set(packet.plan.filesReached.flatMap((f) => latestStack.byFile[f] ?? []))],
+    }))
+    : null;
+  const taskText = run ? packetTaskText(run, packet).task : packet.plan.qualifiedName;
+  const prompt = buildSystemWorkerPrompt({
+    packetId: packet.id,
+    title: packet.plan.qualifiedName,
+    rationale: packet.plan.rationale ?? "",
+    files: packet.plan.filesReached,
+    existing: Object.keys(snap),
+    integrates,
+    integrationContracts: contracts,
+    // M-STACK.3 — a system packet has no thread, so it gets the PROJECT
+    // spec: a new module must be built with the tools already in use.
+    stack: formatSystemSpec(latestStack, isDirectory ? loadConstraints(readmeRootDir()) : []),
+    constraints,
+    reviewer: run?.mode === "orchestrated" ? "orchestrator" : "human",
+  }, taskText
+    + (packet.attempts > 1
+      ? `\n\nRETRY NOTICE: a previous attempt at this packet was REJECTED${packet.review?.reason ? ` ("${packet.review.reason}")` : ""} and its edits were rolled back (created files deleted). This is your final attempt — prefer a smaller, more careful change.`
+      : ""));
+  packet.workerModel = tierLabel("worker");
+  const resultText = await spawnPacketWorker(packet, prompt);
+  await settleDerived();
+  const { diffs, irDelta } = await collectPacketDiffs(packet, snap, beforeIR, packet.plan.filesReached);
+  const parsed = parsePacketResult(resultText);
+  const evidence: PacketEvidence = {
+    summary: parsed
+      ? parsed.summary
+      : resultText === null
+        ? "WORKER SESSION FAILED (spawn error / timeout / bad output) — review the diffs below; they are what actually changed."
+        : `WORKER BROKE THE OUTPUT CONTRACT (no vg-packet-result block) — treat with suspicion. Raw tail: ${resultText.slice(-300)}`,
+    irDelta,
+    diffs,
+    assertions: null,
+    blindSpots: null,
+  };
+  if (resultText === null && diffs.length === 0) {
+    dropPacketSnapshot(packet.id);
+    return { kind: "escalate", reason: "worker session failed before doing any work", evidence };
+  }
+  if (parsed?.outcome === "escalate") {
+    return { kind: "escalate", reason: parsed.reason ?? parsed.summary ?? "worker escalated without a reason", evidence };
+  }
+  return { kind: "review", evidence };
+}
+
+// M-ORCH.3 — the create-file chokepoint for workers: a NEW Python module
+// may be created ONLY while a run packet is RUNNING and lists the path
+// among its files (the human confirmed that list at the objective gate).
+// Content goes through cst_rewrite's create_file (parse-gated, formatted),
+// then the live map + derived data catch up exactly as an edit would.
+async function createFileForPacket(rel: string, source: string, packetId?: string): Promise<{ ok: boolean; message: string }> {
+  if (!isDirectory) return { ok: false, message: "file creation needs a project directory" };
+  const run = getWorkRun();
+  // M-ORCH.4 — the calling worker names its packet (its MCP URL). Without
+  // a name, only an UNAMBIGUOUS single running packet qualifies — with
+  // lanes, "the running packet" is not a thing.
+  const running = run?.packets.filter((p) => p.status === "running") ?? [];
+  const active = packetId ? running.find((p) => p.id === packetId) : (running.length === 1 ? running[0] : undefined);
+  if (!active) {
+    return { ok: false, message: packetId
+      ? `packet ${packetId} is not running — files are created only by a running, confirmed run packet`
+      : running.length > 1
+        ? `${running.length} packets are running — this session is not bound to one; files are created only from a worker session`
+        : "no packet is running — files are created only by a confirmed run packet" };
+  }
+  if (!active.plan.filesReached.includes(rel)) {
+    return { ok: false, message: `${rel} is not among packet ${active.id}'s files (${active.plan.filesReached.join(", ")}) — the human confirmed that list; escalate if the work needs another file` };
+  }
+  const abs = resolveChangesetPath(rel);
+  if (!abs) return { ok: false, message: `path escapes the project root: ${rel}` };
+  if (fs.existsSync(abs)) return { ok: false, message: `${rel} already exists — edit it with vibegraph_rewrite_node / vibegraph_compose_insert` };
+  if (langOf(rel)?.id !== "python") {
+    return { ok: false, message: `create-file is Python-only in v1 (${rel}); other languages: edit existing files or escalate` };
+  }
+  if (typeof source !== "string" || !source.trim()) return { ok: false, message: "source must be non-empty" };
+  fs.mkdirSync(path.dirname(abs), { recursive: true });
+  beginSelfEdit(abs);
+  let result: Awaited<ReturnType<typeof spawnRewrite>>;
+  try { result = await spawnRewrite([abs, "create_file"], source); } finally { endSelfEdit(abs); }
+  if (!result.success) return { ok: false, message: `create_file refused: ${result.error ?? "unknown"}` };
+  try {
+    noteSelfEdit(abs);
+    const createdIR = await parseOneFile(abs, fileToModulePath(abs)); // parse first, assign after (see restorePacketSnapshot)
+    projectParse[abs] = createdIR;
+    touchParsed(abs);
+    await relinkProjectParse();
+  } catch (e: any) {
+    return { ok: false, message: `created but re-parse failed: ${e?.message ?? e}` };
+  }
+  broadcastProjectUpdate();
+  scheduleDerivedRefresh();
+  return { ok: true, message: `created ${rel} (${projectParse[abs]?.nodes?.length ?? 0} IR nodes)` };
+}
+
+async function runPacketWorker(packet: RunPacket): Promise<WorkerOutcome> {
+  if (!claudeCliAvailable) {
+    return { kind: "escalate", reason: "no worker backend — claude CLI unavailable (VG_CLAUDE_BIN can stub it)", evidence: null };
+  }
+  // M-ORCH.3 — a SYSTEM packet has no thread: the brief proposed it for
+  // work no thread owns, the human confirmed it at the objective gate.
+  if (packet.plan.kind === "system") return runSystemPacketWorker(packet);
+  const thread = latestThreads.find(
+    (t: any) => t.entryPointId === packet.plan.entryPointId,
+  ) as Thread | undefined;
+  if (!thread) {
+    return { kind: "escalate", reason: `thread ${packet.plan.entryPointId} is no longer in the envelope (re-plan the run)`, evidence: null };
+  }
+
+  // M-ORCH.4 — the edit scope: snapshot, diffs, prompt, and the
+  // chokepoint's refusal all read this one list.
+  const scope = getWorkRun() ? editScopeOf(getWorkRun()!, packet) : packet.plan.filesReached;
+  const snap = snapshotPacketFiles(packet, scope);
+  const beforeIR: Record<string, any> = {};
+  for (const rel of Object.keys(snap)) {
+    const abs = resolveProjectPath(rel);
+    if (projectParse[abs]) beforeIR[rel] = JSON.parse(JSON.stringify(projectParse[abs]));
+  }
+
+  // D1 bundle pieces, worker-framed. (Deliberately mirrors
+  // runSpawnThreadAgent's assembly — consolidate at the third consumer,
+  // per the abstraction rule.)
+  const projected = projectThreadForAgent(thread);
+  const nests = deriveNests(thread.nodes);
+  const labelById = new Map(thread.nodes.map((n) => [n.id, n.label]));
+  const projection = renderAgentProjection(
+    projected.nodes.map((n) => ({
+      ...n,
+      nestedLabels: (nests.childrenByParent.get(n.id) ?? []).map((k) => labelById.get(k) ?? k),
+    })),
+  );
+  const effectKindFor = (f: string | null, irNodeId: string | null): string | null => {
+    if (!irNodeId) return null;
+    const n = findNode(irNodeId, f ?? undefined);
+    return (n && typeof n.effectKind === "string") ? n.effectKind : null;
+  };
+  const blindSpots = formatBlindSpotsBlock(computeThreadBlindSpots(thread, effectKindFor));
+  const skill = injectableSkillText(readThreadSkill(packet.plan.entryPointId));
+  // M-CONTRACT — the thread contract (IR fact) + routed stated constraints
+  // (provenance per line) ride every worker prompt.
+  const contractCtx = threadContractFor(packet.plan.entryPointId);
+
+  const run = getWorkRun();
+  // M-ORCH — the packet's task: the orchestrator brief's text + HANDOFF
+  // when the run is orchestrated and the brief is ready; otherwise the
+  // generic "your part of the run task" framing (M-AGENT3).
+  const orchestrated = run?.mode === "orchestrated";
+  const taskText = run
+    ? packetTaskText(run, packet).task
+    : `Within this thread, do YOUR PART of the run task. RUN TASK: ${packet.plan.qualifiedName}`;
+  // M-SKILLS.2 — generic direction: the skills a human enabled for this
+  // project whose applies_when fires for THIS thread, after the thread
+  // skill and inside what it left of the one injection budget. Every
+  // omission is named in the audit line; the prompt only carries what rode.
+  const genericSel = isDirectory
+    ? selectGenericSkills({
+      skills: GENERIC_SKILLS, config: skillsConfig, profile: liveStackProfile(),
+      entryPointId: packet.plan.entryPointId,
+      task: packetTaskFacts({
+        priorAttempts: packet.attempts - 1, kind: packet.plan.kind,
+        effects: ((packet.plan.contract as { effects?: Record<string, number> } | undefined)?.effects ?? null),
+        crossesInto: ((packet.plan.contract as { crossesInto?: string[] } | undefined)?.crossesInto ?? null),
+        routedCount: contractCtx.constraints.length,
+      }),
+      budgetChars: Math.max(0, SKILL_INJECTION_BUDGET_CHARS - (skill?.length ?? 0)),
+      alreadyInjected: new Map(),
+    })
+    : { routed: [], injected: [] };
+  const genericText = renderGenericSkillsBlock(genericSel.routed, skillsConfig);
+  // The audit lives on the packet (and so in work-run.json), not only in
+  // the log: the run file is what a report reads.
+  const skillAudit = auditOf(genericSel.routed);
+  packet.skills = skillAudit;
+  if (skillsConfig.enabled.length) console.log(`  [skills] ${packet.id}: ${describeAudit(skillAudit)}`);
+  const prompt = buildWorkerPrompt({
+    entryPointId: packet.plan.entryPointId,
+    qualifiedName: packet.plan.qualifiedName,
+    projection, skill, blindSpots,
+    genericSkills: genericText || null,
+    filesReached: packet.plan.filesReached,
+    outsidePlan: packet.plan.boundaries.outsidePlan,
+    contract: contractCtx.rendered.contract,
+    stack: contractCtx.rendered.stack,
+    constraints: contractCtx.rendered.constraints,
+    reviewer: orchestrated ? "orchestrator" : "human",
+    editScope: scope,
+    autonomous: !!run?.autonomy,
+    closingBar: packet.acceptance?.closingBar ?? null,
+  }, taskText
+    // M-AGENT4 — retry framing: the reviewer rejected attempt 1 and its
+    // work was RESTORED; this is a fresh start, not a continuation.
+    + (packet.attempts > 1
+      ? `\n\nRETRY NOTICE: a previous attempt at this packet was REJECTED by the ${orchestrated ? "orchestrator" : "human reviewer"}${packet.review?.reason ? ` ("${packet.review.reason}")` : ""} and its edits were rolled back. This is your final attempt — prefer a smaller, more careful, easily-reviewable change.`
+      : ""));
+
+  // Spawn — the chat backend's tool posture in one-shot -p form, warm
+  // where M-BATCH's rule allows it.
+  packet.workerModel = tierLabel("worker");
+  const resultText = await spawnPacketWorker(packet, prompt);
+  // M-ORCH.4 — the worker's last edit may have a derived refresh pending:
+  // the fresh thread, its contract, and the blind spots below must come
+  // from the settled envelope, never from the pre-edit one.
+  await settleDerived();
+
+  // Evidence is SERVER-COLLECTED: snapshot-vs-current diffs + per-file
+  // IR delta (the chokepoint already re-parsed each edit), plus the
+  // thread's post-edit assertions/blind spots. The worker's summary is
+  // attached as a labelled self-report only.
+  const { diffs, irDelta } = await collectPacketDiffs(packet, snap, beforeIR, scope);
+  const freshThread = latestThreads.find(
+    (t: any) => t.entryPointId === packet.plan.entryPointId,
+  ) as Thread | undefined ?? thread;
+  const parsed = parsePacketResult(resultText);
+  const evidence: PacketEvidence = {
+    summary: parsed
+      ? parsed.summary
+      : resultText === null
+        ? "WORKER SESSION FAILED (spawn error / timeout / bad output) — review the diffs below; they are what actually changed."
+        : `WORKER BROKE THE OUTPUT CONTRACT (no vg-packet-result block) — treat with suspicion. Raw tail: ${resultText.slice(-300)}`,
+    irDelta,
+    diffs,
+    assertions: computeThreadAssertions(freshThread, effectKindFor),
+    blindSpots: computeThreadBlindSpots(freshThread, effectKindFor),
+  };
+
+  if (resultText === null && diffs.length === 0) {
+    dropPacketSnapshot(packet.id);
+    return { kind: "escalate", reason: "worker session failed before doing any work", evidence };
+  }
+  if (parsed?.outcome === "escalate") {
+    return { kind: "escalate", reason: parsed.reason ?? parsed.summary ?? "worker escalated without a reason", evidence };
+  }
+  return { kind: "review", evidence };
 }
 
 // M8.3.3 — wire-format file paths are relative to inputPath. The
@@ -661,6 +2397,10 @@ function relativeProjectFiles(): typeof projectParse {
         if (!e.targetFile) return e;
         return { ...e, targetFile: relativize(e.targetFile) };
       }),
+      // M-ARCH.2 — a tsconfig alias target is stamped absolute (the linker's
+      // key space); downstream reads the relative map.
+      nodes: (v.nodes ?? []).map((n: any) => (typeof n?.aliasTarget === "string" && path.isAbsolute(n.aliasTarget)
+        ? { ...n, aliasTarget: relativize(n.aliasTarget) } : n)),
     };
     out[relativize(k)] = relIr;
   }
@@ -705,6 +2445,24 @@ function broadcastProjectWarnings(ws?: WebSocket): void {
 
 // ── Node lookup ───────────────────────────────────────────────────────────────
 
+// Per-file id → node index, keyed by the file's node ARRAY and rebuilt when
+// that array is replaced or changes length. The linear scans these replace
+// made a thread contract cost (steps × every node in the project): on
+// a private production codebase (1128 files, 363 threads) one `get-thread-skills` request held
+// the event loop for many minutes, so the GUI loaded threads and then never
+// answered a click for a node's source.
+const nodeIndex = new WeakMap<any[], Map<string, any>>();
+function nodesById(nodes: any[] | undefined): Map<string, any> | null {
+  if (!nodes) return null;
+  let m = nodeIndex.get(nodes);
+  if (!m || m.size > nodes.length || (m.size < nodes.length && m.size !== new Set(nodes.map((n: any) => n.id)).size)) {
+    m = new Map();
+    for (const n of nodes) if (!m.has(n.id)) m.set(n.id, n);
+    nodeIndex.set(nodes, m);
+  }
+  return m;
+}
+
 function findNode(nodeId: string, filePath?: string): any | null {
   if (isDirectory) {
     if (filePath) {
@@ -712,11 +2470,11 @@ function findNode(nodeId: string, filePath?: string): any | null {
       // the absolute key projectParse uses internally. resolveProjectPath
       // is a no-op on already-absolute input so legacy callers still work.
       const abs = resolveProjectPath(filePath);
-      return projectParse[abs]?.nodes.find((n: any) => n.id === nodeId) || null;
+      return nodesById(projectParse[abs]?.nodes)?.get(nodeId) ?? null;
     }
     // search all files
     for (const data of Object.values(projectParse)) {
-      const n = data.nodes.find((n: any) => n.id === nodeId);
+      const n = nodesById(data.nodes)?.get(nodeId);
       if (n) return n;
     }
     return null;
@@ -728,7 +2486,7 @@ function findNode(nodeId: string, filePath?: string): any | null {
 function findNodeFile(nodeId: string): string | null {
   if (!isDirectory) return resolvedPyFile;
   for (const [filePath, data] of Object.entries(projectParse)) {
-    if (data.nodes.find((n: any) => n.id === nodeId)) return filePath;
+    if (nodesById(data.nodes)?.has(nodeId)) return filePath;
   }
   return null;
 }
@@ -757,12 +2515,43 @@ function fileLineCount(filePath: string): number {
 // cst_rewrite.py emits a structured `errorKind` on every CST op (see
 // scripts/cst_rewrite.py:_VALID_ERROR_KINDS / PLAN-v3 §5.3). Surface it to
 // callers so the editor panel can branch on it in its inline error row.
+// M-LANG4 — the wet/dry chokepoint spawns dispatch by the TARGET FILE's
+// language (args[0] is the file in both CLI contracts). Case-2 vectorlab
+// finding (2026-08-30): a floor-less language must REFUSE HONESTLY, not
+// fall through to the Python rewriter — libcst's "ParserSyntaxError"
+// on a .cpp file sent the reader debugging phantom syntax errors when
+// the truth was "C++ has no edit floor". The UI gates these edits off
+// via capabilities; this refusal is for MCP/agent callers that bypass
+// the UI.
+function rewriteCmdFor(targetFile: string):
+  { cmd: { bin: string; argv: string[]; needsPythonEnv: boolean } } | { refusal: string } {
+  const lang = langOf(targetFile);
+  if (!lang) {
+    return { refusal: `No language frontend is registered for '${targetFile}' — nothing can edit it.` };
+  }
+  const cmd = rewriteCommand(lang, path.join(PROJECT_ROOT, "scripts"));
+  if (!cmd) {
+    return {
+      refusal: `${lang.label} has no edit floor yet (capabilities.edit is false) — `
+        + `edits require a per-language rewriter under the diff-confinement check, `
+        + `and none has shipped for ${lang.label}. The file was not touched.`,
+    };
+  }
+  return { cmd };
+}
+
 function spawnRewrite(args: string[], stdin?: string):
   Promise<{ success: boolean; error?: string; errorKind?: string }> {
   return new Promise((resolve) => {
-    const child = spawn("python3", [REWRITE_SCRIPT, ...args], {
+    const dispatch = rewriteCmdFor(args[0] ?? "");
+    if ("refusal" in dispatch) {
+      resolve({ success: false, error: dispatch.refusal });
+      return;
+    }
+    const cmd = dispatch.cmd;
+    const child = spawn(cmd.bin, [...cmd.argv, ...args], {
       stdio: ["pipe", "pipe", "pipe"],
-      env: pythonEnv(),
+      env: cmd.needsPythonEnv ? pythonEnv() : process.env,
     });
     let stdout = "";
     let stderr = "";
@@ -796,7 +2585,9 @@ async function rewriteAndValidate(
   // B3 — snapshot the pre-edit IR before it is overwritten, so the edit can
   // report the structural delta (self-verification).
   const beforeIR = isDirectory ? projectParse[file] : lastParse;
-  const result = await spawnRewrite(args, stdin);
+  beginSelfEdit(file); // the rewriter's write is ours: the watcher must not see it as external
+  let result: Awaited<ReturnType<typeof spawnRewrite>>;
+  try { result = await spawnRewrite(args, stdin); } finally { endSelfEdit(file); }
   if (!result.success) return { success: false, message: result.error, errorKind: result.errorKind };
 
   try {
@@ -810,6 +2601,7 @@ async function rewriteAndValidate(
     let afterIR = parsed;
     if (isDirectory) {
       projectParse[file] = parsed;
+      touchParsed(file);
       // M-FS5 (full-scope review P2) — re-link BEFORE diffing. The solo
       // parse carries no cross-file reference edges, so diffing it
       // against the pre-edit LINKED IR reported every edge out of the
@@ -818,7 +2610,7 @@ async function rewriteAndValidate(
       // investigating. link() is idempotent and cheap next to the full
       // derived pipeline, which stays debounced below.
       try {
-        projectParse = await runCrossFileLink(projectParse);
+        await relinkProjectParse();
         afterIR = projectParse[file] ?? parsed;
       } catch (e: any) {
         console.warn(`  [Edit] post-edit re-link failed (delta may over-report): ${e?.message ?? e}`);
@@ -1209,7 +3001,7 @@ async function changesetProposeCore(raw: unknown, effectConsentToken?: string, t
     fs.writeFileSync(path.join(sandbox, CHECK_MODULE), changeset.check.module, "utf-8");
 
     // Parse + link the sandbox (module paths relative to the SANDBOX root).
-    const sandboxFiles = findPyFiles(sandbox);
+    const sandboxFiles = findSourceFiles(sandbox);
     const sandboxMap: Record<string, any> = {};
     for (const sf of sandboxFiles) {
       const relModule = path.relative(sandbox, sf).replace(/\.py$/, "").split(path.sep).join(".");
@@ -1365,7 +3157,7 @@ async function handleChangesetProposeIntent(intent: string, ws: WebSocket): Prom
     return;
   }
   const existing = isDirectory
-    ? findPyFiles(inputPath).map((f) => relativize(f))
+    ? findSourceFiles(inputPath).map((f) => relativize(f))
     : [];
   const draft = await draftChangeset(intent.trim(), plan, existing, opts.cwd, changesetExistingSymbols(), builderSession());
   if (!draft.changeset) {
@@ -1409,7 +3201,7 @@ async function handleChangesetModify(instruction: unknown, runItemId: unknown, l
   if (!base) { fail("Nothing to modify — no run item or changeset label."); return; }
 
   const intent = `${base}\n\nREVISION GUIDANCE (the previous draft of this increment was declined by the human; follow this): ${instruction.trim()}`;
-  const existing = isDirectory ? findPyFiles(inputPath).map((f) => relativize(f)) : [];
+  const existing = isDirectory ? findSourceFiles(inputPath).map((f) => relativize(f)) : [];
   const draft = await draftChangeset(intent, plan, existing, opts.cwd, changesetExistingSymbols(), builderSession());
   if (!draft.changeset) {
     fail(draft.error ?? "The builder did not produce a revised increment.");
@@ -1477,7 +3269,7 @@ async function handleChangesetAccept(raw: unknown, ws: WebSocket): Promise<void>
     for (const t of targets) {
       noteSelfEdit(t.abs);
       const parsed = await parseOneFile(t.abs, isDirectory ? fileToModulePath(t.abs) : undefined);
-      if (isDirectory) projectParse[t.abs] = parsed;
+      if (isDirectory) { projectParse[t.abs] = parsed; touchParsed(t.abs); }
       else lastParse = parsed;
     }
   } catch (err: any) {
@@ -1713,7 +3505,7 @@ async function advanceBuildRun(): Promise<void> {
     broadcastRunState("run paused: project root unreachable");
     return;
   }
-  const existing = isDirectory ? findPyFiles(inputPath).map((f) => relativize(f)) : [];
+  const existing = isDirectory ? findSourceFiles(inputPath).map((f) => relativize(f)) : [];
   const draft = await draftChangeset(item.capability, sysPlan, existing, opts.cwd, changesetExistingSymbols(), builderSession());
   if (!draft.changeset) {
     updateItem(item.id, "failed", draft.error ?? "builder produced no increment");
@@ -1955,7 +3747,7 @@ function handleEditOpen(nodeId: string, ws: WebSocket, filePath?: string): void 
     ws.send(JSON.stringify({ type: "edit-node-source", payload: { nodeId, source: "", error: "Node not found" } }));
     return;
   }
-  const line = node.line ?? node.lineno;
+  const line = node.decoratorLine ?? node.line ?? node.lineno; // M-CONTRACT.6 — a decorated def/class starts at its first decorator
   const endLine = node.endLine ?? node.endLineno;
   // U1.1 — in directory mode the caller must supply a filePath; if it's
   // missing, fall back to findNodeFile so the pencil-edit path (which
@@ -2106,8 +3898,18 @@ function _proposalToCstArgs(
 // failure (Python modules don't start with `{`, so the discriminator is safe).
 function _dryRunRewrite(argv: string[], stdin?: string): Promise<{ source?: string; error?: string }> {
   return new Promise((resolve) => {
-    const child = spawn("python3", [REWRITE_SCRIPT, ...argv, "--dry-run"], {
-      stdio: ["pipe", "pipe", "pipe"], env: pythonEnv(),
+    // M-LANG4 — same per-language dispatch as spawnRewrite: the wet and
+    // dry paths MUST run the identical op pipeline (the D5/D6 parity
+    // invariant), so both resolve the command from argv[0] — including
+    // the honest floor-less refusal.
+    const dispatch = rewriteCmdFor(argv[0] ?? "");
+    if ("refusal" in dispatch) {
+      resolve({ error: dispatch.refusal });
+      return;
+    }
+    const cmd = dispatch.cmd;
+    const child = spawn(cmd.bin, [...cmd.argv, ...argv, "--dry-run"], {
+      stdio: ["pipe", "pipe", "pipe"], env: cmd.needsPythonEnv ? pythonEnv() : process.env,
     });
     let out = "", err = "";
     child.stdout.on("data", (d: Buffer) => { out += d.toString(); });
@@ -2139,7 +3941,8 @@ async function _sliceFunctionFromSource(source: string, fnId: string): Promise<s
     const n = parsed.nodes.find((x: any) => x.id === fnId);
     if (!n) return null;
     const lines = source.split("\n");
-    return lines.slice((n.line ?? n.lineno) - 1, (n.endLine ?? n.endLineno)).join("\n");
+    // M-CONTRACT.6 — a decorated def starts at its first decorator.
+    return lines.slice((n.decoratorLine ?? n.line ?? n.lineno) - 1, (n.endLine ?? n.endLineno)).join("\n");
   } catch {
     return null;
   } finally {
@@ -2199,7 +4002,8 @@ function _runIntentLlm(intent: string, node: any, fileNodes: any[], fnSource: st
   ].join("\n");
   return new Promise((resolve) => {
     // gen-cwd-fix: run in the analyzed project, fail honestly if it's gone.
-    const opts = genSpawnOptions();
+    const spawnTarget = resolveClaudeBin("thinking");
+    const opts = genSpawnOptions(spawnTarget);
     if (!opts) {
       console.warn("  [Intent] analyzed project root unreachable — skipping LLM");
       resolve(null);
@@ -2212,7 +4016,7 @@ function _runIntentLlm(intent: string, node: any, fileNodes: any[], fnSource: st
     // the CST chokepoint. Also switches off the hardcoded "claude": this
     // spawn bypassed VG_CLAUDE_BIN, so tests could not stub it and the
     // showdown metering never saw it.
-    const { cmd, args: pre } = resolveClaudeBin("thinking");
+    const { cmd, args: pre } = spawnTarget;
     const child = spawn(
       cmd,
       [...pre, "-p", "--output-format", "json", "--strict-mcp-config",
@@ -2272,7 +4076,7 @@ async function handlePlaceIntent(
   const fn = _enclosingFunctionNode(node, fileNodes);
   let fnSource: string | null = null;
   if (fn) {
-    try { fnSource = getSourceSnippet(fn.line ?? fn.lineno, fn.endLine ?? fn.endLineno, filePath); } catch { /* ignore */ }
+    try { fnSource = getSourceSnippet(fn.decoratorLine ?? fn.line ?? fn.lineno, fn.endLine ?? fn.endLineno, filePath); } catch { /* ignore */ }
   }
 
   // ── Tier 1: heuristic placer ──
@@ -2334,8 +4138,23 @@ async function executeToolCall(
   const tFile = chatFile ? resolveProjectPath(chatFile) : (isDirectory ? null : resolvedPyFile);
   if (!tFile) return { success: false, message: "No target file for tool call" };
 
+  // H2H drill finding (2026-09-07): vibegraph_get_node_source accepts nodeId
+  // "module" (the whole file) and its own error text recommends it — but
+  // the WRITE side dead-ended on "Node not found: module", so a worker that
+  // needed to touch the module docstring (no IR node exists for one) had no
+  // honest move but to escalate. Reading and writing now agree: a whole-file
+  // replace routes to the chokepoint's replace_module_body op (Mode A's
+  // path, same confinement floor); the other ops name why "module" cannot
+  // be their anchor instead of a bare not-found.
+  const isModule = input.nodeId === "module" || input.nodeId === "";
+  const moduleHint = (op: string) =>
+    `"module" is the whole file, which has no anchor node for ${op}. Use replace_node with nodeId "module" to replace the entire file (the module docstring has no IR node of its own — this is the only way to edit it), or anchor on a real structural id (e.g. the first import).`;
+
   switch (name) {
     case "replace_node": {
+      if (isModule) {
+        return rewriteAndValidate([tFile, "replace_module_body"], input.newSource as string, tFile);
+      }
       const node = findNode(input.nodeId as string, tFile);
       if (!node) return { success: false, message: `Node not found: ${input.nodeId}` };
       return rewriteAndValidate(
@@ -2344,6 +4163,7 @@ async function executeToolCall(
       );
     }
     case "insert_statement_before": {
+      if (isModule) return { success: false, message: moduleHint(name) };
       const node = findNode(input.nodeId as string, tFile);
       if (!node) return { success: false, message: `Node not found: ${input.nodeId}` };
       return rewriteAndValidate(
@@ -2352,6 +4172,7 @@ async function executeToolCall(
       );
     }
     case "insert_statement_after": {
+      if (isModule) return { success: false, message: moduleHint(name) };
       const node = findNode(input.nodeId as string, tFile);
       if (!node) return { success: false, message: `Node not found: ${input.nodeId}` };
       return rewriteAndValidate(
@@ -2360,6 +4181,7 @@ async function executeToolCall(
       );
     }
     case "delete_node": {
+      if (isModule) return { success: false, message: moduleHint(name) };
       const node = findNode(input.nodeId as string, tFile);
       if (!node) return { success: false, message: `Node not found: ${input.nodeId}` };
       return rewriteAndValidate(
@@ -2407,6 +4229,8 @@ interface ChatClientState {
   // instead of a re-paste. Only meaningful for the stdio backend (the SDK
   // backend has no cross-turn memory, so it must re-inject every turn).
   injectedSkills: Map<string, string>;
+  /** M-SKILLS.2 — generic skills already sent this session (name → body hash). */
+  injectedGenericSkills: Map<string, string>;
 }
 // M-GF3.4 — sessions are keyed per SCOPE within a client: "main" is the
 // chat panel's conversation; "stage:<itemId>" is a stage-dialogue in the
@@ -2493,7 +4317,7 @@ async function handleChat(
       line: node?.line ?? node?.lineno,
       endLine: node?.endLine ?? node?.endLineno,
       source: node && nodeFile
-        ? getSourceSnippet(node.line ?? node.lineno, node.endLine ?? node.endLineno, nodeFile)
+        ? getSourceSnippet(node.decoratorLine ?? node.line ?? node.lineno, node.endLine ?? node.endLineno, nodeFile)
         : null,
     };
   }
@@ -2536,11 +4360,21 @@ async function handleChat(
   // reach back into this same process's /mcp endpoint via the URL we
   // pass in, so the agent can drive the very webview the user is
   // sitting in front of.
-  const backend = selectBackend();
+  // M-PROVIDER — the picker's "Local (Ollama)" id selects the local
+  // backend (the Models panel's endpoint + model); a claude id keeps the
+  // claude session. Switching PROVIDER cannot resume the other's
+  // conversation, so it starts a fresh session (the picker's hint says so).
+  const wantLocal = model === LOCAL_CHAT_MODEL_ID;
+  const backend = wantLocal ? new OllamaChatBackend(getModelTiers().local ?? DEFAULT_LOCAL) : selectBackend();
+  if (wantLocal) model = null; // never reaches the claude CLI as --model
 
   // M27.1 — New chat: drop the old session (and its child) before
   // opening a fresh one. The flag was accepted-and-ignored since M7.
   let state = chatScopeState(ws, "main");
+  if (state && (state.session as { backendId?: string }).backendId !== undefined && (state.session as { backendId?: string }).backendId !== backend.id) {
+    disposeChatScope(ws, "main");
+    state = undefined;
+  }
   if (clearHistory && state) {
     disposeChatScope(ws, "main");
     state = undefined;
@@ -2551,14 +4385,15 @@ async function handleChat(
   const resumedExisting = !!state;
   if (!state) {
     state = {
-      session: backend.openSession({
+      session: Object.assign(backend.openSession({
         mcpServerUrl: `http://localhost:${port}/mcp`,
         cwd: chatCwd(),
         disallowedTools: CHAT_DENIED_TOOLS,
         model: model ?? undefined,
-      }),
+      }), { backendId: backend.id }),
       prevCtx: null,
       injectedSkills: new Map(),
+      injectedGenericSkills: new Map(),
     };
     setChatScopeState(ws, "main", state);
   } else {
@@ -2577,6 +4412,7 @@ async function handleChat(
   // needed, the id is unambiguous (file-disambiguated via the node's TRUE
   // file already resolved into nodeCtx). Both signals merge under one limit.
   let routed: RoutedThreadContext[] = [];
+  let selfMatch: { qualifiedName: string; matchedOn: string[] } | null = null;
   {
     const exclude = threadEntryPointId ? [threadEntryPointId] : [];
     const matches = mergeMatches(
@@ -2594,18 +4430,14 @@ async function handleChat(
       );
       const self = unfiltered.find((m) => m.entryPointId === threadEntryPointId);
       if (self) {
-        ws.send(JSON.stringify({
-          type: "chat-routed",
-          payload: {
-            matches: [],
-            // Not a routed thread — the active thread's FULL context (nodes,
-            // skill, artifacts) is already in the prompt, so re-routing it
-            // would duplicate it. Report it, don't inject it twice.
-            // matchedOn is RemitMatchToken[] ({kind, token}) straight from
-            // the matcher — flatten to the tokens the human actually typed.
-            selfMatch: { qualifiedName: self.qualifiedName, matchedOn: self.matchedOn.map((t) => t.token) },
-          },
-        }));
+        // Not a routed thread — the active thread's FULL context (nodes,
+        // skill, artifacts) is already in the prompt, so re-routing it
+        // would duplicate it. Report it, don't inject it twice.
+        // matchedOn is RemitMatchToken[] ({kind, token}) straight from
+        // the matcher — flatten to the tokens the human actually typed.
+        // Sent with the ONE chat-routed below (M-SKILLS.3), not here: the
+        // generic-skill audit is not known yet at this point.
+        selfMatch = { qualifiedName: self.qualifiedName, matchedOn: self.matchedOn.map((t) => t.token) };
       }
     }
     if (matches.length > 0) {
@@ -2639,6 +4471,27 @@ async function handleChat(
     }
   }
 
+  // M-SKILLS.2 — generic direction for the thread in view (else the top
+  // routed match), inside what the thread skill and the routed skills left
+  // of the ONE budget; deduplicated per persistent session like they are.
+  // No task facts in chat: the retry skill is a packet trigger and never
+  // fires here.
+  const genericDedup = backend.id === "claude-stdio" ? state.injectedGenericSkills : new Map<string, string>();
+  const genericSel = isDirectory
+    ? selectGenericSkills({
+      skills: GENERIC_SKILLS, config: skillsConfig, profile: liveStackProfile(),
+      entryPointId: threadEntryPointId ?? routed[0]?.entryPointId ?? undefined,
+      budgetChars: Math.max(0, SKILL_INJECTION_BUDGET_CHARS
+        - (threadCtx?.skill?.length ?? 0)
+        - routed.reduce((n, r) => n + (r.skill?.length ?? 0), 0)),
+      alreadyInjected: genericDedup,
+    })
+    : { routed: [], injected: [] };
+  if (backend.id === "claude-stdio") {
+    for (const [name, hash] of genericSel.injected) state.injectedGenericSkills.set(name, hash);
+  }
+  const genericText = renderGenericSkillsBlock(genericSel.routed, skillsConfig);
+
   // M27.2 — full framing on the FIRST turn of a persistent session;
   // later turns carry only a delta of what the user is looking at.
   // Non-stdio backends have NO cross-turn memory (SDK = per-turn
@@ -2651,22 +4504,34 @@ async function handleChat(
   };
   let prompt: string;
   if (backend.id !== "claude-stdio" || !state.prevCtx) {
-    prompt = buildChatPrompt({ userText, ...turnCtx, routed });
+    // M-STACK.3 — the project MAP is files plus what they are built on.
+    prompt = buildChatPrompt({ userText, ...turnCtx, routed, stackSummary: stackSummaryLine(latestStack), genericSkills: genericText || null });
   } else {
     // Routing is per-question, not a context delta: the routed block rides
-    // every follow-up turn that has matches.
+    // every follow-up turn that has matches. Generic direction rides the
+    // same way, deduplicated per session.
     const preamble = buildTurnPreamble(state.prevCtx, turnCtx);
     const routedText = renderRoutedBlock(routed);
-    prompt = [preamble, routedText, userText].filter(Boolean).join("\n\n");
+    prompt = [preamble, routedText, genericText, userText].filter(Boolean).join("\n\n");
   }
   state.prevCtx = turnCtx;
 
   // M-SKILL.2 — provenance to the human: name every routed thread and why
-  // it matched, before the reply streams.
-  if (routed.length > 0) {
+  // it matched, before the reply streams. ONE send (M-SKILLS.3): the
+  // self-match report (M-SKILL.6) and the generic-skill audit (M-SKILLS.2)
+  // ride the same chip as the routed threads, so a generic skill shared on
+  // a turn that routed nothing is still said — silence must never read as
+  // "no direction was given". Disabled and not-applicable stay out of the
+  // chip: the prompt and the chip are not the audit (work-run.json is).
+  const genericReport = genericSel.routed
+    .filter((g) => g.skill || g.omitted === "over-budget" || g.omitted === "already-in-session")
+    .map((g) => ({ name: g.name, injected: g.skill != null, ...(g.omitted ? { omitted: g.omitted } : {}) }));
+  if (routed.length > 0 || selfMatch || genericReport.length > 0) {
     ws.send(JSON.stringify({
       type: "chat-routed",
       payload: {
+        genericSkills: genericReport,
+        ...(selfMatch ? { selfMatch } : {}),
         matches: routed.map((r) => ({
           entryPointId: r.entryPointId,
           qualifiedName: r.qualifiedName,
@@ -2742,6 +4607,7 @@ async function handleStageChat(
       }),
       prevCtx: null,
       injectedSkills: new Map(),
+      injectedGenericSkills: new Map(),
     };
     setChatScopeState(ws, scope, state);
   }
@@ -2854,7 +4720,8 @@ async function handleAnalyzeFile(filePath: string | undefined, ws: WebSocket): P
   ].join("\n");
 
   // gen-cwd-fix: run in the analyzed project, fail honestly if it's gone.
-  const opts = genSpawnOptions();
+  const spawnTarget = resolveClaudeBin("routine");
+  const opts = genSpawnOptions(spawnTarget);
   if (!opts) {
     ws.send(JSON.stringify({ type: "analyze-error", payload: { message: "Analyzed project root is unreachable." } }));
     return;
@@ -2864,7 +4731,7 @@ async function handleAnalyzeFile(filePath: string | undefined, ws: WebSocket): P
   // Model tier: routine — a prose summary of one file. Also the last
   // hardcoded "claude" in the codebase; VG_CLAUDE_BIN now covers every
   // headless path without exception.
-  const { cmd, args: pre } = resolveClaudeBin("routine");
+  const { cmd, args: pre } = spawnTarget;
   const child = spawn(
     cmd,
     [
@@ -3014,10 +4881,15 @@ function analyzedRoot(): string {
 // LOUDLY without spawning or persisting — never a silent fallback to
 // VibeGraph's root. The run-to-node core (analyzedRoot() + PYTHONPATH) is the
 // precedent this generalises.
-function genSpawnOptions(): { cwd: string; env: NodeJS.ProcessEnv } | null {
+// M-GATEWAY — a caller that spawns the CLI passes its resolved target, so
+// the child gets THAT TIER's route (a gateway endpoint, its model, its key)
+// rather than the whole server's environment. Callers that spawn something
+// else (python, a helper module with its own target) pass nothing and get
+// the parent's environment exactly as before.
+function genSpawnOptions(target?: SpawnTarget): { cwd: string; env: NodeJS.ProcessEnv } | null {
   const cwd = analyzedRoot();
   if (!fs.existsSync(cwd)) return null;
-  return { cwd, env: { ...process.env } };
+  return { cwd, env: target ? spawnEnv(target) : { ...process.env } };
 }
 
 // The live IR's full node-id universe — every id the parser emitted across the
@@ -3570,7 +5442,7 @@ function runThreadToNodeCore(
 // Effect purity is NOT decided here — that stays with the authoritative floor
 // inside runThreadToNodeCore. This is purely the IR-SHAPE gate.
 type RunTargetResolution =
-  | { ok: true; entryFn: string; exprN: string; needsSynth: boolean; className?: string }
+  | { ok: true; entryFn: string; exprN: string; needsSynth: boolean; className?: string; params: string[] }
   | { ok: false; outcome: string; reason: string };
 
 const _RUN_IDENT = /^[A-Za-z_]\w*$/;
@@ -3637,7 +5509,7 @@ function resolveRunTarget(nodeId: string, filePath?: string): RunTargetResolutio
   } else {
     return decline("value-ambiguous", "no plain-identifier value at this node");
   }
-  return { ok: true, entryFn: fn.name, exprN, needsSynth, ...(className ? { className } : {}) };
+  return { ok: true, entryFn: fn.name, exprN, needsSynth, params, ...(className ? { className } : {}) };
 }
 
 // B5 (PLAN-v6) — resolve the enclosing module-level function of a node id
@@ -3680,6 +5552,13 @@ function resolveEnclosingFn(
 // (not an overload of runThreadToNodeCore) so the proven run-to-node path is
 // untouched. Inherits the SM3 floor + effect-consent: observing the receiver
 // requires its binding code to run, so an effectful binding gates the same way.
+/** The exception line of a Python traceback (the last non-empty line), or undefined. */
+function tracebackTail(stderr: unknown): string | undefined {
+  if (typeof stderr !== "string") return undefined;
+  const lines = stderr.split("\n").map((l) => l.trimEnd()).filter(Boolean);
+  return lines.length ? lines[lines.length - 1].slice(0, 400) : undefined;
+}
+
 function runObserveDynamicTarget(
   nodeId: string,
   filePath: string | undefined,
@@ -3698,6 +5577,20 @@ function runObserveDynamicTarget(
     const node = findNode(nodeId, filePath);
     if (!node) return fail("harness-error", `Node not found: ${nodeId}`);
     const file = findNodeFile(nodeId) ?? filePath ?? resolvedPyFile;
+    // An arg-needing enclosing function is an honest needs-inputs decline —
+    // the verdict run-to-here gives (handleRunThreadToNode) — not a
+    // TypeError buried in a traceback the caller never saw. Measured on the
+    // fleet example: Observe on `conn.execute().fetchall` inside
+    // readings_between(since, until) ran `readings_between()` bare, raised
+    // "missing 2 required positional arguments", and reported
+    // `runtime-error` with no text because the runner's JSON carries the
+    // traceback under `stderr`, not `error`.
+    const target = resolveRunTarget(nodeId, filePath);
+    if (target.ok && target.needsSynth) {
+      return fail("needs-inputs", target.className
+        ? `${target.className}.${entryFn} is a method — Observe runs the enclosing function with no instance and no arguments; run to here instead (the run button synthesizes an example instance), or observe this call from a caller that binds them`
+        : `${entryFn}(${(target.params ?? []).join(", ")}) requires arguments — Observe runs the enclosing function with none; run to here instead (the run button proposes literal inputs), or observe this call from a caller that binds them`);
+    }
 
     const verdict = await scanEffectsToNode(nodeId, filePath);
     if (!verdict.pure) {
@@ -3747,7 +5640,9 @@ function runObserveDynamicTarget(
           observedTarget: r.outcome === "ok" ? (r.value ?? null) : null,
           note: OBSERVE_NOTE,
           provenance: "real-input" as const,
-          error: r.error,
+          // run_to_node reports the traceback under `stderr`; its last
+          // line is the exception, which is what a reader needs.
+          error: r.error ?? tracebackTail(r.stderr),
         };
       } catch {
         return fail("harness-error", "could not parse run_to_node output");
@@ -3756,6 +5651,298 @@ function runObserveDynamicTarget(
       for (const t of temps) { try { fs.unlinkSync(t); } catch { /* ignore */ } }
     }
   })();
+}
+
+// PLAN-M-RUNTIME phase 3 — a TRACE RUN: ONE consented execution of an entry
+// point under scripts/trace_run.py, annotating every call site the run
+// touched at once. The batch form of B5's Observe, and it inherits B5's rule
+// wholesale: the result is an overlay beside the IR, never a promotion of a
+// node's `dynamic`/`unresolved` kind.
+//
+// The floor is the SAME SM3 scan run-to-here uses, with one difference that
+// matters: a trace runs the WHOLE entry function, so the scan's stop node is
+// the LAST node inside it. scan_effects scopes the top frame by
+// `line <= stop.line`, so the furthest-down node is exactly the widest
+// honest scope — anything narrower would consent to less than what runs.
+export interface TraceRunResult {
+  entryPointId: string;
+  outcome: string;
+  /** How many IR nodes the run actually annotated. */
+  observed: number;
+  run?: TraceRun;
+  effects?: EffectOffense[];
+  effectConsentToken?: string | null;
+  note: string;
+  error?: string;
+  stdout?: string;
+  stderr?: string;
+}
+
+// PLAN-M-RUNTIME phase 3 (bash) — the trace half of the BASH RUN FLOOR.
+//
+// Python's floor predicts what will run and asks. Bash's cannot: shelling
+// out IS the language, and `$CMD`/`eval` are decided while running. So this
+// one makes external execution IMPOSSIBLE (trace_bash.mjs points PATH at a
+// missing directory and records every command instead) and then runs the
+// script for real, inside a throwaway copy of the project.
+//
+// The human is still asked, and told two true things: which commands will be
+// recorded rather than executed, and the one thing the floor cannot cover —
+// a redirection is not a command, so an absolute-path redirect is REFUSED
+// rather than run with a caveat (src/server/bash_floor.ts).
+async function runTraceBash(
+  ep: { id: string; file: string; irNodeId: string; qualifiedName: string },
+  effectConsent?: string,
+): Promise<TraceRunResult> {
+  const fail = (outcome: string, error: string, extra?: Partial<TraceRunResult>): TraceRunResult =>
+    ({ entryPointId: ep.id, outcome, observed: 0, note: OBSERVE_NOTE, error, ...extra });
+
+  const root = analyzedRoot();
+  const files = relativeProjectFiles() as Record<string, { nodes?: Array<{ id: string; type?: string; funcName?: string; line?: number }> }>;
+  const thread = (latestThreads as Array<{ entryPointId?: string | null; filesReached?: string[] }>)
+    .find((t) => t.entryPointId === ep.id);
+  // Everything the trace can execute: the entry script plus what it sources.
+  const scripts = [...new Set([ep.file, ...(thread?.filesReached ?? [])])]
+    .filter((f) => /\.(sh|bash)$/.test(f));
+
+  const sources: Record<string, string> = {};
+  for (const f of scripts) {
+    try { sources[f] = fs.readFileSync(path.join(root, f), "utf-8"); }
+    catch { /* a file we cannot read cannot be checked - and is not run */ }
+  }
+  // The command words the IR found, with their lines, so consent NAMES them.
+  //
+  // What is excluded, and the distinction is a SAFETY one the stack index
+  // does not have to make:
+  //   * BASH_SHELL_BUILTINS / BASH_KEYWORDS — `cd`, `[`, `for`. These never
+  //     leave the shell, so there is nothing to neutralise and nothing to
+  //     consent to.
+  //   * calls the linker RESOLVED to a function defined in the script.
+  //     `prepare` is not a subprocess; listing it as one would bury the real
+  //     commands in noise and misdescribe what the run does.
+  //
+  // NOT excluded: BASH_COREUTILS. `rm`, `mkdir`, `tar` are in that list
+  // because they say nothing about the STACK — which is a classification
+  // judgement, not a safety one. `rm -rf build/` is the single most
+  // important line for a human to see before saying yes, and an earlier cut
+  // of this code omitted it for exactly that reason. The M-TABLES split of
+  // shell builtins from coreutils is what makes the right answer expressible.
+  const resolvedCalls = new Set<string>();
+  for (const f of scripts) {
+    for (const e of (files[f] as { edges?: Array<{ type?: string; source?: string }> })?.edges ?? []) {
+      if (e?.type === "reference" && typeof e.source === "string") resolvedCalls.add(e.source);
+    }
+  }
+  const cmdNodes: Array<{ word: string; file: string; line: number }> = [];
+  for (const f of scripts) {
+    for (const n of files[f]?.nodes ?? []) {
+      if (n.type !== "call" || resolvedCalls.has(n.id)) continue;
+      const word = String(n.funcName ?? "").trim().split(/\s+/)[0];
+      if (!word || BASH_SHELL_BUILTINS.has(word) || BASH_KEYWORDS.has(word)) continue;
+      cmdNodes.push({ word, file: f, line: n.line ?? 0 });
+    }
+  }
+
+  const floor = assessBashTrace({ sources, commands: cmdNodes.map((c) => c.word) });
+  if (!floor.ok) return fail("refused", floor.reason);
+
+  // Consent, always: there is no such thing as a provably pure shell script,
+  // so bash never takes the python path's "pure, run it" shortcut. The
+  // offenses ARE the command list, which is what makes the consent readable.
+  const offenses: EffectOffense[] = cmdNodes.length
+    ? [...new Map(cmdNodes.map((c) => [`${c.file}:${c.line}:${c.word}`, {
+      kind: "effect" as const, effectKind: "subprocess", target: c.word, file: c.file, line: c.line,
+    }])).values()]
+    : [{ kind: "effect" as const, effectKind: "subprocess", target: ep.qualifiedName, file: ep.file, line: 0 }];
+  if (!verifyEffectConsent(ep.id, offenses, effectConsent)) {
+    return fail("requires-confirmation", `${floor.reason} ${BASH_TRACE_LIMITS.join(" ")}`, {
+      effects: offenses,
+      effectConsentToken: mintEffectConsent(ep.id, offenses),
+    });
+  }
+
+  // A throwaway copy: the stubbed PATH stops programs, and this stops the
+  // relative redirections it cannot see.
+  const sandbox = makeRunSandbox(root);
+  try {
+    const raw = await new Promise<string>((resolve) => {
+      execFile("node", [TRACE_BASH_SCRIPT, path.join(sandbox.root, ep.file), sandbox.root],
+        { cwd: sandbox.root, timeout: 30000, maxBuffer: 16 * 1024 * 1024 },
+        (err, stdout) => resolve(
+          stdout || JSON.stringify({
+            outcome: "harness-error", observations: [],
+            error: err?.message ?? "the bash tracer produced no output",
+          }),
+        ),
+      );
+    });
+    let parsed: {
+      outcome?: string; observations?: TracedSite[]; error?: string;
+      stdout?: string; stderr?: string; truncated?: boolean; recorded?: string[];
+    };
+    try { parsed = JSON.parse(raw); }
+    catch { return fail("harness-error", "could not parse trace_bash output"); }
+
+    const nodesByFile: Record<string, Array<{ id: string; line?: number | null; type?: string | null }>> = {};
+    for (const [f, fileIr] of Object.entries(files)) nodesByFile[f] = fileIr?.nodes ?? [];
+    const observations = joinTraceToNodes(parsed.observations ?? [], nodesByFile);
+
+    // Hash the REAL files, never the sandbox copy: staleness has to compare
+    // against what the human edits.
+    const sourceHashes: Record<string, string> = {};
+    for (const f of Object.keys(observations)) {
+      try { sourceHashes[f] = hashSource(fs.readFileSync(path.join(root, f), "utf-8")); }
+      catch { /* unreadable = staleness stays unknown, which reads as fresh */ }
+    }
+
+    const recorded = parsed.recorded ?? [];
+    const run: TraceRun = {
+      entryPointId: ep.id,
+      entryFn: ep.qualifiedName.split(/[.:]/).pop() ?? "",
+      language: "bash",
+      at: new Date().toISOString(),
+      outcome: parsed.outcome ?? "harness-error",
+      inputs: "no arguments; every external command RECORDED, not executed"
+        + (recorded.length ? ` (${recorded.join(", ")})` : ""),
+      observations,
+      sourceHashes,
+      truncated: !!parsed.truncated,
+      ...(parsed.error ? { error: parsed.error } : {}),
+    };
+    const observed = Object.values(observations).reduce((n, byId) => n + Object.keys(byId).length, 0);
+    if (observed > 0 || run.outcome === "ok") writeTraceRun(readmeRootDir(), run);
+
+    return {
+      entryPointId: ep.id,
+      outcome: run.outcome,
+      observed,
+      run,
+      note: OBSERVE_NOTE,
+      error: parsed.error,
+      stdout: (parsed.stdout ?? "").slice(0, 4000),
+      stderr: (parsed.stderr ?? "").slice(0, 4000),
+    };
+  } finally {
+    sandbox.dispose();
+  }
+}
+
+async function runTraceEntryPoint(
+  entryPointId: string,
+  effectConsent?: string,
+): Promise<TraceRunResult> {
+  const fail = (outcome: string, error: string, extra?: Partial<TraceRunResult>): TraceRunResult =>
+    ({ entryPointId, outcome, observed: 0, note: OBSERVE_NOTE, error, ...extra });
+
+  const ep = (latestEntryPoints as Array<{ id: string; file: string; irNodeId: string; qualifiedName: string }>)
+    .find((e) => e.id === entryPointId);
+  if (!ep) return fail("unsupported-target", `no entry point ${entryPointId}`);
+
+  // The registry decides, and it decides on `trace` rather than `run`:
+  // bash has a TRACE floor (scripts/trace_bash.mjs makes external execution
+  // impossible) and no RUN floor, so the two capabilities are genuinely
+  // different answers for it.
+  if (!capabilitiesForPath(ep.file).trace) {
+    return fail("unsupported-target",
+      `${ep.file}: this language has no trace floor yet, so there is nothing to trace through`);
+  }
+  if (langOf(ep.file)?.id === "bash") return runTraceBash(ep, effectConsent);
+
+  const files = relativeProjectFiles() as Record<string, { nodes?: Array<{ id: string; line?: number; type?: string }> }>;
+  const ir = files[ep.file];
+  if (!ir?.nodes?.length) return fail("harness-error", `no IR for ${ep.file}`);
+
+  const fnName = ep.qualifiedName.split(/[.:]/).pop() ?? "";
+  if (!_VG_IDENT.test(fnName)) return fail("harness-error", `unsafe entry function: ${fnName}`);
+
+  const prefix = `${ep.irNodeId}/`;
+  const inFn = ir.nodes
+    .filter((n) => n.id.startsWith(prefix) && typeof n.line === "number")
+    .sort((a, b) => (b.line as number) - (a.line as number));
+  const stopId = inFn[0]?.id ?? ep.irNodeId;
+
+  const verdict = await scanEffectsToNode(stopId, ep.file);
+  if (!verdict.pure) {
+    const gated = gatedOffenses(verdict.offenses);
+    if (gated.length && !verifyEffectConsent(stopId, gated, effectConsent)) {
+      return fail("requires-confirmation", verdict.reason, {
+        effects: gated,
+        effectConsentToken: mintEffectConsent(stopId, gated),
+      });
+    }
+  }
+
+  const root = analyzedRoot();
+  const abs = path.isAbsolute(ep.file) ? ep.file : path.join(root, ep.file);
+  const env = pythonEnv();
+  env.PYTHONPATH = `${root}:${env.PYTHONPATH ?? ""}`;
+  const raw = await new Promise<string>((resolve) => {
+    execFile("python3", [TRACE_RUN_SCRIPT, abs, fnName, root],
+      { cwd: root, env, timeout: 30000, maxBuffer: 16 * 1024 * 1024 },
+      (err, stdout) => resolve(
+        stdout || JSON.stringify({
+          outcome: err ? "harness-error" : "harness-error",
+          observations: [], error: err?.message ?? "tracer produced no output",
+        }),
+      ),
+    );
+  });
+
+  let parsed: {
+    outcome?: string; observations?: TracedSite[]; error?: string;
+    stdout?: string; stderr?: string; truncated?: boolean;
+  };
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return fail("harness-error", "could not parse trace_run output");
+  }
+
+  // The tracer reports co_filename, which is however the module was loaded.
+  // Relativise into the ONE keyspace the IR uses, and drop anything outside
+  // the project rather than inventing a key for it.
+  const nodesByFile: Record<string, Array<{ id: string; line?: number | null; type?: string | null }>> = {};
+  for (const [f, fileIr] of Object.entries(files)) nodesByFile[f] = fileIr?.nodes ?? [];
+  const sites: TracedSite[] = (parsed.observations ?? []).map((o) => ({
+    ...o,
+    file: path.isAbsolute(o.file) ? relativize(o.file) : o.file,
+  }));
+  const observations = joinTraceToNodes(sites, nodesByFile);
+
+  const sourceHashes: Record<string, string> = {};
+  for (const f of Object.keys(observations)) {
+    try { sourceHashes[f] = hashSource(fs.readFileSync(path.join(root, f), "utf-8")); }
+    catch { /* a file we cannot read cannot be stamped; staleness stays unknown */ }
+  }
+
+  const run: TraceRun = {
+    entryPointId,
+    entryFn: fnName,
+    language: langOf(ep.file)?.id ?? "python",
+    at: new Date().toISOString(),
+    outcome: parsed.outcome ?? "harness-error",
+    inputs: "no arguments — the entry point runs on its own",
+    observations,
+    sourceHashes,
+    truncated: !!parsed.truncated,
+    ...(parsed.error ? { error: parsed.error } : {}),
+  };
+  const observed = Object.values(observations).reduce((n, byId) => n + Object.keys(byId).length, 0);
+  // A run that raised still wrote down what it saw first. Storing it is the
+  // point: half a run is evidence about that half, and the outcome + error
+  // ride along so nobody reads it as a clean pass.
+  if (observed > 0 || run.outcome === "ok") writeTraceRun(readmeRootDir(), run);
+
+  return {
+    entryPointId,
+    outcome: run.outcome,
+    observed,
+    run,
+    note: OBSERVE_NOTE,
+    error: parsed.error,
+    stdout: (parsed.stdout ?? "").slice(0, 4000),
+    stderr: (parsed.stderr ?? "").slice(0, 4000),
+  };
 }
 
 function handleRunThreadToNode(
@@ -3837,7 +6024,7 @@ function handleSynthThreadArgs(
     const fnNode = _enclosingFunctionNode(findNode(irTargetId, filePath), fileData?.nodes ?? []);
     let fnSource = "";
     if (fnNode) {
-      try { fnSource = getSourceSnippet(fnNode.line ?? fnNode.lineno, fnNode.endLine ?? fnNode.endLineno, filePath); } catch { /* ignore */ }
+      try { fnSource = getSourceSnippet(fnNode.decoratorLine ?? fnNode.line ?? fnNode.lineno, fnNode.endLine ?? fnNode.endLineno, filePath); } catch { /* ignore */ }
     }
     if (!fnSource) { send({ ok: false, call: "", accepted: {}, rejected: [], error: "could not read entry function source" }); return; }
 
@@ -3887,7 +6074,7 @@ function handleSynthThreadArgs(
       const clsNode = (fileData?.nodes ?? []).find((n: any) => n.type === "class_def" && n.name === className);
       let classSource = "";
       if (clsNode) {
-        try { classSource = getSourceSnippet(clsNode.line ?? clsNode.lineno, clsNode.endLine ?? clsNode.endLineno, filePath); } catch { /* ignore */ }
+        try { classSource = getSourceSnippet(clsNode.decoratorLine ?? clsNode.line ?? clsNode.lineno, clsNode.endLine ?? clsNode.endLineno, filePath); } catch { /* ignore */ }
       }
       instanceCtx = { className, classSource: classSource.slice(0, 4000) };
     }
@@ -3957,7 +6144,7 @@ function handleSynthThreadData(
     const fnNode = _enclosingFunctionNode(findNode(irTargetId, filePath), fileData?.nodes ?? []);
     let fnSource = "";
     if (fnNode) {
-      try { fnSource = getSourceSnippet(fnNode.line ?? fnNode.lineno, fnNode.endLine ?? fnNode.endLineno, filePath); } catch { /* ignore */ }
+      try { fnSource = getSourceSnippet(fnNode.decoratorLine ?? fnNode.line ?? fnNode.lineno, fnNode.endLine ?? fnNode.endLineno, filePath); } catch { /* ignore */ }
     }
     if (!fnSource) { send({ ok: false, error: "could not read the reader function's source" }); return; }
 
@@ -4178,14 +6365,25 @@ function _readmePrompt(scope: "thread" | "file", id: string, ir: any): string {
 // a model that fails that floor costs a wasted spawn AND produces nothing.
 // That is the same reasoning that keeps the builder on the capable tier —
 // only callers proven safe to cheapen opt into "routine".
-function _runReadmeLlm(prompt: string, tier: ModelTier = "thinking"): Promise<string | null> {
+// Why the last _runReadmeLlm call returned null, for the callers that report
+// "… returned nothing": a spawn that exits non-zero, a result the CLI itself
+// marks is_error (an expired login answers that way), output that is not
+// JSON, or an empty result. Cleared by a successful call.
+let lastGenFailure: string | null = null;
+function genFailureSuffix(): string {
+  return lastGenFailure ? ` — ${lastGenFailure}` : "";
+}
+
+function _runReadmeLlm(prompt: string, tier: ModelTier = "thinking", kind: SpendKind = "gen"): Promise<string | null> {
   return new Promise((resolve) => {
     // gen-cwd-fix: the shared gen runner (README / thread-skill / explain /
     // thread-agent) must read the USER's project. Fail honestly if it's gone —
     // null here means callers return { ok:false } and persist nothing.
-    const opts = genSpawnOptions();
+    const spawnTarget = resolveClaudeBin(tier);
+    const opts = genSpawnOptions(spawnTarget);
     if (!opts) {
       console.warn("  [gen] analyzed project root unreachable — skipping LLM");
+      lastGenFailure = "analyzed project root unreachable";
       resolve(null);
       return;
     }
@@ -4196,25 +6394,48 @@ function _runReadmeLlm(prompt: string, tier: ModelTier = "thinking"): Promise<st
     // summarisation, and the sweep batch-drives this one spawn per thread,
     // so the per-spawn floor lands once per entry point. This is the single
     // biggest beneficiary of the split.
-    const { cmd, args: pre } = resolveClaudeBin(tier);
+    const { cmd, args: pre } = spawnTarget;
+    // M-ORCH drill finding (2026-09-06): --strict-mcp-config removes MCP
+    // servers only — the spawned claude STILL has Claude Code's native
+    // Read/Bash/Write tools, and the orchestrator's reviewer used them
+    // ("read api.py, executed the predicate"). Reading and running are
+    // verification value; WRITING is not — every caller of this runner
+    // (READMEs, thread skills, explain, D1 agents, the brief, the review)
+    // is a reasoning spawn that must never mutate the project. Deny the
+    // raw write tools STRUCTURALLY, the same posture as chat and workers.
     const child = spawn(
       cmd,
       [...pre, "-p", "--output-format", "json", "--strict-mcp-config",
         "--mcp-config", '{"mcpServers":{}}',
-        "--dangerously-skip-permissions", "--", prompt],
+        "--dangerously-skip-permissions",
+        "--disallowedTools", CHAT_DENIED_TOOLS.join(","),
+        "--", prompt],
       opts,
     );
     let out = "";
+    let errOut = "";
     child.stdout.on("data", (b: Buffer) => { out += b.toString(); });
+    child.stderr?.on("data", (b: Buffer) => { errOut += b.toString(); });
     child.on("close", (code) => {
-      if (code !== 0) { resolve(null); return; }
-      try {
-        const parsed = JSON.parse(out);
-        const text = typeof parsed.result === "string" ? parsed.result.trim() : "";
-        resolve(text || null);
-      } catch { resolve(null); }
+      let parsed: { result?: unknown; is_error?: unknown } | null = null;
+      try { parsed = JSON.parse(out); } catch { parsed = null; }
+      // Charged whatever the outcome: a spawn that failed still ran, and a
+      // ledger that counts only successes understates what a run cost.
+      chargeRun(kind, parsed);
+      const reported = parsed?.is_error && typeof parsed.result === "string" ? parsed.result.trim() : "";
+      if (code !== 0 || parsed?.is_error) {
+        const detail = reported || errOut.trim().split("\n").filter(Boolean).slice(-1)[0] || "";
+        lastGenFailure = `claude exited ${code ?? "?"}${detail ? `: ${detail.slice(0, 300)}` : ""}`;
+        console.warn(`  [gen] ${lastGenFailure}`);
+        resolve(null);
+        return;
+      }
+      if (!parsed) { lastGenFailure = "claude output was not JSON"; resolve(null); return; }
+      const text = typeof parsed.result === "string" ? parsed.result.trim() : "";
+      lastGenFailure = text ? null : "claude returned an empty result";
+      resolve(text || null);
     });
-    child.on("error", () => resolve(null));
+    child.on("error", (e) => { lastGenFailure = `could not spawn claude: ${e.message}`; resolve(null); });
   });
 }
 
@@ -4231,7 +6452,7 @@ async function runGenerateReadme(
     // "thinking" tier, not "routine": this one is read as the map of the
     // whole application, and every section makes claims about it.
     const prose = await _runReadmeLlm(_vibeReadmePrompt(ir), "thinking");
-    if (!prose) return { ok: false, error: "VibeReadme generation returned nothing" };
+    if (!prose) return { ok: false, error: `VibeReadme generation returned nothing${genFailureSuffix()}` };
     const check = validateVibeReadmeBody(prose);
     if (!check.ok) {
       return { ok: false, error: `VibeReadme did not meet its structure: ${check.problems.join("; ")}` };
@@ -4240,7 +6461,7 @@ async function runGenerateReadme(
     return { ok: true, body: prose.trim() };
   }
   const body = await _runReadmeLlm(_readmePrompt(scope as "thread" | "file", id, ir), "routine");
-  if (!body) return { ok: false, error: "README generation returned nothing" };
+  if (!body) return { ok: false, error: `README generation returned nothing${genFailureSuffix()}` };
   writeReadme(readmeRootDir(), scope, id, body, sourceHashOf(ir), new Date().toISOString());
   return { ok: true, body };
 }
@@ -4295,36 +6516,25 @@ async function handleGenerateReadme(
 // DETERMINISTICALLY from A1's roll-up (IR fact, not LLM). Always written as
 // a draft; a human ratifies by editing the file's status.
 
-function _threadSkillPrompt(entryPointId: string, ir: any): string {
-  const projected = projectThreadForAgent(ir as Thread);
-  const steps = projected.nodes
-    .filter((n) => ["seed", "step", "external"].includes(n.kind))
-    .slice(0, 40)
-    .map((n) => {
-      const mark =
-        (n.nestedCollapsed ? ` [+${n.nestedCollapsed} nested, drillable]` : "") +
-        (n.uncaptured ? " [hides calls not in IR]" : "");
-      return `- ${n.kind}: ${n.label}${n.irNodeId ? ` \`${n.irNodeId}\`` : ""}${n.file ? ` (${n.file})` : ""}${mark}`;
-    })
-    .join("\n");
-  return [
-    "Write a THREAD SKILL: durable, grounded guidance for a coding agent working on this code thread.",
-    "Use these markdown sections, in order:",
-    "## Purpose — what this thread does and why (1-2 sentences).",
-    "## Architecture — the key functions/files and how control flows across them.",
-    "## Steps — the execution path; for each named step cite its IR node id in `backticks` (use the ids below).",
-    "## Gotchas — edit hazards, ordering constraints, cross-file coupling.",
-    "Be concrete and specific. Cite ONLY node ids that appear below; never invent ids. Do NOT describe the",
-    "thread's unknown/dynamic/uncaptured parts — those are appended separately as verified IR fact.",
-    "Output ONLY the markdown sections, no preamble. These four sections, once each, in that order, are a",
-    "hard contract — a draft missing them is refused. Keep the whole skill under 8000 characters: it is",
-    "injected into working prompts, so dense beats long.",
-    "",
-    `Thread entry point: ${entryPointId}`,
-    `Files reached: ${(ir.filesReached ?? []).join(", ")}`,
-    "Steps in execution order:",
-    steps,
-  ].join("\n");
+/** M-WHY — the constraints routed to one thread, as the skill's drafting
+ *  input. Deliberately the FULL sentence, not the structured half: the
+ *  machine half catches a violation after it is written, and the sentence is
+ *  what stops it being written — "a flapping sensor once paged the on-call
+ *  forty times in a minute" is what makes a worker design the next paging
+ *  path correctly, including one no check anticipated. */
+function _skillConstraintBlock(entryPointId: string): string {
+  if (!isDirectory) return "";
+  const stored = loadConstraints(readmeRootDir());
+  // No stated rules → the block is empty whatever the contract says; do not
+  // compute a contract to route nothing.
+  if (!stored.length) return "";
+  const ctx = threadContractFor(entryPointId);
+  const routed = routeConstraints(stored, {
+    entryPointId,
+    filesReached: (ctx.contract?.filesReached as string[] | undefined) ?? [],
+    stack: (ctx.contract?.stack ?? []).map((t: { tool: string }) => t.tool),
+  });
+  return skillRulesBlock(routed);
 }
 
 async function runGenerateThreadSkill(
@@ -4333,93 +6543,161 @@ async function runGenerateThreadSkill(
   const ir = latestThreads.find((t: any) => t.entryPointId === entryPointId);
   if (!ir) return { ok: false, error: `No thread for entry point "${entryPointId}"` };
   if (!claudeCliAvailable) return { ok: false, error: "claude CLI unavailable for thread-skill generation" };
-  // The grounding gate below tolerates ZERO ungrounded citations, so a
-  // single invented id discards an otherwise good skill and burns the whole
-  // spawn. Observed roughly half the time across projects. Retry ONCE,
-  // naming the invalid ids — the gate is unchanged and still zero-tolerance
-  // on what actually gets persisted; this only stops one near-miss from
-  // costing a full regeneration the user has to trigger by hand.
-  const known = allKnownNodeIds();
-  let prose = await _runReadmeLlm(_threadSkillPrompt(entryPointId, ir));
-  if (prose) {
-    const first = validateCitationsCore(prose, known);
-    if (first.ungrounded.length > 0 || first.grounded.length === 0) {
-      const complaint = first.ungrounded.length
-        ? `These node ids do NOT exist and must not be cited: ${first.ungrounded.slice(0, 12).join(", ")}. `
-          + "Re-write citing ONLY ids from the step list, or drop the citation."
-        : "The draft cited no node ids. Every named step must cite its IR node id in backticks, taken verbatim from the step list.";
-      const retry = await _runReadmeLlm(
-        `${_threadSkillPrompt(entryPointId, ir)}\n\nYour previous attempt was REJECTED. ${complaint}`,
-      );
-      // Keep the retry only if it is actually better — never trade a
-      // near-miss for a worse draft.
-      if (retry) {
-        const second = validateCitationsCore(retry, known);
-        if (second.grounded.length >= 1 && second.ungrounded.length === 0) prose = retry;
-      }
-    }
-  }
-  if (!prose) return { ok: false, error: "thread-skill generation returned nothing" };
-
-  // gen-cwd-fix Step 3 — grounding gate: a skill persisted to disk is later
-  // auto-injected once ratified, so confabulation must never reach the store.
-  // The C1 prompt demands backticked node-id citations; require ≥1 real id and
-  // zero hallucinated ones before persisting. Gate the LLM PROSE only — the
-  // deterministic honesty block below is appended IR fact, not LLM output.
-  // The bare "no/invalid citations" message named nothing, so a rejected
-  // draft was undiagnosable: you could not tell "cited nothing" (a prompt
-  // problem) from "cited one id that does not exist" (a near-miss that
-  // discards an otherwise good skill, since the gate tolerates zero
-  // ungrounded). Say which, and how close it came.
-  {
-    const check = validateCitationsCore(prose, known);
-    if (!(check.grounded.length >= 1 && check.ungrounded.length === 0)) {
-      const why = check.cited.length === 0
-        ? "the draft cited no node ids at all"
-        : `${check.grounded.length} of ${check.cited.length} citations were real; these do not exist: ${check.ungrounded.slice(0, 8).join(", ")}`;
-      return {
-        ok: false,
-        error: `generation not grounded — ${why}; not persisted`,
-      };
-    }
-  }
-
-  // Skill body contract (2026-08-02) — the shape half of the gate: the four
-  // sections the prompt demands, once each, in order, no preamble. A draft
-  // that fails is refused with the named problems (honest failure → redraft),
-  // never silently persisted in a shape the card and router can't use well.
-  const shape = validateSkillBody(prose);
-  if (!shape.ok) {
-    return { ok: false, error: `generation violates the skill body contract — ${shape.problems.join("; ")}; not persisted` };
-  }
-
-  // Deterministic honesty block — A1's roll-up, appended as IR fact.
-  const effectKindFor = (f: string | null, irNodeId: string | null): string | null => {
-    if (!irNodeId) return null;
-    const n = findNode(irNodeId, f ?? undefined);
-    return (n && typeof n.effectKind === "string") ? n.effectKind : null;
-  };
-  const rollup = computeThreadBlindSpots(ir as Thread, effectKindFor);
-  const body = `${prose.trim()}\n\n${formatBlindSpotsBlock(rollup)}`;
-
-  // Size ceiling on the FULL body (prose + honesty block): the routing
-  // budget (thread_remit) is the whole turn's allowance, so a body over it
-  // could never inject — persisting it would be a silent lie in the store.
-  if (skillBodyOverBudget(body)) {
-    return { ok: false, error: `generated body is ${body.length} chars — over the ${SKILL_INJECTION_BUDGET_CHARS}-char injection budget, so it could never ride a prompt; not persisted` };
-  }
+  // The prompt, the grounding + shape gates, the honesty block and the budget
+  // live in src/server/thread_skill_draft.ts, shared with the CLI's
+  // `skills draft` (2026-09-25).
+  const drafted = await draftThreadSkill({
+    entryPointId, ir, rulesBlock: _skillConstraintBlock(entryPointId), knownIds: allKnownNodeIds(),
+    runLlm: (prompt) => _runReadmeLlm(prompt),
+    effectKindFor: (f, irNodeId) => {
+      if (!irNodeId) return null;
+      const n = findNode(irNodeId, f ?? undefined);
+      return (n && typeof n.effectKind === "string") ? n.effectKind : null;
+    },
+    failureSuffix: genFailureSuffix,
+  });
+  if (!drafted.ok || !drafted.body) return { ok: false, error: drafted.error };
+  const body = drafted.body;
 
   // M-SKILL.7 — stamp the step snapshot alongside the hash so a later
   // staleness can show WHAT changed, not just that something did.
-  writeThreadSkill(readmeRootDir(), entryPointId, body, sourceHashOf(ir), new Date().toISOString(), "draft", makeThreadSnapshot(ir));
+  writeThreadSkill(readmeRootDir(), entryPointId, body, threadSkillStamp(entryPointId, ir), new Date().toISOString(), "draft", makeThreadSnapshot(ir));
   return { ok: true, body };
 }
 
 /** Read the thread-skill tagged with staleness vs the thread's current IR. */
+/**
+ * M-WHY — the ONE stamp a thread skill is written with and read against.
+ *
+ * It covers the thread's CODE and the RULES routed to it, because a skill
+ * now teaches the reason behind those rules: a changed rule can make its
+ * teaching wrong exactly as a changed step can. Folding both into one hash
+ * reuses the whole M-SKILL.7 lifecycle (stale card, Re-affirm, per-skill
+ * auto-reaffirm-with-caveat) instead of inventing a second staleness.
+ *
+ * ONE function on purpose. A first cut computed the composite only on the
+ * READ side while the writes still stamped `sourceHashOf(ir)`, so every
+ * skill read stale forever and re-affirm could not clear it —
+ * test:skill-ratify caught it immediately.
+ *
+ * Named limit: the stale card's DIFF comes from the step snapshot, so a
+ * skill stale only because a RULE changed shows "stale" with no step
+ * difference. Honest but terse; a rule-level diff is a follow-up.
+ */
+function threadSkillStamp(entryPointId: string, ir: unknown): string {
+  if (!ir) return "";
+  // ADDITIVE: a project that states NO rules stamps exactly what it stamped
+  // before M-WHY (src/server/thread_skill_stamp.ts holds the rule).
+  return stampThreadSkill(ir, _skillConstraintBlock(entryPointId));
+}
+
 function readThreadSkill(entryPointId: string): ThreadSkillResult {
+  // No stored skill → nothing can be stale; skip the stamp (it computes the
+  // thread's contract when rules are stated), which every thread paid on
+  // each get-thread-skills.
+  if (!readStoredThreadSkill(readmeRootDir(), entryPointId)) return { exists: false, key: threadSkillKey(entryPointId), entryPointId };
   const ir = latestThreads.find((t: any) => t.entryPointId === entryPointId);
-  const currentHash = ir ? sourceHashOf(ir) : "";
-  return readThreadSkillFromStore(readmeRootDir(), entryPointId, currentHash);
+  return readThreadSkillFromStore(readmeRootDir(), entryPointId, threadSkillStamp(entryPointId, ir));
+}
+
+// ── M-CONTRACT (PLAN-M-CONTRACT.md) — thread contract + stated constraints ──
+// The contract is IR FACT computed over the live envelope (per-file IR
+// joined by findNode, tcall adjacency from deriveThreadCalls); the
+// constraints are STATED facts loaded from the analyzed project's
+// .vibegraph/constraints.json and routed by scope. Both render through
+// their own formatters so every consumer (worker, D1 agent, MCP, plan
+// packets) reads the same labelled blocks — one honesty split, one place.
+
+interface ThreadContractContext {
+  contract: ThreadContract | null;
+  constraints: Constraint[];
+  // M-STACK.3 — `stack` is the rendered SYSTEM SPEC for this thread:
+  // its tools (IR fact) plus the policies stated about them.
+  rendered: { contract: string | null; constraints: string | null; stack: string | null };
+  error?: string;
+}
+
+function threadContractFor(entryPointId: string): ThreadContractContext {
+  const thread = latestThreads.find((t: any) => t.entryPointId === entryPointId) as
+    | (Thread & { entryPointId?: string; filesReached?: string[] })
+    | undefined;
+  const stored = isDirectory ? loadConstraints(readmeRootDir()) : [];
+  if (!thread) {
+    return { contract: null, constraints: [], rendered: { contract: null, constraints: null, stack: null }, error: `no thread for ${entryPointId}` };
+  }
+  // M-FLOW.4 — the hops count as adjacency: a page that runs a backend script
+  // through the platform REACHES that script's thread, and the script is
+  // REACHED BY the page (the reverse trace).
+  const graph = deriveThreadCalls(latestThreads as any, latestEntryPoints as any, latestCrossings);
+  const contract = computeThreadContract(thread, {
+    nodeFor: (f, irNodeId) => (irNodeId ? findNode(irNodeId, f ?? undefined) : null),
+    ...threadAdjacency(graph, entryPointId),
+    // M-STACK.1 — the tools this thread's files use (IR fact).
+    stackFor: (f) => contractStackForFile(latestStack, f),
+    // M-BOUNDARY.1 — what the boundary→tool join needs. External terminals
+    // carry `file: null`, so the owning file is looked up by node id and
+    // relativised (the index and the contract both speak relative paths).
+    fileOfNode: (irNodeId) => {
+      const abs = findNodeFile(irNodeId);
+      return abs ? relativize(abs) : null;
+    },
+    importsFor: (f) => latestStack.importsByFile?.[f] ?? [],
+    localsFor: (f) => latestStack.localsByFile?.[f] ?? [],
+    // M-RESOLVE.3 - the route handler a call sits inside. Node ids are
+    // structural paths, so the enclosing function is a prefix; the entry
+    // point on it carries the framework, and the IR node its parameters.
+    handlerFor: (f, irNodeId) => {
+      const fnId = irNodeId.split("/").slice(0, 2).join("/");
+      const ep = latestEntryPoints.find((e: any) => e.kind === "route" && e.file === f && e.irNodeId === fnId);
+      if (!ep) return null;
+      const fn = findNode(fnId, f);
+      return { framework: ep.framework ?? null, params: Array.isArray(fn?.params) ? fn.params : [] };
+    },
+    stackIndex: latestStack,
+    // M-XLANG.1 - where this thread leaves its own language.
+    crossingsFor: (ep) => latestCrossings.byThread[ep] ?? [],
+    // PLAN-M-RUNTIME phase 3 - what a consented trace run saw. Read fresh
+    // with staleness marked, so a contract riding a worker prompt says
+    // whether the observation still describes the file it was made in.
+    observedFor: (file, irNodeId) => observationsForNode(
+      markStaleness(readObservations(readmeRootDir()), (f) => {
+        try { return fs.readFileSync(path.join(analyzedRoot(), f), "utf-8"); }
+        catch { return null; }
+      }),
+      file, irNodeId,
+    ),
+  });
+  // M-STACK.2 — routing takes the thread's STACK too: a stack-scoped
+  // policy follows the tool as the code changes, not a hand-kept file list.
+  const constraints = routeConstraints(stored, {
+    entryPointId,
+    filesReached: contract.filesReached,
+    stack: contract.stack.map((s) => s.tool),
+  });
+  return {
+    contract,
+    constraints,
+    rendered: {
+      contract: formatContractBlock(contract),
+      constraints: formatConstraintsBlock(constraints),
+      stack: formatSystemSpec(latestStack, stored, { entryPointId }),
+    },
+  };
+}
+
+/** plan_work / start_work_run annotation: compact facts + routed count. */
+function packetContractFor(entryPointId: string) {
+  const ctx = threadContractFor(entryPointId);
+  return ctx.contract ? { ...summarizeContract(ctx.contract), constraints: ctx.constraints.length } : null;
+}
+
+function stateConstraint(input: unknown, source: ConstraintSource): { ok: true; constraint: Constraint } | { ok: false; error: string } {
+  if (!isDirectory) return { ok: false, error: "constraints need a project directory" };
+  const v = validateConstraintInput(input);
+  if (!v.ok) return v;
+  const constraint = addConstraint(readmeRootDir(), v.value, source);
+  broadcastProjectUpdate();
+  return { ok: true, constraint };
 }
 
 // ── M-SKILL.3 — thread-skill lifecycle over the WS wire ──────────────
@@ -4489,7 +6767,7 @@ function handleReaffirmThreadSkill(payload: unknown, ws: WebSocket): void {
   if (!current.exists) return fail("no skill exists for this thread");
   if (current.status !== "ratified") return fail("only a ratified skill can be re-affirmed — ratify the draft first");
   if (!current.stale) return fail("skill is already fresh — nothing to re-affirm");
-  reaffirmThreadSkill(readmeRootDir(), entryPointId, sourceHashOf(ir), makeThreadSnapshot(ir));
+  reaffirmThreadSkill(readmeRootDir(), entryPointId, threadSkillStamp(entryPointId, ir), makeThreadSnapshot(ir));
   ws.send(JSON.stringify({ type: "thread-skill-status", payload: threadSkillWireRecord(entryPointId) }));
   notifyProjectUpdated();
 }
@@ -4570,7 +6848,7 @@ async function runExplainNode(nodeId: string, filePath?: string): Promise<NodeEx
   if (!tFile) return fail("No file for node");
   const node = findNode(nodeId, filePath);
   if (!node) return fail(`Node not found: ${nodeId}`);
-  const line = node.line ?? node.lineno;
+  const line = node.decoratorLine ?? node.line ?? node.lineno; // M-CONTRACT.6 — a decorated def/class starts at its first decorator
   const endLine = node.endLine ?? node.endLineno;
   if (line == null || endLine == null) return fail("Node missing line span");
   let source: string;
@@ -4583,8 +6861,9 @@ async function runExplainNode(nodeId: string, filePath?: string): Promise<NodeEx
     return { nodeId, interpretation: hit.interpretation, attribution: EXPLAIN_ATTRIBUTION, cached: true };
   }
   if (!claudeCliAvailable) return fail("claude CLI unavailable for explanation");
-  const interpretation = await _runReadmeLlm(explainPrompt(source));
-  if (!interpretation) return fail("explanation returned nothing");
+  // M-LANG6 — the prompt names the node's actual language + fence.
+  const interpretation = await _runReadmeLlm(explainPrompt(source, tFile));
+  if (!interpretation) return fail(`explanation returned nothing${genFailureSuffix()}`);
   explainCache.set(nodeId, { sourceHash: srcHash, interpretation });
   return { nodeId, interpretation, attribution: EXPLAIN_ATTRIBUTION, cached: false };
 }
@@ -4646,17 +6925,31 @@ async function runSpawnThreadAgent(requestedId: string, task: string): Promise<T
   // M-SKILL.7 — bounded agents get the same labeled gate (caveat included).
   const skill = injectableSkillText(skillRes);
 
-  // Cross-thread adjacency (the visible boundary).
-  const graph = deriveThreadCalls(latestThreads as any, latestEntryPoints as any);
-  const reaches = graph.edges.filter((e) => e.from === entryPointId).map((e) => e.to);
-  const reachedBy = graph.edges.filter((e) => e.to === entryPointId).map((e) => e.from);
+  // Cross-thread adjacency (the visible boundary) — M-FLOW.4: hops included.
+  const graph = deriveThreadCalls(latestThreads as any, latestEntryPoints as any, latestCrossings);
+  const { reaches, reachedBy } = threadAdjacency(graph, entryPointId);
 
+  // M-CONTRACT — contract (IR fact) + routed constraints ride the D1 bundle.
+  const contractCtx = threadContractFor(entryPointId);
+
+  // M-SKILLS.2 — the bounded agent gets the same generic direction a
+  // worker on this thread would, after the thread skill, same budget rule.
+  const genericSel = isDirectory
+    ? selectGenericSkills({
+      skills: GENERIC_SKILLS, config: skillsConfig, profile: liveStackProfile(), entryPointId,
+      budgetChars: Math.max(0, SKILL_INJECTION_BUDGET_CHARS - (skill?.length ?? 0)), alreadyInjected: new Map(),
+    })
+    : { routed: [], injected: [] };
   const prompt = buildThreadAgentPrompt({
     entryPointId,
     qualifiedName: (thread as any).seed?.qualifiedName ?? entryPointId,
     projection, skill, blindSpots,
+    genericSkills: renderGenericSkillsBlock(genericSel.routed, skillsConfig) || null,
     filesReached: (thread as any).filesReached ?? [],
     reaches, reachedBy,
+    contract: contractCtx.rendered.contract,
+    stack: contractCtx.rendered.stack,
+    constraints: contractCtx.rendered.constraints,
   }, task);
 
   const result = await _runReadmeLlm(prompt);
@@ -4715,7 +7008,7 @@ const mcpContext: VibegraphMcpContext = {
             : `. No parsed nodes for ${tFile} — check filePath.`),
       };
     }
-    const line = node.line ?? node.lineno;
+    const line = node.decoratorLine ?? node.line ?? node.lineno; // M-CONTRACT.6 — a decorated def/class starts at its first decorator
     const endLine = node.endLine ?? node.endLineno;
     if (line == null || endLine == null) return { error: "Node missing line/endLine" };
     return { source: getSourceSnippet(line, endLine, tFile) };
@@ -4742,7 +7035,11 @@ const mcpContext: VibegraphMcpContext = {
   setSelection: (nodeId: string, filePath?: string) => {
     broadcastSetSelection({ nodeId, filePath });
   },
-  rewriteNode: async ({ nodeId, op, payload, filePath }) => {
+  rewriteNode: async ({ nodeId, op, payload, filePath, packetId }) => {
+    // M-ORCH.4 — a WORKER session's edit is confined to its packet's edit
+    // scope BEFORE the chokepoint sees it (the owning packet is named).
+    const scopeErr = packetScopeCheck(packetId, filePath);
+    if (scopeErr) return { success: false, message: scopeErr, errorKind: "out_of_scope" };
     // Adapt MCP-style { nodeId, payload } into executeToolCall's flat
     // input shape ({ nodeId, newSource | source | newName }).
     const input: Record<string, unknown> = { nodeId, ...payload };
@@ -4773,7 +7070,9 @@ const mcpContext: VibegraphMcpContext = {
     const noopWs = { send: () => { /* intentionally empty */ } } as unknown as WebSocket;
     return executeToolCall(op, input, noopWs, filePath);
   },
-  composeInsert: async ({ mode, source, anchorNodeId, filePath }) => {
+  composeInsert: async ({ mode, source, anchorNodeId, filePath, packetId }) => {
+    const scopeErr = packetScopeCheck(packetId, filePath);
+    if (scopeErr) return { success: false, message: scopeErr };
     // MCP exposes a friendlier op enum ("before" / "after" / "top-level")
     // than the internal one; translate here.
     const internalMode = mode === "before" ? "insert_before"
@@ -4931,6 +7230,14 @@ const mcpContext: VibegraphMcpContext = {
     }
     return runObserveDynamicTarget(nodeId, filePath, fn.entryFn, receiver, effectConsent);
   },
+  // PLAN-M-RUNTIME phase 3 — the batch tracer, same code path as the
+  // thread view's trace button, so a human and an agent get the same
+  // overlay and the same floor.
+  traceEntryPoint: async ({ entryPointId, effectConsent }) => {
+    const res = await runTraceEntryPoint(entryPointId, effectConsent);
+    if (res.observed > 0) broadcastProjectUpdate();
+    return res;
+  },
   onSelectionChanged: (cb) => {
     selectionListeners.add(cb);
     return () => { selectionListeners.delete(cb); };
@@ -4981,9 +7288,111 @@ const mcpContext: VibegraphMcpContext = {
       threads: latestThreads as never[],
       entryPoints: latestEntryPoints as never[],
       skillFor: (entryPointId) => readThreadSkill(entryPointId),
+      contractFor: (entryPointId) => packetContractFor(entryPointId),
       maxPackets,
     }),
+  // M-AGENT2 — the chat/MCP launch path drafts ONLY; ratification and
+  // every packet approval stay human, in the board. M-ORCH — an
+  // "orchestrated" draft additionally requests the orchestrator brief;
+  // the human still confirms the objective before anything runs.
+  startWorkRun: (task, mode, opts) => {
+    const err = createDraftRun(task, mode === "orchestrated" ? "orchestrated" : "gated", opts ?? {});
+    if (err) return { ok: false, message: err };
+    const run = workRun!;
+    return {
+      ok: true,
+      message: `DRAFT run created (${run.mode ?? "gated"}, lanes ×${run.parallel ?? 1}${run.review ? `, review: ${run.review}` : ""}): ${run.packets.length} packet(s) over ${run.packets.map((p) => p.plan.qualifiedName).join(", ")}. `
+        + (run.mode === "orchestrated"
+          ? "The orchestrator brief is being drafted; the human confirms the OBJECTIVE in the Agent Manager board before anything runs, then the orchestrator reviews each packet (escalations return to the human)."
+          : "Nothing runs until the human ratifies it in the Agent Manager board (the Agents toolbar button).")
+        + (run.autonomy ? ` AUTONOMOUS (${run.autonomy.ruling}): the server confirms the objective itself when the brief lands and resolves every escalation as a failed packet with its reason kept — no human gate.` : "")
+        + (run.unmatchedTokens.length ? ` NOT covered: ${run.unmatchedTokens.join(", ")}.` : ""),
+    };
+  },
+  // M-CONTRACT.2/.3 — the thread contract (IR fact) + routed stated
+  // constraints, and the agent-side constraint writer (labelled "agent").
+  threadContract: (entryPointId) => threadContractFor(entryPointId),
+  stateConstraint: (input) => stateConstraint(input, "agent"),
+  listConstraints: () => (isDirectory ? loadConstraints(readmeRootDir()) : []),
+  // M-STACK.1 — the stack facts (whole project, or one thread's slice).
+  stack: (entryPointId) => {
+    if (entryPointId && !latestStack.byThread[entryPointId]) {
+      return { index: latestStack, spec: "", error: `no thread ${entryPointId} in the current envelope` };
+    }
+    const stored = isDirectory ? loadConstraints(readmeRootDir()) : [];
+    return {
+      index: latestStack,
+      // M-BOUNDARY.2 — `tools` is what the thread's files hold; `called` is
+      // what a boundary of it actually reaches. A caller that conflates the
+      // two reads a dead dependency as a live one.
+      ...(entryPointId
+        ? {
+          thread: {
+            entryPointId,
+            tools: stackForThread(latestStack, entryPointId),
+            called: stackCalledOnThread(latestStack, entryPointId).map((t) => t.tool),
+          },
+        }
+        : {}),
+      // M-STACK.3 — facts WITH the policies stated about them, and the
+      // disagreements between the two: the same block the prompts get.
+      spec: formatSystemSpec(latestStack, stored, entryPointId ? { entryPointId } : {}) ?? "",
+    };
+  },
+  // M-ORCH.3 — a running system packet may CREATE a new Python module.
+  // M-XLANG.1 - the cross-language crossings (whole project, or one thread).
+  // M-ARCH.1 - the derived architecture model (built in rebuildArch).
+  architecture: () => {
+    if (!isDirectory) return { model: null, error: "the architecture model needs a project directory" };
+    return latestArch ? { model: latestArch } : { model: null, error: "no architecture model yet (the project has not finished parsing, or the model failed - see the server log)" };
+  },
+  // M-ARCH.4 - draft a grounded proposal; it stays pending until a human ratifies.
+  proposeArchitecture: async () => {
+    const r = await archProposeCore();
+    return r.ok ? { ...r, model: latestArch } : r;
+  },
+  crossings: (entryPointId) => {
+    if (entryPointId && !latestCrossings.byThread[entryPointId]) {
+      const known = latestThreads.some((t: any) => t.entryPointId === entryPointId);
+      return known
+        ? { all: [], thread: { entryPointId, crossings: [] } }
+        : { all: [], error: `no thread ${entryPointId} in the current envelope` };
+    }
+    return {
+      all: latestCrossings.all,
+      ...(entryPointId ? { thread: { entryPointId, crossings: latestCrossings.byThread[entryPointId] ?? [] } } : {}),
+    };
+  },
+  createFile: (p, source, packetId) => createFileForPacket(p, source, packetId),
 };
+
+// M-ORCH.4 — the edit-scope guard for WORKER sessions (MCP sessions bound
+// to a packet via `/mcp?packet=`). An unbound session is unscoped, as
+// before. A bound session may edit only files inside its packet's edit
+// scope while that packet is RUNNING; the refusal names the packet that
+// owns the file (if any) and the honest move — write against its
+// contract/handoff, or escalate naming the exact change.
+function mcpPathname(url: string | undefined): string {
+  try { return new URL(url ?? "/", "http://vibegraph").pathname; } catch { return url ?? "/"; }
+}
+
+function packetScopeCheck(packetId: string | undefined, filePath: string | undefined): string | null {
+  if (!packetId) return null;
+  const run = getWorkRun();
+  const packet = run?.packets.find((p) => p.id === packetId);
+  if (!run || !packet) return `packet ${packetId} is not part of the active run — edits from a worker session need a live packet`;
+  if (packet.status !== "running") return `packet ${packetId} is ${packet.status}, not running — its worker session may no longer edit`;
+  if (!filePath) return `name the file (filePath) — packet ${packetId} may edit only: ${editScopeOf(run, packet).join(", ")}`;
+  const rel = relativize(resolveProjectPath(filePath));
+  const scope = editScopeOf(run, packet);
+  if (scope.includes(rel)) return null;
+  const owners = run.packets.filter((p) => p.id !== packetId && editScopeOf(run, p).includes(rel));
+  return `${rel} is outside packet ${packetId}'s edit scope (${scope.join(", ")}). `
+    + (owners.length
+      ? `${rel} belongs to ${owners.map((o) => `${o.id} (${o.status})`).join(", ")} — that packet owns changes there${owners.some((o) => o.status === "running" || o.status === "pending") ? ", possibly in parallel with you right now" : ""}; write your part against its contract and the handoff you were given. `
+      : `No packet in this run owns ${rel}. `)
+    + "If your task genuinely needs this change, finish with outcome \"escalate\" naming the file and the exact change — do not route around the chokepoint.";
+}
 
 const mcpHandler = createMcpHttpHandler(mcpContext);
 
@@ -5017,7 +7426,9 @@ const server = http.createServer((req, res) => {
   // + resources/*, GET (SSE) for server->client streaming, DELETE for
   // session termination. Body is JSON-RPC; read + parse before handing
   // to the SDK transport.
-  if (req.url === "/mcp") {
+  // M-ORCH.4 — the path may carry `?packet=<id>` (a worker session bound to
+  // its packet); match on the pathname, hand the full URL to the handler.
+  if (mcpPathname(req.url) === "/mcp") {
     if (req.method === "GET" || req.method === "DELETE") {
       mcpHandler(req, res, null).catch((e: any) => {
         console.warn(`  [MCP] handler error: ${e?.message ?? e}`);
@@ -5260,6 +7671,10 @@ function setupWebSocket() {
       type: "runtime-state",
       payload: { anthropicAvailable: claudeCliAvailable },
     }));
+    // M-PROVIDER — the server's model routes are the source of truth.
+    ws.send(JSON.stringify({ type: "model-tiers", payload: getModelTiers() }));
+    // M-SKILLS.2 — the enable file plus the shipped catalogue, breadth measured here.
+    ws.send(JSON.stringify({ type: "skills-config", payload: skillsConfigPayload() }));
     broadcastProjectWarnings(ws);
     sendParse(ws);
 
@@ -5279,6 +7694,85 @@ function setupWebSocket() {
           // M-RUN2.3 — draft an example data file for a missing path; the
           // reply carries the full content + a content-hash consent token.
           handleSynthThreadData(msg.payload, ws);
+        } else if (msg.type === "work-run-start") {
+          // M-AGENT1 — task → plan_work → DRAFT run (does nothing until
+          // the human ratifies; the gates are transitions, not UI sugar).
+          handleWorkRunStart(msg.payload, ws);
+        } else if (msg.type === "work-run-ratify") {
+          handleWorkRunRatify(ws);
+        } else if (msg.type === "work-run-review") {
+          handleWorkRunReview(msg.payload, ws);
+        } else if (msg.type === "work-run-pause") {
+          handleWorkRunPauseResume(false, ws);
+        } else if (msg.type === "work-run-resume") {
+          handleWorkRunPauseResume(true, ws);
+        } else if (msg.type === "work-run-discard") {
+          handleWorkRunDiscard(ws);
+        } else if (msg.type === "add-constraint") {
+          // M-CONTRACT.3 — the GUI states a HUMAN constraint (authoritative
+          // provenance); validated at the boundary, persisted, broadcast
+          // on the envelope.
+          const r = stateConstraint(msg.payload, "human");
+          if (!r.ok) ws.send(JSON.stringify({ type: "constraint-error", payload: { error: r.error } }));
+        } else if (msg.type === "remove-constraint") {
+          if (isDirectory && typeof msg.payload?.id === "string") {
+            if (!removeConstraint(readmeRootDir(), msg.payload.id)) {
+              ws.send(JSON.stringify({ type: "constraint-error", payload: { error: `no constraint ${msg.payload.id}` } }));
+            }
+            broadcastProjectUpdate();
+          }
+        } else if (msg.type === "explain-node") {
+          // SCOPE button (tooltip) — C2 explain-this-node over WS: the
+          // SAME runExplainNode the MCP tool uses (labelled inference,
+          // cached, never mutates the node's kind). Boundary: nodeId
+          // must be a string; runExplainNode fails soft on misses.
+          if (typeof msg.payload?.nodeId === "string") {
+            runExplainNode(msg.payload.nodeId, msg.payload.filePath).then((res) => {
+              ws.send(JSON.stringify({ type: "node-explained", payload: res }));
+            });
+          }
+        } else if (msg.type === "trace-thread") {
+          // PLAN-M-RUNTIME phase 3 — one consented run of an entry point,
+          // annotating every call site it touched. Same floor as Observe and
+          // run-to-here: the first press comes back requires-confirmation
+          // with the offenses and a token, and nothing has run.
+          const tr = msg.payload;
+          if (typeof tr?.entryPointId === "string") {
+            void (async () => {
+              const res = await runTraceEntryPoint(tr.entryPointId, tr.effectConsent);
+              ws.send(JSON.stringify({ type: "thread-traced", payload: res }));
+              // A stored overlay changes what every client should render, so
+              // the envelope goes out to everyone — not just the presser.
+              if (res.observed > 0) broadcastProjectUpdate();
+            })();
+          }
+        } else if (msg.type === "clear-trace") {
+          if (typeof msg.payload?.entryPointId === "string") {
+            clearTraceRun(readmeRootDir(), msg.payload.entryPointId);
+            broadcastProjectUpdate();
+          }
+        } else if (msg.type === "observe-node") {
+          // OBSERVE button (PLAN-M-RUNTIME phase 2) — B5 over WS. The SAME
+          // resolveEnclosingFn + runObserveDynamicTarget the MCP tool calls,
+          // so a human pressing the button and an agent calling the tool get
+          // the same answer AND the same floor: observing a receiver means
+          // running its binding code, so an effectful binding comes back
+          // requires-confirmation + a token and NOTHING has run yet.
+          // Boundary: both ids must be strings; the runner re-validates the
+          // receiver against _VG_IDENT before it reaches a probe.
+          const obs = msg.payload;
+          if (typeof obs?.nodeId === "string" && typeof obs?.receiver === "string") {
+            void (async () => {
+              const fn = resolveEnclosingFn(obs.nodeId, obs.filePath);
+              const res: DynamicObservation = fn.ok
+                ? await runObserveDynamicTarget(obs.nodeId, obs.filePath, fn.entryFn, obs.receiver, obs.effectConsent)
+                : {
+                  nodeId: obs.nodeId, outcome: fn.outcome, observedTarget: null,
+                  note: OBSERVE_NOTE, provenance: "real-input", error: fn.reason,
+                };
+              ws.send(JSON.stringify({ type: "node-observed", payload: res }));
+            })();
+          }
         } else if (msg.type === "edit-node-open") {
           handleEditOpen(msg.payload.nodeId, ws, msg.payload.filePath);
         } else if (msg.type === "edit-node-save") {
@@ -5294,7 +7788,30 @@ function setupWebSocket() {
           // arbitrary --model string from a WS client can never reach the CLI.
           const tiers = sanitiseTiers(msg.payload);
           setModelTiers(tiers);
-          console.log(`[models] thinking=${tiers.thinking ?? "cli-default"} routine=${tiers.routine}`);
+          // M-PROVIDER — persist per project and echo the SANITISED result to
+          // every client, so two tabs (and a headless driver) agree.
+          if (isDirectory) { try { saveModelRoutes(inputPath, tiers); } catch (e: any) { console.warn(`  [models] could not save: ${e?.message ?? e}`); } }
+          const echo = JSON.stringify({ type: "model-tiers", payload: tiers });
+          for (const c of clients) c.send(echo);
+          console.log(`[models] ${(["thinking", "routine", "worker"] as ModelTier[]).map((t) => `${t}=${routeLabel(resolveTierRoute(t, tiers))}`).join(" ")}`);
+        } else if (msg.type === "set-skills-config") {
+          // M-SKILLS.2 — boundary validation: only SHIPPED skill names
+          // survive, and the server stamps who enabled each and when. The
+          // sanitised result is persisted per project and echoed to every
+          // client, the models.json shape.
+          const next = sanitiseSkillsConfig(msg.payload, GENERIC_SKILLS.map((s) => s.name), { source: "human", at: new Date().toISOString() }, skillsConfig);
+          skillsConfig = next;
+          if (isDirectory) { try { saveSkillsConfig(inputPath, next); } catch (e: any) { console.warn(`  [skills] could not save: ${e?.message ?? e}`); } }
+          const echo = JSON.stringify({ type: "skills-config", payload: skillsConfigPayload() });
+          for (const c of clients) c.send(echo);
+          console.log(`[skills] enabled: ${next.enabled.join(", ") || "(none)"}`);
+        } else if (msg.type === "probe-model-endpoint") {
+          // M-PROVIDER — the Models panel's Test button: the endpoint is
+          // validated inside the probe; only Ollama's own routes are called.
+          const p = (msg.payload ?? {}) as { endpoint?: unknown; model?: unknown };
+          probeOllamaEndpoint(p.endpoint, typeof p.model === "string" ? p.model : undefined)
+            .then((probe) => ws.send(JSON.stringify({ type: "model-endpoint-probe", payload: probe })))
+            .catch((e: any) => ws.send(JSON.stringify({ type: "model-endpoint-probe", payload: { endpoint: String(p.endpoint ?? ""), ok: false, error: e?.message ?? String(e) } })));
         } else if (msg.type === "chat-send") {
           // Boundary validation: only a whitelisted id ever reaches the
           // CLI as --model; anything else falls back to the CLI default.
@@ -5333,6 +7850,13 @@ function setupWebSocket() {
           // PLAN-v7 Stage 3 — validate a proposed architecture at the
           // boundary; echo as a pending proposal. Reply: system-proposal.
           handleSystemPropose(msg.payload.plan, ws);
+        } else if (msg.type === "arch-propose" || msg.type === "arch-ratify" || msg.type === "arch-reject") {
+          // M-ARCH.4 — propose spends tokens and stores a PENDING proposal;
+          // ratify / reject are the human's. Reply: arch-proposal.
+          const t = msg.type;
+          const reply = (payload: unknown) => ws.send(JSON.stringify({ type: "arch-proposal", payload: { action: t.slice(5), ...(payload as object) } }));
+          if (t === "arch-propose") archProposeCore(typeof msg.payload?.guidance === "string" ? msg.payload.guidance : undefined).then(reply, (e) => reply({ ok: false, error: String(e?.message ?? e) }));
+          else reply(archDecide(t === "arch-ratify" ? "ratify" : "reject"));
         } else if (msg.type === "system-propose-intent") {
           // PLAN-v7 Stage 3b — describe → claude -p architecture draft →
           // system-proposal (drafted plan, grounding-enforced).
@@ -5447,6 +7971,11 @@ function setupWebSocket() {
   });
 }
 
+/** The first full parse + derivation (the boot pass), and whether one has
+ *  finished; sendParse makes a mid-pass connect wait for it. */
+let fullPass: Promise<unknown> | null = null;
+let fullPassDone = false;
+
 async function sendParse(ws?: WebSocket) {
   if (isDirectory) {
     // M26.1 follow-up — don't launch a full parseAllFiles per WS
@@ -5456,11 +7985,22 @@ async function sendParse(ws?: WebSocket) {
     // Primed connect → the new client just gets the current envelope.
     // ONLY for per-connection sends: the no-ws callers (boot prime,
     // watcher debounce) exist to run the full pass.
+    // A tab that connects DURING the boot pass waits for it: projectParse
+    // fills file by file before anything is derived, so the envelope sent
+    // mid-pass had files and no entry points, threads or architecture — the
+    // webview dismissed its boot screen onto a raw file grid. (It also kept
+    // an early connect from launching a second, concurrent full pass.)
+    if (ws && fullPass && !fullPassDone) {
+      await fullPass.catch(() => {});
+      broadcastProjectUpdate(ws);
+      return;
+    }
     if (ws && Object.keys(projectParse).length > 0) {
       broadcastProjectUpdate(ws);
       return;
     }
-    await parseAllFiles();
+    fullPass = parseAllFiles();
+    try { await fullPass; } finally { fullPassDone = true; }
     if (ws) broadcastProjectUpdate(ws);
     return;
   }
@@ -5504,9 +8044,10 @@ if (isDirectory) {
   try {
     guardWatcher(fs.watch(inputPath, { recursive: true }, (_, filename) => {
       if (!filename) return;
-      if (!filename.endsWith(".py")) {
-        // Not source — but an artifact write still changes what the chip must
-        // say (see refreshArtifactIndex). Everything else is ignored as before.
+      if (!isSourceFile(filename, path.join(inputPath, filename))) {
+        // Not source in any REGISTERED language (M-LANG1) — but an artifact
+        // write still changes what the chip must say (see
+        // refreshArtifactIndex). Everything else is ignored as before.
         if (isKnownArtifactPath(filename)) refreshArtifactIndex();
         return;
       }
@@ -5518,7 +8059,7 @@ if (isDirectory) {
     }));
   } catch {
     // Fallback: watch individual files
-    for (const f of findPyFiles(inputPath)) {
+    for (const f of findSourceFiles(inputPath)) {
       guardWatcher(fs.watch(f, (_, filename) => {
         if (filename && isRecentSelfEdit(filename)) return;
         debounceReparse();
@@ -5568,8 +8109,17 @@ function tryListen() {
     }
     console.log(`\n  VibeGraph is running!`);
     if (isDirectory) {
-      const count = findPyFiles(inputPath).length;
-      console.log(`  Project:  ${inputPath} (${count} Python files)`);
+      // M-LANG: the banner counts every REGISTERED language's files and
+      // says which — "16 Python files" on a four-language project was a
+      // small lie the pump-polyglot drill surfaced (2026-09-06).
+      const files = findSourceFiles(inputPath);
+      const perLang = new Map<string, number>();
+      for (const f of files) {
+        const label = langOf(f)?.label ?? "other";
+        perLang.set(label, (perLang.get(label) ?? 0) + 1);
+      }
+      const breakdown = [...perLang].sort((a, b) => b[1] - a[1]).map(([l, n]) => `${n} ${l}`).join(", ");
+      console.log(`  Project:  ${inputPath} (${files.length} source files${perLang.size > 1 ? `: ${breakdown}` : ""})`);
     } else {
       console.log(`  Watching: ${resolvedPyFile}`);
     }
@@ -5588,6 +8138,12 @@ tryListen();
 
 // ── HTML template ─────────────────────────────────────────────────────────────
 
+// The first view the webview opens once the project has parsed: the
+// architecture overview by default, or the thread-index launchpad. The e2e
+// suites pin "index" (playwright.config.ts); anything else is refused to the
+// default rather than trusted into the page.
+const START_VIEW = process.env.VG_START_VIEW === "index" ? "index" : "architecture";
+
 function getIndexHtml(): string {
   return `<!DOCTYPE html>
 <html lang="en">
@@ -5599,10 +8155,12 @@ function getIndexHtml(): string {
   <style>
     /* Anti-FOUC: matches --bg-canvas in tokens.css. HSL form (no raw hex). */
     html, body, #root { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; }
-    body { background: hsl(220 14% 8%); }
+    body { background: hsl(222 18% 7%); }
   </style>
+  <meta name="vg-start-view" content="${START_VIEW}">
 </head>
 <body>
+  ${bootMarkup()}
   <div id="root"></div>
   <script src="/webview.js"></script>
 </body>

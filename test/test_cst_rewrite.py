@@ -1407,21 +1407,21 @@ class TestDryRunEqualsWet(unittest.TestCase):
         )
         self.assertEqual(disk_after_dry, self.CLEAN)
 
-    def test_confinement_failure_is_identical_in_dry_and_wet(self):
-        # A diff-confinement-failing op must be rejected identically on both
-        # paths (apply() raises before the dry/wet branch), and neither writes.
+    def test_structural_refusal_is_identical_in_dry_and_wet(self):
+        # A refused op must be rejected identically on both paths (apply()
+        # raises before the dry/wet branch), and neither writes.
         #
         # This runs through the CLI, so the in-process corrupting helpers
-        # are unavailable. The fixture is a GENUINE escape that no format
-        # candidate can rescue: a FunctionDef's structural span starts at
-        # its `def` line, but replacing the node also replaces its
-        # decorators — so swapping in an undecorated function really does
-        # delete the `@functools.cache` line above the span. That is the
-        # guard working, not formatter noise, which is why dropping black
-        # (the last candidate) cannot make it pass.
+        # are unavailable — and since M-CONTRACT.6 a decorated def's
+        # decorators are part of its node, so replace_node can no longer be
+        # made to escape its span from the CLI (that used to be the fixture
+        # here; the confinement guard's own coverage lives in
+        # TestDirtyFileEdits and TestErrorKindTaxonomyCoverage). The fixture
+        # is now replace_function_body with a CHANGED signature and no
+        # --allow-signature-change: a real structural refusal.
         ugly = "import functools\n\n\n@functools.cache\ndef helper(x):\n    return x + 1\n"
-        args = ["replace_node", "module/helper.fn"]
-        new = "def helper(x):\n    return x + 2\n"
+        args = ["replace_function_body", "module/helper.fn"]
+        new = "def helper(x, y):\n    return x + y\n"
         dry_stdout, disk_after_dry = self._spawn(ugly, args, new, dry=True)
         wet_stdout, disk_after_wet = self._spawn(ugly, args, new, dry=False)
 
@@ -1429,12 +1429,8 @@ class TestDryRunEqualsWet(unittest.TestCase):
         dry_json, wet_json = _json.loads(dry_stdout), _json.loads(wet_stdout)
         self.assertFalse(dry_json["success"])
         self.assertFalse(wet_json["success"])
-        # replace_node is pre-M12.1, so it keeps the plain-RuntimeError
-        # contract (no errorKind); the message still proves the rejection
-        # was the confinement guard. errorKind coverage for confinement
-        # lives in TestErrorKindTaxonomyCoverage.
-        self.assertIn("diff escapes target span", dry_json["error"])
-        self.assertIn("diff escapes target span", wet_json["error"])
+        self.assertIn("signature changed", dry_json["error"])
+        self.assertIn("signature changed", wet_json["error"])
         self.assertEqual(dry_stdout, wet_stdout)
         # neither path wrote
         self.assertEqual(disk_after_dry, ugly)
@@ -1739,16 +1735,28 @@ class TestDirtyFileEdits(unittest.TestCase):
         self.assertIs(report2.get("formatted"), False)
 
     def test_genuine_escape_is_still_refused_by_every_candidate(self):
-        # Replacing a decorated function with an undecorated one really
-        # does delete the decorator line above the span. No candidate can
-        # rescue that, and none should.
+        # M-CONTRACT.6 (2026-09-08): a decorated def's decorators are PART OF
+        # THE NODE — get_node_source returns them, the IR lists them — so
+        # dropping one through replace_node is a legal whole-node edit, not
+        # an escape (it used to be this test's escape fixture). A genuine
+        # escape needs content OUTSIDE the node to change, which only a
+        # corrupting pipeline can do; no candidate may rescue it.
         src = "import functools\n\n\n@functools.cache\ndef helper(x):\n    return x + 1\n"
-        with self.assertRaises(RuntimeError):
-            cst_rewrite.apply(
-                source=src, op="replace_node", target_id="module/helper.fn",
-                new_source="def helper(x):\n    return x + 2\n",
-                new_name=None, do_format=True, do_diff_check=True,
-            )
+        with _pipeline_that_corrupts("import functools", "import ossify"):
+            with self.assertRaises(RuntimeError):
+                cst_rewrite.apply(
+                    source=src, op="replace_node", target_id="module/helper.fn",
+                    new_source="def helper(x):\n    return x + 2\n",
+                    new_name=None, do_format=True, do_diff_check=True,
+                )
+        # …and dropping the decorator alone lands, confined to the node.
+        out = cst_rewrite.apply(
+            source=src, op="replace_node", target_id="module/helper.fn",
+            new_source="def helper(x):\n    return x + 2\n",
+            new_name=None, do_format=True, do_diff_check=True,
+        )
+        self.assertNotIn("@functools.cache", out)
+        self.assertEqual(out, "import functools\n\n\ndef helper(x):\n    return x + 2\n")
 
     # Rehearsal-3 (pump-lab-3): replacing a METHOD failed with a bare
     # ParserSyntaxError because the caller sent the method at its
@@ -2021,6 +2029,105 @@ class TestCaptureProbe(unittest.TestCase):
             new_name="__vg_value", do_format=True, do_diff_check=True,
         )
         self.assertIn('print("__VG__::" + __import__("json").dumps(repr(__vg_value)))', out)
+
+
+class TestSharedConfinementVectors(unittest.TestCase):
+    """M-LANG4 — the SHARED confinement vectors
+    (test/fixtures/rewrite_confinement/vectors.json), consumed by this
+    suite AND test/bash_rewrite.test.mjs. They pin _verify_diff_confined
+    against the Node reimplementation in
+    scripts/frontends/bash/rewrite_bash.mjs so the two edit floors
+    cannot drift. Never weaken a vector without an explicit decision
+    (vibegraph-cst-ops)."""
+
+    def test_shared_vectors(self):
+        import json
+
+        path = ROOT / "test" / "fixtures" / "rewrite_confinement" / "vectors.json"
+        with open(path, encoding="utf-8") as f:
+            vectors = json.load(f)["vectors"]
+        self.assertGreaterEqual(len(vectors), 8)
+        for v in vectors:
+            with self.subTest(v["name"]):
+                if v["confined"]:
+                    # Must NOT raise.
+                    cst_rewrite._verify_diff_confined(
+                        v["pre"], v["post"], tuple(v["span"]), v["op"],
+                    )
+                else:
+                    with self.assertRaises(RuntimeError, msg=v["name"]):
+                        cst_rewrite._verify_diff_confined(
+                            v["pre"], v["post"], tuple(v["span"]), v["op"],
+                        )
+
+
+class TestDecoratedReplaceNode(unittest.TestCase):
+    """M-ORCH.4 / M-CONTRACT.6 (polyglot e2e finding, 2026-09-08) — a DECORATED
+    def read through code_for_node (what vibegraph_get_node_source returns:
+    decorators + the node's own leading blank lines) must round-trip through
+    replace_node: the blank-line gap above the decorator is not doubled, the
+    decorator line is INSIDE the target span (an edit to it is confined, not an
+    escape of its own head), and an undecorated def behaves exactly as before.
+    Before the fix a worker's whole-node replace of a Flask route was rejected
+    with "diff escapes target span (head changed)"."""
+
+    SRC = (
+        "import x\n\n\n"
+        "def plain(a):\n    return a\n\n\n"
+        '@app.route("/orders", methods=["POST"])\n'
+        "def create_order():\n"
+        '    """Doc."""\n'
+        "    return 1\n"
+    )
+
+    def _node_source(self, target_id):
+        wrapper, target = cst_rewrite._resolve(self.SRC, target_id)
+        return wrapper.module.code_for_node(target)
+
+    def test_decorated_round_trip_with_body_comment_is_confined(self):
+        src = self._node_source("module/create_order.fn")
+        self.assertTrue(src.startswith("\n\n@app.route"), repr(src[:24]))
+        lines = src.split("\n")
+        def_at = next(i for i, l in enumerate(lines) if l.startswith("def "))
+        lines.insert(def_at + 1, "    # worker-marker")
+        out = cst_rewrite.apply(
+            source=self.SRC, op="replace_node", target_id="module/create_order.fn",
+            new_source="\n".join(lines), new_name=None, do_format=True, do_diff_check=True,
+        )
+        self.assertIn("    # worker-marker\n", out)
+        # exactly two blank lines still separate plain() from the decorator
+        self.assertIn("    return a\n\n\n@app.route", out)
+        self.assertNotIn("\n\n\n\n@app.route", out)
+
+    def test_decorator_edit_is_inside_the_target_span(self):
+        src = self._node_source("module/create_order.fn")
+        out = cst_rewrite.apply(
+            source=self.SRC, op="replace_node", target_id="module/create_order.fn",
+            new_source=src.replace('methods=["POST"]', 'methods=["POST", "PUT"]'),
+            new_name=None, do_format=True, do_diff_check=True,
+        )
+        self.assertIn('methods=["POST", "PUT"]', out)
+        self.assertIn("def plain(a):\n    return a\n", out)
+
+    def test_undecorated_round_trip_unchanged(self):
+        src = self._node_source("module/plain.fn")
+        out = cst_rewrite.apply(
+            source=self.SRC, op="replace_node", target_id="module/plain.fn",
+            new_source=src.replace("return a", "return a + 0"),
+            new_name=None, do_format=True, do_diff_check=True,
+        )
+        self.assertIn("return a + 0", out)
+        self.assertEqual(out.count("\n\n\n"), self.SRC.count("\n\n\n"), "blank-line structure preserved")
+
+    def test_caller_comment_still_gets_the_original_gap(self):
+        # The comment-toggle shape: a caller PREPENDS a comment with no blank
+        # lines of its own — the original gap is restored in front of it.
+        out = cst_rewrite.apply(
+            source=self.SRC, op="replace_node", target_id="module/plain.fn",
+            new_source="# TODO: revisit\ndef plain(a):\n    return a\n",
+            new_name=None, do_format=True, do_diff_check=True,
+        )
+        self.assertIn("import x\n\n\n# TODO: revisit\ndef plain(a):", out)
 
 
 if __name__ == "__main__":

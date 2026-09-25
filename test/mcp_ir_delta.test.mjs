@@ -131,8 +131,32 @@ test("M-FS5: an edit's delta never reports untouched cross-file edges as removed
     [],
     `untouched functions' reference edges reported as removed: ${JSON.stringify(refsRemoved)}`,
   );
-  // The edited function's own cross-file call survives the re-link too:
-  // list_users still calls db.query, so its reference edge must not be
-  // reported removed either.
-  assert.deepEqual(refsRemoved, [], `list_users' surviving db.query edge reported removed: ${JSON.stringify(refsRemoved)}`);
+  // The edited function's own SURVIVING cross-file call must not be reported
+  // removed: the replacement still calls db.query.
+  assert.deepEqual(
+    refsRemoved.filter((e) => e.source.includes("query")),
+    [],
+    `list_users' surviving db.query edge reported removed: ${JSON.stringify(refsRemoved)}`,
+  );
+  // What the replacement DOES drop is reported, and should be. The original
+  //     return [User(uid=r[0], ...) for r in rows]
+  // calls User inside a LIST COMPREHENSION — invisible to the IR before
+  // M-SWEEP W1 (2026-09-10), which is the only reason this once read as an
+  // empty removal list. The new body has no User(...) call, so the edge is
+  // genuinely gone and the delta saying so is the delta working.
+  //
+  // THE ID MOVED, and the move is the finding, not a fudge:
+  //     module/list_users.fn/User.call
+  //     module/list_users.fn/comp@0/User.call
+  // M-COMP gave the comprehension a container, so the call now parents
+  // inside it — where it always ran. Node ids are STRUCTURAL PATHS, so a
+  // call gaining a real enclosing construct necessarily re-paths; that is
+  // the same thing that happened to every call inside a `try` at M17.2.
+  // The claim under test (exactly one dropped reference edge, and it is the
+  // User constructor) is unchanged.
+  assert.deepEqual(
+    refsRemoved.map((e) => e.source),
+    ["module/list_users.fn/comp@0/User.call"],
+    `expected exactly the dropped User(...) edge: ${JSON.stringify(refsRemoved)}`,
+  );
 });

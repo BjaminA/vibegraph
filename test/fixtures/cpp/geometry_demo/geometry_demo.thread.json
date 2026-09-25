@@ -1,0 +1,384 @@
+{
+  "threads": [
+    {
+      "version": "1.0",
+      "seed": {
+        "file": "main.cpp",
+        "irNodeId": "module/main.fn",
+        "qualifiedName": "main.cpp:main"
+      },
+      "nodes": [
+        {
+          "id": "main.cpp:main",
+          "kind": "seed",
+          "label": "main",
+          "file": "main.cpp",
+          "irNodeId": "module/main.fn",
+          "preview": "Measure one circle, scale and clamp the total, write the report."
+        },
+        {
+          "id": "dynamic:c.area",
+          "kind": "dynamic",
+          "label": "c.area",
+          "file": null,
+          "irNodeId": "module/main.fn/a.assign",
+          "preview": "c.area()",
+          "receiverBoundKind": "local-call",
+          "receiverBoundFrom": "Circle"
+        },
+        {
+          "id": "geometry.h:Circle",
+          "kind": "step",
+          "label": "Circle",
+          "file": "geometry.h",
+          "irNodeId": "module/Circle.class",
+          "preview": null
+        },
+        {
+          "id": "external:fopen",
+          "kind": "external",
+          "label": "fopen",
+          "file": null,
+          "irNodeId": "module/main.fn/f.assign",
+          "preview": "fopen(\"report.txt\", \"w\")",
+          "effectKind": "fs"
+        },
+        {
+          "id": "external:fprintf",
+          "kind": "external",
+          "label": "fprintf",
+          "file": null,
+          "irNodeId": "module/main.fn/if@0/fprintf.call",
+          "preview": "fprintf",
+          "effectKind": "log"
+        },
+        {
+          "id": "main.cpp:main.fn/if@0#then",
+          "kind": "container",
+          "containerKind": "if_then",
+          "label": "if f != nullptr",
+          "file": "main.cpp",
+          "irNodeId": "module/main.fn/if@0",
+          "preview": null
+        },
+        {
+          "id": "main.cpp:report",
+          "kind": "step",
+          "label": "report",
+          "file": "main.cpp",
+          "irNodeId": "module/report.fn",
+          "preview": null
+        },
+        {
+          "id": "external:printf",
+          "kind": "external",
+          "label": "printf",
+          "file": null,
+          "irNodeId": "module/report.fn/printf.call",
+          "preview": "printf",
+          "effectKind": "log"
+        },
+        {
+          "id": "unresolved:scale",
+          "kind": "unresolved",
+          "label": "scale",
+          "file": null,
+          "irNodeId": "module/main.fn/s.assign",
+          "preview": "scale(total)"
+        },
+        {
+          "id": "external:system",
+          "kind": "external",
+          "label": "system",
+          "file": null,
+          "irNodeId": "module/main.fn/system.call",
+          "preview": "system",
+          "effectKind": "subprocess"
+        },
+        {
+          "id": "dynamic:clamp2<double>",
+          "kind": "dynamic",
+          "label": "clamp2<double>",
+          "file": null,
+          "irNodeId": "module/main.fn/t.assign",
+          "preview": "clamp2<double>(s, 0.0, 100.0)"
+        },
+        {
+          "id": "geometry.cpp:area_sum",
+          "kind": "step",
+          "label": "area_sum",
+          "file": "geometry.cpp",
+          "irNodeId": "module/area_sum.fn",
+          "preview": "Sum the areas of `count` circles, logging how many were folded in."
+        },
+        {
+          "id": "dynamic:shapes[i].area",
+          "kind": "dynamic",
+          "label": "shapes[i].area",
+          "file": null,
+          "irNodeId": "module/area_sum.fn/for@0/total.assign",
+          "preview": "shapes[i].area()"
+        },
+        {
+          "id": "geometry.cpp:area_sum.fn/for@0",
+          "kind": "container",
+          "containerKind": "for",
+          "label": "for int i = 0; i < count; i++",
+          "file": "geometry.cpp",
+          "irNodeId": "module/area_sum.fn/for@0",
+          "preview": null
+        },
+        {
+          "id": "external:printf@1",
+          "kind": "external",
+          "label": "printf",
+          "file": null,
+          "irNodeId": "module/area_sum.fn/printf.call",
+          "preview": "printf",
+          "effectKind": "log"
+        },
+        {
+          "id": "main.cpp:main:return@0",
+          "kind": "return",
+          "label": "return",
+          "file": "main.cpp",
+          "irNodeId": "module/main.fn/return@0",
+          "preview": "0"
+        }
+      ],
+      "edges": [
+        {
+          "from": "main.cpp:main",
+          "to": "dynamic:c.area",
+          "kind": "direct",
+          "irSource": "module/main.fn/a.assign"
+        },
+        {
+          "from": "main.cpp:main",
+          "to": "geometry.h:Circle",
+          "kind": "direct",
+          "irSource": "module/main.fn/c.assign"
+        },
+        {
+          "from": "main.cpp:main",
+          "to": "external:fopen",
+          "kind": "direct",
+          "irSource": "module/main.fn/f.assign"
+        },
+        {
+          "from": "main.cpp:main",
+          "to": "external:fprintf",
+          "kind": "direct",
+          "irSource": "module/main.fn/if@0/fprintf.call"
+        },
+        {
+          "from": "main.cpp:main.fn/if@0#then",
+          "to": "external:fprintf",
+          "kind": "contains",
+          "irSource": "module/main.fn/if@0"
+        },
+        {
+          "from": "main.cpp:report",
+          "to": "external:printf",
+          "kind": "direct",
+          "irSource": "module/report.fn/printf.call"
+        },
+        {
+          "from": "main.cpp:main",
+          "to": "main.cpp:report",
+          "kind": "direct",
+          "irSource": "module/main.fn/report.call"
+        },
+        {
+          "from": "main.cpp:main",
+          "to": "unresolved:scale",
+          "kind": "direct",
+          "irSource": "module/main.fn/s.assign"
+        },
+        {
+          "from": "main.cpp:main",
+          "to": "external:system",
+          "kind": "direct",
+          "irSource": "module/main.fn/system.call"
+        },
+        {
+          "from": "main.cpp:main",
+          "to": "dynamic:clamp2<double>",
+          "kind": "direct",
+          "irSource": "module/main.fn/t.assign"
+        },
+        {
+          "from": "geometry.cpp:area_sum",
+          "to": "dynamic:shapes[i].area",
+          "kind": "direct",
+          "irSource": "module/area_sum.fn/for@0/total.assign"
+        },
+        {
+          "from": "geometry.cpp:area_sum.fn/for@0",
+          "to": "dynamic:shapes[i].area",
+          "kind": "contains",
+          "irSource": "module/area_sum.fn/for@0"
+        },
+        {
+          "from": "geometry.cpp:area_sum",
+          "to": "external:printf@1",
+          "kind": "direct",
+          "irSource": "module/area_sum.fn/printf.call"
+        },
+        {
+          "from": "main.cpp:main",
+          "to": "geometry.cpp:area_sum",
+          "kind": "direct",
+          "irSource": "module/main.fn/total.assign"
+        },
+        {
+          "from": "external:system",
+          "to": "main.cpp:main:return@0",
+          "kind": "direct",
+          "irSource": "module/main.fn/return@0"
+        },
+        {
+          "from": "external:fopen",
+          "to": "main.cpp:main.fn/if@0#then",
+          "kind": "conditional",
+          "irSource": "module/main.fn/if@0"
+        }
+      ],
+      "entryPointId": "main.cpp:main",
+      "filesReached": [
+        "main.cpp",
+        "geometry.h",
+        "geometry.cpp"
+      ]
+    },
+    {
+      "version": "1.0",
+      "seed": {
+        "file": "geometry_test.cpp",
+        "irNodeId": "module/GeometrySuite_AreaOfUnitCircle.fn",
+        "qualifiedName": "geometry_test.cpp:GeometrySuite.AreaOfUnitCircle"
+      },
+      "nodes": [
+        {
+          "id": "geometry_test.cpp:GeometrySuite.AreaOfUnitCircle",
+          "kind": "seed",
+          "label": "GeometrySuite.AreaOfUnitCircle",
+          "file": "geometry_test.cpp",
+          "irNodeId": "module/GeometrySuite_AreaOfUnitCircle.fn",
+          "preview": null
+        },
+        {
+          "id": "dynamic:c.area",
+          "kind": "dynamic",
+          "label": "c.area",
+          "file": null,
+          "irNodeId": "module/GeometrySuite_AreaOfUnitCircle.fn/a.assign",
+          "preview": "c.area()",
+          "receiverBoundKind": "local-call",
+          "receiverBoundFrom": "Circle"
+        },
+        {
+          "id": "geometry.h:Circle",
+          "kind": "step",
+          "label": "Circle",
+          "file": "geometry.h",
+          "irNodeId": "module/Circle.class",
+          "preview": null
+        },
+        {
+          "id": "external:printf",
+          "kind": "external",
+          "label": "printf",
+          "file": null,
+          "irNodeId": "module/GeometrySuite_AreaOfUnitCircle.fn/printf.call",
+          "preview": "printf",
+          "effectKind": "log"
+        },
+        {
+          "id": "geometry.cpp:area_sum",
+          "kind": "step",
+          "label": "area_sum",
+          "file": "geometry.cpp",
+          "irNodeId": "module/area_sum.fn",
+          "preview": "Sum the areas of `count` circles, logging how many were folded in."
+        },
+        {
+          "id": "dynamic:shapes[i].area",
+          "kind": "dynamic",
+          "label": "shapes[i].area",
+          "file": null,
+          "irNodeId": "module/area_sum.fn/for@0/total.assign",
+          "preview": "shapes[i].area()"
+        },
+        {
+          "id": "geometry.cpp:area_sum.fn/for@0",
+          "kind": "container",
+          "containerKind": "for",
+          "label": "for int i = 0; i < count; i++",
+          "file": "geometry.cpp",
+          "irNodeId": "module/area_sum.fn/for@0",
+          "preview": null
+        },
+        {
+          "id": "external:printf@1",
+          "kind": "external",
+          "label": "printf",
+          "file": null,
+          "irNodeId": "module/area_sum.fn/printf.call",
+          "preview": "printf",
+          "effectKind": "log"
+        }
+      ],
+      "edges": [
+        {
+          "from": "geometry_test.cpp:GeometrySuite.AreaOfUnitCircle",
+          "to": "dynamic:c.area",
+          "kind": "direct",
+          "irSource": "module/GeometrySuite_AreaOfUnitCircle.fn/a.assign"
+        },
+        {
+          "from": "geometry_test.cpp:GeometrySuite.AreaOfUnitCircle",
+          "to": "geometry.h:Circle",
+          "kind": "direct",
+          "irSource": "module/GeometrySuite_AreaOfUnitCircle.fn/c.assign"
+        },
+        {
+          "from": "geometry_test.cpp:GeometrySuite.AreaOfUnitCircle",
+          "to": "external:printf",
+          "kind": "direct",
+          "irSource": "module/GeometrySuite_AreaOfUnitCircle.fn/printf.call"
+        },
+        {
+          "from": "geometry.cpp:area_sum",
+          "to": "dynamic:shapes[i].area",
+          "kind": "direct",
+          "irSource": "module/area_sum.fn/for@0/total.assign"
+        },
+        {
+          "from": "geometry.cpp:area_sum.fn/for@0",
+          "to": "dynamic:shapes[i].area",
+          "kind": "contains",
+          "irSource": "module/area_sum.fn/for@0"
+        },
+        {
+          "from": "geometry.cpp:area_sum",
+          "to": "external:printf@1",
+          "kind": "direct",
+          "irSource": "module/area_sum.fn/printf.call"
+        },
+        {
+          "from": "geometry_test.cpp:GeometrySuite.AreaOfUnitCircle",
+          "to": "geometry.cpp:area_sum",
+          "kind": "direct",
+          "irSource": "module/GeometrySuite_AreaOfUnitCircle.fn/total.assign"
+        }
+      ],
+      "entryPointId": "geometry_test.cpp:GeometrySuite.AreaOfUnitCircle",
+      "filesReached": [
+        "geometry_test.cpp",
+        "geometry.h",
+        "geometry.cpp"
+      ]
+    }
+  ]
+}

@@ -1,7 +1,8 @@
 # M-NEST fixture — nested-call honesty in the Arch forward thread.
 # FlatNet / ComposedNet: same architecture, flat vs composed (arg-nesting that
-# v1 EXTRACTS). ChainNet: chains + comprehensions that v1 DETECTS but does not
-# extract (the uncaptured backstop — must be badged, never silently complete).
+# v1 EXTRACTS). ChainNet: a method chain that is still DETECTED but not
+# extracted (the uncaptured backstop — must be badged, never silently
+# complete), beside a comprehension that M-COMP now captures in a container.
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -45,11 +46,17 @@ class ComposedNet(nn.Module):
 
 
 class ChainNet(nn.Module):
-    """Nests v1 DETECTS but does not extract: a method chain (self.proj in the
-    callee position of `.relu()`) and a comprehension inside a call argument
-    (self.head). Neither inner call is decomposed into a node, so the forward
-    path is incomplete here — it must carry the 'uncaptured' badge, never read
-    as silently complete."""
+    """The uncaptured backstop, and (since M-COMP) its boundary.
+
+    METHOD CHAIN — `self.proj` sits in the callee position of `.relu()`.
+    Nothing decomposes that, so the wrapping step must carry the dashed
+    'uncaptured' badge and never read as silently complete. This is the
+    case the backstop still exists for.
+
+    COMPREHENSION — `self.head` used to be the second such case. It is not
+    any more: a comprehension is a LOOP, so M-COMP gives it a container and
+    its calls become real nodes inside it. `self.head` is now a visible
+    step, repeated, and `torch.stack(...)` is no longer badged."""
 
     def __init__(self):
         super().__init__()

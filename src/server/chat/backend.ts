@@ -69,7 +69,8 @@ export interface ChatSession {
 }
 
 export interface ChatBackend {
-  readonly id: "claude-stdio" | "claude-p-headless" | "agent-sdk";
+  // M-PROVIDER — "ollama": the GUI chat on a LOCAL model (ollama_backend.ts).
+  readonly id: "claude-stdio" | "claude-p-headless" | "agent-sdk" | "ollama";
   openSession(init: ChatSessionInit): ChatSession;
 }
 

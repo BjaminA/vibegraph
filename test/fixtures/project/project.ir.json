@@ -59,6 +59,48 @@
         "nestExtracted": false
       },
       {
+        "id": "module/run.fn/User.call",
+        "type": "call",
+        "parentId": "module/run.fn",
+        "line": 5,
+        "endLine": 5,
+        "col": 13,
+        "endCol": 26,
+        "funcName": "User",
+        "args": [
+          "\"Alice\""
+        ],
+        "isEffect": false
+      },
+      {
+        "id": "module/run.fn/User.call@1",
+        "type": "call",
+        "parentId": "module/run.fn",
+        "line": 5,
+        "endLine": 5,
+        "col": 28,
+        "endCol": 39,
+        "funcName": "User",
+        "args": [
+          "\"Bob\""
+        ],
+        "isEffect": false
+      },
+      {
+        "id": "module/run.fn/User.call@2",
+        "type": "call",
+        "parentId": "module/run.fn",
+        "line": 5,
+        "endLine": 5,
+        "col": 41,
+        "endCol": 56,
+        "funcName": "User",
+        "args": [
+          "\"Charlie\""
+        ],
+        "isEffect": false
+      },
+      {
         "id": "module/run.fn/for@0",
         "type": "for_loop",
         "parentId": "module/run.fn",
@@ -131,6 +173,21 @@
       },
       {
         "source": "module/run.fn",
+        "target": "module/run.fn/User.call",
+        "type": "contains"
+      },
+      {
+        "source": "module/run.fn",
+        "target": "module/run.fn/User.call@1",
+        "type": "contains"
+      },
+      {
+        "source": "module/run.fn",
+        "target": "module/run.fn/User.call@2",
+        "type": "contains"
+      },
+      {
+        "source": "module/run.fn",
         "target": "module/run.fn/for@0",
         "type": "contains"
       },
@@ -153,6 +210,27 @@
         "source": "module/if@0/run.call",
         "target": "module/run.fn",
         "type": "reference"
+      },
+      {
+        "source": "module/run.fn/User.call",
+        "target": "module/User.class",
+        "type": "reference",
+        "targetFile": "models.py",
+        "qualifiedTarget": "models:User"
+      },
+      {
+        "source": "module/run.fn/User.call@1",
+        "target": "module/User.class",
+        "type": "reference",
+        "targetFile": "models.py",
+        "qualifiedTarget": "models:User"
+      },
+      {
+        "source": "module/run.fn/User.call@2",
+        "target": "module/User.class",
+        "type": "reference",
+        "targetFile": "models.py",
+        "qualifiedTarget": "models:User"
       },
       {
         "source": "module/run.fn/for@0/name.assign",
@@ -220,7 +298,10 @@
         "docstring": null,
         "decorators": [],
         "isAsync": false,
-        "returns": "None"
+        "returns": "None",
+        "paramTypes": {
+          "name": "str"
+        }
       },
       {
         "id": "module/User.class/__init__.fn/self_name.assign",
@@ -439,7 +520,10 @@
         "docstring": "Print a greeting for the given name.",
         "decorators": [],
         "isAsync": false,
-        "returns": "None"
+        "returns": "None",
+        "paramTypes": {
+          "name": "str"
+        }
       },
       {
         "id": "module/greet.fn/print.call",
@@ -470,7 +554,10 @@
         "docstring": "Capitalize and strip whitespace.",
         "decorators": [],
         "isAsync": false,
-        "returns": "str"
+        "returns": "str",
+        "paramTypes": {
+          "name": "str"
+        }
       },
       {
         "id": "module/format_name.fn/return@0",
@@ -500,7 +587,10 @@
         "docstring": null,
         "decorators": [],
         "isAsync": false,
-        "returns": "None"
+        "returns": "None",
+        "paramTypes": {
+          "name": "str"
+        }
       },
       {
         "id": "module/farewell.fn/print.call",

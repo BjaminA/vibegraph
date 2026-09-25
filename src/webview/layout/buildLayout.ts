@@ -1,6 +1,8 @@
 import type { Node } from "@xyflow/react";
 import type { AstNode } from "../types";
 import { docSummary, docLineCount, DOC_WRAP_CHARS, DOC_LINE_H } from "../util/docSummary";
+import { layoutDefinitions } from "./defs_layout";
+import { wrapCount, charsIn } from "../util/wrapCount";
 
 // ── size constants ────────────────────────────────────────────────────────────
 
@@ -17,6 +19,7 @@ const NODE_W: Record<string, number> = {
   return_stmt: 240, raise_stmt: 230,
   call: 240,
   try_stmt: 160, finally_block: 160,
+  comprehension: 200,
 };
 
 // Content-fit sizing. CHAR_W ≈ a monospace advance at the node's body font
@@ -41,6 +44,8 @@ const HEADER_H: Record<string, number> = {
   // which floats over the top border. A small reserve gives the chip
   // clearance + top padding before the first nested statement.
   try_stmt: 22, finally_block: 22,
+  // M-COMP — same shape: a bordered region whose only chrome is the chip.
+  comprehension: 22,
 };
 
 // Phase 6: single-row height for compact `self.X = …` assignments inside a
@@ -54,6 +59,10 @@ const CONTAINER_TYPES = new Set([
   // them here their children were never emitted and the regions fell through
   // to the assignment renderer's blank "ref" card (M-FV try/finally fix).
   "try_stmt", "finally_block",
+  // M-COMP — a comprehension holds the calls that repeat inside it, and has
+  // no name of its own, so it hits the same blank-card path if it is not
+  // named here.
+  "comprehension",
 ]);
 
 // try / finally render with thread-view's container shell rather than a
@@ -64,6 +73,15 @@ const THREAD_CONTAINER: Record<string, { containerKind: string; label: string }>
   try_stmt: { containerKind: "try", label: "try" },
   finally_block: { containerKind: "finally", label: "finally" },
 };
+
+/** M-COMP — a comprehension's chip label, derived rather than constant.
+ *  Mirrors extract_thread.py's `_container_label` EXACTLY, so the file view
+ *  and the thread view name the same construct the same way; two spellings
+ *  of one region is the confusion the container exists to remove. */
+function comprehensionLabel(n: { compKind?: string; target?: string; iterName?: string }): string {
+  const noun = n.compKind === "generator" ? "genexp" : `${n.compKind ?? "list"}comp`;
+  return n.target && n.iterName ? `${noun} for ${n.target} in ${n.iterName}` : noun;
+}
 const BODY_PAD_TOP = 14;
 const BODY_PAD_BOT = 14;
 const CHILD_PAD_LEFT = 12; // right gutter inside a container
@@ -90,11 +108,15 @@ const INDENT_STEP = 24;
 // reserve the space) and emitNode (to place the children in it) MUST agree —
 // they read the same constant from two places before, and the docstring was in
 // neither, which is what put `prepare_tensors`' params under its `if not rows`.
-function headerHeight(n: AstNode): number {
+// The width is the card's own (calcWidth runs first), so every line count here
+// is the text wrapped at the width it will actually paint at.
+function headerHeight(n: AstNode, w: number): number {
   const base = HEADER_H[n.type] ?? 44;
-  const docH = n.type === "function_def" ? docLineCount(n.docstring) * DOC_LINE_H : 0;
-  const extraLines = (previewLines(n) - 1) * PREVIEW_LINE_H;
-  return base + docH + visibleParams(n) * FN_PARAM_ROW_H + extraLines;
+  const docH = n.type === "function_def" ? docLineCount(n.docstring, w - FN_DOC_CHROME) * DOC_LINE_H : 0;
+  const extra = n.type === "call"
+    ? (wrapCount((n.args ?? []).join(", "), charsIn(w - CALL_ARGS_CHROME, ARGS_CHAR_W)) - 1) * ARGS_LINE_H
+    : (previewLines(n, w, false) - 1) * PREVIEW_LINE_H;
+  return base + docH + visibleParams(n) * FN_PARAM_ROW_H + extra;
 }
 
 function gapBetween(prev: AstNode, curr: AstNode): number {
@@ -156,7 +178,9 @@ function longestLineLen(s: string): number {
 // Rendered line count of an assignment/return preview — extra lines beyond
 // the first grow the node in calcHeight so the full expression is visible
 // (matched by the clampLines the node components pass to TextLine).
-function previewLines(n: AstNode): number {
+// Counts WRAPPED lines at the card's width, not just source newlines: a long
+// one-line RHS on a card capped at MAX_NODE_W wraps, and used to be clipped.
+function previewLines(n: AstNode, w: number, compact: boolean): number {
   const text = n.type === "assignment"
     ? (n.preview && n.preview.length > 0 ? n.preview : (n.annotation ?? ""))
     : n.type === "return_stmt" ? (n.value ?? "")
@@ -164,9 +188,25 @@ function previewLines(n: AstNode): number {
     // (`raise ValueError(\n    f"..."\n)`); without this the node is sized
     // for ONE line and the rest is clipped by the 3-line clamp.
     : n.type === "raise_stmt" ? (n.exc ?? "") : "";
-  return text.length === 0 ? 1 : text.split("\n").length;
+  if (text.length === 0) return 1;
+  const chrome = n.type !== "assignment" ? STMT_PREVIEW_CHROME
+    : compact ? COMPACT_ROW_CHROME + (n.name?.length ?? 0) * COMPACT_NAME_CHAR_W
+    : ASSIGN_PREVIEW_CHROME;
+  return wrapCount(text, charsIn(w - chrome, PREVIEW_CHAR_W));
 }
 const PREVIEW_LINE_H = 15; // fontSize-11 monospace line + breathing room
+// What each renderer paints beside its text, in px — the width its text does
+// NOT get. Read off the components (pads, icon, gaps, the 108px action-strip
+// reserve, borders), rounded up so a prediction can only over-reserve.
+const PREVIEW_CHAR_W = 6.7;          // 11px monospace (0.6em) + rounding
+const ASSIGN_PREVIEW_CHROME = 32;    // AssignmentNode body row: 2 × 12 pad + border
+const STMT_PREVIEW_CHROME = 152;     // Return/Raise: 12 pad + 16 icon + 8 gap + 108 + border
+const COMPACT_ROW_CHROME = 180;      // CompactRow: pads, icon, op, gaps, 108 reserve
+const COMPACT_NAME_CHAR_W = 7.3;     // its 12px semibold name
+const ARGS_CHAR_W = 6.1;             // CallNode args: 10px monospace
+const ARGS_LINE_H = 13;
+const CALL_ARGS_CHROME = 164;        // 20 pad + 108 + 24 inset + clip + border
+const FN_DOC_CHROME = 96;            // title band: 2 × 12 pad + 26 icon + gaps + return port
 
 // Character length of the dominant text line for a node — what the node's
 // width must accommodate. Mirrors what each node component actually paints.
@@ -226,7 +266,27 @@ function ownWidth(n: AstNode, byId: Map<string, AstNode>): number {
   // short of the fit (the `nn.Sequential(` → `nn.Sequential` + `(` split).
   const compactExtra = n.type === "assignment" && isClassFieldAssignment(n, byId) ? 11 : 0;
   const fit = W_RESERVE + (contentLen(n) + compactExtra) * CHAR_W;
-  return Math.min(MAX_NODE_W, Math.max(min, fit));
+  // The title row never wraps or ellipsises, so it is a floor even past
+  // MAX_NODE_W: body text wraps (and the height grows for it), a name cannot.
+  return Math.max(Math.min(MAX_NODE_W, Math.max(min, fit)), titleWidth(n));
+}
+
+// The width a card's title row paints, in px, from each component's fonts and
+// chrome (a name at 13px bold mono is ~7.8px/char, not CHAR_W's 7): without it
+// a long assignment name was squeezed to 52px and wrapped letter by letter.
+function titleWidth(n: AstNode): number {
+  const name = n.name?.length ?? 0;
+  switch (n.type) {
+    // pads 12 + icon 16 + gaps 3 × 8 + op 10 + the 108 action reserve + border
+    case "assignment": return 176 + 8 * 5.6 + name * 7.9;
+    // pads 2 × 12 + icon 26 + gap 8 + return port 24 + border
+    case "function_def": return 90 + name * 8.8;
+    // pads 2 × 12 + icon 20 + gap 12 + border; 16px black mono, 0.04em tracking
+    case "class_def": return 64 + name * 10.3;
+    // 20 pad + icon 16 + gap 8 + the 108 reserve + clip insets; 12px heavy mono
+    case "call": return 176 + (n.funcName?.length ?? 0) * 7.5;
+    default: return 0;
+  }
 }
 
 // Container width must also fit its widest descendant (plus side padding),
@@ -263,28 +323,27 @@ export function calcHeight(
   nodeId: string,
   children: Map<string, string[]>,
   byId: Map<string, AstNode>,
-  cache: Map<string, number>
+  cache: Map<string, number>,
+  widths?: Map<string, number>,
 ): number {
   if (cache.has(nodeId)) return cache.get(nodeId)!;
   const n = byId.get(nodeId);
   if (!n) return 40;
-  // A multi-line preview (assignment RHS / return value with source
-  // newlines) grows the node so every line is visible — the width side of
-  // this contract is longestLineLen in contentLen.
-  const extraLines = (previewLines(n) - 1) * PREVIEW_LINE_H;
-  // Phase 6: compact self-field rows have their own height.
+  const w = widths?.get(nodeId) ?? calcWidth(nodeId, children, byId, new Map());
+  // Phase 6: compact self-field rows have their own height. A multi-line
+  // preview grows the node so every line is visible.
   if (isClassFieldAssignment(n, byId)) {
-    const h = ASSIGNMENT_COMPACT_H + extraLines;
+    const h = ASSIGNMENT_COMPACT_H + (previewLines(n, w, true) - 1) * PREVIEW_LINE_H;
     cache.set(nodeId, h);
     return h;
   }
-  const hdr = headerHeight(n);
+  const hdr = headerHeight(n, w);
   const kids = children.get(nodeId) ?? [];
   if (kids.length === 0 || !CONTAINER_TYPES.has(n.type)) {
     cache.set(nodeId, hdr);
     return hdr;
   }
-  const kidsH = kids.reduce((s, k) => s + calcHeight(k, children, byId, cache), 0);
+  const kidsH = kids.reduce((s, k) => s + calcHeight(k, children, byId, cache, widths), 0);
   // Sum the per-sibling rhythm gaps (baseline vs group) rather than a flat
   // gap × (n-1), so the height matches the variable spacing emitNode lays out.
   let gaps = 0;
@@ -311,7 +370,8 @@ function typeToNodeType(type: string): string {
     case "raise_stmt": return "raiseNode";
     case "call": return "callNode";
     case "try_stmt":
-    case "finally_block": return "threadContainer";
+    case "finally_block":
+    case "comprehension": return "threadContainer";
     default: return "assignmentNode";
   }
 }
@@ -321,55 +381,6 @@ function topAncestor(id: string, byId: Map<string, AstNode>): string | null {
   let n = byId.get(id);
   while (n && n.parentId) n = byId.get(n.parentId);
   return n ? n.id : null;
-}
-
-// M-FV.6 (W2b) — order the definitions band by call flow instead of pure
-// source line: each definition is immediately followed by the definitions it
-// calls (resolved to their top-level ancestors), so a caller and its callees
-// sit adjacent and the column reads as a flow. A DFS pre-order seeded by
-// source order — stable, cycle-safe (visited set), and a no-op for files with
-// no intra-band calls (falls back to source order). Single column preserved
-// (band x is fixed), so flow reads top→down here; the band stays one column
-// to keep the M-FV.2 rhythm and M-FV.5 banding contracts intact.
-function flowOrderBand(
-  band: AstNode[],
-  refEdges: Array<{ source: string; target: string }>,
-  byId: Map<string, AstNode>,
-): AstNode[] {
-  if (band.length < 2 || refEdges.length === 0) return band;
-  const inBand = new Set(band.map((n) => n.id));
-  // caller top-id → ordered callee top-ids in this band; hasCaller marks any
-  // definition that is itself called by an in-band definition.
-  const callees = new Map<string, string[]>();
-  const hasCaller = new Set<string>();
-  for (const e of refEdges) {
-    const s = topAncestor(e.source, byId);
-    const t = topAncestor(e.target, byId);
-    if (!s || !t || s === t || !inBand.has(s) || !inBand.has(t)) continue;
-    if (!callees.has(s)) callees.set(s, []);
-    if (!callees.get(s)!.includes(t)) callees.get(s)!.push(t);
-    hasCaller.add(t);
-  }
-  if (callees.size === 0) return band;
-  const order = new Map(band.map((n, i) => [n.id, i]));
-  const visited = new Set<string>();
-  const out: AstNode[] = [];
-  const visit = (id: string) => {
-    if (visited.has(id)) return;
-    visited.add(id);
-    const n = byId.get(id);
-    if (n) out.push(n);
-    // Emit this definition's callees right after it (source order among them),
-    // pulling them adjacent even when they were defined earlier in the file.
-    const next = (callees.get(id) ?? []).slice().sort((a, b) => (order.get(a) ?? 0) - (order.get(b) ?? 0));
-    for (const c of next) visit(c);
-  };
-  // Roots — definitions not called by any in-band definition — anchor the
-  // order in source sequence; each carries its callee subtree beneath it.
-  for (const n of band) if (!hasCaller.has(n.id)) visit(n.id);
-  // Anything left (mutual-recursion cycles) falls back to source order.
-  for (const n of band) visit(n.id);
-  return out;
 }
 
 // Column-based manual layout. Keeps the existing algorithm — PLAN.md notes
@@ -397,11 +408,12 @@ export function buildLayout(
     kids.sort((a, b) => (byId.get(a)?.line ?? 0) - (byId.get(b)?.line ?? 0));
   }
 
-  const heightCache = new Map<string, number>();
-  for (const n of astNodes) calcHeight(n.id, children, byId, heightCache);
 
   const widthCache = new Map<string, number>();
   for (const n of astNodes) calcWidth(n.id, children, byId, widthCache);
+  // Heights AFTER widths: a text's line count depends on the width it wraps at.
+  const heightCache = new Map<string, number>();
+  for (const n of astNodes) calcHeight(n.id, children, byId, heightCache, widthCache);
 
   const topLevel = astNodes.filter((n) => !hasParent.has(n.id));
 
@@ -417,6 +429,7 @@ export function buildLayout(
     ["import", "import_from"],                                   // imports
     ["assignment"],                                             // module state
     ["function_def", "class_def", "for_loop", "if_stmt",        // definitions
+     "comprehension",                                           //   + loops
      "call", "return_stmt", "raise_stmt"],                      //   + flow
   ];
 
@@ -438,12 +451,12 @@ export function buildLayout(
     col.sort((a, b) => (a.line ?? 0) - (b.line ?? 0));
   }
 
-  // W2b — reorder ONLY the definitions band (the one holding function/class
-  // defs) by call flow. The state band keeps strict source order (W2a).
+  // 2026-09-24 — the definitions band is no longer one column: it is laid
+  // out left to right as call flows packed into a laptop-shaped region
+  // (defs_layout.ts). M-FV.6's flow ORDER (a callee after its caller) holds
+  // as a flow DIRECTION: a callee sits right of its caller. Imports and
+  // module state stay one column each, in source order.
   const defsBand = COLUMN_TYPES.findIndex((types) => types.includes("function_def"));
-  if (defsBand >= 0) {
-    columns[defsBand] = flowOrderBand(columns[defsBand], refEdges, byId);
-  }
 
   // Column X positions are derived from the widest node in each preceding
   // column rather than fixed, so wide content can't bleed into the next
@@ -458,7 +471,23 @@ export function buildLayout(
 
   const flowNodes: Node[] = [];
   const topLevelPositions = new Map<string, { x: number; y: number }>();
+  if (defsBand >= 0 && columns[defsBand].length) {
+    const calls: Array<[string, string]> = [];
+    for (const e of refEdges) {
+      const a = topAncestor(e.source, byId), b = topAncestor(e.target, byId);
+      if (a && b && a !== b) calls.push([a, b]);
+    }
+    const columnH = (col: AstNode[]) => col.reduce((k, n) => k + (heightCache.get(n.id) ?? 40) + BASELINE_GAP, 0);
+    const rel = layoutDefinitions({
+      defs: columns[defsBand], calls,
+      besideHeight: Math.max(0, ...columns.filter((_, c) => c !== defsBand).map(columnH)),
+      width: (id) => widthCache.get(id) ?? 260,
+      height: (id) => heightCache.get(id) ?? 40,
+    });
+    for (const [id, p] of rel) topLevelPositions.set(id, { x: COLUMN_X[defsBand] + p.x, y: 40 + p.y });
+  }
   for (let c = 0; c < columns.length; c++) {
+    if (c === defsBand) continue;
     let y = 40;
     let prev: AstNode | null = null;
     for (const n of columns[c]) {
@@ -480,7 +509,9 @@ export function buildLayout(
     const compact = isClassFieldAssignment(n, byId);
     // try / finally carry the thread-container data shape (kind + chip label
     // + Family-1 accent) so ThreadContainerNode renders the region + chip.
-    const containerData = THREAD_CONTAINER[n.type];
+    const containerData = n.type === "comprehension"
+      ? { containerKind: "comprehension", label: comprehensionLabel(n) }
+      : THREAD_CONTAINER[n.type];
     const flowNode: Node = {
       id: nodeId,
       type: typeToNodeType(n.type),
@@ -511,7 +542,7 @@ export function buildLayout(
 
     const kids = children.get(nodeId);
     if (kids && kids.length > 0 && CONTAINER_TYPES.has(n.type)) {
-      let childY = headerHeight(n) + BODY_PAD_TOP;
+      let childY = headerHeight(n, w) + BODY_PAD_TOP;
       let prevKid: AstNode | null = null;
       for (const kid of kids) {
         const kidNode = byId.get(kid);

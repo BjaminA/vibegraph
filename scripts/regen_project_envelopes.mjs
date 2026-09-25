@@ -45,6 +45,16 @@ const FIXTURES = [
     manualSeeds: join(ROOT, "test", "fixtures", "system", "system_demo", ".vibegraph", "manual_seeds.json"),
   },
   {
+    // M-COMP — every function is a manual seed, so each spelling of the same
+    // N+1 gets its own thread and its own contract. A negative case buried
+    // inside a larger thread proves nothing.
+    name: "comp_demo",
+    ir: join(ROOT, "test", "fixtures", "comprehension", "comp_demo", "comp_demo.ir.json"),
+    out: join(ROOT, "test", "fixtures", "comprehension", "comp_demo", "comp_demo.project.json"),
+    root: join(ROOT, "test", "fixtures", "comprehension", "comp_demo"),
+    manualSeeds: join(ROOT, "test", "fixtures", "comprehension", "comp_demo", ".vibegraph", "manual_seeds.json"),
+  },
+  {
     name: "library_only",
     ir: join(ROOT, "test", "fixtures", "system", "library_only", "library_only.ir.json"),
     out: join(ROOT, "test", "fixtures", "system", "library_only", "library_only.project.json"),

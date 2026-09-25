@@ -1,0 +1,351 @@
+{
+  "generatedAt": "2026-09-21T12:20:36.075Z",
+  "commit": "016fcd9",
+  "verbs": {
+    "guards": "MAY-GATE",
+    "not-in-loop": "MAY-GATE",
+    "handles-failure": "MAY-GATE",
+    "annotated": "MAY-GATE",
+    "co-changes": "DEMOTE"
+  },
+  "records": {
+    "guards": {
+      "commit": "92091cb",
+      "at": "2026-09-12T16:01:41.992Z",
+      "sampleSet": {
+        "knownGood": [
+          "guards_demo.py:module/good_if_arm.fn",
+          "guards_demo.py:module/good_negated_return.fn",
+          "guards_demo.py:module/good_bound_then_if.fn",
+          "guards_demo.py:module/good_negated_else.fn",
+          "telemetry/alerts.py:module/evaluate.fn"
+        ],
+        "knownBad": [
+          "guards_demo.py:module/bad_after.fn",
+          "guards_demo.py:module/bad_else_arm.fn",
+          "guards_demo.py:module/bad_negated_then.fn",
+          "guards_demo.py:module/bad_return_between.fn",
+          "guards_demo.py:module/bad_no_guard.fn"
+        ]
+      },
+      "fireRate": {
+        "onKnownGood": {
+          "fired": 0,
+          "of": 5
+        },
+        "onKnownBad": {
+          "fired": 5,
+          "of": 5
+        }
+      },
+      "falsePositiveReview": {
+        "reviewedBy": "model",
+        "model": "claude:claude-fable-5-1",
+        "delegatedBy": {
+          "source": "human",
+          "id": "ruling:2026-09-12:calibration-review-delegated",
+          "at": "2026-09-12T16:00:00.000Z"
+        },
+        "notes": [],
+        "falsePositives": [],
+        "intended": []
+      },
+      "samplesFrom": "reviews/quality-layer/calibration/guards.candidate.json"
+    },
+    "not-in-loop": {
+      "commit": "016fcd9",
+      "at": "2026-09-21T12:20:35.698Z",
+      "sampleSet": {
+        "knownGood": [
+          "fanout.py:module/page_once.fn",
+          "telemetry/backfill.py:module/backfill_from_file.fn",
+          "telemetry/ingest.py:module/ingest_batch.fn"
+        ],
+        "knownBad": [
+          "fanout.py:module/clause_guard.fn",
+          "fanout.py:module/clause_iterable.fn",
+          "fanout.py:module/fetch_comp.fn",
+          "fanout.py:module/fetch_dict.fn",
+          "fanout.py:module/fetch_genexp.fn",
+          "fanout.py:module/fetch_loop.fn",
+          "fanout.py:module/filter_live.fn",
+          "fanout.py:module/guard_then_fetch.fn",
+          "fanout.py:module/loop_over_comp.fn",
+          "fanout.py:module/nm_loop.fn",
+          "fanout.py:module/nm_nested_comps.fn",
+          "fanout.py:module/nm_two_clauses.fn",
+          "fanout.py:module/t3_clauses.fn",
+          "fanout.py:module/t3_guard_middle.fn",
+          "fanout.py:module/t3_loop.fn",
+          "fanout.py:module/t3_mixed_clauses_outside.fn",
+          "fanout.py:module/t3_mixed_node_outside.fn",
+          "fanout.py:module/t3_nodes.fn"
+        ]
+      },
+      "fireRate": {
+        "onKnownGood": {
+          "fired": 0,
+          "of": 3
+        },
+        "onKnownBad": {
+          "fired": 18,
+          "of": 18
+        }
+      },
+      "falsePositiveReview": {
+        "reviewedBy": "model",
+        "model": "claude:claude-opus-5",
+        "delegatedBy": {
+          "source": "human",
+          "id": "ruling:2026-09-12:calibration-review-delegated",
+          "at": "2026-09-12T16:00:00.000Z"
+        },
+        "notes": [],
+        "falsePositives": [],
+        "intended": []
+      },
+      "samplesFrom": "reviews/quality-layer/calibration/not-in-loop.candidate.json"
+    },
+    "handles-failure": {
+      "commit": "92091cb",
+      "at": "2026-09-12T16:01:42.372Z",
+      "sampleSet": {
+        "knownGood": [
+          "scripts/build_system_tier.py:module/_detect_frontend.fn/for@0/for@0/if@0/except@0",
+          "scripts/build_system_tier.py:module/_scan_calls_edges.fn/for@0/except@0",
+          "scripts/check_literals.py:module/_validate_expr.fn/except@0",
+          "scripts/check_literals.py:module/main.fn/except@0",
+          "scripts/check_project_deps.py:module/_is_importable.fn/except@0",
+          "scripts/check_project_deps.py:module/main.fn/except@0",
+          "scripts/cross_file_link.py:module/_ratchet_version.fn/except@0",
+          "scripts/cst_rewrite.py:module/op_capture_probe.fn/except@0",
+          "scripts/cst_rewrite.py:module/op_create_file.fn/except@0",
+          "scripts/cst_rewrite.py:module/_RenameTransformer.class/leave_Name.fn/except@0",
+          "scripts/cst_rewrite.py:module/_resolve_or_op_error.fn/except@0",
+          "scripts/cst_rewrite.py:module/_parse_stmts_or_op_error.fn/except@0",
+          "scripts/cst_rewrite.py:module/_parse_expression_or_op_error.fn/except@0",
+          "scripts/cst_rewrite.py:module/_render.fn/except@0",
+          "scripts/cst_rewrite.py:module/op_replace_function_body.fn/if@5/except@0",
+          "scripts/cst_rewrite.py:module/op_replace_function_body.fn/for@1/except@0",
+          "scripts/cst_rewrite.py:module/op_replace_module_body.fn/except@0",
+          "scripts/cst_rewrite.py:module/apply.fn/if@2/except@0",
+          "scripts/cst_rewrite.py:module/apply.fn/for@0/except@0",
+          "scripts/cst_rewrite.py:module/main.fn/try@0/if@0/except@0",
+          "scripts/cst_rewrite.py:module/main.fn/except@0",
+          "scripts/cst_rewrite.py:module/main.fn/except@1",
+          "scripts/extract_thread.py:module/if@0/if@0/for@0/except@0",
+          "scripts/parse_cst.py:module/GraphBuilder.class/_code.fn/except@0",
+          "scripts/parse_cst.py:module/GraphBuilder.class/visit_AugAssign.fn/except@0",
+          "scripts/parse_cst.py:module/_batch_worker.fn/except@0",
+          "scripts/place_intent.py:module/_wrap_function_body_in_try.fn/except@0",
+          "scripts/place_intent.py:module/place.fn/for@0/except@0",
+          "scripts/place_intent.py:module/main.fn/except@0",
+          "scripts/place_new_code.py:module/place.fn/for@0/except@0",
+          "scripts/place_new_code.py:module/_cli.fn/except@0",
+          "scripts/place_new_code.py:module/_cli.fn/except@1",
+          "scripts/resolve_external_callable.py:module/_safe_signature.fn/except@0",
+          "scripts/resolve_external_callable.py:module/_safe_docstring.fn/except@0",
+          "scripts/resolve_external_callable.py:module/_safe_sourcefile.fn/except@0",
+          "scripts/resolve_external_callable.py:module/resolve.fn/except@0",
+          "scripts/resolve_external_callable.py:module/resolve.fn/except@1",
+          "scripts/resolve_external_callable.py:module/resolve.fn/except@2",
+          "scripts/resolve_external_callable.py:module/_cli.fn/except@0",
+          "scripts/run_block.py:module/extract_dependencies.fn/except@0",
+          "scripts/run_block.py:module/run_block.fn/except@0",
+          "scripts/run_block.py:module/run_block.fn/except@1",
+          "scripts/run_to_node.py:module/_decode_capture.fn/except@0",
+          "scripts/run_to_node.py:module/run.fn/except@0",
+          "scripts/scan_effects.py:module/main.fn/except@0",
+          "scripts/synth_scale_fixture.py:module/main.fn/for@0/except@0",
+          "scripts/synth_scale_fixture.py:module/main.fn/except@0",
+          "scripts/synth_thread_fixture.py:module/main.fn/except@0",
+          "scripts/trace_run.py:module/_Tracer.class/_owned.fn/except@0",
+          "scripts/trace_run.py:module/_Tracer.class/__call__.fn/except@0",
+          "scripts/trace_run.py:module/trace.fn/except@0",
+          "scripts/trace_run.py:module/trace.fn/except@1",
+          "scripts/trace_run.py:module/trace.fn/except@2",
+          "test/fixtures/scale/src/checks.py:module/_issubclass.fn/except@0",
+          "test/fixtures/scale/src/checks.py:module/_contains_subclass.fn/for@0/except@0",
+          "test/fixtures/scale/src/checks.py:module/BaseModelAdminChecks.class/_check_autocomplete_fields_item.fn/except@0",
+          "test/fixtures/scale/src/checks.py:module/BaseModelAdminChecks.class/_check_raw_id_fields_item.fn/except@0",
+          "test/fixtures/scale/src/checks.py:module/BaseModelAdminChecks.class/_check_field_spec_item.fn/if@0/except@0",
+          "test/fixtures/scale/src/checks.py:module/BaseModelAdminChecks.class/_check_filter_item.fn/except@0",
+          "test/fixtures/scale/src/checks.py:module/BaseModelAdminChecks.class/_check_radio_fields_key.fn/except@0",
+          "test/fixtures/scale/src/checks.py:module/BaseModelAdminChecks.class/_check_prepopulated_fields_key.fn/except@0",
+          "test/fixtures/scale/src/checks.py:module/BaseModelAdminChecks.class/_check_prepopulated_fields_value_item.fn/except@0",
+          "test/fixtures/scale/src/checks.py:module/BaseModelAdminChecks.class/_check_ordering_item.fn/if@1/if@0/if@0/except@0",
+          "test/fixtures/scale/src/checks.py:module/BaseModelAdminChecks.class/_check_readonly_fields_item.fn/if@0/if@0/if@0/except@0",
+          "test/fixtures/scale/src/checks.py:module/ModelAdminChecks.class/_check_inlines_item.fn/except@0",
+          "test/fixtures/scale/src/checks.py:module/ModelAdminChecks.class/_check_list_display_item.fn/except@0",
+          "test/fixtures/scale/src/checks.py:module/ModelAdminChecks.class/_check_list_display_item.fn/except@0/except@0",
+          "test/fixtures/scale/src/checks.py:module/ModelAdminChecks.class/_check_list_filter_item.fn/if@0/if@1/except@0",
+          "test/fixtures/scale/src/checks.py:module/ModelAdminChecks.class/_check_list_editable_item.fn/except@0",
+          "test/fixtures/scale/src/checks.py:module/ModelAdminChecks.class/_check_date_hierarchy.fn/if@0/except@0",
+          "test/fixtures/scale/src/checks.py:module/InlineModelAdminChecks.class/_check_relation.fn/except@0",
+          "test/fixtures/scale/src/filters.py:module/FieldListFilter.class/queryset.fn/except@0",
+          "test/fixtures/scale/src/helpers.py:module/AdminReadonlyField.class/get_admin_url.fn/except@0",
+          "test/fixtures/scale/src/helpers.py:module/AdminReadonlyField.class/contents.fn/except@0",
+          "test/fixtures/scale/src/models.py:module/LogEntry.class/get_change_message.fn/if@0/except@0",
+          "test/fixtures/scale/src/models.py:module/LogEntry.class/get_admin_url.fn/if@0/except@0",
+          "test/fixtures/scale/src/options.py:module/BaseModelAdmin.class/get_empty_value_display.fn/except@0",
+          "test/fixtures/scale/src/options.py:module/BaseModelAdmin.class/lookup_allowed.fn/for@1/except@0",
+          "test/fixtures/scale/src/options.py:module/BaseModelAdmin.class/to_field_allowed.fn/except@0",
+          "test/fixtures/scale/src/options.py:module/ModelAdmin.class/get_form.fn/except@0",
+          "test/fixtures/scale/src/options.py:module/ModelAdmin.class/get_object.fn/except@0",
+          "test/fixtures/scale/src/options.py:module/ModelAdmin.class/get_action.fn/if@0/if@0/except@0",
+          "test/fixtures/scale/src/options.py:module/ModelAdmin.class/get_search_results.fn/construct_search.fn/for@0/except@0",
+          "test/fixtures/scale/src/options.py:module/ModelAdmin.class/message_user.fn/if@0/except@0",
+          "test/fixtures/scale/src/options.py:module/ModelAdmin.class/response_action.fn/except@0",
+          "test/fixtures/scale/src/options.py:module/ModelAdmin.class/response_action.fn/except@1",
+          "test/fixtures/scale/src/options.py:module/ModelAdmin.class/get_changeform_initial_data.fn/for@0/except@0",
+          "test/fixtures/scale/src/options.py:module/ModelAdmin.class/_get_list_editable_queryset.fn/except@0",
+          "test/fixtures/scale/src/options.py:module/ModelAdmin.class/changelist_view.fn/except@0",
+          "test/fixtures/scale/src/sites.py:module/AdminSite.class/catch_all_view.fn/if@0/except@0",
+          "test/fixtures/scale/src/sites.py:module/AdminSite.class/_build_app_dict.fn/for@0/if@2/except@0",
+          "test/fixtures/scale/src/sites.py:module/AdminSite.class/_build_app_dict.fn/for@0/if@3/except@0",
+          "test/fixtures/scale/src/templatetags/admin_list.py:module/items_for_result.fn/for@0/except@0",
+          "test/fixtures/scale/src/templatetags/admin_list.py:module/items_for_result.fn/for@0/if@0/except@0",
+          "test/fixtures/scale/src/templatetags/admin_modify.py:module/cell_count.fn/for@0/for@0/for@0/except@0",
+          "test/fixtures/scale/src/templatetags/admin_urls.py:module/add_preserved_filters.fn/if@0/except@0",
+          "test/fixtures/scale/src/utils.py:module/lookup_spawns_duplicates.fn/for@0/except@0",
+          "test/fixtures/scale/src/utils.py:module/get_deleted_objects.fn/except@0",
+          "test/fixtures/scale/src/utils.py:module/get_deleted_objects.fn/format_callback.fn/if@0/except@0",
+          "test/fixtures/scale/src/utils.py:module/NestedObjects.class/collect.fn/except@0",
+          "test/fixtures/scale/src/utils.py:module/NestedObjects.class/collect.fn/except@1",
+          "test/fixtures/scale/src/utils.py:module/lookup_field.fn/except@0",
+          "test/fixtures/scale/src/utils.py:module/label_for_field.fn/try@0/except@0",
+          "test/fixtures/scale/src/utils.py:module/label_for_field.fn/except@0",
+          "test/fixtures/scale/src/utils.py:module/label_for_field.fn/except@1",
+          "test/fixtures/scale/src/utils.py:module/help_text_for_field.fn/except@0",
+          "test/fixtures/scale/src/utils.py:module/display_for_field.fn/if@0/except@0",
+          "test/fixtures/scale/src/utils.py:module/display_for_field.fn/if@0/if@0/if@0/if@0/if@0/if@0/if@0/if@0/if@0/except@0",
+          "test/fixtures/scale/src/utils.py:module/reverse_field_path.fn/for@0/if@0/except@0",
+          "test/fixtures/scale/src/utils.py:module/_get_changed_field_labels_from_form.fn/for@0/except@0",
+          "test/fixtures/scale/src/views/autocomplete.py:module/AutocompleteJsonView.class/process_request.fn/except@0",
+          "test/fixtures/scale/src/views/autocomplete.py:module/AutocompleteJsonView.class/process_request.fn/except@1",
+          "test/fixtures/scale/src/views/autocomplete.py:module/AutocompleteJsonView.class/process_request.fn/except@2",
+          "test/fixtures/scale/src/views/autocomplete.py:module/AutocompleteJsonView.class/process_request.fn/except@3",
+          "test/fixtures/scale/src/views/autocomplete.py:module/AutocompleteJsonView.class/process_request.fn/except@4",
+          "test/fixtures/scale/src/views/main.py:module/ChangeList.class/__init__.fn/except@0",
+          "test/fixtures/scale/src/views/main.py:module/ChangeList.class/get_filters.fn/if@0/if@0/except@0",
+          "test/fixtures/scale/src/views/main.py:module/ChangeList.class/get_filters.fn/except@0",
+          "test/fixtures/scale/src/views/main.py:module/ChangeList.class/get_results.fn/if@1/except@0",
+          "test/fixtures/scale/src/views/main.py:module/ChangeList.class/get_ordering_field.fn/except@0",
+          "test/fixtures/scale/src/views/main.py:module/ChangeList.class/get_ordering.fn/if@0/for@0/except@0",
+          "test/fixtures/scale/src/views/main.py:module/ChangeList.class/_get_deterministic_ordering.fn/for@0/if@1/except@0",
+          "test/fixtures/scale/src/views/main.py:module/ChangeList.class/get_ordering_field_columns.fn/if@0/for@1/except@0",
+          "test/fixtures/scale/src/views/main.py:module/ChangeList.class/get_queryset.fn/except@0",
+          "test/fixtures/scale/src/views/main.py:module/ChangeList.class/get_queryset.fn/except@1",
+          "test/fixtures/scale/src/views/main.py:module/ChangeList.class/has_related_field_in_list_display.fn/for@0/except@0",
+          "test/fixtures/scale/src/widgets.py:module/ForeignKeyRawIdWidget.class/label_and_url_for_value.fn/except@0",
+          "test/fixtures/scale/src/widgets.py:module/ForeignKeyRawIdWidget.class/label_and_url_for_value.fn/except@1",
+          "test/fixtures/scale/src/widgets.py:module/AdminURLFieldWidget.class/get_context.fn/except@0"
+        ],
+        "knownBad": [
+          "test/fixtures/threads/run_demo/calc.py:module/swallowed.fn/except@0"
+        ]
+      },
+      "fireRate": {
+        "onKnownGood": {
+          "fired": 3,
+          "of": 129
+        },
+        "onKnownBad": {
+          "fired": 1,
+          "of": 1
+        }
+      },
+      "falsePositiveReview": {
+        "reviewedBy": "model",
+        "model": "claude:claude-fable-5-1",
+        "delegatedBy": {
+          "source": "human",
+          "id": "ruling:2026-09-12:calibration-review-delegated",
+          "at": "2026-09-12T16:00:00.000Z"
+        },
+        "notes": [
+          {
+            "id": "scripts/build_system_tier.py:module/_detect_frontend.fn/for@0/for@0/if@0/except@0",
+            "verdict": "finding",
+            "why": "`except Exception: pass` around reading and parsing a package.json while probing for a frontend framework. A malformed manifest, a permissions error or a bug in the probe all vanish identically and the system tier reports no frontend. A narrow `except (OSError, ValueError)` with a note would make the skip intentional; as written it is a swallow."
+          },
+          {
+            "id": "scripts/build_system_tier.py:module/_scan_calls_edges.fn/for@0/except@0",
+            "verdict": "finding",
+            "why": "`except Exception: continue` around `open(full).read()` in a file loop. An unreadable file is a legitimate skip, but `Exception` also hides a UnicodeDecodeError on a file the scan should have seen, silently dropping its edges. `except (OSError, UnicodeDecodeError)` would name the skip."
+          },
+          {
+            "id": "scripts/trace_run.py:module/_Tracer.class/__call__.fn/except@0",
+            "verdict": "intended",
+            "why": "`except Exception: pass  # noqa: BLE001 - a tracer must never break the run`. The shape is a real broad swallow and the author meant it: a sys.setprofile hook that raises would abort the traced program (PLAN-M-RUNTIME phase 3). The IR cannot read the comment; this wants a stated allowance on the node, not a verb change."
+          }
+        ],
+        "falsePositives": [],
+        "intended": [
+          "scripts/trace_run.py:module/_Tracer.class/__call__.fn/except@0"
+        ]
+      },
+      "samplesFrom": "reviews/quality-layer/calibration/handles-failure.candidate.json"
+    },
+    "annotated": {
+      "commit": "92091cb",
+      "at": "2026-09-12T16:01:42.559Z",
+      "sampleSet": {
+        "knownGood": [
+          "telemetry/app.py:module/alerts_route.fn",
+          "telemetry/app.py:module/device_route.fn",
+          "telemetry/app.py:module/devices_route.fn",
+          "telemetry/app.py:module/export_route.fn",
+          "telemetry/app.py:module/health.fn",
+          "telemetry/alerts.py:module/evaluate.fn",
+          "telemetry/alerts.py:module/recent_events.fn",
+          "telemetry/devices.py:module/device_summary.fn",
+          "telemetry/devices.py:module/list_device_ids.fn",
+          "telemetry/export.py:module/export_csv.fn",
+          "telemetry/export.py:module/parse_export.fn",
+          "telemetry/http_client.py:module/post_json.fn",
+          "telemetry/metrics_math.py:module/clamp.fn",
+          "telemetry/metrics_math.py:module/rolling_mean.fn",
+          "telemetry/schema.py:module/validate_reading.fn",
+          "telemetry/storage.py:module/insert_readings.fn",
+          "telemetry/storage.py:module/latest_for_device.fn",
+          "telemetry/storage.py:module/list_devices.fn",
+          "telemetry/storage.py:module/readings_between.fn",
+          "telemetry/storage.py:module/upsert_device.fn"
+        ],
+        "knownBad": [
+          "telemetry/app.py:module/ingest_route.fn",
+          "telemetry/cli.py:module/main.fn",
+          "telemetry/auth.py:module/require_token.fn",
+          "telemetry/backfill.py:module/backfill_from_file.fn",
+          "telemetry/ingest.py:module/ingest_batch.fn",
+          "telemetry/normalize.py:module/normalize_reading.fn",
+          "telemetry/schema.py:module/validate_batch.fn"
+        ]
+      },
+      "fireRate": {
+        "onKnownGood": {
+          "fired": 0,
+          "of": 20
+        },
+        "onKnownBad": {
+          "fired": 7,
+          "of": 7
+        }
+      },
+      "falsePositiveReview": {
+        "reviewedBy": "model",
+        "model": "claude:claude-fable-5-1",
+        "delegatedBy": {
+          "source": "human",
+          "id": "ruling:2026-09-12:calibration-review-delegated",
+          "at": "2026-09-12T16:00:00.000Z"
+        },
+        "notes": [],
+        "falsePositives": [],
+        "intended": []
+      },
+      "samplesFrom": "reviews/quality-layer/calibration/annotated.candidate.json"
+    }
+  }
+}

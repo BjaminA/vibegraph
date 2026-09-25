@@ -24,14 +24,15 @@ test.describe("missing-deps banner", () => {
     const banner = page.locator("[data-deps-banner]");
     await expect(banner).toBeVisible({ timeout: 15_000 });
 
-    await expect(banner).toContainText("vg_absent_dep_zz");
-    await expect(banner).toContainText("pip install --target .pydeps");
+    // A compact toolbar chip since the overlap pass (it floated over each
+    // view's own controls); the module and the pip fix ride its title.
+    await expect(banner).toHaveAttribute("title", /vg_absent_dep_zz/);
+    await expect(banner).toHaveAttribute("title", /pip install --target \.pydeps/);
 
     // stdlib and project-local imports are never flagged.
+    const title = (await banner.getAttribute("title")) ?? "";
     for (const clean of ["json", "helpers"]) {
-      await expect(banner, `"${clean}" wrongly flagged as missing`).not.toContainText(
-        new RegExp(`\\b${clean}\\b`),
-      );
+      expect(title, `"${clean}" wrongly flagged as missing`).not.toMatch(new RegExp(`\\b${clean}\\b`));
     }
 
     // Dismissible, like the key banner.

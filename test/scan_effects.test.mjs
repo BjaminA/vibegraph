@@ -254,3 +254,187 @@ test("resolution parity with extract_thread.py on aero_demo", () => {
     "scan_effects.py and extract_thread.py diverged on call resolution — the duplicated resolution logic has drifted.",
   );
 });
+
+// ── 4. IMPORT-TIME EFFECTS (2026-09-10) ──────────────────────────────
+//
+// `Scan.visit` walks the entry function's SUBTREE. A module-level statement
+// is not a descendant of any function, so it was never scanned — while
+// run_to_node.py executes the module with `runpy.run_path`, which runs the
+// whole top level. Measured both ways against this very script before the
+// fix: `DB = sqlite3.connect(...)` at module level came back pure=True.
+//
+// No exotic syntax is needed to hit this. It is simply how a project holds a
+// connection or a client.
+
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+
+/** Parse several sources into one project IR map, each with its modulePath —
+ *  which is what lets the scan follow an import to the file it names. */
+function parseProject(sources) {
+  const dir = mkdtempSync(join(tmpdir(), "vg-importtime-"));
+  const files = {};
+  for (const [name, src] of Object.entries(sources)) {
+    const abs = join(dir, name.replace(/\//g, "_"));
+    writeFileSync(abs, src, "utf-8");
+    files[name] = py(PARSE, [abs, "--module-path", name.replace(/\.py$/, "").replace(/\//g, ".")], "");
+  }
+  return files;
+}
+
+const lastReturn = (ir) => ir.nodes.filter((n) => n.type === "return_stmt").pop().id;
+
+test("a MODULE-LEVEL effect is on the path — it runs before the entry function does", () => {
+  const files = parseProject({
+    "app.py": "import sqlite3\n\n\nDB = sqlite3.connect('prod.db')\n\n\ndef run():\n    return 0\n",
+  });
+  const v = py(SCAN, ["--stop-file", "app.py", "--stop-id", lastReturn(files["app.py"]), "--list-effects"],
+    JSON.stringify({ files }));
+  assert.equal(v.pure, false, "module level runs on import — the floor must see it");
+  assert.equal(v.offenses.length, 1);
+  assert.equal(v.offenses[0].effectKind, "db");
+  assert.equal(v.offenses[0].file, "app.py");
+});
+
+test("a CLASS BODY effect counts too — python runs it on import", () => {
+  const files = parseProject({
+    "app.py": "import sqlite3\n\n\nclass C:\n    DB = sqlite3.connect('prod.db')\n\n\ndef run():\n    return 0\n",
+  });
+  const v = py(SCAN, ["--stop-file", "app.py", "--stop-id", lastReturn(files["app.py"]), "--list-effects"],
+    JSON.stringify({ files }));
+  assert.equal(v.pure, false);
+  assert.equal(v.offenses[0].effectKind, "db");
+});
+
+test("an IMPORTED module's top level is on the path too — import executes it", () => {
+  const files = parseProject({
+    "app.py": "from telemetry.store import fetch\n\n\ndef run():\n    return 0\n",
+    "telemetry/store.py": "import sqlite3\n\n\nDB = sqlite3.connect('prod.db')\n\n\ndef fetch():\n    return 1\n",
+  });
+  // The import is never CALLED from run() — importing it is enough.
+  const v = py(SCAN, ["--stop-file", "app.py", "--stop-id", lastReturn(files["app.py"]), "--list-effects"],
+    JSON.stringify({ files }));
+  assert.equal(v.pure, false, "a module imported but never called still runs its top level");
+  assert.equal(v.offenses[0].file, "telemetry/store.py");
+});
+
+test("an effect INSIDE a function is not import-time — it runs when called", () => {
+  // The distinction has to hold both ways, or every project with a helper
+  // would refuse on import-time grounds it never earned.
+  const files = parseProject({
+    "app.py": "import sqlite3\n\n\ndef helper():\n    return sqlite3.connect('x')\n\n\ndef run():\n    return 0\n",
+  });
+  const v = py(SCAN, ["--stop-file", "app.py", "--stop-id", lastReturn(files["app.py"]), "--list-effects"],
+    JSON.stringify({ files }));
+  assert.equal(v.pure, true, "run() never calls helper(), and helper's body does not run on import");
+});
+
+test("a THIRD-PARTY import resolves to nothing and is skipped — no false refusal", () => {
+  const files = parseProject({
+    "app.py": "import os\nimport flask\nfrom collections import OrderedDict\n\n\ndef run():\n    return 0\n",
+  });
+  const v = py(SCAN, ["--stop-file", "app.py", "--stop-id", lastReturn(files["app.py"]), "--list-effects"],
+    JSON.stringify({ files }));
+  assert.equal(v.pure, true, "their side effects are not ours to scan, and never were");
+});
+
+test("the GATE mode refuses too, and says the effect is at import time", () => {
+  const files = parseProject({
+    "app.py": "import sqlite3\n\n\nDB = sqlite3.connect('prod.db')\n\n\ndef run():\n    return 0\n",
+  });
+  const v = py(SCAN, ["--stop-file", "app.py", "--stop-id", lastReturn(files["app.py"])],
+    JSON.stringify({ files }));
+  assert.equal(v.pure, false);
+  assert.match(v.reason, /IMPORT time/);
+  assert.match(v.reason, /before the entry function does/);
+});
+
+// ── 5. EVERY EXPRESSION POSITION (M-SWEEP W1, 2026-09-10) ────────────
+//
+// The parser emitted a call node only when the call was the DIRECT value
+// of a statement, so 20 of 30 in-function positions produced NO node and
+// the floor could not see them. It was one bug, not twenty: nothing walked
+// INTO a composite expression, which is why `with`, then `if`/`while`,
+// were each patched individually and the class kept coming back.
+//
+// These pin the positions that leaked, one representative per FAMILY. The
+// point is not the individual cases — it is that a call anywhere in an
+// expression reaches the floor, so the class cannot quietly reopen.
+
+const EFFECT = 'requests.post("u", json={})';
+
+/** A one-function module whose body is `lines`, ending in `return 0`. */
+function bodyIr(lines) {
+  const src = `import requests\n\n\ndef run():\n${lines.map((l) => `    ${l}`).join("\n")}\n    return 0\n`;
+  const dir = mkdtempSync(join(tmpdir(), "vg-w1-"));
+  const abs = join(dir, "m.py");
+  writeFileSync(abs, src, "utf-8");
+  return py(PARSE, [abs, "--module-path", "m"], "");
+}
+
+const POSITIONS = {
+  "comprehension element": [`xs = [${EFFECT} for _ in range(2)]`],
+  "comprehension iterable": [`xs = [x for x in ${EFFECT}]`],
+  "dict-comprehension value": [`d = {k: ${EFFECT} for k in range(2)}`],
+  "generator inside a call": [`g = list(${EFFECT} for _ in range(2))`],
+  "for iterable": [`for x in ${EFFECT}:`, "    pass"],
+  "assert": [`assert ${EFFECT}`],
+  "boolean short-circuit": [`x = False or ${EFFECT}`],
+  "ternary branch": [`x = 1 if True else ${EFFECT}`],
+  "f-string interpolation": [`s = f"{${EFFECT}}"`],
+  "list-literal element": [`xs = [${EFFECT}]`],
+  "dict-literal value": [`d = {"k": ${EFFECT}}`],
+  "starred argument": [`x = max(*[${EFFECT}])`],
+  "chained comparison": [`x = 0 < len(${EFFECT}) < 9`],
+  "unary not": [`x = not ${EFFECT}`],
+  "slice bound": ["xs = [1, 2, 3]", `y = xs[:len(${EFFECT})]`],
+  "lambda body": [`fn = lambda: ${EFFECT}`, "fn()"],
+  "tuple return": [`return ${EFFECT}, 201`],
+};
+
+for (const [name, lines] of Object.entries(POSITIONS)) {
+  test(`W1: an effectful call in a ${name} reaches the floor`, () => {
+    const ir = bodyIr(lines);
+    const files = { "m.py": ir };
+    const stop = ir.nodes.filter((n) => n.type === "return_stmt").pop();
+    const v = py(SCAN, ["--stop-file", "m.py", "--stop-id", stop.id, "--list-effects"],
+      JSON.stringify({ files }));
+    assert.equal(v.pure, false, `${name}: the floor must see this call`);
+    assert.ok(v.offenses.some((o) => o.effectKind === "http"),
+      `${name}: expected the http effect, got ${JSON.stringify(v.offenses)}`);
+  });
+}
+
+test("W1: a DEF-TIME call parents OUTSIDE the function, where it runs", () => {
+  // A parameter default runs when the `def` executes — at import — even if
+  // the function is never called. Filed inside the function it would be
+  // invisible twice over: import_time_offenses skips anything inside a
+  // function, and an uncalled helper is in no entry function's subtree.
+  const dir = mkdtempSync(join(tmpdir(), "vg-w1-def-"));
+  const abs = join(dir, "m.py");
+  writeFileSync(abs, `import requests\n\n\ndef helper(x=${EFFECT}):\n    return x\n\n\ndef run():\n    return 0\n`, "utf-8");
+  const ir = py(PARSE, [abs, "--module-path", "m"], "");
+  const effect = ir.nodes.find((n) => n.effectKind === "http");
+  assert.ok(effect, "the default-argument call must be a node");
+  assert.ok(!effect.id.includes(".fn/"),
+    `a def-time call belongs at module scope, got ${effect.id}`);
+  // And the floor sees it even though `helper` is never called.
+  const stop = ir.nodes.filter((n) => n.type === "return_stmt" && n.id.startsWith("module/run.fn")).pop();
+  const v = py(SCAN, ["--stop-file", "m.py", "--stop-id", stop.id, "--list-effects"],
+    JSON.stringify({ files: { "m.py": ir } }));
+  assert.equal(v.pure, false, "an uncalled helper's default still runs on import");
+});
+
+test("W1: nesting is unchanged — a nested call is a NEST, not a second node", () => {
+  // The sweep fires at depth 1 only. `f(g())` keeps its existing shape:
+  // one node for the outer call with g minted beneath it, never two
+  // sibling nodes — which would change what `nests` means everywhere.
+  // A bare expression statement, so visit_Expr emits a `call` node (an
+  // assignment would emit an `assignment` node carrying callTarget instead).
+  const ir = bodyIr(["len(str(3))"]);
+  const outer = ir.nodes.filter((n) => n.type === "call" && n.funcName === "len");
+  assert.equal(outer.length, 1, "one node for the outermost call");
+  assert.equal(outer[0].nestsInnerCalls, true, "and the nest is stamped, as before");
+  assert.equal(ir.nodes.filter((n) => n.funcName === "str" && n.parentId === outer[0].id).length, 1,
+    "the inner call is minted BENEATH the outer one, not beside it");
+});

@@ -1,8 +1,8 @@
 /* VibeGraph 2D depth language — see PLAN.md Aesthetic Appendix §"Depth (2D)".
    Three primitives, all CSS-only:
      1. Hover-lift  — motion is the depth cue (Rauno).
-     2. Attention-fade on selection — Obsidian "fade unrelated", driven by
-        :has(.selected). No JS wiring needed.
+     2. Selection outline — the clicked node gains an animated ring; nothing
+        else changes (2026-09-24, replaced the attention-fade).
      3. Panel shadow — one --shadow-panel token for floating UI only.
    Node "glow" halos are aesthetic, not elevation — handled per-node-kind. */
 
@@ -20,20 +20,35 @@
   transform: translateY(var(--hover-lift-y)) scale(var(--hover-lift-scale));
 }
 
-/* ── 2. Attention-fade on selection ──────────────────────────────────────
-   When ANY node inside the canvas has `.selected` (added by React Flow),
-   every other node fades and every edge dims. The selected node stays
-   fully opaque. Pure CSS — no listener, no state, no React re-render. */
-.react-flow:has(.react-flow__node.selected) .react-flow__node:not(.selected) {
-  opacity: var(--attention-fade-opacity);
-  transition: opacity var(--motion-fade-dur) var(--motion-hover-ease);
+/* ── 2. Selection: an outline, not a fade ────────────────────────────────
+   2026-09-24 (Ben): selecting a node used to fade every other node to 35%
+   and every edge to 18% — you lost the picture to find the thing. Now the
+   whole map stays lit and the SELECTED node gains a ring: it draws in with
+   the node-enter motion, then breathes while it stays selected. The loop is
+   bounded by the selection (it stops the moment you deselect) — the same
+   state-bounded exception the relink dot and the boot screen take.
+   Pure CSS on React Flow's own `.selected`: every canvas (architecture map,
+   thread view, system view, diagram) gets it with no JS. The ring sits on
+   the node WRAPPER, so the inner card's hover-lift never moves it. */
+.react-flow__node.selected::after {
+  content: "";
+  position: absolute;
+  inset: -6px;
+  border-radius: 18px;
+  border: 2px solid var(--accent-thread);
+  pointer-events: none;
+  z-index: -1;
+  animation:
+    vg-select-in var(--motion-node-enter-dur) var(--motion-node-enter-ease) both,
+    vg-select-breathe 1600ms ease-in-out var(--motion-node-enter-dur) infinite;
 }
-.react-flow:has(.react-flow__node.selected) .react-flow__edge {
-  opacity: var(--attention-fade-edge-opacity);
-  transition: opacity var(--motion-fade-dur) var(--motion-hover-ease);
+@keyframes vg-select-in {
+  from { opacity: 0; transform: scale(1.08); }
+  to   { opacity: 1; transform: scale(1); }
 }
-.react-flow__node, .react-flow__edge {
-  transition: opacity var(--motion-fade-dur) var(--motion-hover-ease);
+@keyframes vg-select-breathe {
+  0%, 100% { box-shadow: 0 0 6px  color-mix(in oklab, var(--accent-thread) 30%, transparent); }
+  50%      { box-shadow: 0 0 20px color-mix(in oklab, var(--accent-thread) 65%, transparent); }
 }
 
 /* ── 3. NodeActionStrip hover-reveal ─────────────────────────────────────
@@ -83,12 +98,13 @@
    Hard fall-through, matching motion.css. Hover-lift becomes a snap; the
    fade still fires but instantly. */
 @media (prefers-reduced-motion: reduce) {
-  .react-flow__node > *,
-  .react-flow:has(.react-flow__node.selected) .react-flow__node:not(.selected),
-  .react-flow:has(.react-flow__node.selected) .react-flow__edge,
-  .react-flow__node,
-  .react-flow__edge {
+  .react-flow__node > * {
     transition: none !important;
+  }
+  /* A still ring: the selection is shown, nothing moves. */
+  .react-flow__node.selected::after {
+    animation: none;
+    box-shadow: 0 0 12px color-mix(in oklab, var(--accent-thread) 45%, transparent);
   }
   .react-flow__node:hover > * {
     transform: none !important;

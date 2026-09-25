@@ -89,7 +89,15 @@
           "docstring": null,
           "decorators": [],
           "isAsync": false,
-          "returns": "None"
+          "returns": "None",
+          "paramTypes": {
+            "in_channels": "int",
+            "num_classes": "int",
+            "image_size": "int",
+            "conv1_channels": "int",
+            "conv2_channels": "int",
+            "hidden_features": "int"
+          }
         },
         {
           "id": "module/CNNClassifier.class/__init__.fn/super___init__.call",
@@ -278,7 +286,10 @@
           "docstring": "Map an image batch ``(N, C, H, W)`` to logits ``(N, num_classes)``.",
           "decorators": [],
           "isAsync": false,
-          "returns": "torch.Tensor"
+          "returns": "torch.Tensor",
+          "paramTypes": {
+            "x": "torch.Tensor"
+          }
         },
         {
           "id": "module/CNNClassifier.class/forward.fn/x.assign",
@@ -682,7 +693,15 @@
           "docstring": "Generate one batch of random images and matching class labels.\n\n    Returns a tuple ``(images, labels)`` where ``images`` is a float tensor of\n    shape ``(batch_size, channels, height, width)`` with values in ``[0, 1)``\n    and ``labels`` is a 1-D int64 tensor of shape ``(batch_size,)`` with each\n    entry in ``[0, num_classes)``.\n\n    An optional ``generator`` makes the draw reproducible without touching\n    global RNG state.",
           "decorators": [],
           "isAsync": false,
-          "returns": "Tuple[torch.Tensor, torch.Tensor]"
+          "returns": "Tuple[torch.Tensor, torch.Tensor]",
+          "paramTypes": {
+            "batch_size": "int",
+            "channels": "int",
+            "height": "int",
+            "width": "int",
+            "num_classes": "int",
+            "generator": "torch.Generator | None"
+          }
         },
         {
           "id": "module/generate_batch.fn/_validate_shape.call",
@@ -791,7 +810,14 @@
           "docstring": "Reject non-positive dimensions before any tensor is allocated.",
           "decorators": [],
           "isAsync": false,
-          "returns": "None"
+          "returns": "None",
+          "paramTypes": {
+            "batch_size": "int",
+            "channels": "int",
+            "height": "int",
+            "width": "int",
+            "num_classes": "int"
+          }
         },
         {
           "id": "module/_validate_shape.fn/dims.assign",
@@ -806,6 +832,18 @@
           "preview": "{\n    \"batch_size\": batch_size,\n    \"channels\": channels,\n    \"height\": height,\n    \"width\": width,\n    \"num_classes\": num_classes,\n}"
         },
         {
+          "id": "module/_validate_shape.fn/dims_items.call",
+          "type": "call",
+          "parentId": "module/_validate_shape.fn",
+          "line": 67,
+          "endLine": 67,
+          "col": 23,
+          "endCol": 35,
+          "funcName": "dims.items",
+          "args": [],
+          "isEffect": false
+        },
+        {
           "id": "module/_validate_shape.fn/for@0",
           "type": "for_loop",
           "parentId": "module/_validate_shape.fn",
@@ -815,6 +853,21 @@
           "endCol": 81,
           "target": "name, value",
           "iterName": "dims.items()"
+        },
+        {
+          "id": "module/_validate_shape.fn/for@0/isinstance.call",
+          "type": "call",
+          "parentId": "module/_validate_shape.fn/for@0",
+          "line": 68,
+          "endLine": 68,
+          "col": 15,
+          "endCol": 37,
+          "funcName": "isinstance",
+          "args": [
+            "value",
+            "int"
+          ],
+          "isEffect": false
         },
         {
           "id": "module/_validate_shape.fn/for@0/if@0",
@@ -867,7 +920,17 @@
         },
         {
           "source": "module/_validate_shape.fn",
+          "target": "module/_validate_shape.fn/dims_items.call",
+          "type": "contains"
+        },
+        {
+          "source": "module/_validate_shape.fn",
           "target": "module/_validate_shape.fn/for@0",
+          "type": "contains"
+        },
+        {
+          "source": "module/_validate_shape.fn/for@0",
+          "target": "module/_validate_shape.fn/for@0/isinstance.call",
           "type": "contains"
         },
         {
@@ -1034,7 +1097,8 @@
           "decorators": [
             "dataclass"
           ],
-          "docstring": "Outcome of a training run.\n\n    ``epoch_losses`` holds the mean cross-entropy loss for each epoch (one\n    entry per epoch, in order). ``final_accuracy`` is the post-training top-1\n    accuracy in ``[0.0, 1.0]`` reported by :func:`evaluate.evaluate`."
+          "docstring": "Outcome of a training run.\n\n    ``epoch_losses`` holds the mean cross-entropy loss for each epoch (one\n    entry per epoch, in order). ``final_accuracy`` is the post-training top-1\n    accuracy in ``[0.0, 1.0]`` reported by :func:`evaluate.evaluate`.",
+          "decoratorLine": 26
         },
         {
           "id": "module/TrainingReport.class/epoch_losses.assign",
@@ -1077,7 +1141,10 @@
           "docstring": "Build a seeded RNG for reproducible batches, or ``None`` for global RNG.",
           "decorators": [],
           "isAsync": false,
-          "returns": "Optional[torch.Generator]"
+          "returns": "Optional[torch.Generator]",
+          "paramTypes": {
+            "seed": "Optional[int]"
+          }
         },
         {
           "id": "module/_make_generator.fn/if@0",
@@ -1159,7 +1226,17 @@
           "docstring": "Run one epoch of ``steps_per_epoch`` optimizer steps; return mean loss.\n\n    Each step draws a fresh synthetic batch, computes cross-entropy loss\n    against the integer labels, backpropagates, and steps the optimizer.",
           "decorators": [],
           "isAsync": false,
-          "returns": "float"
+          "returns": "float",
+          "paramTypes": {
+            "model": "CNNClassifier",
+            "optimizer": "torch.optim.Optimizer",
+            "steps_per_epoch": "int",
+            "batch_size": "int",
+            "in_channels": "int",
+            "image_size": "int",
+            "num_classes": "int",
+            "generator": "Optional[torch.Generator]"
+          }
         },
         {
           "id": "module/train_epoch.fn/if@0",
@@ -1206,6 +1283,20 @@
           "name": "running_loss",
           "valueKind": "scalar",
           "preview": "0.0"
+        },
+        {
+          "id": "module/train_epoch.fn/range.call",
+          "type": "call",
+          "parentId": "module/train_epoch.fn",
+          "line": 70,
+          "endLine": 70,
+          "col": 13,
+          "endCol": 35,
+          "funcName": "range",
+          "args": [
+            "steps_per_epoch"
+          ],
+          "isEffect": false
         },
         {
           "id": "module/train_epoch.fn/for@0",
@@ -1327,6 +1418,41 @@
           "isEffect": false
         },
         {
+          "id": "module/train_epoch.fn/for@0/running_loss.assign",
+          "type": "assignment",
+          "parentId": "module/train_epoch.fn/for@0",
+          "line": 86,
+          "endLine": 86,
+          "col": 8,
+          "endCol": 42,
+          "name": "running_loss",
+          "valueKind": "call",
+          "preview": "float(loss.item())",
+          "augmented": "+=",
+          "callTarget": "float",
+          "args": [
+            "loss.item()"
+          ],
+          "nestsInnerCalls": true,
+          "nestExtracted": true
+        },
+        {
+          "id": "module/train_epoch.fn/for@0/running_loss.assign/loss_item.call",
+          "type": "call",
+          "parentId": "module/train_epoch.fn/for@0/running_loss.assign",
+          "line": 86,
+          "endLine": 86,
+          "col": 30,
+          "endCol": 41,
+          "funcName": "loss.item",
+          "args": [],
+          "isEffect": false,
+          "callTarget": "loss.item",
+          "preview": "loss.item()",
+          "nested": true,
+          "nestedDepth": 1
+        },
+        {
           "id": "module/train_epoch.fn/return@0",
           "type": "return_stmt",
           "parentId": "module/train_epoch.fn",
@@ -1359,7 +1485,18 @@
           "docstring": "Instantiate, train, and evaluate the CNN; return a :class:`TrainingReport`.\n\n    A fresh ``CNNClassifier`` is trained for ``epochs`` epochs (each of\n    ``steps_per_epoch`` batches) with an Adam optimizer on cross-entropy loss,\n    then scored with :func:`evaluate.evaluate` over ``eval_batches`` held-out\n    synthetic batches. Passing ``seed`` makes weight init, training batches,\n    and evaluation batches reproducible.",
           "decorators": [],
           "isAsync": false,
-          "returns": "TrainingReport"
+          "returns": "TrainingReport",
+          "paramTypes": {
+            "epochs": "int",
+            "steps_per_epoch": "int",
+            "batch_size": "int",
+            "num_classes": "int",
+            "image_size": "int",
+            "in_channels": "int",
+            "learning_rate": "float",
+            "eval_batches": "int",
+            "seed": "Optional[int]"
+          }
         },
         {
           "id": "module/train_model.fn/if@0",
@@ -1527,6 +1664,20 @@
           "preview": "[]"
         },
         {
+          "id": "module/train_model.fn/range.call",
+          "type": "call",
+          "parentId": "module/train_model.fn",
+          "line": 130,
+          "endLine": 130,
+          "col": 13,
+          "endCol": 26,
+          "funcName": "range",
+          "args": [
+            "epochs"
+          ],
+          "isEffect": false
+        },
+        {
           "id": "module/train_model.fn/for@0",
           "type": "for_loop",
           "parentId": "module/train_model.fn",
@@ -1682,6 +1833,21 @@
           ]
         },
         {
+          "id": "module/main.fn/enumerate.call",
+          "type": "call",
+          "parentId": "module/main.fn",
+          "line": 161,
+          "endLine": 161,
+          "col": 23,
+          "endCol": 62,
+          "funcName": "enumerate",
+          "args": [
+            "report.epoch_losses",
+            "1"
+          ],
+          "isEffect": false
+        },
+        {
           "id": "module/main.fn/for@0",
           "type": "for_loop",
           "parentId": "module/main.fn",
@@ -1802,6 +1968,11 @@
         },
         {
           "source": "module/train_epoch.fn",
+          "target": "module/train_epoch.fn/range.call",
+          "type": "contains"
+        },
+        {
+          "source": "module/train_epoch.fn",
           "target": "module/train_epoch.fn/for@0",
           "type": "contains"
         },
@@ -1833,6 +2004,16 @@
         {
           "source": "module/train_epoch.fn/for@0",
           "target": "module/train_epoch.fn/for@0/optimizer_step.call",
+          "type": "contains"
+        },
+        {
+          "source": "module/train_epoch.fn/for@0",
+          "target": "module/train_epoch.fn/for@0/running_loss.assign",
+          "type": "contains"
+        },
+        {
+          "source": "module/train_epoch.fn/for@0/running_loss.assign",
+          "target": "module/train_epoch.fn/for@0/running_loss.assign/loss_item.call",
           "type": "contains"
         },
         {
@@ -1902,6 +2083,11 @@
         },
         {
           "source": "module/train_model.fn",
+          "target": "module/train_model.fn/range.call",
+          "type": "contains"
+        },
+        {
+          "source": "module/train_model.fn",
           "target": "module/train_model.fn/for@0",
           "type": "contains"
         },
@@ -1954,6 +2140,11 @@
           "source": "module/main.fn/report.assign",
           "target": "module/train_model.fn",
           "type": "reference"
+        },
+        {
+          "source": "module/main.fn",
+          "target": "module/main.fn/enumerate.call",
+          "type": "contains"
         },
         {
           "source": "module/main.fn",
@@ -2165,7 +2356,23 @@
           "docstring": "Fraction of rows whose argmax-over-classes matches the label.\n\n    ``logits`` is ``(N, num_classes)`` and ``labels`` is a 1-D int tensor of\n    shape ``(N,)``. Returns a Python float in ``[0.0, 1.0]``; an empty batch\n    scores ``0.0`` rather than dividing by zero.",
           "decorators": [],
           "isAsync": false,
-          "returns": "float"
+          "returns": "float",
+          "paramTypes": {
+            "logits": "torch.Tensor",
+            "labels": "torch.Tensor"
+          }
+        },
+        {
+          "id": "module/accuracy_from_logits.fn/logits_dim.call",
+          "type": "call",
+          "parentId": "module/accuracy_from_logits.fn",
+          "line": 27,
+          "endLine": 27,
+          "col": 7,
+          "endCol": 19,
+          "funcName": "logits.dim",
+          "args": [],
+          "isEffect": false
         },
         {
           "id": "module/accuracy_from_logits.fn/if@0",
@@ -2189,7 +2396,37 @@
           "exc": "ValueError(\n    f\"logits must be 2-D (N, num_classes), got shape {tuple(logits.shape)}\"\n)",
           "callTarget": "ValueError",
           "nestsInnerCalls": true,
-          "nestExtracted": false
+          "nestExtracted": true
+        },
+        {
+          "id": "module/accuracy_from_logits.fn/if@0/raise@0/tuple.call",
+          "type": "call",
+          "parentId": "module/accuracy_from_logits.fn/if@0/raise@0",
+          "line": 29,
+          "endLine": 29,
+          "col": 62,
+          "endCol": 81,
+          "funcName": "tuple",
+          "args": [
+            "logits.shape"
+          ],
+          "isEffect": false,
+          "callTarget": "tuple",
+          "preview": "tuple(logits.shape)",
+          "nested": true,
+          "nestedDepth": 1
+        },
+        {
+          "id": "module/accuracy_from_logits.fn/labels_dim.call",
+          "type": "call",
+          "parentId": "module/accuracy_from_logits.fn",
+          "line": 31,
+          "endLine": 31,
+          "col": 7,
+          "endCol": 19,
+          "funcName": "labels.dim",
+          "args": [],
+          "isEffect": false
         },
         {
           "id": "module/accuracy_from_logits.fn/if@1",
@@ -2213,7 +2450,25 @@
           "exc": "ValueError(f\"labels must be 1-D (N,), got shape {tuple(labels.shape)}\")",
           "callTarget": "ValueError",
           "nestsInnerCalls": true,
-          "nestExtracted": false
+          "nestExtracted": true
+        },
+        {
+          "id": "module/accuracy_from_logits.fn/if@1/raise@0/tuple.call",
+          "type": "call",
+          "parentId": "module/accuracy_from_logits.fn/if@1/raise@0",
+          "line": 32,
+          "endLine": 32,
+          "col": 63,
+          "endCol": 82,
+          "funcName": "tuple",
+          "args": [
+            "labels.shape"
+          ],
+          "isEffect": false,
+          "callTarget": "tuple",
+          "preview": "tuple(labels.shape)",
+          "nested": true,
+          "nestedDepth": 1
         },
         {
           "id": "module/accuracy_from_logits.fn/if@2",
@@ -2338,7 +2593,16 @@
           "docstring": "Run ``model`` over ``num_batches`` synthetic batches and return accuracy.\n\n    Evaluation happens in ``model.eval()`` under ``torch.no_grad()`` so no\n    gradients are tracked. Accuracy is aggregated across every sample of every\n    batch (not averaged per-batch), so uneven final batches would still weight\n    correctly. Returns a Python float in ``[0.0, 1.0]``.",
           "decorators": [],
           "isAsync": false,
-          "returns": "float"
+          "returns": "float",
+          "paramTypes": {
+            "model": "CNNClassifier",
+            "num_batches": "int",
+            "batch_size": "int",
+            "num_classes": "int",
+            "image_size": "int",
+            "in_channels": "int",
+            "generator": "torch.Generator | None"
+          }
         },
         {
           "id": "module/evaluate.fn/if@0",
@@ -2432,6 +2696,20 @@
           "isEffect": false
         },
         {
+          "id": "module/evaluate.fn/try@0/range.call",
+          "type": "call",
+          "parentId": "module/evaluate.fn/try@0",
+          "line": 73,
+          "endLine": 73,
+          "col": 21,
+          "endCol": 39,
+          "funcName": "range",
+          "args": [
+            "num_batches"
+          ],
+          "isEffect": false
+        },
+        {
           "id": "module/evaluate.fn/try@0/for@0",
           "type": "for_loop",
           "parentId": "module/evaluate.fn/try@0",
@@ -2520,6 +2798,54 @@
           ]
         },
         {
+          "id": "module/evaluate.fn/try@0/for@0/total_correct.assign",
+          "type": "assignment",
+          "parentId": "module/evaluate.fn/try@0/for@0",
+          "line": 84,
+          "endLine": 84,
+          "col": 16,
+          "endCol": 74,
+          "name": "total_correct",
+          "valueKind": "call",
+          "preview": "int((predictions == labels).sum().item())",
+          "augmented": "+=",
+          "callTarget": "int",
+          "args": [
+            "(predictions == labels).sum().item()"
+          ],
+          "nestsInnerCalls": true,
+          "nestExtracted": true
+        },
+        {
+          "id": "module/evaluate.fn/try@0/for@0/total_correct.assign/?_sum_item.call",
+          "type": "call",
+          "parentId": "module/evaluate.fn/try@0/for@0/total_correct.assign",
+          "line": 84,
+          "endLine": 84,
+          "col": 37,
+          "endCol": 73,
+          "funcName": "?.sum().item",
+          "args": [],
+          "isEffect": false,
+          "callTarget": "?.sum().item",
+          "preview": "(predictions == labels).sum().item()",
+          "nested": true,
+          "nestedDepth": 1
+        },
+        {
+          "id": "module/evaluate.fn/try@0/for@0/total_seen.assign",
+          "type": "assignment",
+          "parentId": "module/evaluate.fn/try@0/for@0",
+          "line": 85,
+          "endLine": 85,
+          "col": 16,
+          "endCol": 45,
+          "name": "total_seen",
+          "valueKind": "other",
+          "preview": "labels.shape[0]",
+          "augmented": "+="
+        },
+        {
           "id": "module/evaluate.fn/finally@0",
           "type": "finally_block",
           "parentId": "module/evaluate.fn",
@@ -2577,12 +2903,27 @@
       "edges": [
         {
           "source": "module/accuracy_from_logits.fn",
+          "target": "module/accuracy_from_logits.fn/logits_dim.call",
+          "type": "contains"
+        },
+        {
+          "source": "module/accuracy_from_logits.fn",
           "target": "module/accuracy_from_logits.fn/if@0",
           "type": "contains"
         },
         {
           "source": "module/accuracy_from_logits.fn/if@0",
           "target": "module/accuracy_from_logits.fn/if@0/raise@0",
+          "type": "contains"
+        },
+        {
+          "source": "module/accuracy_from_logits.fn/if@0/raise@0",
+          "target": "module/accuracy_from_logits.fn/if@0/raise@0/tuple.call",
+          "type": "contains"
+        },
+        {
+          "source": "module/accuracy_from_logits.fn",
+          "target": "module/accuracy_from_logits.fn/labels_dim.call",
           "type": "contains"
         },
         {
@@ -2593,6 +2934,11 @@
         {
           "source": "module/accuracy_from_logits.fn/if@1",
           "target": "module/accuracy_from_logits.fn/if@1/raise@0",
+          "type": "contains"
+        },
+        {
+          "source": "module/accuracy_from_logits.fn/if@1/raise@0",
+          "target": "module/accuracy_from_logits.fn/if@1/raise@0/tuple.call",
           "type": "contains"
         },
         {
@@ -2677,6 +3023,11 @@
         },
         {
           "source": "module/evaluate.fn/try@0",
+          "target": "module/evaluate.fn/try@0/range.call",
+          "type": "contains"
+        },
+        {
+          "source": "module/evaluate.fn/try@0",
           "target": "module/evaluate.fn/try@0/for@0",
           "type": "contains"
         },
@@ -2693,6 +3044,21 @@
         {
           "source": "module/evaluate.fn/try@0/for@0",
           "target": "module/evaluate.fn/try@0/for@0/predictions.assign",
+          "type": "contains"
+        },
+        {
+          "source": "module/evaluate.fn/try@0/for@0",
+          "target": "module/evaluate.fn/try@0/for@0/total_correct.assign",
+          "type": "contains"
+        },
+        {
+          "source": "module/evaluate.fn/try@0/for@0/total_correct.assign",
+          "target": "module/evaluate.fn/try@0/for@0/total_correct.assign/?_sum_item.call",
+          "type": "contains"
+        },
+        {
+          "source": "module/evaluate.fn/try@0/for@0",
+          "target": "module/evaluate.fn/try@0/for@0/total_seen.assign",
           "type": "contains"
         },
         {
@@ -3212,6 +3578,14 @@
           "preview": "Train with default settings and print per-epoch loss and final accuracy."
         },
         {
+          "id": "external:enumerate",
+          "kind": "external",
+          "label": "enumerate",
+          "file": null,
+          "irNodeId": "module/main.fn/enumerate.call",
+          "preview": "enumerate"
+        },
+        {
           "id": "external:print",
           "kind": "external",
           "label": "print",
@@ -3339,6 +3713,14 @@
           "preview": "Reject non-positive dimensions before any tensor is allocated."
         },
         {
+          "id": "dynamic:dims.items",
+          "kind": "dynamic",
+          "label": "dims.items",
+          "file": null,
+          "irNodeId": "module/_validate_shape.fn/dims_items.call",
+          "preview": "dims.items"
+        },
+        {
           "id": "external:ValueError@1",
           "kind": "external",
           "label": "ValueError",
@@ -3363,6 +3745,14 @@
           "file": "synthetic_data.py",
           "irNodeId": "module/_validate_shape.fn/for@0",
           "preview": null
+        },
+        {
+          "id": "external:isinstance",
+          "kind": "external",
+          "label": "isinstance",
+          "file": null,
+          "irNodeId": "module/_validate_shape.fn/for@0/isinstance.call",
+          "preview": "isinstance"
         },
         {
           "id": "external:torch.rand",
@@ -3413,6 +3803,35 @@
           "file": null,
           "irNodeId": "module/evaluate.fn/try@0/for@0/predictions.assign",
           "preview": "torch.argmax(logits, dim=1)"
+        },
+        {
+          "id": "external:int",
+          "kind": "external",
+          "label": "int",
+          "file": null,
+          "irNodeId": "module/evaluate.fn/try@0/for@0/total_correct.assign",
+          "preview": "int((predictions == labels).sum().item())",
+          "nestsInnerCalls": true,
+          "nestExtracted": true
+        },
+        {
+          "id": "dynamic:?.sum().item",
+          "kind": "dynamic",
+          "label": "?.sum().item",
+          "file": null,
+          "irNodeId": "module/evaluate.fn/try@0/for@0/total_correct.assign/?_sum_item.call",
+          "preview": "(predictions == labels).sum().item()",
+          "nested": true,
+          "receiverBoundKind": "local-call",
+          "receiverBoundFrom": "generate_batch"
+        },
+        {
+          "id": "external:range",
+          "kind": "external",
+          "label": "range",
+          "file": null,
+          "irNodeId": "module/evaluate.fn/try@0/range.call",
+          "preview": "range"
         },
         {
           "id": "external:torch.no_grad",
@@ -3503,6 +3922,27 @@
           "receiverBoundKind": "param"
         },
         {
+          "id": "external:float",
+          "kind": "external",
+          "label": "float",
+          "file": null,
+          "irNodeId": "module/train_epoch.fn/for@0/running_loss.assign",
+          "preview": "float(loss.item())",
+          "nestsInnerCalls": true,
+          "nestExtracted": true
+        },
+        {
+          "id": "dynamic:loss.item",
+          "kind": "dynamic",
+          "label": "loss.item",
+          "file": null,
+          "irNodeId": "module/train_epoch.fn/for@0/running_loss.assign/loss_item.call",
+          "preview": "loss.item()",
+          "nested": true,
+          "receiverBoundKind": "local-call",
+          "receiverBoundFrom": "F.cross_entropy"
+        },
+        {
           "id": "external:ValueError@2",
           "kind": "external",
           "label": "ValueError",
@@ -3527,6 +3967,14 @@
           "irNodeId": "module/train_epoch.fn/model_train.call",
           "preview": "model.train",
           "receiverBoundKind": "param"
+        },
+        {
+          "id": "external:range@1",
+          "kind": "external",
+          "label": "range",
+          "file": null,
+          "irNodeId": "module/train_epoch.fn/range.call",
+          "preview": "range"
         },
         {
           "id": "external:ValueError@3",
@@ -3767,6 +4215,14 @@
           "nested": true
         },
         {
+          "id": "external:range@2",
+          "kind": "external",
+          "label": "range",
+          "file": null,
+          "irNodeId": "module/train_model.fn/range.call",
+          "preview": "range"
+        },
+        {
           "id": "train:TrainingReport",
           "kind": "step",
           "label": "TrainingReport",
@@ -3776,6 +4232,12 @@
         }
       ],
       "edges": [
+        {
+          "from": "train:main",
+          "to": "external:enumerate",
+          "kind": "direct",
+          "irSource": "module/main.fn/enumerate.call"
+        },
         {
           "from": "train:main",
           "to": "external:print",
@@ -3844,6 +4306,12 @@
         },
         {
           "from": "synthetic_data:_validate_shape",
+          "to": "dynamic:dims.items",
+          "kind": "direct",
+          "irSource": "module/_validate_shape.fn/dims_items.call"
+        },
+        {
+          "from": "synthetic_data:_validate_shape",
           "to": "external:ValueError@1",
           "kind": "direct",
           "irSource": "module/_validate_shape.fn/for@0/if@0/raise@0"
@@ -3857,6 +4325,18 @@
         {
           "from": "synthetic_data:_validate_shape.fn/for@0",
           "to": "synthetic_data:_validate_shape.fn/for@0/if@0#then",
+          "kind": "contains",
+          "irSource": "module/_validate_shape.fn/for@0"
+        },
+        {
+          "from": "synthetic_data:_validate_shape",
+          "to": "external:isinstance",
+          "kind": "direct",
+          "irSource": "module/_validate_shape.fn/for@0/isinstance.call"
+        },
+        {
+          "from": "synthetic_data:_validate_shape.fn/for@0",
+          "to": "external:isinstance",
           "kind": "contains",
           "irSource": "module/_validate_shape.fn/for@0"
         },
@@ -3919,6 +4399,42 @@
           "to": "external:torch.argmax",
           "kind": "contains",
           "irSource": "module/evaluate.fn/try@0/for@0"
+        },
+        {
+          "from": "evaluate:evaluate",
+          "to": "external:int",
+          "kind": "direct",
+          "irSource": "module/evaluate.fn/try@0/for@0/total_correct.assign"
+        },
+        {
+          "from": "evaluate:evaluate.fn/try@0/for@0",
+          "to": "external:int",
+          "kind": "contains",
+          "irSource": "module/evaluate.fn/try@0/for@0"
+        },
+        {
+          "from": "evaluate:evaluate",
+          "to": "dynamic:?.sum().item",
+          "kind": "direct",
+          "irSource": "module/evaluate.fn/try@0/for@0/total_correct.assign/?_sum_item.call"
+        },
+        {
+          "from": "evaluate:evaluate.fn/try@0/for@0",
+          "to": "dynamic:?.sum().item",
+          "kind": "contains",
+          "irSource": "module/evaluate.fn/try@0/for@0"
+        },
+        {
+          "from": "evaluate:evaluate",
+          "to": "external:range",
+          "kind": "direct",
+          "irSource": "module/evaluate.fn/try@0/range.call"
+        },
+        {
+          "from": "evaluate:evaluate.fn/try@0",
+          "to": "external:range",
+          "kind": "contains",
+          "irSource": "module/evaluate.fn/try@0"
         },
         {
           "from": "evaluate:evaluate",
@@ -4024,6 +4540,30 @@
         },
         {
           "from": "train:train_epoch",
+          "to": "external:float",
+          "kind": "direct",
+          "irSource": "module/train_epoch.fn/for@0/running_loss.assign"
+        },
+        {
+          "from": "train:train_epoch.fn/for@0",
+          "to": "external:float",
+          "kind": "contains",
+          "irSource": "module/train_epoch.fn/for@0"
+        },
+        {
+          "from": "train:train_epoch",
+          "to": "dynamic:loss.item",
+          "kind": "direct",
+          "irSource": "module/train_epoch.fn/for@0/running_loss.assign/loss_item.call"
+        },
+        {
+          "from": "train:train_epoch.fn/for@0",
+          "to": "dynamic:loss.item",
+          "kind": "contains",
+          "irSource": "module/train_epoch.fn/for@0"
+        },
+        {
+          "from": "train:train_epoch",
           "to": "external:ValueError@2",
           "kind": "direct",
           "irSource": "module/train_epoch.fn/if@0/raise@0"
@@ -4039,6 +4579,12 @@
           "to": "dynamic:model.train@1",
           "kind": "direct",
           "irSource": "module/train_epoch.fn/model_train.call"
+        },
+        {
+          "from": "train:train_epoch",
+          "to": "external:range@1",
+          "kind": "direct",
+          "irSource": "module/train_epoch.fn/range.call"
         },
         {
           "from": "train:train_model",
@@ -4216,6 +4762,12 @@
         },
         {
           "from": "train:train_model",
+          "to": "external:range@2",
+          "kind": "direct",
+          "irSource": "module/train_model.fn/range.call"
+        },
+        {
+          "from": "train:train_model",
           "to": "train:TrainingReport",
           "kind": "direct",
           "irSource": "module/train_model.fn/return@0"
@@ -4367,6 +4919,14 @@
           "preview": "Reject non-positive dimensions before any tensor is allocated."
         },
         {
+          "id": "dynamic:dims.items",
+          "kind": "dynamic",
+          "label": "dims.items",
+          "file": null,
+          "irNodeId": "module/_validate_shape.fn/dims_items.call",
+          "preview": "dims.items"
+        },
+        {
           "id": "external:ValueError@1",
           "kind": "external",
           "label": "ValueError",
@@ -4391,6 +4951,14 @@
           "file": "synthetic_data.py",
           "irNodeId": "module/_validate_shape.fn/for@0",
           "preview": null
+        },
+        {
+          "id": "external:isinstance",
+          "kind": "external",
+          "label": "isinstance",
+          "file": null,
+          "irNodeId": "module/_validate_shape.fn/for@0/isinstance.call",
+          "preview": "isinstance"
         },
         {
           "id": "external:torch.rand",
@@ -4441,6 +5009,35 @@
           "file": null,
           "irNodeId": "module/evaluate.fn/try@0/for@0/predictions.assign",
           "preview": "torch.argmax(logits, dim=1)"
+        },
+        {
+          "id": "external:int",
+          "kind": "external",
+          "label": "int",
+          "file": null,
+          "irNodeId": "module/evaluate.fn/try@0/for@0/total_correct.assign",
+          "preview": "int((predictions == labels).sum().item())",
+          "nestsInnerCalls": true,
+          "nestExtracted": true
+        },
+        {
+          "id": "dynamic:?.sum().item",
+          "kind": "dynamic",
+          "label": "?.sum().item",
+          "file": null,
+          "irNodeId": "module/evaluate.fn/try@0/for@0/total_correct.assign/?_sum_item.call",
+          "preview": "(predictions == labels).sum().item()",
+          "nested": true,
+          "receiverBoundKind": "local-call",
+          "receiverBoundFrom": "generate_batch"
+        },
+        {
+          "id": "external:range",
+          "kind": "external",
+          "label": "range",
+          "file": null,
+          "irNodeId": "module/evaluate.fn/try@0/range.call",
+          "preview": "range"
         },
         {
           "id": "external:torch.no_grad",
@@ -4509,6 +5106,12 @@
         },
         {
           "from": "synthetic_data:_validate_shape",
+          "to": "dynamic:dims.items",
+          "kind": "direct",
+          "irSource": "module/_validate_shape.fn/dims_items.call"
+        },
+        {
+          "from": "synthetic_data:_validate_shape",
           "to": "external:ValueError@1",
           "kind": "direct",
           "irSource": "module/_validate_shape.fn/for@0/if@0/raise@0"
@@ -4522,6 +5125,18 @@
         {
           "from": "synthetic_data:_validate_shape.fn/for@0",
           "to": "synthetic_data:_validate_shape.fn/for@0/if@0#then",
+          "kind": "contains",
+          "irSource": "module/_validate_shape.fn/for@0"
+        },
+        {
+          "from": "synthetic_data:_validate_shape",
+          "to": "external:isinstance",
+          "kind": "direct",
+          "irSource": "module/_validate_shape.fn/for@0/isinstance.call"
+        },
+        {
+          "from": "synthetic_data:_validate_shape.fn/for@0",
+          "to": "external:isinstance",
           "kind": "contains",
           "irSource": "module/_validate_shape.fn/for@0"
         },
@@ -4584,6 +5199,42 @@
           "to": "external:torch.argmax",
           "kind": "contains",
           "irSource": "module/evaluate.fn/try@0/for@0"
+        },
+        {
+          "from": "evaluate:evaluate",
+          "to": "external:int",
+          "kind": "direct",
+          "irSource": "module/evaluate.fn/try@0/for@0/total_correct.assign"
+        },
+        {
+          "from": "evaluate:evaluate.fn/try@0/for@0",
+          "to": "external:int",
+          "kind": "contains",
+          "irSource": "module/evaluate.fn/try@0/for@0"
+        },
+        {
+          "from": "evaluate:evaluate",
+          "to": "dynamic:?.sum().item",
+          "kind": "direct",
+          "irSource": "module/evaluate.fn/try@0/for@0/total_correct.assign/?_sum_item.call"
+        },
+        {
+          "from": "evaluate:evaluate.fn/try@0/for@0",
+          "to": "dynamic:?.sum().item",
+          "kind": "contains",
+          "irSource": "module/evaluate.fn/try@0/for@0"
+        },
+        {
+          "from": "evaluate:evaluate",
+          "to": "external:range",
+          "kind": "direct",
+          "irSource": "module/evaluate.fn/try@0/range.call"
+        },
+        {
+          "from": "evaluate:evaluate.fn/try@0",
+          "to": "external:range",
+          "kind": "contains",
+          "irSource": "module/evaluate.fn/try@0"
         },
         {
           "from": "evaluate:evaluate",
@@ -4982,6 +5633,14 @@
           "preview": "Reject non-positive dimensions before any tensor is allocated."
         },
         {
+          "id": "dynamic:dims.items",
+          "kind": "dynamic",
+          "label": "dims.items",
+          "file": null,
+          "irNodeId": "module/_validate_shape.fn/dims_items.call",
+          "preview": "dims.items"
+        },
+        {
           "id": "external:ValueError",
           "kind": "external",
           "label": "ValueError",
@@ -5006,6 +5665,14 @@
           "file": "synthetic_data.py",
           "irNodeId": "module/_validate_shape.fn/for@0",
           "preview": null
+        },
+        {
+          "id": "external:isinstance",
+          "kind": "external",
+          "label": "isinstance",
+          "file": null,
+          "irNodeId": "module/_validate_shape.fn/for@0/isinstance.call",
+          "preview": "isinstance"
         },
         {
           "id": "external:torch.rand",
@@ -5035,6 +5702,12 @@
       "edges": [
         {
           "from": "synthetic_data:_validate_shape",
+          "to": "dynamic:dims.items",
+          "kind": "direct",
+          "irSource": "module/_validate_shape.fn/dims_items.call"
+        },
+        {
+          "from": "synthetic_data:_validate_shape",
           "to": "external:ValueError",
           "kind": "direct",
           "irSource": "module/_validate_shape.fn/for@0/if@0/raise@0"
@@ -5048,6 +5721,18 @@
         {
           "from": "synthetic_data:_validate_shape.fn/for@0",
           "to": "synthetic_data:_validate_shape.fn/for@0/if@0#then",
+          "kind": "contains",
+          "irSource": "module/_validate_shape.fn/for@0"
+        },
+        {
+          "from": "synthetic_data:_validate_shape",
+          "to": "external:isinstance",
+          "kind": "direct",
+          "irSource": "module/_validate_shape.fn/for@0/isinstance.call"
+        },
+        {
+          "from": "synthetic_data:_validate_shape.fn/for@0",
+          "to": "external:isinstance",
           "kind": "contains",
           "irSource": "module/_validate_shape.fn/for@0"
         },

@@ -40,6 +40,10 @@ export default defineConfig({
     // stays explicit so libcst resolves out of .pydeps/.
     env: {
       PYTHONPATH: ".pydeps",
+      // The suites were written against the thread-index launchpad as the
+      // first view; users boot into the architecture overview (server.ts
+      // START_VIEW). A spec that wants the overview overrides this.
+      VG_START_VIEW: process.env.VG_START_VIEW ?? "index",
       PATH: process.env.PATH ?? "",
       HOME: process.env.HOME ?? "",
       // M-RUN e2e (test:e2e-run) drives the SM2 arg synthesizer through a
@@ -51,6 +55,12 @@ export default defineConfig({
       // M-SKILL.5 — the routing e2e asserts on the prompt the chat backend
       // actually sent; the stdio stub appends each turn here when set.
       ...(process.env.FAKE_PROMPT_LOG ? { FAKE_PROMPT_LOG: process.env.FAKE_PROMPT_LOG } : {}),
+      // M-AGENT3 — the worker-session stub's knobs (fake_worker.mjs):
+      // edit target + escalate mode, forwarded only when set.
+      ...(process.env.FAKE_WORKER_MODE ? { FAKE_WORKER_MODE: process.env.FAKE_WORKER_MODE } : {}),
+      ...(process.env.FAKE_EDIT_FILE ? { FAKE_EDIT_FILE: process.env.FAKE_EDIT_FILE } : {}),
+      ...(process.env.FAKE_EDIT_NODE ? { FAKE_EDIT_NODE: process.env.FAKE_EDIT_NODE } : {}),
+      ...(process.env.FAKE_ESCALATE_REASON ? { FAKE_ESCALATE_REASON: process.env.FAKE_ESCALATE_REASON } : {}),
       // OPUS-SHOWDOWN — opt-in persistent builder session (one stream-json
       // child per build run instead of a claude -p spawn per increment).
       ...(process.env.VG_BUILD_SESSION ? { VG_BUILD_SESSION: process.env.VG_BUILD_SESSION } : {}),

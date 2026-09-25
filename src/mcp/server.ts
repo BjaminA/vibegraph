@@ -302,6 +302,29 @@ function registerTools(server: McpServer, ctx: VibegraphMcpContext): void {
   );
 
   server.registerTool(
+    "vibegraph_create_file",
+    {
+      description:
+        "M-ORCH.3 — create a NEW Python module through the CST chokepoint (cst_rewrite create_file: " +
+        "parse-gated, black-formatted). Allowed ONLY while a work-run packet is RUNNING and the path is " +
+        "among that packet's files — a SYSTEM packet the orchestrator proposed and the human confirmed " +
+        "at the objective gate. Refuses existing files (edit those with vibegraph_rewrite_node / " +
+        "vibegraph_compose_insert), non-Python paths (v1 limit), and paths outside the project. On " +
+        "success the file is parsed, linked, and derived data refreshes — it appears in the IR like any " +
+        "other module. If the work needs a file not in your packet, escalate; do not route around this.",
+      inputSchema: {
+        path: z.string().describe("Project-relative path of the NEW .py file (e.g. telemetry/migrations.py)."),
+        source: z.string().describe("The complete module source."),
+      },
+    },
+    async ({ path, source }) => {
+      const r = await ctx.createFile(path, source);
+      if (!r.ok) return { content: [{ type: "text", text: `Create-file refused: ${r.message}` }], isError: true };
+      return { content: [{ type: "text", text: r.message }] };
+    },
+  );
+
+  server.registerTool(
     "vibegraph_extract_thread",
     {
       description:
@@ -349,7 +372,10 @@ function registerTools(server: McpServer, ctx: VibegraphMcpContext): void {
         "CRITICAL: observedTarget is a RUNTIME SAMPLE (this run, these inputs) — NEVER a static fact. One " +
         "run can lie; the node stays dynamic and the IR is unchanged. Same SM3 effect floor + consent as " +
         "run_thread_to_node: observing requires the receiver's binding code to run, so an effectful " +
-        "binding returns requires-confirmation + a token. observedTarget is null on any non-ok outcome.",
+        "binding returns requires-confirmation + a token. observedTarget is null on any non-ok outcome. " +
+        "An enclosing function that requires arguments declines needs-inputs before anything runs (Observe " +
+        "never synthesizes inputs — use vibegraph_run_thread_to_node with synthArgs, or observe from a caller); " +
+        "a run that raises carries the exception line in `error`.",
       inputSchema: {
         nodeId: z.string().describe("The dynamic call-site node id."),
         receiver: z.string().describe("The receiver variable whose runtime type to observe (e.g. conn)."),
@@ -359,6 +385,33 @@ function registerTools(server: McpServer, ctx: VibegraphMcpContext): void {
     },
     async ({ nodeId, receiver, filePath, effectConsent }) => {
       const r = await ctx.observeDynamicTarget({ nodeId, receiver, filePath, effectConsent });
+      return { content: [{ type: "text", text: JSON.stringify(r, null, 2) }] };
+    },
+  );
+
+  server.registerTool(
+    "vibegraph_trace_thread",
+    {
+      description:
+        "Run ONE entry point under a profiler and record what every call site it touched ACTUALLY " +
+        "called — the batch form of vibegraph_observe_dynamic_target. Use it when a thread has several " +
+        "dynamic/unresolved dispatches and you want them all resolved from a single run rather than " +
+        "one at a time. Returns { outcome, observed, run } where `observed` is how many IR nodes were " +
+        "annotated. CRITICAL: every observation is a RUNTIME SAMPLE (this run, these inputs) — NEVER a " +
+        "static fact. One run can lie: a branch that did not execute is not reported, and a different " +
+        "input may dispatch elsewhere. Nodes keep their dynamic/unresolved kind; the overlay is stored " +
+        "beside the IR in .vibegraph/observations.json, never merged into it. Same SM3 effect floor as " +
+        "run_thread_to_node: a trace runs the WHOLE entry point, so an effectful path returns " +
+        "requires-confirmation + a token and nothing has run until you re-call with it. Only entry " +
+        "points that take NO arguments can be traced — inventing inputs is the synth chokepoint's job, " +
+        "under its own consent, not a tracer's.",
+      inputSchema: {
+        entryPointId: z.string().describe("The entry point to run (e.g. calc.py:dispatch)."),
+        effectConsent: z.string().optional().describe("Token from a prior requires-confirmation, to authorise an effectful run."),
+      },
+    },
+    async ({ entryPointId, effectConsent }) => {
+      const r = await ctx.traceEntryPoint({ entryPointId, effectConsent });
       return { content: [{ type: "text", text: JSON.stringify(r, null, 2) }] };
     },
   );
@@ -417,6 +470,45 @@ function registerTools(server: McpServer, ctx: VibegraphMcpContext): void {
   );
 
   server.registerTool(
+    "vibegraph_start_work_run",
+    {
+      description:
+        "M-AGENT — draft an Agent Manager WORK RUN from a task: plan_work decomposition persisted as a " +
+        "DRAFT run the human sees in the board (Agents toolbar button). THIS TOOL CANNOT RATIFY OR RUN " +
+        "ANYTHING: ratification and every per-packet approval are human gates in the GUI — propose the " +
+        "run, then tell the user to review it — UNLESS `autonomous` is set (ruling:2026-09-12:human-out-of-the-loop), " +
+        "in which case the run confirms its own objective when the brief lands and runs to a terminal state with no " +
+        "human gate, escalations ending as failed packets with their reason kept. One active run at a time; a run " +
+        "already in flight is an error, not a replacement.",
+      inputSchema: {
+        task: z.string().describe("The development task, naming the code it touches (matching is lexical over the IR)."),
+        mode: z.enum(["gated", "orchestrated"]).optional().describe(
+          "gated (default): the human ratifies the plan AND reviews every packet's evidence. "
+          + "orchestrated (M-ORCH): an orchestrator brief writes each packet's task + constraint handoff; the human "
+          + "confirms only the OBJECTIVE, the orchestrator reviews packet evidence; escalations and broken output "
+          + "contracts still return to the human."),
+        parallel: z.number().int().min(1).max(8).optional().describe(
+          "M-ORCH.4 — LANES: how many packets may run at once (default 3 orchestrated, 1 gated). Only packets with "
+          + "no dependency between them AND disjoint edit scopes (the brief's declared files) share the lanes; the "
+          + "chokepoint refuses a worker's edit outside its scope."),
+        review: z.enum(["full", "pre-checks"]).optional().describe(
+          "M-ORCH.4 — orchestrated only. 'pre-checks' (default): a packet whose deterministic checks pass (edits inside "
+          + "its scope, every file re-parsed, entry-point signature unchanged, no new resolution gaps, first attempt, "
+          + "not a system packet) is approved WITHOUT a model review and recorded as such; 'full': the orchestrator reads every diff."),
+        autonomous: z.boolean().optional().describe(
+          "AUTONOMY (ruling:2026-09-12:human-out-of-the-loop): orchestrated only. The run confirms its own objective the moment the "
+          + "brief lands and resolves every escalation as a FAILED packet with its reason kept, so no human gate exists; "
+          + "the run record and summary name the ruling. Default false."),
+      },
+    },
+    async ({ task, mode, parallel, review, autonomous }) => {
+      const res = ctx.startWorkRun(task, mode, { parallel, review, autonomous });
+      if (!res.ok) throw new Error(res.message);
+      return { content: [{ type: "text", text: res.message }] };
+    },
+  );
+
+  server.registerTool(
     "vibegraph_sweep_thread_skills",
     {
       description:
@@ -469,7 +561,10 @@ function registerTools(server: McpServer, ctx: VibegraphMcpContext): void {
         "'Not statically known' block appended as IR fact (the thread's resolution gaps / runtime " +
         "dispatch / uncaptured calls). Always written status=draft and persisted under " +
         ".vibegraph/thread-skills/. It becomes authoritative ONLY after a HUMAN reviews and ratifies it " +
-        "(edits the file's status to ratified) — you cannot ratify it yourself. Regenerating resets it " +
+        "(edits the file's status to ratified) — you cannot ratify it yourself, and there is no tool here " +
+        "that lets you. A model MAY ratify only under a recorded human ruling, through " +
+        "scripts/draft_thread_skills.mjs, and the file then names the model and the ruling so every prompt " +
+        "the skill is injected into carries that caveat. Regenerating resets it " +
         "to draft. Returns the drafted body.",
       inputSchema: {
         entryPointId: z.string().describe("The thread's entry-point id (e.g. app.py:create_user_route)."),
@@ -590,6 +685,198 @@ function registerTools(server: McpServer, ctx: VibegraphMcpContext): void {
       const r = await ctx.threadBlindSpots(seedNodeId, filePath);
       return { content: [{ type: "text", text: JSON.stringify(r, null, 2) }] };
     },
+  );
+
+  // ── M-CONTRACT (PLAN-M-CONTRACT.md) — thread contract + stated constraints ──
+  server.registerTool(
+    "vibegraph_thread_contract",
+    {
+      description:
+        "M-CONTRACT — the DATA CONTRACT of one thread (entryPointId), IR FACT: what enters (the seed's " +
+        "params), what leaves (declared return + the return expressions), every effectful external call " +
+        "with its LITERAL call text (the endpoint / SQL / path / command the code actually uses), round " +
+        "trips inside loops (the N+1 lever, named per loop and via which step), cross-thread adjacency " +
+        "(the handoff surface), and where static knowledge ends. Plus the STATED constraints routed to " +
+        "this thread (payload schemas, proxies, backend-call requirements, perf levers, invariants) — each " +
+        "labelled with its source: human-stated (authoritative), orchestrator-stated, or agent-stated. " +
+        "`rendered` holds the exact prompt blocks a worker/thread agent receives. Read-only.",
+      inputSchema: {
+        entryPointId: z.string().describe("The thread's entry-point id (e.g. api/app.py:create_order)."),
+      },
+    },
+    async ({ entryPointId }) => {
+      const r = ctx.threadContract(entryPointId);
+      if (r.error && !r.contract) {
+        return { content: [{ type: "text", text: `Thread contract failed: ${r.error}` }], isError: true };
+      }
+      return { content: [{ type: "text", text: JSON.stringify(r, null, 2) }] };
+    },
+  );
+
+  server.registerTool(
+    "vibegraph_state_constraint",
+    {
+      description:
+        "M-CONTRACT — state an architecture CONSTRAINT the IR cannot see, so every agent working the " +
+        "threads it scopes receives it: kind payload-schema (what shape a payload must keep), proxy (what " +
+        "fronts a call), backend-call (what a backend expects), perf-lever (batch vs round-trip: when to " +
+        "reduce round trips rather than micro-optimise), invariant, objective, or M-STACK's stack-policy " +
+        "(a decision ABOUT A TOOL — prefer the project's http wrapper over bare requests; the tensor " +
+        "program is torch, do not add tensorflow). A stack-policy REQUIRES `policy` " +
+        "{ tool, rule: require|prefer|forbid|replace-with, with (required for replace-with), role?, " +
+        "reason? } — that structured form is what the deterministic post-packet checks read; `text` stays " +
+        "the human sentence. Scope it to threads (entryPointIds), files (a trailing / matches a " +
+        "directory), TOOLS (scope.stack — names from vibegraph_stack; it reaches every thread whose stack " +
+        "uses one, and keeps reaching new files that adopt the tool), or everything (all: true). " +
+        "Persisted to .vibegraph/constraints.json with source \"agent\" — it is injected LABELLED as " +
+        "agent-stated, NOT reviewed by a human, never as human-authoritative. A human can remove it in " +
+        "the Agent Manager board.",
+      inputSchema: {
+        kind: z.enum(["payload-schema", "proxy", "backend-call", "perf-lever", "invariant", "objective", "stack-policy"]),
+        text: z.string().describe("The constraint, one or two sentences, concrete (name the shape / host / lever / tool)."),
+        scope: z.object({
+          all: z.boolean().optional(),
+          entryPointIds: z.array(z.string()).optional(),
+          files: z.array(z.string()).optional(),
+          stack: z.array(z.string()).optional(),
+        }).describe("Who receives it: threads by entryPointId, files (dir prefix with trailing /), tools (stack), or all."),
+        check: z.union([
+          z.object({ rule: z.literal("callers-only"), target: z.string(), files: z.array(z.string()).optional(), functions: z.array(z.string()).optional() }),
+          z.object({ rule: z.literal("import-only"), tool: z.string(), files: z.array(z.string()) }),
+          z.object({ rule: z.literal("calls-through"), target: z.string(), through: z.string() }),
+        ]).optional().describe(
+          "M-GRAMMAR — the CHECKABLE half, when the rule is one the IR can settle: "
+          + "callers-only (every caller of `target` is in these files/functions), "
+          + "import-only (only these files may import `tool`), "
+          + "calls-through (every call to `target` goes through `through`). "
+          + "`text` stays the human sentence; this is what the deterministic pre-checks EVALUATE, "
+          + "so the rule stops being prose a reviewer reads and agrees with. "
+          + "A constraint the IR cannot settle comes back `unverifiable` and goes to the model — never a silent pass.",
+        ),
+        policy: z.object({
+          tool: z.string(),
+          rule: z.enum(["require", "prefer", "forbid", "replace-with"]),
+          with: z.string().optional(),
+          role: z.string().optional(),
+          reason: z.string().optional(),
+        }).optional().describe("Required for kind stack-policy; allowed on any other kind (a `proxy` constraint stating which tool fronts a call is the same decision) — the deterministic checks read `policy` wherever it appears."),
+        note: z.string().optional().describe("Provenance note (e.g. which task or document it comes from)."),
+      },
+    },
+    async (input) => {
+      const r = ctx.stateConstraint(input);
+      if (!r.ok) return { content: [{ type: "text", text: `Constraint rejected: ${r.error}` }], isError: true };
+      return { content: [{ type: "text", text: JSON.stringify(r.constraint, null, 2) }] };
+    },
+  );
+
+  // ── M-STACK.1 (PLAN-M-STACK.md) — the stack facts ──────────────────
+  server.registerTool(
+    "vibegraph_stack",
+    {
+      description:
+        "M-STACK — the SOFTWARE STACK this project actually uses, derived from the IR and the manifests " +
+        "on disk: every tool with its ROLE (web-framework / frontend / http-client / db / cache / queue / " +
+        "tensor / data / cloud / infra / process / remote / test / build / runtime / unknown), its ORIGIN " +
+        "(third-party, stdlib, or a PROJECT module that funnels one — the proxy case, carrying `wraps`), " +
+        "its declared version when a manifest names one, the files and threads it appears in, and the " +
+        "parse EVIDENCE behind it (import / call / include, or `config` for a manifest-only fact — the " +
+        "only kind of fact available about an unparsed .js frontend). Pass entryPointId for ONE thread's " +
+        "slice. Facts only: a tool no table knows is listed with role \"unknown\" rather than guessed, and " +
+        "a stated DECISION about a tool is not here — that is a constraint of kind \"stack-policy\" " +
+        "(vibegraph_list_constraints). Read-only.",
+      inputSchema: {
+        entryPointId: z.string().optional().describe("Restrict to one thread's tools (e.g. telemetry/app.py:ingest_route)."),
+      },
+    },
+    async ({ entryPointId }) => {
+      const r = ctx.stack(entryPointId);
+      if (r.error) return { content: [{ type: "text", text: `Stack unavailable: ${r.error}` }], isError: true };
+      return { content: [{ type: "text", text: JSON.stringify(r, null, 2) }] };
+    },
+  );
+
+  // - M-XLANG.1 (PLAN-M-V5FORKS.md) - the cross-language crossings -
+  server.registerTool(
+    "vibegraph_crossings",
+    {
+      description:
+        "M-XLANG - where a logic thread LEAVES its own language over HTTP, and which route in this " +
+        "project serves the path it calls. Both sides are parsed data: the caller's URL argument (a " +
+        "template literal is reduced to its static path shape, `${BASE}/devices/${id}` -> /devices/*) and " +
+        "the receiver's route metadata from any language's discoverer. The match is WEIGHED, never " +
+        "resolved: `confidence` is path+method only when BOTH sides parsed a method (two framework " +
+        "defaults agreeing is not evidence), `ambiguous` names every candidate and claims none, and " +
+        "`unmatched` means the path resolved but nothing here serves it. A route served inside the " +
+        "calling thread's own files is excluded - a service calling itself is not a crossing. `note` " +
+        "always says what the match could NOT establish, including that the base URL was never " +
+        "followed. A crossing does NOT widen the thread: `filesReached` stays one language. " +
+        "Pass entryPointId for one thread. Read-only.",
+      inputSchema: {
+        entryPointId: z.string().optional().describe("Restrict to one thread's crossings (e.g. gateway/server.ts:postIngestRoute)."),
+      },
+    },
+    async ({ entryPointId }) => {
+      const r = ctx.crossings(entryPointId);
+      if (r.error) return { content: [{ type: "text", text: `Crossings unavailable: ${r.error}` }], isError: true };
+      return { content: [{ type: "text", text: JSON.stringify(r, null, 2) }] };
+    },
+  );
+
+  // - M-ARCH.1 (PLAN-M-ARCH.md) - the architecture layer -
+  server.registerTool(
+    "vibegraph_architecture",
+    {
+      description:
+        "M-ARCH - the project's ARCHITECTURE as a small graph, derived from the IR (no model involved): " +
+        "CLUSTERS of entry points (a framework's family - Next.js app, MCP server, HTTP API per framework, " +
+        "scripts, CLI - under the nearest package manifest), TOOL nodes for every boundary tool a cluster's " +
+        "threads call (database, platform, model API, HTTP client, agent protocol, cloud, remote, or " +
+        "`unknown`, named), and EDGES aggregating the hops between clusters (http / command / tool) and the " +
+        "calls into tools. Every edge carries a `protocol` READ FROM THE FACT with `protocolBasis` saying " +
+        "which fact (`SQL` because pg is a SQL client; `Volt - WebSocket - command` because the calling " +
+        "thread calls @tdxvolt/volt-client-web), a count, the threads, and refs to the call sites (file + IR " +
+        "node id, which is also an edit address). `unplaced` counts what the picture leaves out. `groups` " +
+        "(deployment/trust boundaries) are stated or proposed, never derived. Read-only.",
+      inputSchema: {},
+    },
+    async () => {
+      const r = ctx.architecture();
+      if (!r.model) return { content: [{ type: "text", text: `Architecture unavailable: ${r.error ?? "no model"}` }], isError: true };
+      return { content: [{ type: "text", text: JSON.stringify(r.model, null, 2) }] };
+    },
+  );
+
+  server.registerTool(
+    "vibegraph_propose_architecture",
+    {
+      description:
+        "M-ARCH.4 - SPENDS TOKENS. Ask a model to propose what the code cannot say about the architecture: " +
+        "deployment / trust GROUPS (host, region, subnet, trust, network, process, account, zone) wrapping the " +
+        "derived nodes, display NAMES, the PRIMARY PATH and a two-sentence narrative. The model sees the derived " +
+        "model, deployment facts read line by line from compose / Dockerfile / k8s / terraform / pm2 / Procfile / " +
+        "systemd / .env.example, and the project's docs; every item must cite one of those (file:line) or a node / " +
+        "edge id, and a citation that was not shown is dropped - an item left with none is INFERRED. The model " +
+        "cannot add a node or an edge, or say anything about protocols or payloads. The result is stored PENDING in " +
+        ".vibegraph/architecture.json and shown ghosted; only a human ratifies or rejects it, in the GUI.",
+      inputSchema: {},
+    },
+    async () => {
+      const r = await ctx.proposeArchitecture();
+      if (!r.ok) return { content: [{ type: "text", text: `Proposal failed: ${r.error ?? "unknown"}` }], isError: true };
+      return { content: [{ type: "text", text: JSON.stringify({ pending: true, groups: r.groups, names: r.names, refused: r.refused, note: "awaiting human ratification in the GUI", groupsNow: r.model?.groups, proposal: r.model?.proposal }, null, 2) }] };
+    },
+  );
+
+  server.registerTool(
+    "vibegraph_list_constraints",
+    {
+      description:
+        "M-CONTRACT — every stated constraint in the analyzed project (.vibegraph/constraints.json) with " +
+        "its kind, scope, and source (human / orchestrator / agent). Read-only.",
+      inputSchema: {},
+    },
+    async () => ({ content: [{ type: "text", text: JSON.stringify(ctx.listConstraints(), null, 2) }] }),
   );
 
   server.registerTool(
@@ -890,12 +1177,37 @@ function registerResources(server: McpServer, ctx: VibegraphMcpContext): void {
   );
 }
 
+// M-ORCH.4 — a WORKER session announces its packet in its MCP URL
+// (`/mcp?packet=p3`, set by the server that spawned it). Every write tool
+// registered on that session carries the packet id down to the chokepoint,
+// which confines the edit to the packet's EDIT SCOPE — so parallel packets
+// can never touch each other's files, and a stray edit is refused with the
+// owning packet named. A session without the parameter (the GUI chat, an
+// external `claude mcp add` session) is unscoped, exactly as before.
+const PACKET_ID_RE = /^[px]\d{1,4}$/;
+
+export function packetIdFromUrl(url: string | undefined): string | null {
+  try {
+    const id = new URL(url ?? "/", "http://vibegraph").searchParams.get("packet");
+    return id && PACKET_ID_RE.test(id) ? id : null;
+  } catch { return null; }
+}
+
+function scopedContext(ctx: VibegraphMcpContext, packetId: string): VibegraphMcpContext {
+  return {
+    ...ctx,
+    rewriteNode: (args) => ctx.rewriteNode({ ...args, packetId }),
+    composeInsert: (args) => ctx.composeInsert({ ...args, packetId }),
+    createFile: (p, source) => ctx.createFile(p, source, packetId),
+  };
+}
+
 export function createMcpHttpHandler(ctx: VibegraphMcpContext) {
   const sessions = new Map<string, ConnectedSession>();
 
-  async function makeSession(): Promise<ConnectedSession> {
+  async function makeSession(packetId: string | null): Promise<ConnectedSession> {
     const server = new McpServer({ name: "vibegraph", version: "0.1.0" });
-    registerTools(server, ctx);
+    registerTools(server, packetId ? scopedContext(ctx, packetId) : ctx);
     registerResources(server, ctx);
 
     const transport = new StreamableHTTPServerTransport({
@@ -960,7 +1272,7 @@ export function createMcpHttpHandler(ctx: VibegraphMcpContext) {
         }));
         return;
       }
-      session = await makeSession();
+      session = await makeSession(packetIdFromUrl(req.url));
     }
 
     await session.transport.handleRequest(req, res, parsedBody);

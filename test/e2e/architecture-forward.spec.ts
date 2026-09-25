@@ -66,10 +66,14 @@ test.describe("M-ARCH — forward() data-path thread", () => {
       await expect(node(page, name)).toHaveCount(1);
     }
 
-    // Ordering along the data path (L-R main axis): conv1 < conv2 < fc1 < fc2.
-    const xOf = async (label: string) => (await node(page, label).first().boundingBox())!.x;
+    // Ordering along the data path: conv1 < conv2 < fc1 < fc2. forward()
+    // CALLS each layer, so the layers are siblings — since the thread became
+    // a call tree (2026-09-24, Ben: threads bunched into long rows) siblings
+    // stack DOWN one column in execution order, so the data path reads along
+    // y. It read along x while every sibling shared one row.
+    const yOf = async (label: string) => (await node(page, label).first().boundingBox())!.y;
     const [c1, c2, f1, f2] = await Promise.all(
-      ["self.conv1", "self.conv2", "self.fc1", "self.fc2"].map(xOf),
+      ["self.conv1", "self.conv2", "self.fc1", "self.fc2"].map(yOf),
     );
     expect(c1).toBeLessThan(c2);
     expect(c2).toBeLessThan(f1);
@@ -84,7 +88,7 @@ test.describe("M-ARCH — forward() data-path thread", () => {
       const b = await all.nth(i).boundingBox();
       if (b) boxes.push(b);
     }
-    const { maxGap, median, count } = deadBandReport(boxes, "x");
+    const { maxGap, median, count } = deadBandReport(boxes, "y"); // the data path's axis, above
     expect(count).toBeGreaterThanOrEqual(12); // all steps, not the collapsed 2
     expect(maxGap, `dead band: maxGap ${maxGap} vs median ${median}`)
       .toBeLessThanOrEqual(Math.max(median * 3, 160));

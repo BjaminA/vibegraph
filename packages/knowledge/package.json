@@ -1,0 +1,37 @@
+{
+  "name": "vibegraph-knowledge",
+  "version": "0.6.0",
+  "description": "Crystallise what VibeGraph derives from a codebase (thread contracts, stack facts, a dependency-ordered plan) and what its operators stated (constraints with their reasons, stack policies) into files a plain Claude reads before it edits, plus a checker that verifies the stated rules against the code. Zero tokens.",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "vibegraph-knowledge": "dist/cli.mjs",
+    "vgk": "dist/cli.mjs"
+  },
+  "files": [
+    "dist/cli.mjs",
+    "vendor/",
+    "requirements.txt",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/BjaminA/vibegraph.git",
+    "directory": "packages/knowledge"
+  },
+  "keywords": [
+    "claude",
+    "claude-code",
+    "codebase",
+    "constraints",
+    "static-analysis",
+    "ir",
+    "agent-context"
+  ],
+  "dependencies": {
+    "web-tree-sitter": "^0.26.13"
+  }
+}

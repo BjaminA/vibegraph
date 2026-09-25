@@ -1,0 +1,105 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibegraph.dev/schemas/quality/stack_profile.json",
+  "title": "VibeGraph quality layer: stack profile",
+  "description": "Derived archetype detection: the selector that makes every quality and flow rule archetype-relative. Every fact carries an ordinal confidence tied to the evidence ladder stack_attribution.ts already uses, and at least one supporting node, because a fact with no node behind it is an assertion. Facts the IR cannot derive appear under `unknowns` with a reason; they are never defaulted. Regimes are tags derived from facts and must name the facts that support them. Facts are held at project level and per thread, because a regime is a property of a thread (a route handler and a training loop can share a repository). Derived only: provenance is Derived, never stated. Run 3 writes the deriver; this pins its output.",
+  "type": "object",
+  "required": ["version", "project", "provenance", "facts", "regimes", "unknowns", "threads"],
+  "additionalProperties": false,
+  "properties": {
+    "version": { "const": "1.0" },
+    "project": { "type": "string", "minLength": 1, "description": "The analysed project root as the server knows it." },
+    "provenance": { "$ref": "evidence.json#/$defs/Derived" },
+    "facts": { "$ref": "#/$defs/FactMap" },
+    "regimes": { "$ref": "#/$defs/Regimes" },
+    "unknowns": { "$ref": "#/$defs/Unknowns" },
+    "threads": {
+      "description": "Per-thread profile keyed by entryPointId. A thread's facts override the project's for predicate evaluation; its regimes are its own.",
+      "type": "object",
+      "additionalProperties": { "$ref": "#/$defs/ThreadProfile" }
+    }
+  },
+  "$defs": {
+    "FactName": {
+      "description": "The closed catalogue of derivable facts. Each names the envelope surface it is read from. languages: files[].language. entryKinds: entryPoints[].kind. frameworks: entryPoints[].framework (evidence-based only). rolesPresent: stack.byFile / byThread. rolesCalled: stack.byThreadCalled (a boundary reaches the tool). funnels: stack.tools[].wraps. subsystems: system.subsystems[].kind. effectfulLoops: thread contract roundTrips non-empty. testsPresent: an entry of kind test or a tool with role test. crossings: crossings.ts joins for the thread. unattributedBoundaries: contract boundaries.unattributed non-zero.",
+      "enum": ["languages", "entryKinds", "frameworks", "rolesPresent", "rolesCalled", "funnels", "subsystems", "effectfulLoops", "testsPresent", "crossings", "unattributedBoundaries"]
+    },
+    "Confidence": {
+      "description": "Ordinal, not numeric, keyed to the attribution ladder. exact: the linker or index keyed it (qualified, call-site, binding, an entry-point record, a file's language). attributed: a rule attributed it (global, runtime, local-binding, handler-param). file-level: only the file-level fact (funnel-file, present-not-called).",
+      "enum": ["exact", "attributed", "file-level"]
+    },
+    "Fact": {
+      "type": "object",
+      "required": ["value", "confidence", "supportingNodes", "readFrom"],
+      "additionalProperties": false,
+      "properties": {
+        "value": {
+          "oneOf": [
+            { "type": "array", "items": { "type": "string", "minLength": 1 } },
+            { "type": "boolean" }
+          ]
+        },
+        "confidence": { "$ref": "#/$defs/Confidence" },
+        "supportingNodes": {
+          "description": "Never empty. The nodes (file:node) the fact was read from.",
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "evidence.json#/$defs/NodeRef" }
+        },
+        "readFrom": { "type": "string", "minLength": 1, "description": "The envelope surface, e.g. entryPoints[].kind, stack.byThreadCalled." }
+      }
+    },
+    "FactMap": {
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/FactName" },
+      "additionalProperties": { "$ref": "#/$defs/Fact" }
+    },
+    "RegimeId": {
+      "description": "Tags a thread or project can carry. Derived by rules over facts in Run 3; the schema only requires that each tag names its supporting facts. http-service: an entry of kind route. cli-tool: kind cli. library: only public_api entries. ml-model: kind model or role tensor called. ops-script: bash with subprocess or remote subsystems. test-suite: kind test. polyglot: more than one language reached. unknown: no rule fired, with a reason.",
+      "enum": ["http-service", "cli-tool", "library", "ml-model", "ops-script", "test-suite", "polyglot", "unknown"]
+    },
+    "Regime": {
+      "type": "object",
+      "required": ["id", "derivedFrom"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/RegimeId" },
+        "derivedFrom": {
+          "description": "The facts that fired the tag. Never empty.",
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/FactName" }
+        },
+        "reason": { "type": "string", "minLength": 1 }
+      },
+      "if": { "properties": { "id": { "const": "unknown" } } },
+      "then": { "required": ["reason"] }
+    },
+    "Regimes": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/Regime" } },
+    "UnknownFactName": {
+      "description": "Facts the source cannot yield. hotPaths: which loops iterate a lot (only a trace says). dataVolume, latencyBudget, deploymentTarget, consumers: not in the code; state them as constraints.",
+      "enum": ["hotPaths", "dataVolume", "latencyBudget", "deploymentTarget", "consumers"]
+    },
+    "Unknowns": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["fact", "reason"],
+        "additionalProperties": false,
+        "properties": {
+          "fact": { "$ref": "#/$defs/UnknownFactName" },
+          "reason": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "ThreadProfile": {
+      "type": "object",
+      "required": ["facts", "regimes"],
+      "additionalProperties": false,
+      "properties": {
+        "facts": { "$ref": "#/$defs/FactMap" },
+        "regimes": { "$ref": "#/$defs/Regimes" }
+      }
+    }
+  }
+}

@@ -1,0 +1,210 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibegraph.dev/schemas/quality/quality_model.json",
+  "title": "VibeGraph quality layer: quality model",
+  "description": "Dimensions of code quality, each with a prose half (the why), a checks half (verbs from check_grammar.json), an applies_when predicate over the stack profile, an evidence class, a mode, and a threshold and calibration that are Unknown until Run 3 measures them. Three things are enforced by shape rather than by convention: every dimension names at least one profile fact in applies_when (there is no `always`, because a universal rule set applied everywhere is the named failure mode); every check binding names the Run 1 assertions that forced it (an unforced check does not exist); and a gate-blocking dimension must carry a calibration record, so nothing gates before it has discriminated on this repository's own history. The five dimension ids are the five Run 1 verbs' outcomes; adding one is a schema change with its own review, which is how the catalogue cap holds without a count.",
+  "type": "object",
+  "required": ["version", "provenance", "dimensions"],
+  "additionalProperties": false,
+  "properties": {
+    "version": { "const": "1.0" },
+    "provenance": {
+      "oneOf": [
+        { "$ref": "evidence.json#/$defs/Derived" },
+        { "$ref": "evidence.json#/$defs/Stated" }
+      ]
+    },
+    "dimensions": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/Dimension" } }
+  },
+  "$defs": {
+    "DimensionId": {
+      "description": "One per Run 1 verb outcome. boundary-integrity: guards, callers-only, import-only, calls-through. failure-visibility: handles-failure. repetition-cost: not-in-loop. resolvability: annotated. change-coupling: co-changes.",
+      "enum": ["boundary-integrity", "failure-visibility", "repetition-cost", "resolvability", "change-coupling"]
+    },
+    "AssertionId": {
+      "description": "A Run 1 assertion id (RUN1.md section 1) or a stated constraint id.",
+      "type": "string",
+      "pattern": "^(AR|PT|AS|TF|SP|VG)-[0-9]+$|^c[0-9]+$"
+    },
+    "Predicate": {
+      "description": "Over the stack profile. Composable with all/any/not. A leaf names a fact and a value it has or asserts the fact is absent, or names a regime tag. No `always`.",
+      "oneOf": [
+        {
+          "type": "object", "required": ["all"], "additionalProperties": false,
+          "properties": { "all": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/Predicate" } } }
+        },
+        {
+          "type": "object", "required": ["any"], "additionalProperties": false,
+          "properties": { "any": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/Predicate" } } }
+        },
+        {
+          "type": "object", "required": ["not"], "additionalProperties": false,
+          "properties": { "not": { "$ref": "#/$defs/Predicate" } }
+        },
+        {
+          "type": "object", "required": ["fact", "has"], "additionalProperties": false,
+          "properties": {
+            "fact": { "$ref": "stack_profile.json#/$defs/FactName" },
+            "has": { "type": "string", "minLength": 1 }
+          }
+        },
+        {
+          "type": "object", "required": ["fact", "absent"], "additionalProperties": false,
+          "properties": {
+            "fact": { "$ref": "stack_profile.json#/$defs/FactName" },
+            "absent": { "const": true }
+          }
+        },
+        {
+          "type": "object", "required": ["regime"], "additionalProperties": false,
+          "properties": { "regime": { "$ref": "stack_profile.json#/$defs/RegimeId" } }
+        }
+      ]
+    },
+    "Measurement": {
+      "description": "A measured pair, only ever written by Run 3 calibration against a named commit. The place numbers are allowed to exist.",
+      "type": "object",
+      "required": ["fired", "of"],
+      "additionalProperties": false,
+      "properties": {
+        "fired": { "type": "integer" },
+        "of": { "type": "integer" }
+      }
+    },
+    "CalibrationRecord": {
+      "description": "A check earns its place only by discriminating across known-good and known-bad code drawn from this repository's own defect history. The record names the sample, the fire rate, the human false-positive review and the commit, so a stale calibration is visible.",
+      "type": "object",
+      "required": ["commit", "at", "sampleSet", "fireRate", "falsePositiveReview"],
+      "additionalProperties": false,
+      "properties": {
+        "commit": { "type": "string", "minLength": 1 },
+        "at": { "type": "string", "format": "date-time" },
+        "samplesFrom": { "type": "string", "minLength": 1, "description": "Run 3: the candidate file holding each sampled unit's id, label, source and raw verdict (scripts/quality_calibrate.mjs). The record keeps the NodeRefs; the detail lives there." },
+        "sampleSet": {
+          "type": "object",
+          "required": ["knownGood", "knownBad"],
+          "additionalProperties": false,
+          "properties": {
+            "knownGood": { "type": "array", "minItems": 1, "items": { "$ref": "evidence.json#/$defs/NodeRef" } },
+            "knownBad": { "type": "array", "minItems": 1, "items": { "$ref": "evidence.json#/$defs/NodeRef" } }
+          }
+        },
+        "fireRate": {
+          "type": "object",
+          "required": ["onKnownGood", "onKnownBad"],
+          "additionalProperties": false,
+          "properties": {
+            "onKnownGood": { "$ref": "#/$defs/Measurement" },
+            "onKnownBad": { "$ref": "#/$defs/Measurement" }
+          }
+        },
+        "falsePositiveReview": {
+          "description": "Who judged the fires on good or presumed-good code, and how each was judged. A human, or a model the human DELEGATED to (Ben's ruling of 2026-09-12: the agent pipeline runs with the human out of the loop; RUN3.md section 10). A model review names the model and the ruling that delegated it, and carries every judgement with its reason, so it is never mistaken for a human's. Three verdicts per fire: false-positive (the verb is wrong here), finding (the label was wrong; the code has the defect), intended (the shape is real and the author meant it: wants a stated allowance, not a verb change). Only false-positive demotes.",
+          "type": "object",
+          "required": ["reviewedBy", "falsePositives", "notes"],
+          "additionalProperties": false,
+          "properties": {
+            "reviewedBy": { "enum": ["human", "model"] },
+            "model": { "type": "string", "minLength": 1, "description": "Required when reviewedBy is model: the audit label, e.g. claude:claude-fable-5-1." },
+            "delegatedBy": {
+              "description": "Required when reviewedBy is model: the human ruling that delegated the review.",
+              "type": "object",
+              "required": ["source", "id", "at"],
+              "additionalProperties": false,
+              "properties": {
+                "source": { "const": "human" },
+                "id": { "type": "string", "minLength": 1 },
+                "at": { "type": "string", "format": "date-time" }
+              }
+            },
+            "notes": {
+              "description": "One entry per fire on good, presumed-good or neutral code. Never empty when such fires exist.",
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["id", "verdict", "why"],
+                "additionalProperties": false,
+                "properties": {
+                  "id": { "type": "string", "minLength": 1 },
+                  "verdict": { "enum": ["false-positive", "finding", "intended"] },
+                  "why": { "type": "string", "minLength": 1 }
+                }
+              }
+            },
+            "falsePositives": { "type": "array", "items": { "$ref": "evidence.json#/$defs/NodeRef" } },
+            "intended": { "type": "array", "items": { "$ref": "evidence.json#/$defs/NodeRef" } }
+          },
+          "if": { "properties": { "reviewedBy": { "const": "model" } } },
+          "then": { "required": ["model", "delegatedBy"] }
+        }
+      }
+    },
+    "Threshold": {
+      "description": "Only meaningful beside a calibration. Run 2 instances carry Unknown here.",
+      "type": "object",
+      "required": ["value", "unit", "calibratedAt"],
+      "additionalProperties": false,
+      "properties": {
+        "value": { "type": "number" },
+        "unit": { "type": "string", "minLength": 1 },
+        "calibratedAt": { "type": "string", "minLength": 1, "description": "The calibration commit." }
+      }
+    },
+    "CheckBinding": {
+      "type": "object",
+      "required": ["check", "costClass", "forcedBy"],
+      "additionalProperties": false,
+      "properties": {
+        "check": { "$ref": "check_grammar.json#/$defs/Check" },
+        "costClass": { "$ref": "evidence.json#/$defs/CostClass" },
+        "forcedBy": {
+          "description": "The Run 1 assertions that forced the verb. Never empty.",
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/AssertionId" }
+        },
+        "calibration": {
+          "oneOf": [
+            { "$ref": "evidence.json#/$defs/Unknown" },
+            { "$ref": "#/$defs/CalibrationRecord" }
+          ]
+        }
+      }
+    },
+    "Dimension": {
+      "type": "object",
+      "required": ["id", "text", "applies_when", "checks", "evidenceClass", "mode", "threshold", "calibration"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/DimensionId" },
+        "text": { "type": "string", "minLength": 1, "description": "The prose half: the why a worker reads." },
+        "applies_when": { "$ref": "#/$defs/Predicate" },
+        "checks": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/CheckBinding" } },
+        "evidenceClass": {
+          "description": "A: IR-decidable. B: needs the trace overlay, a build artefact or a test run. C never enters the model; a qualitative judgement goes to a model with provenance model_judgement and never into a gate.",
+          "enum": ["A", "B"]
+        },
+        "mode": { "enum": ["advisory", "gate-blocking"] },
+        "threshold": {
+          "oneOf": [
+            { "$ref": "evidence.json#/$defs/Unknown" },
+            { "$ref": "#/$defs/Threshold" }
+          ]
+        },
+        "calibration": {
+          "oneOf": [
+            { "$ref": "evidence.json#/$defs/Unknown" },
+            { "$ref": "#/$defs/CalibrationRecord" }
+          ]
+        }
+      },
+      "if": { "properties": { "mode": { "const": "gate-blocking" } } },
+      "then": {
+        "properties": {
+          "calibration": { "$ref": "#/$defs/CalibrationRecord" },
+          "checks": { "type": "array", "items": { "type": "object", "required": ["calibration"], "properties": { "calibration": { "$ref": "#/$defs/CalibrationRecord" } } } }
+        }
+      }
+    }
+  }
+}

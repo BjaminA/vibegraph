@@ -2,7 +2,7 @@ import React from "react";
 import { TerminalIcon } from "./icons";
 import { NodeActionStrip } from "./NodeActionStrip";
 import { NodeHandles } from "./NodeHandles";
-import { TextLine } from "../util/TextLine";
+import { TextLine, UNCLAMPED } from "../util/TextLine";
 
 interface Props {
   data: { id: string; funcName: string; args: string[]; isEffect: boolean; charBudget?: number };
@@ -81,6 +81,7 @@ export function CallNode({ data }: Props) {
             <TextLine
               text={argsStr}
               maxChars={data.charBudget ?? 32}
+              clampLines={UNCLAMPED}
               style={{
                 color: argsTint, fontSize: 10, fontFamily: "monospace",
               }}

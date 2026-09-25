@@ -33,6 +33,9 @@ export type ContainerKind =
   | "for"
   | "if_then"
   | "if_else"
+  // M-COMP — a list/set/dict comprehension or generator expression. A loop,
+  // and drawn as one.
+  | "comprehension"
   // M-NEST L2 — view-only backdrop wrapping an expanded nest (outer step +
   // its revealed inner calls). Never emitted by the extractor.
   | "nest";
@@ -52,6 +55,11 @@ export interface ThreadNode {
   // receiver name for display. Both absent on non-via-local terminals.
   qualifiedTarget?: string;
   viaLocal?: string;
+  // M-LANG6 — NON-PYTHON external terminals carry the frontend-stamped
+  // effectKind (extract_thread gates it off python so python threads
+  // are byte-identical); accentForThreadNode prefers it over the
+  // Python-vocabulary classifyExternal tables.
+  effectKind?: string;
   // R4 — dotted dynamic terminals whose receiver is a runtime-bound
   // local (e.g. `conn.execute()` where `conn = _get_conn()`) carry the
   // callee that bound the receiver, so the tooltip can say
@@ -107,4 +115,12 @@ export interface Thread {
   };
   nodes: ThreadNode[];
   edges: ThreadEdge[];
+  /** The entry point this thread starts from. Present on every thread the
+   *  project envelope ships (protocol.ts ProjectThread, since M8.3);
+   *  optional here because a single-file / fixture thread may have none.
+   *  Declared at M-XLANG.2, which needed it to look a thread's crossings
+   *  up by id. */
+  entryPointId?: string | null;
+  /** The files this thread's walk reaches, relative. Same provenance. */
+  filesReached?: string[];
 }

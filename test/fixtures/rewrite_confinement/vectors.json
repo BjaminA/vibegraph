@@ -1,0 +1,69 @@
+{
+  "_comment": "M-LANG4 — shared diff-confinement vectors. Consumed by BOTH rewriter implementations: test/test_cst_rewrite.py (Python, _verify_diff_confined) and test/bash_rewrite.test.mjs (Node, verifyDiffConfined). The two must agree on every vector or the suites fail — the implementations cannot drift. Vector shape: pre/post are full sources, span is the 1-indexed inclusive pre-edit line span of the target, op names the operation, confined says whether the check must ACCEPT. Never weaken: a vector may only move from confined:true to confined:false by an explicit decision (vibegraph-cst-ops).",
+  "vectors": [
+    {
+      "name": "in-span replacement, same line count",
+      "op": "replace_node",
+      "span": [2, 2],
+      "pre": "a=1\nb=2\nc=3\n",
+      "post": "a=1\nb=99\nc=3\n",
+      "confined": true
+    },
+    {
+      "name": "in-span growth (more lines inside the window)",
+      "op": "replace_node",
+      "span": [2, 3],
+      "pre": "head\ntarget_a\ntarget_b\ntail\n",
+      "post": "head\nnew_1\nnew_2\nnew_3\nnew_4\ntail\n",
+      "confined": true
+    },
+    {
+      "name": "in-span shrink (deletion leaves head/tail anchored)",
+      "op": "delete_node",
+      "span": [2, 3],
+      "pre": "head\ntarget_a\ntarget_b\ntail\n",
+      "post": "head\ntail\n",
+      "confined": true
+    },
+    {
+      "name": "head line changed outside the span — ESCAPE",
+      "op": "replace_node",
+      "span": [3, 3],
+      "pre": "keep_1\nkeep_2\ntarget\nkeep_3\n",
+      "post": "MUTATED\nkeep_2\nnew_target\nkeep_3\n",
+      "confined": false
+    },
+    {
+      "name": "tail line changed outside the span — ESCAPE",
+      "op": "replace_node",
+      "span": [2, 2],
+      "pre": "keep_1\ntarget\nkeep_2\nkeep_3\n",
+      "post": "keep_1\nnew_target\nkeep_2\nMUTATED\n",
+      "confined": false
+    },
+    {
+      "name": "trailing-whitespace normalisation outside the span is tolerated (rstrip contract)",
+      "op": "replace_node",
+      "span": [2, 2],
+      "pre": "keep_1   \ntarget\nkeep_2\t\n",
+      "post": "keep_1\nnew_target\nkeep_2\n",
+      "confined": true
+    },
+    {
+      "name": "insert grows inside the anchor window",
+      "op": "insert_after",
+      "span": [2, 2],
+      "pre": "head\nanchor\ntail\n",
+      "post": "head\nanchor\ninserted\ntail\n",
+      "confined": true
+    },
+    {
+      "name": "formatter reordered a far line — ESCAPE (the whole-file-format rejection)",
+      "op": "replace_node",
+      "span": [4, 4],
+      "pre": "one\ntwo\nthree\ntarget\nfive\n",
+      "post": "one\nthree\ntwo\nnew_target\nfive\n",
+      "confined": false
+    }
+  ]
+}

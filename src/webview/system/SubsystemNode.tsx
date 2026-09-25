@@ -8,7 +8,31 @@ import React, { useState } from "react";
 import { Handle, Position } from "@xyflow/react";
 import { ChevronRight, ChevronDown } from "lucide-react";
 import type { Subsystem } from "../types";
+import type { StackIndexRecord } from "../../shared/protocol";
+import type { StackRole } from "../../shared/stack_taxonomy";
 import { subsystemVisual, evidenceLabel } from "./subsystem_visual";
+
+// M-STACK.3 — which stack ROLE answers "what is this card built on".
+// The M19 system tier is deliberately language-shallow (the frontend is
+// one node found by a TEXT scan, never parsed), so the index knows more
+// than the tier does about every card here — but it never overwrites
+// the tier: where the two disagree, SubLine shows BOTH.
+const ROLE_FOR_KIND: Partial<Record<Subsystem["kind"], StackRole[]>> = {
+  frontend: ["frontend"],
+  backend: ["web-framework"],
+  db: ["db"],
+  cache: ["cache"],
+  external_http: ["http-client"],
+  library: ["tensor", "data"],
+};
+
+function toolsFor(s: Subsystem, stack?: StackIndexRecord | null): { tool: string; wraps?: string[]; configOnly: boolean }[] {
+  const roles = ROLE_FOR_KIND[s.kind];
+  if (!roles || !stack) return [];
+  return stack.tools
+    .filter((t) => roles.includes(t.role as StackRole))
+    .map((t) => ({ tool: t.tool, wraps: t.wraps, configOnly: t.evidence.every((e) => e.kind === "config") }));
+}
 
 function endpointLabel(id: string): string {
   // entryPoints[].id is '<file>:<funcName>' — show the function name.
@@ -16,12 +40,18 @@ function endpointLabel(id: string): string {
   return rest;
 }
 
+/** The card's width; buildSystemLayout spaces its columns by it. */
+export const SUBSYSTEM_CARD_W = 260;
+/** Tool chips shown before "+N more". */
+const MAX_TOOLS = 5;
+
 export function SubsystemNode({
   data,
 }: {
-  data: { subsystem: Subsystem; onOpenThread?: (entryPointId: string) => void };
+  data: { subsystem: Subsystem; onOpenThread?: (entryPointId: string) => void; stack?: StackIndexRecord | null };
 }) {
   const s = data.subsystem;
+  const tools = toolsFor(s, data.stack);
   const { accent, icon: Icon, quiet } = subsystemVisual(s.kind);
   const [expanded, setExpanded] = useState(false);
   const [hover, setHover] = useState(false);
@@ -40,8 +70,9 @@ export function SubsystemNode({
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
       style={{
-        minWidth: 200,
-        maxWidth: 260,
+        // A FIXED width: the layout spaces columns by it, so a card can never
+        // reach into the next column (overlap audit, reviews/overlaps).
+        width: SUBSYSTEM_CARD_W, boxSizing: "border-box",
         background: "var(--bg-node)",
         border: `1px solid color-mix(in oklab, ${a} ${hover ? 70 : 45}%, transparent)`,
         borderRadius: 14,
@@ -76,7 +107,7 @@ export function SubsystemNode({
           >
             {s.label}
           </div>
-          <SubLine subsystem={s} />
+          <SubLine subsystem={s} tools={tools} />
         </div>
         {expandable && (
           <button
@@ -92,6 +123,36 @@ export function SubsystemNode({
           </button>
         )}
       </div>
+
+      {/* M-STACK.3 — the tools behind this card, from the index (IR fact).
+          A config-only chip is marked: nothing was parsed for it. Their own
+          block under the header, each chip truncated to the card: in the
+          header row, a private production codebase's 40 long funnel names pushed the row past
+          the card and spilled across the next column. The first MAX_TOOLS
+          show; the rest are counted, and named in the tooltip. */}
+      {tools.length > 0 && (
+        <div data-subsystem-tools={s.id} style={{ display: "flex", gap: 4, flexWrap: "wrap", marginTop: 8, minWidth: 0 }}>
+          {tools.slice(0, MAX_TOOLS).map((t) => (
+            <span key={t.tool} data-subsystem-tool={t.tool}
+              title={t.configOnly
+                ? `${t.tool} — from a manifest/config file; no code was parsed for it`
+                : `${t.tool}${t.wraps?.length ? ` — the project funnel wrapping ${t.wraps.join(", ")}` : ""}`}
+              style={{
+                fontFamily: "var(--font-mono)", fontSize: "var(--fs-11)",
+                color: t.configOnly ? "var(--accent-warning)" : "var(--text-muted)",
+                border: `1px solid color-mix(in oklab, ${t.configOnly ? "var(--accent-warning)" : "var(--text-muted)"} 45%, transparent)`,
+                borderRadius: 4, padding: "0 5px",
+                maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+              }}>{t.tool}{t.configOnly ? " ?" : ""}</span>
+          ))}
+          {tools.length > MAX_TOOLS && (
+            <span data-subsystem-tools-more title={tools.slice(MAX_TOOLS).map((t) => t.tool).join("\n")}
+              style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-11)", color: "var(--text-muted)", padding: "0 5px" }}>
+              {`+${tools.length - MAX_TOOLS} more`}
+            </span>
+          )}
+        </div>
+      )}
 
       {expandable && expanded && (
         <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 4 }}>
@@ -121,7 +182,10 @@ export function SubsystemNode({
 }
 
 // Secondary line: framework / detection / file count, in --text-muted.
-function SubLine({ subsystem: s }: { subsystem: Subsystem }) {
+// M-STACK.3 — when the stack index names a tool for this card's role and
+// the tier's own framework string differs, BOTH are shown with their
+// provenance. A card must never silently swap one for the other.
+function SubLine({ subsystem: s, tools }: { subsystem: Subsystem; tools?: { tool: string }[] }) {
   let text: string | null = null;
   if (s.kind === "backend") {
     const parts: string[] = [];
@@ -139,9 +203,14 @@ function SubLine({ subsystem: s }: { subsystem: Subsystem }) {
   } else if (s.evidence) {
     text = evidenceLabel(s.evidence);
   }
+  const named = (tools ?? []).map((t) => t.tool);
+  if (named.length && s.framework && !named.some((n) => n.toLowerCase() === s.framework!.toLowerCase())) {
+    text = `${text ?? s.framework} (tier scan) · ${named.join(", ")} (imports/manifest)`;
+  }
   if (!text) return null;
   return (
     <div
+      data-subsystem-subline
       style={{
         fontFamily: "var(--font-ui)", fontSize: "var(--fs-11)",
         color: "var(--text-muted)", whiteSpace: "nowrap",

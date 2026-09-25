@@ -21,7 +21,7 @@ import { spawn } from "child_process";
 // test:compose-draft, which requires explicit extensions on relative imports.
 // esbuild (the server bundle) resolves them fine; tsc's TS5097 on these is the
 // same pre-existing noise as the other node-run backends.
-import { resolveClaudeBin } from "./run/synth_args.ts";
+import { resolveClaudeBin, spawnEnv } from "./run/synth_args.ts";
 import { extractFunctionSource } from "./intent_extract.ts";
 
 function buildPrompt(intent: string, anchorLabel: string | null): string {
@@ -49,14 +49,15 @@ export interface DraftResult {
 export function draftInsertion(intent: string, anchorLabel: string | null, cwd: string): Promise<DraftResult> {
   const prompt = buildPrompt(intent, anchorLabel);
   // Model tier: thinking — drafts code that lands on disk.
-  const { cmd, args: pre } = resolveClaudeBin("thinking");
+  const spawnTarget = resolveClaudeBin("thinking");
+  const { cmd, args: pre } = spawnTarget;
   return new Promise((resolve) => {
     const child = spawn(
       cmd,
       [...pre, "-p", "--output-format", "json", "--strict-mcp-config",
         "--mcp-config", '{"mcpServers":{}}',
         "--dangerously-skip-permissions", "--", prompt],
-      { cwd, env: { ...process.env } },
+      { cwd, env: spawnEnv(spawnTarget) },
     );
     child.stdin?.end(); // 6d pre-flight: no open pipe — claude -p otherwise waits 3s for stdin per draft
     let out = "";

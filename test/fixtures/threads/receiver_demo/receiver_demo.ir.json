@@ -271,6 +271,20 @@
         "preview": "0"
       },
       {
+        "id": "module/Engine.class/ignite.fn/range.call",
+        "type": "call",
+        "parentId": "module/Engine.class/ignite.fn",
+        "line": 16,
+        "endLine": 16,
+        "col": 17,
+        "endCol": 38,
+        "funcName": "range",
+        "args": [
+          "self.cylinders"
+        ],
+        "isEffect": false
+      },
+      {
         "id": "module/Engine.class/ignite.fn/for@0",
         "type": "for_loop",
         "parentId": "module/Engine.class/ignite.fn",
@@ -294,6 +308,20 @@
         "preview": "rpm + self.step_rpm(throttle)",
         "nestsInnerCalls": true,
         "nestExtracted": false
+      },
+      {
+        "id": "module/Engine.class/ignite.fn/for@0/self_step_rpm.call",
+        "type": "call",
+        "parentId": "module/Engine.class/ignite.fn/for@0",
+        "line": 17,
+        "endLine": 17,
+        "col": 24,
+        "endCol": 47,
+        "funcName": "self.step_rpm",
+        "args": [
+          "throttle"
+        ],
+        "isEffect": false
       },
       {
         "id": "module/Engine.class/ignite.fn/self_running.assign",
@@ -385,12 +413,22 @@
       },
       {
         "source": "module/Engine.class/ignite.fn",
+        "target": "module/Engine.class/ignite.fn/range.call",
+        "type": "contains"
+      },
+      {
+        "source": "module/Engine.class/ignite.fn",
         "target": "module/Engine.class/ignite.fn/for@0",
         "type": "contains"
       },
       {
         "source": "module/Engine.class/ignite.fn/for@0",
         "target": "module/Engine.class/ignite.fn/for@0/rpm.assign",
+        "type": "contains"
+      },
+      {
+        "source": "module/Engine.class/ignite.fn/for@0",
+        "target": "module/Engine.class/ignite.fn/for@0/self_step_rpm.call",
         "type": "contains"
       },
       {

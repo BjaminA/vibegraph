@@ -1,0 +1,9 @@
+{
+  "seeds": [
+    {
+      "file": "calc.py",
+      "irNodeId": "module/dispatch.fn",
+      "comment": "PLAN-M-RUNTIME phase 2 — `dispatch` is not auto-detected (no __main__ block, no route, no cross-file caller), and the Observe button lives in the THREAD tooltip, so the fixture needs a thread to open. Seeded rather than edited: test/mcp_observe_dynamic.test.mjs copies calc.py alone into a temp dir, so the file must stay byte-identical for the MCP half of this same feature."
+    }
+  ]
+}
