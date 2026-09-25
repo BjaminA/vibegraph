@@ -13,8 +13,24 @@
 // result(success) are intentionally ignored — `done` is emitted once at
 // the end of iteration.
 
-import { query } from "@anthropic-ai/claude-agent-sdk";
 import type { ChatBackend, ChatSession, ChatSessionInit, ChatEvent } from "./backend";
+
+// Loaded on FIRST USE, not at start-up (2026-09-25): this backend is chosen
+// only when ANTHROPIC_API_KEY is set, and the npm package that ships the app
+// (`vibegraph-knowledge view`) does not carry the SDK — an eager import made
+// every start-up require it. Missing, it fails the turn with how to fix it.
+type QueryFn = typeof import("@anthropic-ai/claude-agent-sdk").query;
+let loadedQuery: QueryFn | null = null;
+async function sdkQuery(): Promise<QueryFn> {
+  if (!loadedQuery) {
+    try {
+      loadedQuery = (await import("@anthropic-ai/claude-agent-sdk")).query;
+    } catch {
+      throw new Error("ANTHROPIC_API_KEY is set, which selects the Agent SDK chat, but @anthropic-ai/claude-agent-sdk is not installed. Install it (npm install -g @anthropic-ai/claude-agent-sdk) or unset ANTHROPIC_API_KEY to chat through your logged-in claude CLI.");
+    }
+  }
+  return loadedQuery;
+}
 
 const MCP_TOOL_PREFIX = "mcp__vibegraph__";
 
@@ -75,6 +91,7 @@ export class AgentSDKBackend implements ChatBackend {
   private async *run(prompt: string, init: ChatSessionInit): AsyncIterable<ChatEvent> {
     let errored = false;
     try {
+      const query = await sdkQuery();
       const iterator = query({
         prompt,
         options: {

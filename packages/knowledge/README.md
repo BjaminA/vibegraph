@@ -1,7 +1,20 @@
 # vibegraph-knowledge
 
-What [VibeGraph](https://github.com/BjaminA/vibegraph) derives from a
-codebase, and what the people who run it have stated about it, written to
+[VibeGraph](https://github.com/BjaminA/vibegraph) from npm, both halves:
+
+```
+npm install -g vibegraph-knowledge
+vibegraph-knowledge view /path/to/project     # the visualisation at http://localhost:4200
+vibegraph-knowledge init && vibegraph-knowledge export     # the knowledge, for Claude Code
+```
+
+**`view`** starts the web app — the architecture map, threads traced across
+files and languages, running code to a node, editing through a chokepoint
+that refuses changes outside the node, rules, skills and agents. The walkthrough
+is [docs/guide/VISUALISATION.md](https://github.com/BjaminA/vibegraph/blob/main/docs/guide/VISUALISATION.md).
+
+**The knowledge commands** write what VibeGraph derives from a
+codebase, and what the people who run it have stated about it, to
 disk for a Claude that has no VibeGraph. Zero tokens by default: nothing
 `init`, `export`, `check`, `constraints` or `seeds` writes comes from a model.
 Three things do spend tokens — `classify`, `architecture --propose/--modify`

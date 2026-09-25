@@ -78,3 +78,22 @@ export function resolvePython(loc, { log = () => {} } = {}) {
   if (!v) throw new Error(`${PACKAGE_NAME}: libcst was installed into ${ownDeps} but ${firstBin} still cannot import it.`);
   return { bin: firstBin, env, libcst: v, how: ownDeps };
 }
+
+// 2026-09-25 — `view` (the visualisation) also EDITS, and every edit is
+// formatted by black (>= 24 for --line-ranges; see the repo requirements).
+// The read-only commands never need it, so it is provisioned only here, into
+// the same directory as libcst. A black that cannot be installed is a
+// warning, not a failure: everything but editing still works, and the edit
+// path itself fails loudly rather than writing unformatted code.
+const BLACK_PROBE = "import black, sys\nmajor = int(black.__version__.split('.')[0])\nsys.exit(0 if major >= 24 else 1)";
+
+export function ensureBlack(py, loc, { log = () => {} } = {}) {
+  if (spawnSync(py.bin, ["-c", BLACK_PROBE], { env: py.env }).status === 0) return { ok: true, env: py.env };
+  const ownDeps = loc.mode === "dev" ? join(loc.repoRoot, ".pydeps") : join(cacheDir(), "pydeps");
+  log(`black >= 24 not found for ${py.bin}; installing into ${ownDeps} (one time) — edits are formatted with it`);
+  mkdirSync(ownDeps, { recursive: true });
+  const pip = spawnSync(py.bin, ["-m", "pip", "install", "--quiet", "--target", ownDeps, "--upgrade", "black>=24"], { encoding: "utf-8", stdio: ["ignore", "inherit", "inherit"] });
+  const env = withPath(ownDeps);
+  if (pip.status === 0 && spawnSync(py.bin, ["-c", BLACK_PROBE], { env }).status === 0) return { ok: true, env };
+  return { ok: false, env: py.env, error: `could not install black >= 24: editing will be refused until it is importable (${py.bin} -m pip install --target "${ownDeps}" "black>=24")` };
+}

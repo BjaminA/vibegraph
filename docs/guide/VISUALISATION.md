@@ -3,17 +3,20 @@
 Set-up is in [SETUP.md](SETUP.md). This page assumes you can run:
 
 ```bash
-./runVis.sh /path/to/your/project
+npm install -g vibegraph-knowledge            # once
+vibegraph-knowledge view /path/to/your/project
 ```
 
-and open <http://localhost:4200>.
+and open <http://localhost:4200>. (From a VibeGraph clone, `./runVis.sh
+/path/to/your/project` starts the same app built from source.)
 
 ---
 
 ## 1. What happens when it starts
 
-`runVis.sh` installs the Python packages on first use, rebuilds the web app if
-the source is newer than the build, then starts one Node process that:
+`view` makes sure Python can import `libcst` and `black` (installing them into
+`~/.cache/vibegraph-knowledge` the first time), then starts one Node process
+that:
 
 1. **parses every supported file** (Python, TypeScript, bash, C++, Rust — see
    [SETUP.md §5](SETUP.md#5-what-vibegraph-reads)) into an IR;
@@ -209,7 +212,7 @@ is the blast radius of changing `normalize`?"*, *"state a constraint that…"*,
 
 ## 10. A good first session on your own code
 
-1. `./runVis.sh your-project`, open the map, switch to **Bird's-eye**.
+1. `vibegraph-knowledge view your-project`, open the map, switch to **Bird's-eye**.
 2. **Propose groups**, read what it cites, **Ratify** or **Modify**.
 3. Open the busiest process's threads; follow one end to end.
 4. Hover a few `dynamic` calls; **Observe** or **trace** where it matters.

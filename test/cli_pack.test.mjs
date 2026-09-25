@@ -20,7 +20,7 @@ import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, 
 import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { buildPackage, PYTHON_SCRIPTS } from "../scripts/cli/build.mjs";
+import { buildPackage, PYTHON_SCRIPTS, APP_PYTHON_SCRIPTS } from "../scripts/cli/build.mjs";
 import { exportKnowledge } from "../scripts/export_knowledge.mjs";
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -44,6 +44,38 @@ function walk(dir, base = dir) {
   }
   return out.sort();
 }
+
+// 2026-09-25 — `view`: the visualisation from the same package. Started from
+// the unpacked tarball on a copy of a fixture: it must serve the app, parse
+// the project, and take its server down with it when stopped.
+test("view: the packed visualisation serves the app on a project, and stops its server when stopped", async () => {
+  const { spawn } = await import("node:child_process");
+  const proj = join(tmp, "view-proj");
+  cpSync(join(ROOT, "test", "fixtures", "polyglot", "shop_demo"), proj, { recursive: true });
+  const port = String(4450 + Math.floor(Math.random() * 40));
+  const env = { ...process.env, VIBEGRAPH_PYDEPS: join(ROOT, ".pydeps"), VIBEGRAPH_KNOWLEDGE_HOME: join(tmp, "home"), PORT: port };
+  delete env.PYTHONPATH;
+  const child = spawn(process.execPath, [cli, "view", proj, "--port", port], { cwd: tmp, env });
+  let out = "";
+  child.stdout.on("data", (b) => { out += b; });
+  child.stderr.on("data", (b) => { out += b; });
+  try {
+    const t0 = Date.now();
+    while (!/VibeGraph is running/.test(out) && Date.now() - t0 < 120_000) await new Promise((r) => setTimeout(r, 500));
+    assert.match(out, /VibeGraph is running/, out.slice(-2000));
+    assert.match(out, /source files: .*Python/, "the project was parsed");
+    const html = await (await fetch(`http://127.0.0.1:${port}/`)).text();
+    assert.match(html, /<!DOCTYPE html>/i);
+    const js = await fetch(`http://127.0.0.1:${port}/webview.js`);
+    assert.equal(js.status, 200, "the web app bundle is served from the package");
+  } finally {
+    child.kill("SIGTERM");
+    await new Promise((r) => child.on("exit", r));
+  }
+  await new Promise((r) => setTimeout(r, 1000));
+  const still = await fetch(`http://127.0.0.1:${port}/`).then(() => true, () => false);
+  assert.equal(still, false, "stopping view stopped its server");
+});
 
 before(async () => {
   await buildPackage({ quiet: true });
@@ -73,6 +105,15 @@ test("the tarball ships the bundle, the python scripts, the frontends and gramma
     assert.ok(files.includes(f), `tarball has ${f}`);
   }
   for (const py of PYTHON_SCRIPTS) assert.ok(files.includes(`vendor/scripts/${py}`), `tarball has ${py}`);
+  // The visualisation: the server and web app bundles, the scripts only the
+  // app spawns, the bundled Ollama shim, the generic skills.
+  for (const f of ["vendor/dist/server.js", "vendor/dist/webview.js", "vendor/dist/webview.css", "vendor/dist/package.json",
+    "vendor/scripts/trace_bash.mjs", "vendor/scripts/vg_ollama_shim.mjs"]) {
+    assert.ok(files.includes(f), `tarball has ${f}`);
+  }
+  for (const py of APP_PYTHON_SCRIPTS) assert.ok(files.includes(`vendor/scripts/${py}`), `tarball has ${py}`);
+  assert.ok(files.some((f) => f.startsWith("vendor/dist/fonts/")), "the fonts ship");
+  assert.ok(files.some((f) => f.startsWith("vendor/skills/")), "the generic skills ship");
   for (const f of files) {
     assert.ok(!/^(test|examples|reviews|src|scripts|node_modules)\//.test(f), `tarball must not ship ${f}`);
     assert.ok(!f.endsWith(".map"), `no source maps: ${f}`);

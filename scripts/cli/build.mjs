@@ -15,7 +15,7 @@
 // is the package's one npm dependency. Nothing here is committed; run
 // `npm run build:cli` (test:cli-pack does) before `npm pack`.
 import * as esbuild from "esbuild";
-import { chmodSync, copyFileSync, cpSync, existsSync, mkdirSync, rmSync, statSync } from "node:fs";
+import { chmodSync, copyFileSync, cpSync, existsSync, mkdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -29,6 +29,17 @@ export const PYTHON_SCRIPTS = ["parse_cst.py", "cross_file_link.py", "discover_e
 /** M-FLOW.2 — Node scripts at scripts/ root the pipeline spawns (the
  *  frontends under scripts/frontends/ are copied whole, below). */
 export const NODE_SCRIPTS = ["discover_project.mjs"];
+
+/** 2026-09-25 — `view`, the VISUALISATION, ships in the same package. The
+ *  server finds everything relative to its own file (server.ts PROJECT_ROOT =
+ *  dist/..), so its bundle goes to vendor/dist/ and it reads vendor/scripts
+ *  and vendor/skills — the parser scripts above are shared, not duplicated.
+ *  These are the scripts only the app spawns (runs, edits, traces, placement). */
+export const APP_PYTHON_SCRIPTS = [
+  "cst_rewrite.py", "scan_effects.py", "check_literals.py", "check_project_deps.py", "run_block.py",
+  "run_to_node.py", "trace_run.py", "place_intent.py", "resolve_external_callable.py",
+];
+export const APP_NODE_SCRIPTS = ["trace_bash.mjs"];
 
 export async function buildPackage({ quiet = false } = {}) {
   rmSync(join(PKG, "dist"), { recursive: true, force: true });
@@ -62,6 +73,28 @@ export async function buildPackage({ quiet = false } = {}) {
   });
   copyFileSync(join(ROOT, "LICENSE"), join(PKG, "LICENSE"));
 
+  // The visualisation: the same two esbuild configs `npm run build` uses,
+  // written to vendor/dist without source maps.
+  const { serverConfig, webviewConfig } = await import(join(ROOT, "esbuild.mjs"));
+  const APP = join(PKG, "vendor", "dist");
+  await esbuild.build({ ...serverConfig, entryPoints: [join(ROOT, "server.ts")], outfile: join(APP, "server.js"), sourcemap: false, logLevel: quiet ? "error" : "warning" });
+  await esbuild.build({ ...webviewConfig, entryPoints: [join(ROOT, "src", "webview", "index.tsx")], outfile: join(APP, "webview.js"), sourcemap: false, logLevel: quiet ? "error" : "warning" });
+  // The package is "type": "module" (the CLI is ESM); the server bundle is
+  // CommonJS. Without this marker Node reads server.js as ESM and it dies on
+  // `module.exports` (found on the first packed install).
+  writeFileSync(join(APP, "package.json"), JSON.stringify({ type: "commonjs" }) + "\n");
+  for (const f of APP_PYTHON_SCRIPTS) copyFileSync(join(ROOT, "scripts", f), join(VENDOR, f));
+  for (const f of APP_NODE_SCRIPTS) copyFileSync(join(ROOT, "scripts", f), join(VENDOR, f));
+  // The Ollama shim imports the MCP SDK, which the package does not install:
+  // bundled, it needs nothing but Node.
+  await esbuild.build({
+    entryPoints: [join(ROOT, "scripts", "vg_ollama_shim.mjs")], bundle: true, format: "esm", platform: "node", target: "node20",
+    outfile: join(VENDOR, "vg_ollama_shim.mjs"),
+    banner: { js: "import { createRequire as __vgCreateRequire } from 'node:module'; const require = __vgCreateRequire(import.meta.url);" },
+    logLevel: quiet ? "error" : "warning",
+  });
+  cpSync(join(ROOT, "skills"), join(PKG, "vendor", "skills"), { recursive: true });
+
   const bundleBytes = statSync(outfile).size;
   if (!quiet) {
     const inputs = Object.entries(result.metafile.outputs[relative(ROOT, outfile).split("\\").join("/")]?.inputs ?? {})
@@ -69,6 +102,7 @@ export async function buildPackage({ quiet = false } = {}) {
       .map(([f, m]) => `    ${f} ${(m.bytesInOutput / 1024).toFixed(0)} KB`);
     console.log(`built ${relative(ROOT, outfile)} (${(bundleBytes / 1024).toFixed(0)} KB); largest inputs:\n${inputs.join("\n")}`);
     console.log(`vendored ${PYTHON_SCRIPTS.length} python scripts + scripts/frontends → ${relative(ROOT, VENDOR)}`);
+    console.log(`vendored the visualisation (server + web app, ${APP_PYTHON_SCRIPTS.length} more python scripts, skills) → ${relative(ROOT, join(PKG, "vendor"))}`);
   }
   return { outfile, bundleBytes, vendor: VENDOR, pkg: PKG };
 }

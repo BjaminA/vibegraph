@@ -29,48 +29,52 @@ same knowledge is exported as plain files a Claude Code session reads first.
 | **[docs/guide/VISUALISATION.md](docs/guide/VISUALISATION.md)** | Using the web app on your codebase: the architecture map and its lenses, threads, running code, editing, rules, skills, agents, MCP. |
 | **[docs/guide/CLI.md](docs/guide/CLI.md)** | The node commands (`vibegraph-knowledge`): every command, what it writes, what costs tokens, a team workflow. |
 
-### The node way — one install, no clone
-
-[`vibegraph-knowledge`](https://www.npmjs.com/package/vibegraph-knowledge) on
-npm (also installed as `vgk`) derives everything from your code and writes it
-where Claude Code reads it:
+### Install — one npm package, no clone
 
 ```bash
-npm install -g vibegraph-knowledge
+npm install -g vibegraph-knowledge          # also installed as `vgk`
+```
 
+You need **Node 20+** and **Python 3.10+** (`python3` on your PATH). The first
+run installs the Python parser and formatter (`libcst`, `black`) into
+`~/.cache/vibegraph-knowledge` by itself. **Claude Code** (`claude`, logged in)
+is optional: chat, drafting and proposals need it; everything deterministic
+works without it. On Windows, use WSL2.
+
+### See it — the visualisation
+
+```bash
+vibegraph-knowledge view /path/to/your/project     # then open http://localhost:4200
+vibegraph-knowledge view . --open                  # or open the browser for you
+```
+
+Ctrl-C stops it. The architecture map, threads across files, running code to
+a node, editing through the chokepoint, rules, skills and agents — walked
+through in [docs/guide/VISUALISATION.md](docs/guide/VISUALISATION.md).
+
+### Hand it to Claude — the knowledge commands
+
+```bash
 cd /path/to/your/project
 vibegraph-knowledge init                     # point CLAUDE.md at .vibegraph/knowledge/
 vibegraph-knowledge export                   # the architecture map, one contract per thread, the rules
 vibegraph-knowledge constraints add --kind invariant --all \
   --text "Every outbound HTTP call goes through lib/http_client.py: it routes via the egress proxy."
 vibegraph-knowledge check                    # verify the stated rules against the code
-vibegraph-knowledge architecture             # the system map as .md, .json and a self-contained .html
 ```
 
 Then open Claude Code in the project as usual: `CLAUDE.md` now tells it to
-read the knowledge first. It needs Node 20+ and Python 3.10+ on your PATH;
-the first `export` installs the Python parser (`libcst`) into
-`~/.cache/vibegraph-knowledge` by itself.
-Every command, and which three spend tokens: [docs/guide/CLI.md](docs/guide/CLI.md).
+read the knowledge first. Both halves share `.vibegraph/` in your project, so a
+rule stated in the browser is what `export` hands to Claude. Every command, and
+which three spend tokens: [docs/guide/CLI.md](docs/guide/CLI.md).
 
-### The visualisation — from a clone
-
-The browser app is not on npm yet; run it from a clone:
+### From a clone (to work on VibeGraph itself)
 
 ```bash
 git clone https://github.com/BjaminA/vibegraph.git
-cd vibegraph
-npm install
-./runVis.sh /path/to/your/project            # then open http://localhost:4200
+cd vibegraph && npm install
+./runVis.sh /path/to/your/project            # the same app, built from source
 ```
-
-The first launch installs `libcst` and `black` into `vibegraph/.pydeps/` and
-builds the app (about a minute). Walkthrough:
-[docs/guide/VISUALISATION.md](docs/guide/VISUALISATION.md).
-
-You need Node 20+ and Python 3.10+ (and git for the clone). Claude Code
-(`claude`, logged in) is optional: everything deterministic works without it.
-On Windows, use WSL2.
 
 ## What it is
 

@@ -1,8 +1,11 @@
 import * as esbuild from "esbuild";
+import { fileURLToPath } from "node:url";
 
 const isWatch = process.argv.includes("--watch");
 
-const serverConfig = {
+// Exported: the npm package build (scripts/cli/build.mjs) reuses both configs
+// with its own output directory, so the shipped app is built exactly as here.
+export const serverConfig = {
   entryPoints: ["server.ts"],
   bundle: true,
   outfile: "dist/server.js",
@@ -17,7 +20,7 @@ const serverConfig = {
   external: ["@anthropic-ai/claude-agent-sdk"],
 };
 
-const webviewConfig = {
+export const webviewConfig = {
   entryPoints: ["src/webview/index.tsx"],
   bundle: true,
   outfile: "dist/webview.js",
@@ -50,7 +53,9 @@ async function build() {
   }
 }
 
-build().catch((e) => {
-  console.error(e);
-  process.exit(1);
-});
+if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
+  build().catch((e) => {
+    console.error(e);
+    process.exit(1);
+  });
+}

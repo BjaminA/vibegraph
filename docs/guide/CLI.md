@@ -3,9 +3,10 @@
 `vibegraph-knowledge` (also installed as `vgk`) writes what VibeGraph derives
 from your code, and what you and your team have stated about it, into
 `.vibegraph/knowledge/` — plain files a Claude Code session reads before it
-edits. It also verifies your stated rules against the code. It needs no
-browser, no server, and — apart from three clearly marked commands — no
-model calls.
+edits. It also verifies your stated rules against the code. These commands
+need no browser, no server, and — apart from three clearly marked ones — no
+model calls. The same package also runs the **visualisation**:
+`vibegraph-knowledge view <project>` (see [`view`](#view--the-visualisation)).
 
 Why it exists: in measured head-to-head runs, a plain Claude session that
 could read the project's **stated rules** wrote code that kept them, and one
@@ -49,6 +50,21 @@ Every command takes the project root as a positional argument (it can come
 last; the default is the current directory). Exit code 0 is success, 1 means
 something was found or refused (the output says what), 2 is bad usage, 3 means
 a model could not be run.
+
+### `view` — the visualisation
+
+```bash
+vibegraph-knowledge view [<path>] [--port <n>] [--open]
+```
+
+Starts the web app on a project (or one file) and serves it at
+<http://localhost:4200> until `Ctrl-C`. The same app `./runVis.sh` builds
+from a clone, shipped prebuilt in this package. The first run installs
+`libcst` and `black` 24+ into `~/.cache/vibegraph-knowledge`; `python3` must be
+on your PATH. `--open` opens your browser once it is ready; `--port` (or
+`PORT`) moves it. The server binds `127.0.0.1` only. What you can do in it:
+[VISUALISATION.md](VISUALISATION.md). Zero tokens until you use a Claude
+feature in the app.
 
 ### `init` — point Claude at the knowledge
 

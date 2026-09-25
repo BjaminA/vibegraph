@@ -25,10 +25,12 @@ import { runArchitecture } from "./architecture.mjs";
 import { CONSTRAINTS_USAGE, runConstraints } from "./constraints.mjs";
 import { SEEDS_USAGE, runSeeds } from "./seeds.mjs";
 import { SKILLS_USAGE, runSkills } from "./skills.mjs";
+import { VIEW_USAGE, runView } from "./view.mjs";
 
 const USAGE = `${PACKAGE_NAME} — what VibeGraph derives from a codebase and what its operators stated, on disk for a plain Claude.
 
 usage:
+  ${PACKAGE_NAME} ${VIEW_USAGE}
   ${PACKAGE_NAME} export [<root>] [options]     write .vibegraph/knowledge/ under <root> (default: cwd)
       --task "<text>"      also write plan.md: the task mapped onto the threads that own it
                            (matching is lexical: name the files, symbols or node ids it touches)
@@ -311,10 +313,19 @@ async function cmdSkills(args) {
   return report(await runSkills({ root, sub, targets: rest, values: parsed.values, envelope: parsed.values.envelope, pipeline }));
 }
 
+function cmdView(args) {
+  let parsed;
+  try { parsed = parseArgs({ args, allowPositionals: true, options: { port: { type: "string" }, open: { type: "boolean" } } }); }
+  catch (e) { return fail(`${e.message}\n\n${USAGE}`); }
+  if (parsed.values.port && !/^\d{2,5}$/.test(parsed.values.port)) return fail("--port must be a number");
+  return runView({ loc: locate(), target: parsed.positionals[0], port: parsed.values.port, open: parsed.values.open === true });
+}
+
 export function main(argv) {
   const [command, ...rest] = argv;
   if (!command || command === "--help" || command === "-h" || command === "help") { process.stdout.write(USAGE); return 0; }
   if (command === "--version" || command === "-v" || command === "version") { process.stdout.write(`${toolLabel(locate())}\n`); return 0; }
+  if (command === "view") return cmdView(rest);
   if (command === "export") return cmdExport(rest);
   if (command === "check") return cmdCheck(rest);
   if (command === "init") return cmdInit(rest);
