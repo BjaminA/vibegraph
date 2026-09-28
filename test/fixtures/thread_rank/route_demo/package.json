@@ -1,0 +1,9 @@
+{
+  "name": "route-demo",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "next": "15.0.0",
+    "openai": "4.60.0"
+  }
+}

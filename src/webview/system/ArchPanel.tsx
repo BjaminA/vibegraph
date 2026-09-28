@@ -155,9 +155,19 @@ export function ArchProposalBar({ model, state, onAction }: {
   };
   const why = p ? [p.narrative ?? "", ...p.refused.map((r) => `refused ${r.item}: ${r.reason}`)].filter(Boolean).join("\n") : "";
   return (
-    <div data-arch-proposal-bar data-arch-proposal-state={state.busy ? "busy" : p ? "pending" : "none"}
+    <div data-arch-proposal-bar data-arch-proposal-state={state.busy ? "busy" : p ? "pending" : model.ratified ? "ratified" : "none"}
       style={{ ...panel, position: "absolute", top: "max(128px, calc(var(--vg-toolbar-bottom, 43px) + 52px))", left: 250, zIndex: 30, display: "flex", alignItems: "center", gap: 8, padding: 4, maxWidth: 640 }}>
-      {!p && (
+      {/* Ratified groups are settled: no button spawns another proposal
+          (the server's proposalGate refuses it too). Re-proposing is a
+          deliberate act — the CLI's --force, or editing the file. */}
+      {!p && model.ratified && !state.busy && (
+        <span data-arch-ratified title={`To draft again: vibegraph-knowledge architecture --propose --force, or edit .vibegraph/architecture.json`}
+          style={{ display: "flex", alignItems: "center", gap: 4, padding: "4px 8px", color: "var(--text-muted)" }}>
+          <Check size={16} strokeWidth={1.5} />
+          {`groups ratified from ${model.ratified.model}${model.ratified.at ? ` · ${model.ratified.at.slice(0, 10)}` : ""}`}
+        </span>
+      )}
+      {!p && (!model.ratified || state.busy) && (
         <button data-arch-propose disabled={state.busy || !onAction} onClick={() => onAction?.("propose")} style={btn}
           title="Ask a model for deployment / trust groups, names and a primary path — every item must cite a manifest line, a doc line or a node; spends tokens; nothing applies until you ratify">
           <Sparkles size={16} strokeWidth={1.5} />{state.busy ? "Proposing…" : "Propose groups"}

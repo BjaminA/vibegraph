@@ -268,6 +268,14 @@ test.describe("M-ARCH — the architecture map", () => {
       await expect(insp.locator("[data-arch-group-evidence]")).not.toContainText("k8s/db.yaml");
       await insp.locator("[data-arch-inspector-close]").click();
 
+      // Reject drops the draft and leaves the button: a rejected proposal can
+      // be asked for again (only a RATIFIED one settles the groups).
+      await bar.locator("[data-arch-reject]").click();
+      await expect(bar).toHaveAttribute("data-arch-proposal-state", "none", { timeout: 15_000 });
+      await expect(page.locator('[data-arch-group][data-arch-group-source="proposed"]')).toHaveCount(0);
+      await page.locator("[data-arch-propose]").click();
+      await expect(bar).toHaveAttribute("data-arch-proposal-state", "pending", { timeout: 30_000 });
+
       // Modify — the person's words go back to the model; the same grounding
       // applies, and the revision is visibly a revision (the stub marks it).
       await bar.locator("[data-arch-modify]").click();
@@ -280,9 +288,14 @@ test.describe("M-ARCH — the architecture map", () => {
       // Ratify — the human's act; the file now holds them as stated.
       await bar.locator("[data-arch-ratify]").click();
       await expect(page.locator('[data-arch-group="g-public"]')).toHaveAttribute("data-arch-group-source", "stated", { timeout: 15_000 });
-      await expect(bar).toHaveAttribute("data-arch-proposal-state", "none");
+      // Ratified groups are settled: the bar says so, and there is no button
+      // that would spawn another proposal (2026-09-28).
+      await expect(bar).toHaveAttribute("data-arch-proposal-state", "ratified");
+      await expect(bar.locator("[data-arch-ratified]")).toContainText("groups ratified from");
+      await expect(page.locator("[data-arch-propose]")).toHaveCount(0);
       const stored = JSON.parse(readFileSync(STORE, "utf-8"));
       assert(stored.proposal === undefined, "ratify clears the pending proposal");
+      assert(typeof stored.ratified?.at === "string" && typeof stored.ratified?.model === "string", "ratify records the flag");
       const page_md = readFileSync(join(KNOWLEDGE, "architecture.md"), "utf-8");
       assert(page_md.includes("**public network (revised)** (network) — **stated**"), "the exported page follows the ratification");
       assert(!existsSync(join(KNOWLEDGE, "architecture.vibegraph.json")), "a refresh rewrites what was exported, never adds to it");
@@ -303,14 +316,12 @@ test.describe("M-ARCH — the architecture map", () => {
       await page.screenshot({ path: join(REVIEW_DIR, "story.png") });
       await story.locator("[data-arch-trace-clear]").click();
       await page.locator('[data-arch-lens="trust"]').click();
-
-      // Propose again, then reject: the proposal goes, the stated half stays.
-      await page.locator("[data-arch-propose]").click();
-      await expect(bar).toHaveAttribute("data-arch-proposal-state", "pending", { timeout: 30_000 });
-      await bar.locator("[data-arch-reject]").click();
-      await expect(bar).toHaveAttribute("data-arch-proposal-state", "none", { timeout: 15_000 });
-      await expect(page.locator('[data-arch-group][data-arch-group-source="proposed"]')).toHaveCount(0);
       await expect(page.locator('[data-arch-group][data-arch-group-source="stated"]')).toHaveCount(3);
+
+      // A reload still knows: the flag lives in the file, not the page.
+      await openMap(page);
+      await expect(page.locator("[data-arch-proposal-bar]")).toHaveAttribute("data-arch-proposal-state", "ratified");
+      await expect(page.locator("[data-arch-propose]")).toHaveCount(0);
     } finally {
       clearStore();
     }

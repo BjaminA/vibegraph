@@ -18,7 +18,7 @@ import { planWork } from "./src/server/plan_work";
 import { buildStackIndex, contractStackForFile, stackForThread, stackCalledOnThread, toolsAddedByDelta, type StackIndex } from "./src/server/stack";
 import { buildCrossingIndex, type CrossingIndex } from "./src/server/crossings";
 import { archModelForEnvelope } from "./src/server/arch_envelope";
-import { applyArchStore, loadArchStore, saveArchStore, ratifyProposal, rejectProposal } from "./src/server/arch_store";
+import { applyArchStore, loadArchStore, saveArchStore, ratifyProposal, rejectProposal, proposalGate } from "./src/server/arch_store";
 import { buildProposePrompt, docExcerpts, parseProposal } from "./src/server/arch_propose";
 import { readInfraManifests } from "./src/server/infra_manifests";
 import { readManualSeeds } from "./src/server/manual_seeds";
@@ -311,9 +311,13 @@ async function archProposeCore(guidance?: string): Promise<{ ok: boolean; error?
   const docs = docExcerpts(inputPath, latestArchDerived);
   // Modify (the M-GF3 gate): a revision re-drafts the PENDING proposal with
   // the person's words; the same grounding floor applies to what comes back.
-  const pending = loadArchStore(inputPath).proposal;
+  // One gate for every caller (arch_store proposalGate): a pending draft is
+  // only revised, and ratified groups are never re-proposed unasked.
+  const current = loadArchStore(inputPath);
+  const pending = current.proposal;
   const g = typeof guidance === "string" ? guidance.trim() : "";
-  if (g && !pending) return { ok: false, error: "there is no pending proposal to modify" };
+  const gate = proposalGate(current, { modify: !!g });
+  if (!gate.allowed) return { ok: false, error: gate.reason };
   const prompt = buildProposePrompt(latestArchDerived, facts, docs, g && pending ? { previous: pending, guidance: g } : undefined);
   const text = await _runReadmeLlm(prompt, "thinking", "gen");
   if (text === null) return { ok: false, error: `the model returned nothing${genFailureSuffix()}` };
@@ -8143,6 +8147,12 @@ tryListen();
 // suites pin "index" (playwright.config.ts); anything else is refused to the
 // default rather than trusted into the page.
 const START_VIEW = process.env.VG_START_VIEW === "index" ? "index" : "architecture";
+// Thread ranks (2026-09-25): which nodes a thread draws before the user picks
+// — primary by default. The e2e suites pin "all" (their assertions predate
+// ranks); a user's own choice, once made, is remembered by the page.
+const THREAD_RANK = ["all", "secondary"].includes(process.env.VG_THREAD_RANK ?? "")
+  ? process.env.VG_THREAD_RANK!
+  : "primary";
 
 function getIndexHtml(): string {
   return `<!DOCTYPE html>
@@ -8158,6 +8168,7 @@ function getIndexHtml(): string {
     body { background: hsl(222 18% 7%); }
   </style>
   <meta name="vg-start-view" content="${START_VIEW}">
+  <meta name="vg-thread-rank" content="${THREAD_RANK}">
 </head>
 <body>
   ${bootMarkup()}

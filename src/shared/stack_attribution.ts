@@ -79,6 +79,11 @@ export interface LocalBinding {
   name: string;
   valueKind: string;
   callTarget?: string;
+  /** 2026-09-25 — the call CONSTRUCTED the value (`new OpenAI(…)` in JS/TS,
+   *  a Capitalised class call in Python). A constructed client and a call's
+   *  RESULT are different objects: `openai.chat.completions.create` crosses
+   *  the network, `res.json()` after `res = fetch()` parses a body. */
+  constructed?: true;
 }
 
 /** One boundary to attribute. Everything here is already on the thread
@@ -131,6 +136,11 @@ export type AttributionHow =
   // not a boundary at all) or a call whose callee attributes (`conn =
   // sqlite3.connect(...)`, so `conn.execute` really is sqlite3).
   | "local-literal" | "local-binding"
+  // 2026-09-25 - the receiver is a CLIENT the file constructed from a tool
+  // whose every method is a round trip (`openai = new OpenAI()`, then
+  // `openai.chat.completions.create`). The one local binding that derives an
+  // effect: see CLIENT_ROLES.
+  | "client-instance"
   // M-RESOLVE.3 - the receiver is a route handler's framework-provided
   // parameter (`res` in an express handler), matched by POSITION.
   | "handler-param";
@@ -215,6 +225,23 @@ function headOf(label: string, language?: string): string {
 }
 
 const IDENT = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
+
+/** `createHash("sha256")` → `createHash`: a receiver that is the RESULT of
+ *  calling a plain name. Null for anything else. */
+function calledName(head: string): string | null {
+  const m = /^([A-Za-z_$][A-Za-z0-9_$]*)\(.*\)$/s.exec(head);
+  return m ? m[1] : null;
+}
+
+/** Roles whose CLIENT OBJECT does nothing but cross a boundary: a constructed
+ *  `OpenAI` / `Pool` / `requests.Session` is a handle on the remote side, so a
+ *  method on it is a round trip, not local work. Not `runtime`, `data`,
+ *  `frontend`, … — their objects are local. */
+const CLIENT_ROLES = new Set(["model-api", "http-client", "db", "platform"]);
+
+/** Methods that attach a listener rather than call the remote side. On a
+ *  client (`pool.on("error", …)`) these are wiring, not round trips. */
+const WIRING_METHODS = /\.(on|once|off|addListener|removeListener|removeAllListeners|emit)$/;
 
 /** `module:Sym.method` (the IR's cross-file form) and `a.b.c` alike →
  *  the dotted root the taxonomy keys on. A target carrying a path
@@ -389,6 +416,22 @@ export function attributeBoundary(input: BoundaryInput): Attribution | null {
     }
   }
 
+  // 4-ii. 2026-09-25 - the receiver is the RESULT of calling an imported
+  //     name: `createHash("sha256").update(der)`. The head is not an
+  //     identifier, so rule 4 could not see it, and inside a funnel file the
+  //     call fell to rule 6 and read as the funnel's own tool (a hash digest
+  //     reported as "inside the fetch funnel"). The object came from that
+  //     import, which is the same claim - and the same weakness - as a local
+  //     binding: it says what the object IS, never that the call crosses.
+  {
+    const fn = calledName(head);
+    const binding = fn ? imports.find((b) => b.binding === fn) : undefined;
+    if (binding && !binding.project) {
+      const a = classified(language, toolNameFor(language, binding.spec), "local-binding", stack);
+      if (a) return decorate(a);
+    }
+  }
+
   // 4b. M-RESOLVE - the receiver is a LOCAL, and the file says what it
   //     was bound from. Two shapes, and they are different claims:
   //       * a LITERAL (`problems = []`) - the call is list/dict work, so
@@ -425,7 +468,14 @@ export function attributeBoundary(input: BoundaryInput): Attribution | null {
               return { tool: via.tool, role: "builtin", origin: "language", how: "local-literal" };
             }
             if (via && via.how !== "funnel-file" && !via.projectModule) {
-              return decorate({ ...via, how: "local-binding" });
+              // A CLIENT the file constructed from a strongly attributed
+              // tool (the constructor resolved through an import or the
+              // linker, never another local or a funnel).
+              const client = bound.every((b) => b.constructed)
+                && CLIENT_ROLES.has(via.role)
+                && (via.how === "binding" || via.how === "qualified" || via.how === "global")
+                && !WIRING_METHODS.test(label);
+              return decorate({ ...via, how: client ? "client-instance" : "local-binding" });
             }
           }
         }
@@ -614,6 +664,9 @@ export function effectFromRole(a: Attribution | null | undefined): string | null
   // `fetch()` says what the OBJECT is, not that `res.json()` crosses the
   // network; deriving http there is the same fabricated N+1 the funnel
   // rule already refuses.
+  //   The exception is `client-instance`: a constructed client of a
+  //   CLIENT_ROLES tool is a handle on the remote side, so its methods are
+  //   the round trips (it falls through to the role table below).
   if (a.how === "local-binding" || a.how === "local-literal") return null;
   // M-RESOLVE.2 - a runtime call's effect is the one the parser already
   // stamped (`open` is fs). Deriving one from role "runtime" would say
@@ -660,7 +713,10 @@ export function attributionLabel(a: Attribution): string {
  * this is only a projection of them. Shared so the contract, the index
  * and the tooltip resolve a receiver the same way.
  */
-export function localBindings(nodes: ReadonlyArray<IrNodeLike & { name?: unknown; valueKind?: unknown; callTarget?: unknown; augmented?: unknown }>): LocalBinding[] {
+export function localBindings(
+  nodes: ReadonlyArray<IrNodeLike & { name?: unknown; valueKind?: unknown; callTarget?: unknown; augmented?: unknown; preview?: unknown }>,
+  language?: string,
+): LocalBinding[] {
   const out: LocalBinding[] = [];
   for (const n of nodes) {
     if (n?.type !== "assignment") continue;
@@ -678,9 +734,17 @@ export function localBindings(nodes: ReadonlyArray<IrNodeLike & { name?: unknown
     // reassigned. The operator has always been on Python's IR (`augmented`,
     // M-CONTRACT.5) and was simply never read here.
     if (typeof n.augmented === "string" && n.augmented) continue;
+    const callTarget = typeof n.callTarget === "string" && n.callTarget ? n.callTarget : "";
+    const preview = typeof n.preview === "string" ? n.preview.trimStart() : "";
+    // `new X(…)` says construction outright; Python spells it as a call to a
+    // Capitalised class (PEP 8), which is a convention and read as one.
+    const last = callTarget.split(".").pop() ?? "";
+    const constructed = valueKind === "call" && callTarget
+      && (preview.startsWith("new ") || (language === "python" && /^[A-Z][A-Za-z0-9_]*$/.test(last)));
     out.push({
       name, valueKind,
-      ...(typeof n.callTarget === "string" && n.callTarget ? { callTarget: n.callTarget } : {}),
+      ...(callTarget ? { callTarget } : {}),
+      ...(constructed ? { constructed: true as const } : {}),
     });
   }
   return out;

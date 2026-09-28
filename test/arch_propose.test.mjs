@@ -184,3 +184,49 @@ test("a statement about a box the code no longer yields is SAID in the notes, no
   assert.ok(m.notes.some((n) => n.includes('"all gone"') && n.includes("is not drawn")));
   assert.ok(m.notes.some((n) => n.includes('"Vanished DB"') && n.includes("tool:vanished")));
 });
+
+// 2026-09-28 — "the propose groups button still appears after clicked". Once
+// a person ratifies, the groups are settled: one gate (proposalGate) refuses
+// every path that would spawn another proposal, unless a person forces it.
+test("the proposal gate: ratified groups refuse a new proposal unless forced; reject and pending behave", async () => {
+  const { proposalGate, ratifiedAt } = await import("../src/server/arch_store.ts");
+  const tmp = mkdtempSync(join(tmpdir(), "vg-arch-gate-"));
+  try {
+    const fresh = emptyStore();
+    assert.deepEqual(proposalGate(fresh), { allowed: true }, "nothing decided yet: propose");
+    assert.equal(proposalGate(fresh, { modify: true }).allowed, false, "nothing pending to modify");
+
+    const pending = { ...emptyStore(), proposal: parsed.proposal };
+    assert.equal(proposalGate(pending).allowed, false, "a pending draft is revised, not replaced");
+    assert.deepEqual(proposalGate(pending, { modify: true }), { allowed: true });
+
+    assert.deepEqual(proposalGate(rejectProposal(pending)), { allowed: true }, "a rejected draft can be asked for again");
+
+    const ratified = ratifyProposal(pending);
+    assert.equal(ratified.ratified.model, parsed.proposal.model, "ratify records the flag");
+    const refused = proposalGate(ratified);
+    assert.equal(refused.allowed, false);
+    assert.match(refused.reason, /already ratified/);
+    assert.match(refused.reason, /--force/);
+    assert.equal(proposalGate(ratified, { modify: true }).allowed, false, "no Modify past a ratified store");
+    assert.deepEqual(proposalGate(ratified, { force: true }), { allowed: true }, "a person may force it");
+
+    // The flag round-trips through the file and reaches the model the GUI draws.
+    saveArchStore(tmp, ratified);
+    const loaded = loadArchStore(tmp);
+    assert.deepEqual(loaded.ratified, ratified.ratified);
+    assert.deepEqual(applyArchStore(derived, loaded).ratified, ratified.ratified);
+    assert.equal(applyArchStore(derived, fresh).ratified, undefined);
+
+    // A store ratified BEFORE the flag existed still counts: every group
+    // ratification made stated carries a "ratified from" note.
+    const legacy = { ...ratified };
+    delete legacy.ratified;
+    assert.deepEqual(ratifiedAt(legacy), { at: parsed.proposal.at, model: parsed.proposal.model });
+    assert.equal(proposalGate(legacy).allowed, false);
+    // ...while hand-stated groups (no such note) do not.
+    const handStated = { ...emptyStore(), groups: [{ id: "g-hand", kind: "host", label: "mine", wraps: ["cluster:web:."] }] };
+    assert.equal(ratifiedAt(handStated), null);
+    assert.deepEqual(proposalGate(handStated), { allowed: true });
+  } finally { rmSync(tmp, { recursive: true, force: true }); }
+});

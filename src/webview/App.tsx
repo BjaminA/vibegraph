@@ -1960,6 +1960,11 @@ function Graph() {
           selectedNodeId={chatContextNode?.id ?? null}
           onClose={() => setCodeOpen(false)}
           dock={codeDock}
+          // Thread ranks beside the source (codeRanks.ts) — project mode only.
+          threads={projectThreads.length ? projectThreads : undefined}
+          projectIR={projectDataRef.current}
+          stack={stack}
+          crossings={crossings}
         />
       )}
 

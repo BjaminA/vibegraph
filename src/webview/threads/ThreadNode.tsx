@@ -21,12 +21,16 @@
 
 import React, { useRef } from "react";
 import { Handle, Position, useStore, type NodeProps } from "@xyflow/react";
-import { ChevronRight, ChevronsDownUp, ChevronsUpDown, type LucideIcon } from "lucide-react";
+import { ChevronRight, ChevronsDownUp, ChevronsUpDown, Shield, type LucideIcon } from "lucide-react";
 import type { ThreadNodeKind } from "./types";
 import type { AddComponentDropDetail } from "./useAddComponentDrag";
 import { tierForZoom, lodLabelFontSize } from "./lod";
+import { RemitBadge } from "./RemitBadge";
+import type { RankDecoration } from "./useThreadRanks";
 
-export interface ThreadNodeData {
+// 2026-09-25 — thread ranks: the rank, a folded guard's label, `×N` for
+// identical calls, and the remit this node holds (RankDecoration).
+export interface ThreadNodeData extends Partial<RankDecoration> {
   kind: ThreadNodeKind;
   label: string;
   file: string | null;
@@ -126,7 +130,8 @@ export function ThreadNode({ id, data }: NodeProps) {
   const d = data as unknown as ThreadNodeData;
   const shape = KIND_SHAPE[d.kind];
   const accentVar = d.accentVar ?? "--accent-thread";
-  const Icon = d.Icon ?? ChevronRight;
+  // A folded guard (thread ranks) reads as a guard, whatever call it ends in.
+  const Icon = d.foldLabel ? Shield : d.Icon ?? ChevronRight;
   const OverlayIcon = d.overlayIcon;
   const isSeed = d.kind === "seed";
   const wrapRef = useRef<HTMLDivElement | null>(null);
@@ -141,6 +146,7 @@ export function ThreadNode({ id, data }: NodeProps) {
   const isLandmark = isSeed || !!d.isCrossFile || !!d.routeMethod;
   const showBody = tier === "full";
   const showLabel = tier === "full" || tier === "compact" || isLandmark;
+  const shownLabel = `${d.foldLabel ?? d.label}${d.repeat ? ` ×${d.repeat}` : ""}`;
 
   // U3.1 hover/click eventing — emit anchor rect for the floating
   // tooltip ThreadView mounts.
@@ -245,6 +251,8 @@ export function ThreadNode({ id, data }: NodeProps) {
       data-file-hue={d.fileHueIndex != null ? String(d.fileHueIndex) : undefined}
       data-file-depth={d.fileDepth != null ? String(d.fileDepth) : undefined}
       data-dimmed={shape.dimmed ? "true" : undefined}
+      data-rank={d.rank}
+      data-fold={d.foldLabel ? "guard" : undefined}
       className={[
         "vg-thread-node",
         `vg-thread-node-${d.kind}`,
@@ -423,13 +431,17 @@ export function ThreadNode({ id, data }: NodeProps) {
         {tier === "full" && (
           <div
             className="vg-node-code"
+            data-node-label
             style={{ fontWeight: isSeed ? 600 : 500 }}
-            title={d.label}
+            title={d.foldLabel ? `${d.foldLabel} — ${d.label}` : d.label}
           >
-            {d.label}
+            {shownLabel}
           </div>
         )}
       </div>
+      {tier === "full" && (
+        <RemitBadge nodeId={id} count={d.remitCount} text={d.remitText} open={d.remitOpen} />
+      )}
 
       {/* M-NA7 — below full tier the label leaves the card: rendered
           outside at inverse-zoom scale (~constant on-screen size), so
@@ -452,7 +464,7 @@ export function ThreadNode({ id, data }: NodeProps) {
             pointerEvents: "none",
           }}
         >
-          {d.label}
+          {shownLabel}
         </div>
       )}
 

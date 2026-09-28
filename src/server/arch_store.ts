@@ -13,6 +13,11 @@
 //               none is INFERRED and drawn as a ghost. Ratify moves it into
 //               the stated half; reject drops it. A model never writes the
 //               stated half directly.
+//   ratified    WHEN a proposal was last ratified, and from which model.
+//               It is the flag `proposalGate` reads: once a person has
+//               decided the groups, nothing spawns another proposal unless
+//               a person forces it (2026-09-28). Reject leaves it unset, so
+//               a rejected draft can be asked for again.
 //
 // Validated at the boundary; a mangled entry is dropped, never half-loaded.
 
@@ -46,6 +51,7 @@ export interface ArchStore {
   primaryPath?: string[];
   notes?: string[];
   proposal?: ArchProposal;
+  ratified?: { at: string; model: string };
 }
 
 const ID = /^[A-Za-z][\w.:-]{0,79}$/;
@@ -77,6 +83,10 @@ export function loadArchStore(root: string | null): ArchStore {
     const store: ArchStore = { version: "1", groups, names };
     if (Array.isArray(raw.primaryPath)) store.primaryPath = raw.primaryPath.filter((x): x is string => typeof x === "string");
     if (Array.isArray(raw.notes)) store.notes = raw.notes.filter((x): x is string => typeof x === "string");
+    const rt = raw.ratified as Record<string, unknown> | undefined;
+    if (rt && typeof rt === "object" && typeof rt.at === "string" && typeof rt.model === "string") {
+      store.ratified = { at: rt.at, model: rt.model };
+    }
     const pr = raw.proposal as Record<string, unknown> | undefined;
     if (pr && typeof pr === "object" && Array.isArray(pr.groups)) {
       store.proposal = {
@@ -118,6 +128,7 @@ export function ratifyProposal(store: ArchStore): ArchStore {
   const out: ArchStore = { ...store, groups, names };
   if (p.primaryPath?.entryPoints.length) out.primaryPath = p.primaryPath.entryPoints;
   if (p.narrative) out.notes = [...(store.notes ?? []), p.narrative];
+  out.ratified = { at: new Date().toISOString(), model: p.model };
   delete out.proposal;
   return out;
 }
@@ -126,6 +137,43 @@ export function rejectProposal(store: ArchStore): ArchStore {
   const out = { ...store };
   delete out.proposal;
   return out;
+}
+
+/** When the groups were settled by a person, or null. A store written
+ *  before the flag existed still says so: ratification has always stamped
+ *  each group it made stated with a `ratified from <model> (<at>)` note. */
+export function ratifiedAt(store: ArchStore): { at: string; model: string } | null {
+  if (store.ratified) return store.ratified;
+  for (const g of store.groups) {
+    const m = /^ratified from (.+?) \(([^)]*)\)/.exec(g.note ?? "");
+    if (m) return { at: m[2], model: m[1] };
+  }
+  return null;
+}
+
+/**
+ * May a NEW proposal be drafted (a model spawned)? The one gate every
+ * caller asks — the GUI's button, the WS handler, MCP and the CLI.
+ *   * a pending proposal → only a Modify (it revises that draft);
+ *   * groups already ratified → refused, unless a person forces it.
+ * A Modify never spawns past a ratified store either: there is nothing
+ * pending to revise.
+ */
+export function proposalGate(
+  store: ArchStore, opts: { modify?: boolean; force?: boolean } = {},
+): { allowed: true } | { allowed: false; reason: string } {
+  if (opts.modify) {
+    return store.proposal ? { allowed: true } : { allowed: false, reason: "there is no pending proposal to modify" };
+  }
+  if (store.proposal) return { allowed: false, reason: "a proposal is already pending: ratify, modify or reject it first" };
+  const r = ratifiedAt(store);
+  if (r && !opts.force) {
+    return {
+      allowed: false,
+      reason: `the groups were already ratified (from ${r.model}${r.at ? `, ${r.at}` : ""}); edit .vibegraph/architecture.json, or re-propose with --force from the CLI`,
+    };
+  }
+  return { allowed: true };
 }
 
 /** The model the view draws: derived facts + stated groups/names + the
@@ -179,5 +227,6 @@ export function applyArchStore(model: ArchModelRecord, store: ArchStore): ArchMo
     notes: [...model.notes, ...staleNotes],
     ...(primary ? { primaryPath: primary } : {}),
     ...(store.proposal ? { proposal: { at: store.proposal.at, model: store.proposal.model, narrative: store.proposal.narrative ?? null, refused: store.proposal.refused } } : {}),
+    ...(ratifiedAt(store) ? { ratified: ratifiedAt(store)! } : {}),
   });
 }

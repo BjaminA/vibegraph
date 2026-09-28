@@ -10,7 +10,11 @@
 //      SOURCING file's directory first, then the project root. ONE hop,
 //      direct sources only — transitive chains are a NAMED LIMIT.
 //      Variable-interpolated targets ("$DIR/x.sh") stay honestly
-//      unlinked: never guessed.
+//      unlinked: never guessed — with ONE exception that is not a guess: a
+//      name the same file binds once to the script-directory idiom
+//      (`DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"`) holds this
+//      file's directory by the language's own definition (2026-09-25; a private production codebase binds it this
+//      way in 74 scripts and sources its shared _lib through it).
 //   2. Calls that match a function in a sourced file gain a reference
 //      edge {targetFile, qualifiedTarget: "<moduleId>:<fn>"} — the same
 //      wire shape cross_file_link.py emits.
@@ -43,6 +47,37 @@ function normalize(p) {
   return (abs ? "/" : "") + parts.join("/");
 }
 
+function unquote(s) {
+  return s.length >= 2 && (s[0] === '"' || s[0] === "'") && s.at(-1) === s[0] ? s.slice(1, -1) : s;
+}
+
+// The script-directory idiom, spelled the ways it is actually written:
+//   DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"   (74 of 74 on a private production codebase)
+//   DIR="$(dirname "$0")"
+// Its value is the directory of THIS file by the language's own definition,
+// so `source "${DIR}/../_lib/x.sh"` is a path, not a guess.
+const SCRIPT_DIR_IDIOM = /^"?\$\((?:cd "?\$\(dirname "?\$(?:\{BASH_SOURCE\[0\]\}|\{?0\}?)"?\)"? && pwd(?: -P)?|dirname "?\$(?:\{BASH_SOURCE\[0\]\}|\{?0\}?)"?)\)"?$/;
+
+/** Names bound to the script-directory idiom, and bound EXACTLY once: a
+ *  rebind means the file does not say what the name holds at the source
+ *  line, and that stays an honest gap. */
+function scriptDirVars(nodes) {
+  const seen = new Map();
+  for (const n of nodes) {
+    if (n.type !== "assignment" || typeof n.name !== "string") continue;
+    const idiom = SCRIPT_DIR_IDIOM.test(String(n.preview ?? "").trim());
+    seen.set(n.name, seen.has(n.name) ? false : idiom);
+  }
+  return new Set([...seen].filter(([, ok]) => ok).map(([k]) => k));
+}
+
+/** `${DIR}/x.sh` / `$DIR/x.sh` → `./x.sh` when DIR is the script directory. */
+function expandScriptDir(target, dirVars) {
+  const m = /^\$(?:\{([A-Za-z_][A-Za-z0-9_]*)\}|([A-Za-z_][A-Za-z0-9_]*))(\/.*)$/.exec(target);
+  const name = m && (m[1] ?? m[2]);
+  return name && dirVars.has(name) ? `.${m[3]}` : target;
+}
+
 export function linkFiles(files) {
   // fnIndex: relPath → Map(fnName → nodeId)
   const fnIndex = new Map();
@@ -60,12 +95,15 @@ export function linkFiles(files) {
     const edges = ir.edges ?? [];
 
     // 1. resolve direct sources (one hop)
+    const dirVars = scriptDirVars(nodes);
     const sourced = [];
     for (const n of nodes) {
       if (n.type !== "import") continue;
-      const target = n.names?.[0] ?? "";
+      const target = expandScriptDir(unquote(n.names?.[0] ?? ""), dirVars);
       if (!target || target.includes("$")) continue; // interpolated: honest gap
-      const candidates = [normalize(`${posixDir(rel)}/${target}`), normalize(target)];
+      const fromDir = normalize(`${posixDir(rel)}/${target}`);
+      // an expanded script-dir path is relative to THIS file by definition
+      const candidates = target.startsWith("./") ? [fromDir] : [fromDir, normalize(target)];
       const hit = candidates.find((c) => c in files);
       if (hit) sourced.push(hit);
     }

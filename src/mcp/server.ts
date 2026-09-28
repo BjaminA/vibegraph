@@ -858,7 +858,7 @@ function registerTools(server: McpServer, ctx: VibegraphMcpContext): void {
         "systemd / .env.example, and the project's docs; every item must cite one of those (file:line) or a node / " +
         "edge id, and a citation that was not shown is dropped - an item left with none is INFERRED. The model " +
         "cannot add a node or an edge, or say anything about protocols or payloads. The result is stored PENDING in " +
-        ".vibegraph/architecture.json and shown ghosted; only a human ratifies or rejects it, in the GUI.",
+        ".vibegraph/architecture.json and shown ghosted; only a human ratifies or rejects it, in the GUI. Refused once the groups have been ratified (re-proposing is a human act: the CLI's --force).",
       inputSchema: {},
     },
     async () => {

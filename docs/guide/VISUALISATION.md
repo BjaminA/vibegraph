@@ -106,6 +106,33 @@ How to read it:
   serves it, a script run by path) is drawn to the thread it reaches, and can
   be walked from the step's tooltip.
 
+**Primary / + Secondary / All** (top left of the canvas) decides how much of
+the thread is drawn. On real code most of a thread is not the story: local
+data work, the language's built-ins, logging and UI state outnumber the calls
+that matter many times over.
+
+- **Primary** — what the thread does: the entry point, every call that leaves
+  your code (database, network, files, other programs, a model API), runtime
+  dispatch, hops to other threads, and the steps on the way to them.
+- **+ Secondary** — adds your own helpers that reach no boundary, unresolved
+  calls, set-up (building a client), outputs, and **guards**. A guard is an
+  `if` that only logs and leaves; it is drawn as one line, e.g.
+  `returns if !apiKey`, with a shield icon.
+- **All** — every node the static walk reached, exactly as before.
+
+Nothing is thrown away. A card that owns hidden nodes shows **+N**; hover it
+for what they are ("12 hidden: 5 local ops, 4 logs, 3 UI state"), click it to
+show them in place, and click **hide** to fold them again. Identical calls from
+one place collapse to `×N`. The counter says how many cards are drawn out of
+the thread's total. VibeGraph remembers your choice; the first one comes from
+`VG_THREAD_RANK` (`primary` by default; `secondary` or `all`).
+
+The **code view** shows the same ranks beside the source: a bar in the gutter
+of every line a thread reaches — blue for primary (it leaves your code, or it
+is an entry point), teal for secondary, grey for tertiary. Hover a line for
+what it is and how many threads reach it. The layers button at the bottom
+right turns the marks off.
+
 **Hover a step** for its tooltip: the call's arguments, where it is written,
 and the actions that apply to it:
 

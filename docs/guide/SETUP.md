@@ -156,6 +156,7 @@ should share them.
 | `PORT` | `4200` | the visualisation's port |
 | `VG_HOST` | `127.0.0.1` | the address it binds. Anything else exposes an **unauthenticated** server beyond your machine — the server says so loudly. |
 | `VG_START_VIEW` | architecture map | set to `index` to open on the thread list instead |
+| `VG_THREAD_RANK` | `primary` | how much of a thread is drawn at first: `primary`, `secondary` or `all` (the canvas switch overrides it, and is remembered) |
 | `VG_CLAUDE_BIN` | `claude` on your PATH | the command used for every model call (e.g. `claude --model …`) |
 | `VG_PYTHON` | `python3` | the interpreter the knowledge commands use (`view` always runs `python3`) |
 | `VIBEGRAPH_PYDEPS` | — | a directory that already holds `libcst` (and `black`, for `view`) |

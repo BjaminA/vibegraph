@@ -47,6 +47,8 @@ import type { CrossingRecord } from "../../shared/protocol";
 import { languageForPath } from "../../shared/languages";
 import { useThreadLayout, type ThreadOrientation } from "./useThreadLayout";
 import { deriveNests, collapseNests, nestFlowEdges } from "./collapse";
+import { useRankState, useRankedView, type RankedView } from "./useThreadRanks";
+import { RankControl } from "./RankControl";
 import { planRunToNode } from "./runToNode";
 import { bridge } from "../types";
 import { accentForThreadNode } from "./colour_for_node";
@@ -159,9 +161,15 @@ interface InnerProps {
   // global toggle; `expandedNests` is the per-outer-node open set.
   expandAll: boolean;
   expandedNests: Set<string>;
+  // 2026-09-25 — thread ranks: the ranked projection, computed once by the
+  // outer view (its node count feeds the level control).
+  ranks: RankedView;
+  rankLevel: 1 | 2 | 3;
+  /** how many cards the canvas draws (ranks AND collapsed nests applied). */
+  onDrawnCount: (n: number) => void;
 }
 
-function ThreadCanvas({ thread: rawThread, width, height, projectIR, entryPoints, orientation, hideMiniMap, expandAll, expandedNests }: InnerProps) {
+function ThreadCanvas({ thread: rawThread, width, height, projectIR, entryPoints, orientation, hideMiniMap, expandAll, expandedNests, ranks, rankLevel, onDrawnCount }: InnerProps) {
   // M17.3 — control-flow containers (try/except/finally/while) render as
   // bordered regions positioned around their descendants. Layout runs on
   // the regular nodes only; containers are sized post-layout from the
@@ -191,22 +199,34 @@ function ThreadCanvas({ thread: rawThread, width, height, projectIR, entryPoints
       }),
     };
     const collapsed = collapseNests(annotated, nests, isNestExpanded);
-    const layoutNodes = collapsed.nodes.filter((n) => n.kind !== "container");
+    // Thread ranks: below "All", draw only the projection's nodes, and join a
+    // node whose caller is folded away to the node that owns it.
+    const shown = ranks.projection.visible;
+    const ranked = rankLevel < 3;
+    const layoutNodes = collapsed.nodes.filter((n) => n.kind !== "container" && (!ranked || shown.has(n.id)));
+    const kept = new Set(layoutNodes.map((n) => n.id));
     return {
       ...collapsed,
       nodes: layoutNodes,
       edges: [
-        ...collapsed.edges.filter((e) => e.kind !== "contains"),
+        ...collapsed.edges.filter((e) => e.kind !== "contains" && (!ranked || (kept.has(e.from) && kept.has(e.to)))),
+        ...(ranked
+          ? ranks.projection.extraEdges
+            .filter((e) => kept.has(e.from) && kept.has(e.to))
+            .map((e) => ({ from: e.from, to: e.to, kind: "direct" as const, irSource: null }))
+          : []),
         ...nestFlowEdges(layoutNodes, nests),
       ],
     };
-  }, [rawThread, nests, isNestExpanded]);
+  }, [rawThread, nests, isNestExpanded, ranks, rankLevel]);
+  useEffect(() => { onDrawnCount(thread.nodes.length); }, [thread, onDrawnCount]);
 
   // Container subset + contains-edge map; used after layout to compute
   // bounding-box react-flow nodes. Built once per rawThread.
   const containerNodes = useMemo<ThreadNodeData[]>(
-    () => rawThread.nodes.filter((n) => n.kind === "container"),
-    [rawThread],
+    () => rawThread.nodes.filter((n) => n.kind === "container"
+      && (rankLevel >= 3 || ranks.projection.containers.has(n.id))),
+    [rawThread, ranks, rankLevel],
   );
   const containsChildren = useMemo<Map<string, string[]>>(() => {
     const m = new Map<string, string[]>();
@@ -348,11 +368,13 @@ function ThreadCanvas({ thread: rawThread, width, height, projectIR, entryPoints
           // literal): the uncaptured-nests honesty badge.
           nestsInnerCalls: n.nestsInnerCalls ?? false,
           nestExtracted: n.nestExtracted ?? false,
+          // Thread ranks — rank, guard label, ×N, remit badge.
+          ...(rankLevel < 3 ? ranks.decorate(n.id) : {}),
         },
         draggable: true,
       };
     });
-  }, [thread, layout, projectIR, entryPoints, fileGroups, enterDelayById, orientation, isNestExpanded]);
+  }, [thread, layout, projectIR, entryPoints, fileGroups, enterDelayById, orientation, isNestExpanded, ranks, rankLevel]);
 
   // M17.3 — react-flow nodes for each control-flow container. Position
   // + size are derived from the bounding box of the container's leaf
@@ -566,7 +588,7 @@ function ThreadCanvas({ thread: rawThread, width, height, projectIR, entryPoints
   const fitKeyRef = useRef<string | null>(null);
   useEffect(() => {
     if (!rf || !rf.fitView) return;
-    const fitKey = `${thread.seed.qualifiedName}|${orientation}`;
+    const fitKey = `${thread.seed.qualifiedName}|${orientation}|${rankLevel}`;
     // Only a fit that really ran (a real canvas size, measured nodes) counts:
     // the first pass fires before the canvas has its width.
     if (fitKeyRef.current === fitKey && rawThread.nodes.length > FOLD_ABOVE) return;
@@ -629,7 +651,7 @@ function ThreadCanvas({ thread: rawThread, width, height, projectIR, entryPoints
     // NOT a dep: same-thread node additions are owned by the added-nodes
     // fit below, never a whole-thread re-fit.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rf, thread.seed.qualifiedName, width, height, orientation]);
+  }, [rf, thread.seed.qualifiedName, width, height, orientation, rankLevel]);
 
   // M10R follow-up — when the SAME thread gains nodes (a save re-extracts
   // it, M18.3), bring the additions into view. A whole-thread re-fit is
@@ -1488,6 +1510,15 @@ export function ThreadView({ thread, projectIR, entryPoints, editorOpen, codeOpe
     [thread],
   );
 
+  // Thread ranks — the level (Primary | + Secondary | All) and the remits the
+  // user opened, then the projection both the canvas and the control read.
+  const rankState = useRankState();
+  const ranks = useRankedView(
+    thread, projectIR ?? null, stack ?? null, crossings ?? null, rankState.level, rankState.openRemits,
+  );
+  const rankTotal = useMemo(() => thread.nodes.filter((n) => n.kind !== "container").length, [thread]);
+  const [rankShown, setRankShown] = useState(0);
+
   // Open / close timers — refs so re-renders don't blow them away mid-
   // delay. clearOpen aborts a pending open if the cursor leaves before
   // 150ms; clearClose aborts the 200ms close if the cursor re-enters
@@ -1846,6 +1877,9 @@ export function ThreadView({ thread, projectIR, entryPoints, editorOpen, codeOpe
             hideMiniMap={detailDockOpen}
             expandAll={expandAllNests}
             expandedNests={expandedNests}
+            ranks={ranks}
+            rankLevel={rankState.level}
+            onDrawnCount={setRankShown}
           />
         </ReactFlowProvider>
         )}
@@ -1860,9 +1894,18 @@ export function ThreadView({ thread, projectIR, entryPoints, editorOpen, codeOpe
           `orientation` is pinned to "horizontal" above so a stale
           localStorage "vertical" can't strand anyone in the unstyled view. */}
 
-      {/* M-NEST L2 — global expand-all-nests toggle. Now the FIRST canvas-chrome
-          row under the chip strip (it moved up when the orientation toggle was
-          unmounted); shown only when the thread actually has nests. */}
+      {/* Thread ranks (2026-09-25) — the FIRST canvas-chrome row: which nodes
+          the thread draws, and how many of how many. */}
+      <RankControl
+        level={rankState.level}
+        onLevel={rankState.setLevel}
+        shown={rankShown}
+        total={rankTotal}
+        top={belowChipStrip(0)}
+      />
+
+      {/* M-NEST L2 — global expand-all-nests toggle, the row under the rank
+          control; shown only when the thread actually has nests. */}
       {threadHasNests && (
         <button
           data-thread-nests-toggle
@@ -1871,7 +1914,7 @@ export function ThreadView({ thread, projectIR, entryPoints, editorOpen, codeOpe
           title={expandAllNests ? "Collapse all nested calls" : "Expand all nested calls"}
           style={{
             position: "absolute",
-            top: belowChipStrip(0),
+            top: belowChipStrip(1),
             left: 12,
             zIndex: 30,
             display: "flex",
@@ -1902,7 +1945,7 @@ export function ThreadView({ thread, projectIR, entryPoints, editorOpen, codeOpe
           the first press returns the effects on the path plus a token, and
           nothing has run until the human presses again. */}
       {!editorOpen && !codeOpen && thread.entryPointId && traceable && (
-        <div style={{ position: "absolute", top: belowChipStrip(threadHasNests ? 1 : 0), left: 12, zIndex: 30 }}>
+        <div style={{ position: "absolute", top: belowChipStrip(threadHasNests ? 2 : 1), left: 12, zIndex: 30 }}>
           <button
             data-trace-thread
             onClick={() => startTrace()}

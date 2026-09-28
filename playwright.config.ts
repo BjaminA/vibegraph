@@ -44,6 +44,10 @@ export default defineConfig({
       // first view; users boot into the architecture overview (server.ts
       // START_VIEW). A spec that wants the overview overrides this.
       VG_START_VIEW: process.env.VG_START_VIEW ?? "index",
+      // Thread ranks (2026-09-25): users open a thread on its primary nodes;
+      // the suites assert on every node, so they open on "all". The rank
+      // spec switches levels through the control, as a user does.
+      VG_THREAD_RANK: process.env.VG_THREAD_RANK ?? "all",
       PATH: process.env.PATH ?? "",
       HOME: process.env.HOME ?? "",
       // M-RUN e2e (test:e2e-run) drives the SM2 arg synthesizer through a

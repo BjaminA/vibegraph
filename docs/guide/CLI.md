@@ -310,6 +310,11 @@ The proposal is stored **pending**; `--ratify` makes it stated (whoever runs
 the command is the human), `--reject` drops it, `--modify` re-drafts with your
 words.
 
+Once a proposal is ratified the groups are settled: `--propose` (and the
+app's button, and MCP) refuse to spend tokens on another one, and say when it
+was ratified. To draft again anyway, add `--force`; or edit
+`.vibegraph/architecture.json` by hand.
+
 ### `classify` — tools no table knows
 
 ```bash

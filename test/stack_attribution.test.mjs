@@ -518,3 +518,80 @@ test("M-RESOLVE.4: `console.log` is a boundary, and now it says through what", (
     file: "gateway/server.ts", stack: STACK,
   }), null);
 });
+
+// ── 2026-09-25 — a constructed client, and a call on an import result ─
+//
+// Found reading a private production codebase threads for the tiered view: the real network call
+// of a Next route (`openai.chat.completions.create`) was a weak local binding
+// with no effect, while the `new OpenAI()` constructor read as the boundary;
+// and `createHash("sha256").update(...)` inside an http funnel file read as
+// the funnels
+
+// ── 2026-09-25 — a constructed client, and a call on an import result ─
+//
+// Found reading a private production codebase threads for the tiered view: the real network call
+// of a Next route (`openai.chat.completions.create`) was a weak local binding
+// with no effect, while the `new OpenAI()` constructor read as the boundary;
+// and `createHash("sha256").update(...)` inside an http funnel file read as
+// the funnel's own tool.
+
+test("a client CONSTRUCTED from a model-api tool derives the round trip; a call RESULT still does not", () => {
+  const imports = [{ binding: "OpenAI", spec: "openai" }];
+  const locals = localBindings([
+    { type: "assignment", name: "openai", valueKind: "call", callTarget: "OpenAI", preview: "new OpenAI({ apiKey })" },
+  ], "jsts");
+  assert.deepEqual(locals, [{ name: "openai", valueKind: "call", callTarget: "OpenAI", constructed: true }]);
+  const a = attributeBoundary({
+    language: "jsts", label: "openai.chat.completions.create", kind: "dynamic",
+    file: "app/api/route.ts", imports, locals, stack: { tools: [] },
+  });
+  assert.equal(a?.tool, "openai");
+  assert.equal(a?.how, "client-instance");
+  assert.equal(effectFromRole(a), "http");
+  // a listener on the same client is wiring, not a round trip
+  const on = attributeBoundary({
+    language: "jsts", label: "openai.on", kind: "dynamic",
+    file: "app/api/route.ts", imports, locals, stack: { tools: [] },
+  });
+  assert.equal(on?.how, "local-binding");
+  assert.equal(effectFromRole(on), null);
+  // `res = fetch(u)` then `res.json()`: a RESULT, not a client - unchanged
+  const res = attributeBoundary({
+    language: "jsts", label: "res.json", kind: "dynamic", file: "app/api/route.ts", stack: { tools: [] },
+    locals: localBindings([{ type: "assignment", name: "res", valueKind: "call", callTarget: "fetch", preview: "await fetch(url)" }], "jsts"),
+  });
+  assert.equal(res?.how, "local-binding");
+  assert.equal(effectFromRole(res), null);
+});
+
+test("python: a Capitalised class call constructs; a factory call does not", () => {
+  const imports = [{ binding: "requests", spec: "requests" }];
+  const s = localBindings([
+    { type: "assignment", name: "s", valueKind: "call", callTarget: "requests.Session", preview: "requests.Session()" },
+    { type: "assignment", name: "conn", valueKind: "call", callTarget: "sqlite3.connect", preview: "sqlite3.connect(p)" },
+  ], "python");
+  assert.equal(s[0].constructed, true);
+  assert.equal(s[1].constructed, undefined, "a factory is a call result: the M-RESOLVE refusal stands");
+  const a = attributeBoundary({
+    language: "python", label: "s.post", kind: "dynamic", file: "svc/x.py", imports, locals: s, stack: STACK,
+  });
+  assert.equal(a?.how, "client-instance");
+  assert.equal(effectFromRole(a), "http");
+});
+
+test("a call on the RESULT of an imported function belongs to that import, weakly, even inside a funnel", () => {
+  const a = attributeBoundary({
+    language: "python", label: "hashlib_new(\"sha256\").update", kind: "external",
+    file: "telemetry/http_client.py", stack: STACK,
+    imports: [{ binding: "hashlib_new", spec: "hashlib" }],
+  });
+  assert.equal(a?.tool, "hashlib");
+  assert.equal(a?.how, "local-binding");
+  assert.equal(effectFromRole(a), null);
+  // a project function's result keeps the funnel reading (`_session().post`)
+  const f = attributeBoundary({
+    language: "python", label: "_session().post", kind: "external",
+    file: "telemetry/http_client.py", stack: STACK,
+  });
+  assert.equal(f?.how, "funnel-file");
+});

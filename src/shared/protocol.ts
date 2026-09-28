@@ -778,6 +778,10 @@ export interface ArchModelRecord {
   /** M-ARCH.4 — a pending model proposal (its items are in groups/labels
    *  with source "proposed"); what the validator refused, named. */
   proposal?: { at: string; model: string; narrative: string | null; refused: Array<{ item: string; reason: string }> };
+  /** 2026-09-28 — the groups were ratified by a person (arch_store
+   *  `ratifiedAt`): the GUI shows this instead of a Propose button, and no
+   *  path spawns another proposal unless a person forces it. */
+  ratified?: { at: string; model: string };
 }
 
 export interface StackIndexRecord {

@@ -71,6 +71,7 @@ usage:
                            PENDING in .vibegraph/architecture.json, drawn ghosted until decided
       --modify "<text>"    SPENDS TOKENS: re-draft the pending proposal with your words (same grounding)
       --ratify | --reject  decide the pending proposal (running this is the human's decision)
+      --force              with --propose: draft again although the groups were already ratified
       --reply <f>          use a saved model reply instead of spawning · --dry-run print the prompt, spawn nothing
       --model <id>         the model to ask (default: the claude CLI's own)
       exit 0 done · 1 nothing to decide · 3 the model could not be run or its reply was unusable
@@ -224,7 +225,7 @@ function cmdArchitecture(args) {
       options: {
         out: { type: "string" }, envelope: { type: "string" }, propose: { type: "boolean" }, ratify: { type: "boolean" },
         reject: { type: "boolean" }, reply: { type: "string" }, "dry-run": { type: "boolean" }, model: { type: "string" },
-        modify: { type: "string" }, archify: { type: "boolean" },
+        modify: { type: "string" }, archify: { type: "boolean" }, force: { type: "boolean" },
       },
       allowPositionals: true,
     });
@@ -243,7 +244,7 @@ function cmdArchitecture(args) {
   const r = runArchitecture({
     root: absRoot, out: v.out, envelope: v.envelope, pipeline, commit: gitHead(absRoot) ?? "no-git", tool: toolLabel(loc),
     action: v.propose || v.modify !== undefined ? "propose" : v.ratify ? "ratify" : v.reject ? "reject" : null,
-    replyFile: v.reply, dryRun: v["dry-run"] === true, model: v.model, guidance: v.modify, archify: v.archify === true,
+    replyFile: v.reply, dryRun: v["dry-run"] === true, model: v.model, guidance: v.modify, archify: v.archify === true, force: v.force === true,
   });
   for (const line of r.lines) process.stdout.write(`${line}\n`);
   for (const m of r.messages) process.stderr.write(`${m}\n`);

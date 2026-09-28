@@ -154,3 +154,36 @@ test("broken file: unparseable region dropped + reported, healthy constructs kep
   assert.ok(ids.includes("module/healthy.fn"), "healthy fn swallowed by the ERROR node is recovered");
   assert.ok(!ids.some((id) => id.includes("case")), "no garbage from the broken region");
 });
+
+// 2026-09-25 — the script-directory idiom. a private production codebase's orchestrators source
+// their shared _lib as `source "${SCRIPT_DIR}/../_lib/x.sh"`, so every call to
+// a shared helper read as an EXTERNAL PROGRAM (subprocess) instead of a step
+// into project code. The idiom's value is defined by bash itself; a rebind is
+// still an honest gap.
+test("source through the script-directory idiom links; a rebound name stays a gap", async () => {
+  const { mkdtempSync, mkdirSync, writeFileSync, rmSync } = await import("node:fs");
+  const { tmpdir } = await import("node:os");
+  const dir = mkdtempSync(join(tmpdir(), "vg-bash-srcdir-"));
+  try {
+    mkdirSync(join(dir, "bin")); mkdirSync(join(dir, "_lib"));
+    writeFileSync(join(dir, "_lib", "helper.sh"), "helper_fn() {\n  echo hi\n}\n");
+    writeFileSync(join(dir, "bin", "run.sh"),
+      '#!/usr/bin/env bash\nSCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"\n' +
+      'source "${SCRIPT_DIR}/../_lib/helper.sh"\nhelper_fn\n');
+    writeFileSync(join(dir, "bin", "rebound.sh"),
+      '#!/usr/bin/env bash\nHERE="$(dirname "$0")"\nHERE="/opt/elsewhere"\n' +
+      '. "$HERE/../_lib/helper.sh"\nhelper_fn\n');
+    const out = runPipe(process.execPath, [FRONTEND, "--batch"],
+      "bin/run.sh\tbin/run.sh\nbin/rebound.sh\tbin/rebound.sh\n_lib/helper.sh\t_lib/helper.sh\n", { cwd: dir });
+    const linked = JSON.parse(runPipe(process.execPath, [LINKER], JSON.stringify({ files: JSON.parse(out).files }))).files;
+    const call = (f) => linked[f].nodes.find((n) => n.type === "call" && n.funcName === "helper_fn");
+    const ref = (f) => linked[f].edges.find((e) => e.type === "reference" && e.source === call(f).id);
+    assert.equal(ref("bin/run.sh")?.qualifiedTarget?.endsWith(":helper_fn"), true, "the idiom resolves the source");
+    assert.equal(ref("bin/run.sh")?.targetFile, "_lib/helper.sh");
+    assert.equal(call("bin/run.sh").effectKind, undefined, "a project function is not a subprocess");
+    assert.equal(ref("bin/rebound.sh"), undefined, "a rebound name does not say what it holds");
+    assert.equal(call("bin/rebound.sh").effectKind, "subprocess", "the honest default stands for the gap");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

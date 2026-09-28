@@ -21,14 +21,14 @@ import { loadEnvelope } from "../quality_check.mjs";
 import { buildStackIndex } from "../../src/server/stack.ts";
 import { buildCrossingIndex } from "../../src/server/crossings.ts";
 import { archModelForEnvelope } from "../../src/server/arch_envelope.ts";
-import { applyArchStore, loadArchStore, ratifyProposal, rejectProposal, saveArchStore } from "../../src/server/arch_store.ts";
+import { applyArchStore, loadArchStore, ratifyProposal, rejectProposal, saveArchStore, proposalGate } from "../../src/server/arch_store.ts";
 import { buildProposePrompt, docExcerpts, parseProposal } from "../../src/server/arch_propose.ts";
 import { readInfraManifests } from "../../src/server/infra_manifests.ts";
 import { spawnClassifier } from "./classify.mjs";
 import { repositoryFor, writeArchArtifacts } from "../arch_artifacts.mjs";
 import { deriveThreadCalls } from "../../src/webview/system/threadInteraction.ts";
 
-export function runArchitecture({ root, out, envelope, pipeline, commit, tool, action = null, replyFile, dryRun = false, model, guidance, archify = false, env = process.env }) {
+export function runArchitecture({ root, out, envelope, pipeline, commit, tool, action = null, replyFile, dryRun = false, model, guidance, archify = false, force = false, env = process.env }) {
   const absRoot = resolve(root);
   const lines = [];
   const messages = [];
@@ -42,8 +42,12 @@ export function runArchitecture({ root, out, envelope, pipeline, commit, tool, a
   if (action === "propose") {
     const facts = readInfraManifests(absRoot).facts;
     const docs = docExcerpts(absRoot, derived);
-    const pending = loadArchStore(absRoot).proposal;
-    if (guidance && !pending) return { lines, messages: [...messages, "there is no pending proposal to modify"], exitCode: 1 };
+    // The same gate as the live server (arch_store proposalGate): a pending
+    // draft is only revised, and ratified groups need --force to re-propose.
+    const current = loadArchStore(absRoot);
+    const pending = current.proposal;
+    const gate = proposalGate(current, { modify: !!guidance, force });
+    if (!gate.allowed) return { lines, messages: [...messages, gate.reason], exitCode: 1 };
     const prompt = buildProposePrompt(derived, facts, docs, guidance ? { previous: pending, guidance } : undefined);
     if (dryRun) {
       lines.push(prompt);

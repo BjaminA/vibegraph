@@ -120,7 +120,11 @@
               "properties": {
                 "name": { "type": "string" },
                 "valueKind": { "type": "string" },
-                "callTarget": { "type": "string" }
+                "callTarget": { "type": "string" },
+                "constructed": {
+                  "const": true,
+                  "description": "2026-09-25 (additive): the call CONSTRUCTED the value (`new X(...)`; a Capitalised class call in Python). A constructed client of a model-api / http-client / db / platform tool is the one local binding that derives an effect."
+                }
               }
             }
           }

@@ -109,6 +109,18 @@
   animation: vg-pulse-kf 600ms cubic-bezier(0.2, 0, 0, 1) both;
 }
 
+/* Thread ranks in the code view (src/webview/codeRanks.ts): a static bar in
+   Monaco's line-decoration gutter. Primary takes the I/O accent (it leaves
+   the project), secondary the thread accent, tertiary recedes. No motion. */
+.monaco-editor .vg-rank-gutter {
+  width: 3px !important;
+  margin-left: 2px;
+  border-radius: 2px;
+}
+.monaco-editor .vg-rank-gutter-1 { background: var(--accent-io); }
+.monaco-editor .vg-rank-gutter-2 { background: color-mix(in oklab, var(--accent-thread) 60%, transparent); }
+.monaco-editor .vg-rank-gutter-3 { background: color-mix(in oklab, var(--text-muted) 35%, transparent); }
+
 /* ── U2 — thread edges (PLAN.md updateUI §3, vibegraph-aesthetic skill) ──
    Glow via drop-shadow (4px blur, accent-thread @ 60% opacity), three-tier
    stroke-width by call-frequency, dashed for cross-file boundaries, gentle

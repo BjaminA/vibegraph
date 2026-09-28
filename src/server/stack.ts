@@ -629,7 +629,7 @@ export function buildStackIndex(env: StackEnvelopeLike, projectRoot?: string): S
     if (bindings.length) importsByFile[file] = bindings;
     // M-RESOLVE - the assignments, projected. Same shape, same purpose:
     // one place decides what a receiver name refers to.
-    const locals = localBindings(ir.nodes ?? []);
+    const locals = localBindings(ir.nodes ?? [], lang);
     if (locals.length) localsByFile[file] = locals;
   }
 
