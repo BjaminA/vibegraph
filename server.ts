@@ -21,6 +21,7 @@ import { handleInvestigation, listInvestigations, readInvestigation, renderHando
 import { diffEditChecks, formatEditCheck, type EditCheckRow } from "./src/server/edit_check";
 import { derivedPolicyClauses, checkPolicyClause, describePolicyClause } from "./src/server/policy_check";
 import { startHookedRun, stopHookedRun, decideHookedRun, currentHookedRun, type HookedRunDeps } from "./src/server/hooked_runner";
+import { hostAllowed, originAllowed, jsonContentType, staticPath, ensurePrivateIgnore, type GuardConfig } from "./src/server/local_guard";
 import { archModelForEnvelope } from "./src/server/arch_envelope";
 import { applyArchStore, loadArchStore, saveArchStore, ratifyProposal, rejectProposal, proposalGate } from "./src/server/arch_store";
 import { testReach, affectedTests } from "./src/shared/test_reach";
@@ -2004,6 +2005,7 @@ function snapshotPacketFiles(packet: RunPacket, scope: string[] = packet.plan.fi
     try { map[rel] = fs.readFileSync(abs, "utf-8"); } catch { absent.push(rel); }
   }
   const dir = packetSnapshotDir(packet.id);
+  ensurePrivateIgnore(inputPath);
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, "manifest.json"), JSON.stringify({ files: map, absent }), "utf-8");
   return map;
@@ -7598,7 +7600,16 @@ const MIME: Record<string, string> = {
   ".woff2": "font/woff2",
 };
 
+// 2026-09-29 — localhost only, and only for this app (src/server/local_guard.ts):
+// a page in the same browser, or a DNS-rebinding site, must not reach it.
+const guardCfg = (): GuardConfig => ({ port, exposedHost: process.env.VG_HOST || null });
+
 const server = http.createServer((req, res) => {
+  if (!hostAllowed(req.headers.host, guardCfg())) {
+    res.writeHead(403, { "Content-Type": "text/plain" });
+    res.end("VibeGraph answers only as localhost (Host header refused).");
+    return;
+  }
   if (req.url === "/" || req.url === "/index.html") {
     res.writeHead(200, { "Content-Type": "text/html", "Cache-Control": NO_STORE });
     res.end(getIndexHtml());
@@ -7611,6 +7622,16 @@ const server = http.createServer((req, res) => {
   // M-ORCH.4 — the path may carry `?packet=<id>` (a worker session bound to
   // its packet); match on the pathname, hand the full URL to the handler.
   if (mcpPathname(req.url) === "/mcp") {
+    if (!originAllowed(req.headers.origin, req.headers.host, guardCfg())) {
+      res.writeHead(403, { "Content-Type": "text/plain" });
+      res.end("VibeGraph's MCP endpoint does not accept requests from other web pages.");
+      return;
+    }
+    if (req.method === "POST" && !jsonContentType(req.headers["content-type"])) {
+      res.writeHead(415, { "Content-Type": "text/plain" });
+      res.end("POST /mcp must be application/json.");
+      return;
+    }
     if (req.method === "GET" || req.method === "DELETE") {
       mcpHandler(req, res, null).catch((e: any) => {
         console.warn(`  [MCP] handler error: ${e?.message ?? e}`);
@@ -7648,8 +7669,8 @@ const server = http.createServer((req, res) => {
     res.end("Method not allowed");
     return;
   }
-  const filePath = path.join(DIST_DIR, req.url || "");
-  if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
+  const filePath = staticPath(DIST_DIR, req.url);
+  if (filePath && fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
     const ext = path.extname(filePath);
     res.writeHead(200, {
       "Content-Type": MIME[ext] || "application/octet-stream",
@@ -7840,7 +7861,13 @@ function handleGetFileSource(filePath: string, ws: WebSocket): void {
 const clients = new Set<WebSocket>();
 
 function setupWebSocket() {
-  const wss = new WebSocketServer({ server });
+  // A WebSocket is not subject to CORS: without this any open web page could
+  // connect and drive VibeGraph (local_guard.ts).
+  const wss = new WebSocketServer({
+    server,
+    verifyClient: (info: { origin?: string; req: http.IncomingMessage }) =>
+      hostAllowed(info.req.headers.host, guardCfg()) && originAllowed(info.origin || undefined, info.req.headers.host, guardCfg()),
+  });
 
   wss.on("connection", (ws) => {
     clients.add(ws);
@@ -8297,7 +8324,7 @@ function tryListen() {
   // edit-capable MCP endpoint (and, with M27, a persistent agent
   // session); listening on all interfaces hands that to the LAN.
   // VG_HOST opts out explicitly — and loudly.
-  const host = process.env.VG_HOST ?? "127.0.0.1";
+  const host = process.env.VG_HOST || "127.0.0.1";
   server.listen(port, host, () => {
     if (booted) return;
     booted = true;

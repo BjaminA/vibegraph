@@ -60,16 +60,50 @@ These are real, enforced mechanisms — not intentions:
   explicit human accept.
 - **Localhost by default.** The server binds `127.0.0.1`. `VG_HOST` opts
   out and prints a warning when it does.
+- **Only this app's own page may drive it** (`src/server/local_guard.ts`).
+  Binding to localhost keeps other machines out but not a web page open in
+  your browser, and a WebSocket is not covered by CORS. So every request's
+  `Host` must be the server's own loopback name (a DNS-rebinding site is
+  refused with 403); a browser's WebSocket and `/mcp` requests must come from
+  the app's own origin; `POST /mcp` must be `application/json` (so a page
+  cannot send it as a preflight-free "simple" request); and static files are
+  served only from the bundle directory. Non-browser clients (a Claude Code
+  session, `curl`) send no `Origin` and are allowed — they are local
+  processes that already have your file access.
+- **Copies stay out of git.** Anything VibeGraph stores that holds copies of
+  your code or runtime data — the Agent Manager's snapshots, a run's diffs,
+  trace observations, the knowledge export — is listed in a
+  `.vibegraph/.gitignore` it writes itself, whatever your own `.gitignore`
+  says.
+- **No telemetry.** VibeGraph itself sends nothing anywhere. The only
+  outbound traffic is the `claude` CLI (below), the one-time download of
+  libcst from PyPI (or npm, when run with `npx`), and a local Ollama
+  endpoint if you route a model tier to one.
 
 ## What does NOT protect you
 
 Stated explicitly so you can make your own call:
 
-- **The HTTP and WebSocket endpoints are unauthenticated.** Anything that
-  can reach the port can drive the MCP tools — which means editing and
-  running code in your project. This is acceptable only because it binds to
-  localhost. **Never set `VG_HOST` to a public interface**, and be aware
-  that on a shared or multi-user machine, other local users can reach it.
+- **The HTTP and WebSocket endpoints are unauthenticated.** Any local
+  process that can reach the port can drive the MCP tools — which means
+  editing and running code in your project (web pages are refused, above).
+  This is acceptable only because it binds to localhost. **Never set
+  `VG_HOST` to a public interface** (it also relaxes the Host check), and be
+  aware that on a shared or multi-user machine, other local users can reach
+  it.
+- **Which features send code to Anthropic.** Browsing, the diagrams, the
+  threads, the checks, the hooks' own work, `export` and `check` are all
+  local and spend no tokens. Anything that starts a Claude session sends
+  what that session reads: the chat, the Agent Manager (hooked or
+  orchestrated), skill drafting, README generation, Scope, architecture
+  proposals, `classify`, drafted example inputs. A Claude Code session you
+  run yourself with the hooks sends what it reads, as it would without them.
+  Route a tier to a local Ollama model to keep that work on your machine.
+- **The Agent Manager's Claude Code run is not sandboxed.** It runs
+  `claude -p --dangerously-skip-permissions` in your project: Claude can
+  read, write and run commands there without asking. The snapshot and your
+  Accept / Reject undo its file changes; they cannot undo a command's side
+  effects outside the project.
 - **The chokepoint confines *structure*, not *intent*.** It guarantees an
   edit changed only the node it claimed to. It cannot tell you the change
   was a good idea, or correct. Review the diff.

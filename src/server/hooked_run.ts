@@ -30,6 +30,7 @@ import * as path from "path";
 import { createHash } from "crypto";
 import { shouldSkipDir } from "./languages.ts";
 import { lineDiff } from "./work_worker.ts";
+import { ensurePrivateIgnore } from "./local_guard.ts";
 
 import type { HookedRun, HookedRunChange, HookedRunEvent } from "../shared/hooked_run_wire.ts";
 export type { HookedRun, HookedRunChange, HookedRunEvent } from "../shared/hooked_run_wire.ts";
@@ -50,6 +51,7 @@ export function loadHookedRun(root: string): HookedRun | null {
 }
 
 export function saveHookedRun(root: string, run: HookedRun): void {
+  ensurePrivateIgnore(root);
   const p = path.join(root, HOOKED_RUN_FILE);
   fs.mkdirSync(path.dirname(p), { recursive: true });
   fs.writeFileSync(`${p}.tmp`, JSON.stringify(run, null, 2) + "\n");
@@ -166,6 +168,7 @@ export function snapshotTree(root: string, runId: string): { ok: true; files: nu
   for (const f of files) bytes += fs.statSync(path.join(root, f)).size;
   if (bytes > MAX_SNAPSHOT_BYTES) return { ok: false, error: `the editable tree is ${Math.round(bytes / 1e6)} MB, over the ${MAX_SNAPSHOT_BYTES / 1e6} MB snapshot cap — a run that cannot be undone is not started` };
   const dir = path.join(root, HOOKED_SNAP_DIR, runId);
+  ensurePrivateIgnore(root);
   fs.rmSync(dir, { recursive: true, force: true });
   const manifest: Record<string, string> = {};
   for (const f of files) {

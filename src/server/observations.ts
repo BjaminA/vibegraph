@@ -27,6 +27,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
 import { OBSERVATIONS_VERSION } from "../shared/observations.ts";
+import { ensurePrivateIgnore } from "./local_guard.ts";
 import type {
   JoinNode, NodeObservationRecord, ObservationStoreRecord, ObservedCalleeRecord,
   ResolvedObservation, TracedSite, TraceRunRecord,
@@ -95,6 +96,8 @@ export function clearTraceRun(root: string, entryPointId: string): ObservationSt
 }
 
 function write(root: string, store: ObservationStore): void {
+  // Observed values are real runtime data: never committed (local_guard.ts).
+  ensurePrivateIgnore(root);
   const p = storePath(root);
   mkdirSync(dirname(p), { recursive: true });
   writeFileSync(p, `${JSON.stringify(store, null, 2)}\n`, "utf-8");
