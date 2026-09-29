@@ -80,6 +80,23 @@ These are real, enforced mechanisms — not intentions:
   libcst from PyPI (or npm, when run with `npx`), and a local Ollama
   endpoint if you route a model tier to one.
 
+## Dependencies (audited 2026-09-29)
+
+- **The npm package** installs one dependency, `web-tree-sitter`, with no
+  install scripts in it or in the package itself (`npm audit`: 0). The app
+  it ships (`vendor/`) is prebuilt; its bundled dependencies are audited from
+  the lockfile it was built from (`npm audit`: 0 — `ws`, the MCP SDK's
+  transitive `hono` / `qs` / `fast-uri` / `ip-address`, and the editor's
+  `dompurify` were updated; the unused `puppeteer` was removed).
+- **Python**: the command line installs `libcst` (1.x) — and, for editing in
+  the app, `black` (24–26) — into a directory it owns, from **prebuilt wheels
+  only** (`pip --only-binary=:all:`), so no package's build script runs at
+  install time; each is bounded to its tested major version. `pip-audit`: no
+  known vulnerabilities.
+- Re-run the audit before a release: `npm audit` in the repository and in a
+  fresh install of the packed tarball, and `pip-audit -r
+  packages/knowledge/requirements.txt`.
+
 ## What does NOT protect you
 
 Stated explicitly so you can make your own call:

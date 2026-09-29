@@ -94,7 +94,9 @@ export function resolvePython(loc, { log = () => {} } = {}) {
   const req = join(loc.packageRoot, "requirements.txt");
   log(`libcst not found for ${firstBin}; installing into ${ownDeps} (one time)`);
   mkdirSync(ownDeps, { recursive: true });
-  const pip = spawnSync(firstBin, ["-m", "pip", "install", "--quiet", "--target", ownDeps, "--upgrade", "-r", req], { encoding: "utf-8", stdio: ["ignore", "inherit", "inherit"] });
+  // Wheels only: a source distribution runs its build script at install time,
+  // a wheel runs nothing (2026-09-29 supply-chain audit).
+  const pip = spawnSync(firstBin, ["-m", "pip", "install", "--quiet", "--only-binary=:all:", "--target", ownDeps, "--upgrade", "-r", req], { encoding: "utf-8", stdio: ["ignore", "inherit", "inherit"] });
   if (pip.status !== 0) {
     throw new Error(`${PACKAGE_NAME}: could not install libcst. Run this yourself, then retry:\n  ${firstBin} -m pip install --target "${ownDeps}" libcst\nor set VIBEGRAPH_PYDEPS to a directory where libcst is importable.`);
   }
@@ -117,7 +119,7 @@ export function ensureBlack(py, loc, { log = () => {} } = {}) {
   const ownDeps = ownDepsFor(py.bin);
   log(`black >= 24 not found for ${py.bin}; installing into ${ownDeps} (one time) — edits are formatted with it`);
   mkdirSync(ownDeps, { recursive: true });
-  const pip = spawnSync(py.bin, ["-m", "pip", "install", "--quiet", "--target", ownDeps, "--upgrade", "black>=24"], { encoding: "utf-8", stdio: ["ignore", "inherit", "inherit"] });
+  const pip = spawnSync(py.bin, ["-m", "pip", "install", "--quiet", "--only-binary=:all:", "--target", ownDeps, "--upgrade", "black>=24,<27"], { encoding: "utf-8", stdio: ["ignore", "inherit", "inherit"] });
   // On top of the environment libcst was found in, not in place of it.
   const sepChar = process.platform === "win32" ? ";" : ":";
   const env = { ...py.env, PYTHONPATH: py.env.PYTHONPATH ? `${ownDeps}${sepChar}${py.env.PYTHONPATH}` : ownDeps };

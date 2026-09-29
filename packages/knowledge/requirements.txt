@@ -2,4 +2,9 @@
 # only Python dependency of parse_cst / cross_file_link / discover_entry_points
 # / extract_thread / build_system_tier. black is an EDIT-time dependency of the
 # CST chokepoint and is deliberately not here.
-libcst
+#
+# 2026-09-29 (supply-chain audit): bounded to the major version tested, so a
+# future major — breaking or compromised — is never picked up silently, and
+# installed from prebuilt wheels only (pyenv.mjs passes --only-binary), so no
+# package's build script runs on your machine at install time.
+libcst>=1.9,<2
