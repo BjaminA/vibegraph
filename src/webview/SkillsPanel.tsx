@@ -11,7 +11,7 @@
 // The server owns the file (.vibegraph/skills.json); this panel posts the
 // enabled list and renders the echoed, sanitised result.
 import React from "react";
-import { X } from "lucide-react";
+import { Compass, X } from "lucide-react";
 import type { SkillsConfigPayload } from "../shared/generic_skills_wire";
 import { belowToolbar, heightBelowToolbar } from "./TopToolbar";
 
@@ -41,14 +41,18 @@ export function SkillsPanel({ state, onChange, onClose }: Props) {
     <div
       data-skills-panel
       style={{
-        position: "fixed", right: 12, top: belowToolbar(16), width: 380, maxHeight: heightBelowToolbar(16),
+        // Same surface as the Stack panel. It used `--bg-panel`, a token
+        // tokens.css never defined, so the panel was fully transparent and the
+        // canvas text showed through it.
+        position: "fixed", right: 16, top: belowToolbar(16), width: 420, maxHeight: heightBelowToolbar(16),
         boxSizing: "border-box", overflowY: "auto", zIndex: 1000,
-        background: "var(--bg-panel)", border: "1px solid var(--border-edge)", borderRadius: 8,
+        background: "var(--bg-node)", border: "1px solid var(--border-edge)", borderRadius: 6,
         boxShadow: "var(--shadow-panel)", padding: 16, color: "var(--text-primary)",
       }}
     >
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-        <div style={{ fontSize: 13, fontWeight: 600 }}>Generic direction</div>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+        <Compass size={14} strokeWidth={1.5} color="var(--text-muted)" />
+        <span style={{ fontSize: "var(--fs-12)", fontWeight: 600, color: "var(--text-primary)", flex: 1 }}>Generic direction</span>
         <button
           data-skills-close
           onClick={onClose}
