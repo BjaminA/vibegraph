@@ -19,6 +19,7 @@ import { buildStackIndex, contractStackForFile, stackForThread, stackCalledOnThr
 import { buildCrossingIndex, type CrossingIndex } from "./src/server/crossings";
 import { handleInvestigation, listInvestigations, readInvestigation, renderHandoff, readRel } from "./src/server/investigations";
 import { diffEditChecks, formatEditCheck, type EditCheckRow } from "./src/server/edit_check";
+import { derivedPolicyClauses, checkPolicyClause, describePolicyClause } from "./src/server/policy_check";
 import { archModelForEnvelope } from "./src/server/arch_envelope";
 import { applyArchStore, loadArchStore, saveArchStore, ratifyProposal, rejectProposal, proposalGate } from "./src/server/arch_store";
 import { testReach } from "./src/shared/test_reach";
@@ -1629,7 +1630,21 @@ interface RoutedCheckResult {
  *  envelope: the before/after the in-band post-edit check diffs. */
 function statedCheckSnapshot(): RoutedCheckResult[] {
   if (!isDirectory) return [];
-  try { return evaluateRoutedChecks(null, null, loadConstraints(readmeRootDir())); } catch { return []; }
+  try {
+    const constraints = loadConstraints(readmeRootDir());
+    const rows = evaluateRoutedChecks(null, null, constraints);
+    // A stack policy's own forbid / replace-with, derived (src/server/policy_check.ts).
+    const files = relativeProjectFiles() as any;
+    const withPolicy = constraints.map((c) => [c, derivedPolicyClauses(c as any, files)] as const).filter(([, pcs]) => pcs.length);
+    if (withPolicy.length) {
+      const facts = qualityFactsFor(null, null);
+      for (const [c, pcs] of withPolicy) for (const pc of pcs) {
+        const r = checkPolicyClause(facts, pc);
+        rows.push({ id: c.id, source: c.source, described: describePolicyClause(pc), rule: "stack-policy", verdict: r.verdict, reason: r.reason, gates: true, offenders: [...r.offenders] });
+      }
+    }
+    return rows;
+  } catch { return []; }
 }
 
 /** An offender ref as the baseline stores it, comparable across runs. */

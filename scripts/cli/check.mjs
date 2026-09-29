@@ -25,6 +25,7 @@ import { buildQualityFacts } from "../../src/server/quality/facts.ts";
 import { newRegistry, isRun1Check, describeRun1Check } from "../../src/server/quality/verbs/index.ts";
 import { checkConstraint, describeCheck, isConstraintCheck } from "../../src/server/constraint_grammar.ts";
 import { loadConstraints, routeConstraints } from "../../src/server/constraint_store.ts";
+import { derivedPolicyClauses, checkPolicyClause, describePolicyClause } from "../../src/server/policy_check.ts";
 
 const VERDICT_RANK = { violated: 2, unverifiable: 1, pass: 0 };
 
@@ -94,7 +95,20 @@ export function runConstraintChecks({ root, envelope: envelopePath, pipeline, gi
   const unchecked = [];
   for (const c of constraints) {
     const clauses = clausesOf(c);
-    if (!clauses.length) { unchecked.push(c.id); continue; }
+    // 2026-09-29 — a stack policy's own `policy` is checked too: derived, and
+    // never twinned (no derived clause when an import-only names the tool).
+    const policyClauses = derivedPolicyClauses(c, env.files);
+    for (const pc of policyClauses) {
+      const r = checkPolicyClause(projectFacts, pc);
+      results.push({
+        id: c.id, kind: c.kind, source: c.source, rule: "stack-policy", threads: [], described: describePolicyClause(pc),
+        verdict: r.verdict, reason: r.reason, offenders: [...r.offenders], notFollowed: [],
+        // A stated policy is a person's decision, and the work-run stack
+        // pre-check already rejects on it — so it gates here too.
+        gates: true,
+      });
+    }
+    if (!clauses.length) { if (!policyClauses.length) unchecked.push(c.id); continue; }
     const routed = threads.filter((t) => routeConstraints([c], t).length > 0).map((t) => t.entryPointId);
     for (const clause of clauses) {
       const row = { id: c.id, kind: c.kind, source: c.source, rule: clause?.rule ?? "?", threads: [] };

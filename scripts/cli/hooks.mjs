@@ -53,6 +53,8 @@ import { formatContractBlock } from "../../src/server/thread_contract.ts";
 import { getThreadSkill, injectableSkillText, readStoredThreadSkill } from "../../src/server/thread_skill_store.ts";
 import { affectedTests } from "../../src/shared/test_reach.ts";
 import { verbMayGate } from "../../src/server/quality/standings.ts";
+import { derivedPolicyClauses } from "../../src/server/policy_check.ts";
+import { archForPrompt } from "./arch_context.mjs";
 import { languageForFile, shouldSkipDir } from "../../src/server/languages.ts";
 
 export const HOOK_EVENTS = ["session-start", "prompt", "post-edit", "stop"];
@@ -107,7 +109,7 @@ export function findingsOf(checkResult) {
         key: `${row.id}|${row.rule}|${row.verdict}|${o}`,
         id: row.id, rule: row.rule, verdict: row.verdict, offender: o === "-" ? null : o,
         described: row.described, reason: row.reason,
-        gates: row.verdict === "violated" && verbMayGate(row.rule),
+        gates: row.verdict === "violated" && (row.gates ?? verbMayGate(row.rule)),
       });
     }
   }
@@ -166,6 +168,7 @@ export function orientation(absRoot, loaded, constraints) {
     let used = 0, shown = 0;
     for (const c of constraints) {
       const checks = [...(c.checks ?? []), ...(c.check ? [c.check] : [])].map((x) => x?.rule).filter(Boolean);
+      if (derivedPolicyClauses(c, env.files).length) checks.push(`policy ${c.policy.rule}`);
       const who = c.source && c.source !== "human" ? ` · ${c.source}-stated` : "";
       const text = c.text.length > 240 ? `${c.text.slice(0, 237)}…` : c.text;
       const line = `- [${c.id} · ${c.kind}${who}] ${text}${checks.length ? ` (checked: ${checks.join(", ")})` : ""}`;
@@ -256,6 +259,7 @@ function onPrompt(input, { absRoot, loaded, state, constraints }) {
     const sentRules = new Set(state.rules ?? []);
     const injected = new Map(Object.entries(state.injectedSkills ?? {}));
     const deferred = [];
+    const archFor = archForPrompt(absRoot, env, applied.routed.map((r) => r.entryPointId), state, constraints);
     for (const r of applied.routed) {
       const c = ctx.byEntry.get(r.entryPointId);
       const terms = weakBy.get(r.entryPointId);
@@ -266,8 +270,12 @@ function onPrompt(input, { absRoot, loaded, state, constraints }) {
       const fresh = (c?.routed ?? []).filter((k) => !sentRules.has(k.id));
       const rules = formatConstraintsBlock(fresh);
       if (rules) parts.push(rules);
+      const archBefore = JSON.stringify(state.arch ?? null);
+      const archLines = archFor(r.entryPointId);
+      if (archLines) parts.push(archLines);
       let block = parts.join("\n");
-      if (block.length > room) { deferred.push(r.qualifiedName); continue; }
+      // Not sent: nothing about it may be remembered as sent.
+      if (block.length > room) { state.arch = JSON.parse(archBefore) ?? undefined; deferred.push(r.qualifiedName); continue; }
       room -= block.length;
       for (const k of fresh) sentRules.add(k.id);
       if (r.skill && r.skill.length + 40 <= room) {
