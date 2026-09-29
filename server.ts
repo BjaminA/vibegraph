@@ -20,9 +20,10 @@ import { buildCrossingIndex, type CrossingIndex } from "./src/server/crossings";
 import { handleInvestigation, listInvestigations, readInvestigation, renderHandoff, readRel } from "./src/server/investigations";
 import { diffEditChecks, formatEditCheck, type EditCheckRow } from "./src/server/edit_check";
 import { derivedPolicyClauses, checkPolicyClause, describePolicyClause } from "./src/server/policy_check";
+import { startHookedRun, stopHookedRun, decideHookedRun, currentHookedRun, type HookedRunDeps } from "./src/server/hooked_runner";
 import { archModelForEnvelope } from "./src/server/arch_envelope";
 import { applyArchStore, loadArchStore, saveArchStore, ratifyProposal, rejectProposal, proposalGate } from "./src/server/arch_store";
-import { testReach } from "./src/shared/test_reach";
+import { testReach, affectedTests } from "./src/shared/test_reach";
 import { buildEnvSurface, configuredByFor, type EnvSurface } from "./src/shared/env_surface";
 import { coverageFor } from "./src/server/coverage";
 import { buildThreadBrief } from "./src/server/thread_brief";
@@ -1940,6 +1941,42 @@ async function orchestratorReview(run: WorkRun, packet: RunPacket, evidence: Pac
 // goes through the CST chokepoint), a turn budget, and a remit rule
 // whose only outside move is escalation. Evidence is collected by the
 // SERVER from snapshots — never trusted from the worker's self-report.
+
+// ── The HOOKED RUN (2026-09-29): the Agent Manager's default — one plain
+// Claude Code session with the VibeGraph hooks (src/server/hooked_run.ts,
+// hooked_runner.ts). Everything it needs from this process, in one place.
+function hookedRunDeps(): HookedRunDeps {
+  const target = resolveClaudeBin("worker");
+  // How a hook reaches the vibegraph-knowledge CLI: the packaged bundle next
+  // to this app (<pkg>/vendor/dist/server.js → <pkg>/dist/cli.mjs), else
+  // this checkout's source.
+  const packaged = path.join(PROJECT_ROOT, "..", "dist", "cli.mjs");
+  const cli = fs.existsSync(packaged)
+    ? [process.execPath, packaged]
+    : [process.execPath, "--experimental-strip-types", "--no-warnings", path.join(PROJECT_ROOT, "scripts", "cli", "main.mjs")];
+  // Pin the Python this server parses with: a hook runs under Claude Code's
+  // PATH, and an unpinned one once found a Python that could not load libcst.
+  const pinEnv: Record<string, string> = {};
+  try { pinEnv.VG_PYTHON = execFileSync("sh", ["-c", "command -v python3"], { encoding: "utf-8" }).trim(); } catch { /* the hook resolves its own */ }
+  const deps = (process.env.PYTHONPATH ?? "").split(path.delimiter).find((d) => d && fs.existsSync(path.join(d, "libcst")));
+  if (deps) pinEnv.VIBEGRAPH_PYDEPS = deps;
+  const refresh = async () => {
+    if (debounceTimer) { clearTimeout(debounceTimer); debounceTimer = undefined; }
+    await sendParse();
+    await settleDerived();
+  };
+  return {
+    root: analyzedRoot(),
+    target: { cmd: target.cmd, args: target.args, label: target.label, provider: target.provider, env: spawnEnv(target) },
+    cli, pinEnv,
+    mcpUrl: `http://localhost:${port}/mcp`,
+    checkSnapshot: () => statedCheckSnapshot() as EditCheckRow[],
+    settle: refresh,
+    testsFor: (files) => affectedTests(latestThreads as any, latestEntryPoints as any, files).map((t) => t.entryPointId),
+    afterRestore: async () => { await refresh(); },
+    broadcast: (run) => { const m = JSON.stringify({ type: "hooked-run", payload: { run } }); for (const c of clients) c.send(m); },
+  };
+}
 
 const WORK_SNAP_DIR = path.join(".vibegraph", "work-snapshots");
 
@@ -7820,6 +7857,7 @@ function setupWebSocket() {
     ws.send(JSON.stringify({ type: "model-tiers", payload: getModelTiers() }));
     // M-SKILLS.2 — the enable file plus the shipped catalogue, breadth measured here.
     ws.send(JSON.stringify({ type: "skills-config", payload: skillsConfigPayload() }));
+    if (isDirectory) ws.send(JSON.stringify({ type: "hooked-run", payload: { run: currentHookedRun(analyzedRoot()) } }));
     broadcastProjectWarnings(ws);
     sendParse(ws);
 
@@ -7995,6 +8033,15 @@ function setupWebSocket() {
           // PLAN-v7 Stage 3 — validate a proposed architecture at the
           // boundary; echo as a pending proposal. Reply: system-proposal.
           handleSystemPropose(msg.payload.plan, ws);
+        } else if (msg.type === "hooked-run-get") {
+          ws.send(JSON.stringify({ type: "hooked-run", payload: { run: isDirectory ? currentHookedRun(analyzedRoot()) : null } }));
+        } else if (msg.type === "hooked-run-start" || msg.type === "hooked-run-stop" || msg.type === "hooked-run-decide") {
+          // 2026-09-29 — the Agent Manager's default path (src/server/hooked_runner.ts).
+          const reply = (error?: string) => ws.send(JSON.stringify({ type: "hooked-run", payload: { run: currentHookedRun(analyzedRoot()), ...(error ? { error } : {}) } }));
+          if (!isDirectory) reply("a hooked run needs a project directory");
+          else if (msg.type === "hooked-run-start") { const r = startHookedRun(msg.payload?.task, hookedRunDeps()); if (!r.ok) reply(r.error); }
+          else if (msg.type === "hooked-run-stop") { if (!stopHookedRun(analyzedRoot())) reply("no run is running"); }
+          else decideHookedRun(msg.payload?.accept === true, hookedRunDeps()).then((r) => { if (!r.ok) reply(r.error); }, (e) => reply(String(e?.message ?? e)));
         } else if (typeof msg.type === "string" && msg.type.startsWith("investigation-")) {
           // 2026-09-29 — the investigation board (src/server/investigations.ts).
           // Reply: investigation-state { list, current?, handoff?, error? }.
@@ -8301,6 +8348,9 @@ const START_VIEW = process.env.VG_START_VIEW === "index" ? "index" : "architectu
 const THREAD_RANK = ["all", "secondary"].includes(process.env.VG_THREAD_RANK ?? "")
   ? process.env.VG_THREAD_RANK!
   : "primary";
+// The Agent Manager's first engine (2026-09-29): the hooked Claude Code run
+// by default; the legacy suites pin "orchestrated" (playwright.config.ts).
+const AGENT_ENGINE = process.env.VG_AGENT_ENGINE === "orchestrated" ? "orchestrated" : "hooked";
 
 function getIndexHtml(): string {
   return `<!DOCTYPE html>
@@ -8317,6 +8367,7 @@ function getIndexHtml(): string {
   </style>
   <meta name="vg-start-view" content="${START_VIEW}">
   <meta name="vg-thread-rank" content="${THREAD_RANK}">
+  <meta name="vg-agent-engine" content="${AGENT_ENGINE}">
 </head>
 <body>
   ${bootMarkup()}

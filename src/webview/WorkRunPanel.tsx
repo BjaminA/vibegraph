@@ -22,6 +22,8 @@ import { bridge } from "./types";
 // M-CONTRACT.3 / M-ORCH — split out to keep this file under the 500-line rule.
 import { ConstraintsPanel } from "./ConstraintsPanel";
 import { OrchestrationGate } from "./OrchestrationGate";
+// 2026-09-29 — the default engine is one Claude Code session with the hooks.
+import { HookedRunView, AgentEngineToggle, useAgentEngine } from "./HookedRunView";
 
 const mono = "var(--font-mono)";
 
@@ -231,6 +233,7 @@ export function WorkRunPanel({ open, onClose, run, constraints = [], stack, poli
   // AUTONOMY — no human gate at all: the server confirms the objective
   // when the brief lands and resolves escalations as failed packets.
   const [autonomous, setAutonomous] = useState(false);
+  const [engine, setEngine] = useAgentEngine(!!run && ["draft", "running", "paused"].includes(run.status));
   if (!open) return null;
 
   const finished = run && (run.status === "done" || run.status === "failed");
@@ -279,7 +282,7 @@ export function WorkRunPanel({ open, onClose, run, constraints = [], stack, poli
         }}>
           <Bot size={16} strokeWidth={1.5} color="var(--accent-thread)" />
           <span style={{ fontSize: "var(--fs-13)", fontWeight: 700 }}>Agent Manager</span>
-          {run && (
+          {run && engine === "orchestrated" && (
             <span data-run-status-label style={{ fontSize: "var(--fs-11)", color: "var(--text-muted)", fontFamily: mono }}>
               {run.status} · {run.packets.filter((p) => p.status === "done").length}/{run.packets.length} packets
             </span>
@@ -306,7 +309,10 @@ export function WorkRunPanel({ open, onClose, run, constraints = [], stack, poli
         </div>
 
         <div style={{ padding: 20, overflowY: "auto", display: "flex", flexDirection: "column", gap: 12 }}>
-          {showForm ? (
+          <AgentEngineToggle engine={engine} onChange={setEngine} />
+          {engine === "hooked" ? (
+            <HookedRunView taskInput={(v, c) => <TaskInput value={v} onChange={c} />} />
+          ) : showForm ? (
             <>
               <span style={{ fontSize: "var(--fs-12)", color: "var(--text-muted)", lineHeight: 1.5 }}>
                 Describe the task. It decomposes DETERMINISTICALLY onto the threads whose remit it names

@@ -48,6 +48,9 @@ export default defineConfig({
       // the suites assert on every node, so they open on "all". The rank
       // spec switches levels through the control, as a user does.
       VG_THREAD_RANK: process.env.VG_THREAD_RANK ?? "all",
+      // The Agent Manager (2026-09-29): users land on the hooked Claude Code
+      // run; the orchestrated suites predate it and pin the legacy engine.
+      VG_AGENT_ENGINE: process.env.VG_AGENT_ENGINE ?? "orchestrated",
       PATH: process.env.PATH ?? "",
       HOME: process.env.HOME ?? "",
       // M-RUN e2e (test:e2e-run) drives the SM2 arg synthesizer through a

@@ -1,0 +1,14 @@
+{
+  "version": "1",
+  "constraints": [
+    {
+      "id": "c1",
+      "kind": "invariant",
+      "text": "Only store.py may call purge: a purge from anywhere else once wiped production.",
+      "scope": { "all": true },
+      "source": "human",
+      "createdAt": "2026-09-29T09:00:00.000Z",
+      "check": { "rule": "callers-only", "target": "purge", "files": ["store.py"] }
+    }
+  ]
+}

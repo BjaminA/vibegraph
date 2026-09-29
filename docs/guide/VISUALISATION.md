@@ -239,7 +239,28 @@ see [CLI.md](CLI.md).
 
 ## 8. Agents
 
-The **Agent Manager** (toolbar) turns a task into work on threads:
+The **Agent Manager** (toolbar) opens on **Claude Code + hooks**, the
+arrangement the head-to-heads proved: one Claude Code session with
+VibeGraph's hooks, so each prompt gets the contracts, stated rules and
+ratified skills of the threads it names, and every edit is re-checked — a new
+violation of a stated rule is stopped and explained to Claude.
+
+1. Describe the task and press **Run with Claude Code**. The project is
+   snapshotted first; you watch the session's tool calls (and any edit a hook
+   blocked) as it works, and can **Stop** it.
+2. When it ends, VibeGraph collects the evidence itself: every changed file
+   with its diff, the stated rules checked before and after (a rule the run
+   newly broke is named), the tests that reach the changes, and Claude's own
+   summary, labelled as a self-report.
+3. **Accept** keeps the changes; **Reject** restores the snapshot.
+
+The hooks are passed to that one session only; nothing is written to your
+project's `.claude/` (and if you installed them yourself with `init --hooks`,
+they are not added twice). It uses the **Workers** model tier, which must be a
+Claude model.
+
+**Orchestrated (legacy)**, one toggle away, is the earlier Agent Manager,
+unchanged — it turns a task into work on threads:
 
 1. Describe the task, **naming the code it touches** (backticked symbols, file
    names) — the decomposition is lexical and needs names to match.
