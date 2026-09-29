@@ -20,7 +20,7 @@ Install it (Node 20+ and Python 3.10+ on your PATH):
 npm install -g vibegraph-knowledge       # or: npx vibegraph-knowledge <command>
 ```
 
-More in [SETUP.md §2](SETUP.md#2-the-node-commands--install-from-npm).
+More in [SETUP.md §2](SETUP.md#2-install--one-npm-package).
 
 ---
 
@@ -32,62 +32,72 @@ More in [SETUP.md §2](SETUP.md#2-the-node-commands--install-from-npm).
 current directory. **Tokens** means the command asks a model (your `claude`
 CLI) and says so; everything else is deterministic.
 
+**Set up**
+
 | Command | What it does | What it writes | Tokens |
 |---|---|---|---|
-| `view [<path>] [--port n] [--open]` | Starts the visualisation — the web app at `http://localhost:4200` — until Ctrl-C | `.vibegraph/` state, as you use the app | only the app's Claude features |
 | `init [--print]` | Points Claude Code at the knowledge folder | a marked block in `CLAUDE.md`; a line in `.gitignore` | — |
-| `init --hooks` / `--remove-hooks` | Installs (or removes) four Claude Code hooks: each session starts with an orientation (re-sent after a compaction); each prompt gets its threads' contracts, rules and skills; each edit and the end of each turn re-check every stated rule, and a new violation blocks | `.claude/settings.local.json` (per user, never committed) | — |
-| `lessons list` | What the hooks saw sessions break and put right: each blocked rule, where, and the diff when it cleared; `skills draft` hands a thread's lessons to the drafting prompt | nothing | — |
-| `direction [<skill>]` / `direction enable\|disable <skill>` / `direction hooks headlines\|on-violation\|off` | The generic coding direction (six skills): which apply to how many threads, one skill's rules with each why, and whether the hooks send them — rule headlines once per session where a skill applies (default), only a rule's why when its check fires, or nothing. Off until you enable one; the Skills panel writes the same file | `.vibegraph/skills.json` (enable / hooks only) | — |
-| `dataflow [<root>] [--json]` | Untrusted input (request data, argv, stdin, script arguments, route / MCP handler parameters) followed by name into a shell string, SQL query text, eval or a subprocess argument list — each finding with its source, path and sink call; UNGUARDED or "review" (a condition on the way mentions the value). Exit 1 on an unguarded flow. Name-based: states its limits in every output | — | — |
-| `init --skill [--user]` / `--skills plan,debug,…` / `--remove-skill` | Installs (or removes) the Claude Code skills: `/vibegraph` (set up and use this) and the task skills `/vibegraph-plan`, `-debug`, `-security`, `-review` — which knowledge file and command to open for that task | `.claude/skills/<name>/SKILL.md`, or `~/.claude/skills/…` with `--user` | — |
-| `export` | Derives everything from the code and writes it for Claude | `.vibegraph/knowledge/` (see the files table) | — |
+| `init --hooks` / `--remove-hooks` | Installs (removes) the four Claude Code hooks | `.claude/settings.local.json` (per user, never committed) | — |
+| `init --skill [--user]` / `--skills plan,…` / `--remove-skill` | Installs (removes) `/vibegraph` and the four task skills | `.claude/skills/`, or `~/.claude/skills/` with `--user` | — |
+| `view [<path>] [--port n] [--open]` | Starts the visualisation until Ctrl-C | `.vibegraph/` state, as you use the app | only the app's Claude features |
+
+**Know the code**
+
+| Command | What it does | What it writes | Tokens |
+|---|---|---|---|
+| `export` | Derives everything and writes it for Claude | `.vibegraph/knowledge/` (see the files table below) | — |
 | `export --task "<text>"` | …plus the task mapped onto the threads that own it, dependencies first | `plan.md`, `plan.json` | — |
-| `export --architecture` | …plus the system map as data and as a picture | `architecture.vibegraph.json`, `architecture.html` | — |
-| `export --with-ir` | …plus the raw derived forms | `ir/`, `envelope.json`, `stack.json`, `crossings.json`, `architecture.json`, `quality/` | — |
-| `export --archify` | …plus the map in Archify's schema | `architecture.archify.json` | — |
-| `check [--uncommitted \| --git <range>]` | Verifies every stated rule's checkable half against the code: PASS / VIOLATED (names the call) / UNVERIFIABLE | nothing | — |
-| `affected <file>… [--uncommitted]` | Lists the discovered tests that reach the changed files (what to run) and the threads the change touches; names changed files no test reaches | nothing | — |
-| `coverage <file>…` | Per file: parsed fully or partially, the threads and tests that reach it, its unreached functions and why, the environment variables it reads, whether it changed since the export — and what to do before trusting it | nothing | — |
-| `constraints list [--json]` | Shows the stated rules, who stated them, their scope and checks | nothing | — |
-| `constraints add …` | States a rule (human), refusing duplicates and malformed checks | `.vibegraph/constraints.json` | — |
-| `constraints remove <id>` / `ratify <id>` | Deletes a rule / makes a model-stated rule human-stated | `.vibegraph/constraints.json` | — |
-| `seeds list` | Shows the entry points you named, and whether each resolves | nothing | — |
-| `seeds add <file>[:<fn>]` / `remove …` | Names an entry point discovery cannot see (checked before it is saved) | `.vibegraph/manual_seeds.json` | — |
-| `skills list` | Every thread and its skill: none / draft / ratified and fresh / stale | nothing | — |
-| `skills draft <entry>… \| --missing` | Drafts per-thread guidance through VibeGraph's grounding gates; saved as a draft | `.vibegraph/thread-skills/` | **yes** |
-| `skills ratify` / `reaffirm` / `auto-reaffirm` | Approves a draft / re-stamps a still-correct stale skill / keeps one exported across changes | `.vibegraph/thread-skills/` | — |
+| `export --architecture` / `--with-ir` / `--archify` | …plus the map as data and a picture / the raw IR / Archify's schema | see the files table | — |
+| `brief <entry> [--max n]` | One thread: its contract, then the verbatim source of its primary functions, then secondary within a budget | nothing | — |
+| `affected <file>… [--uncommitted]` | The tests that reach the changed files, and the threads the change touches | nothing | — |
+| `coverage <file>…` | Per file: parsed fully?, what reaches and tests it, unreached functions and why, env vars read, changed since the export | nothing | — |
+| `dataflow [--json]` | Untrusted input → shell / SQL text / eval, with the path; exit 1 on an unguarded flow | nothing | — |
 | `architecture` | Writes the system map | `.vibegraph/architecture-map/` | — |
-| `architecture --propose` / `--modify "<text>"` | Asks for deployment / trust groups, names and a start-here path, every item citing what it saw; stored pending | `.vibegraph/architecture.json` (pending) | **yes** |
-| `architecture --ratify` / `--reject` | Makes the pending proposal stated / drops it | `.vibegraph/architecture.json` | — |
-| `classify [--dry-run \| --apply]` | Asks for the role of tools no table knows; `--apply` stores each as a model-stated policy | `.vibegraph/constraints.json` | **yes** |
+
+**State and check what the code cannot show**
+
+| Command | What it does | What it writes | Tokens |
+|---|---|---|---|
+| `check [--uncommitted \| --git <range>]` | Every stated rule's check: PASS / VIOLATED (names the call) / UNVERIFIABLE; exit 0 / 1 / 2 | nothing | — |
+| `constraints list \| add \| remove \| ratify` | The stated rules, their reasons, scopes and checks | `.vibegraph/constraints.json` | — |
+| `seeds list \| add \| remove` | Entry points discovery cannot see | `.vibegraph/manual_seeds.json` | — |
+| `skills list \| ratify \| reaffirm \| auto-reaffirm` | Per-thread skills: approve, re-stamp a still-correct stale one | `.vibegraph/thread-skills/` | — |
+| `skills draft <entry>… \| --missing` | Drafts per-thread guidance through the grounding gates (reads the thread's lessons) | `.vibegraph/thread-skills/` | **yes** |
+| `direction [<skill>]` / `enable \| disable <skill>` / `hooks headlines \| on-violation \| off` | The generic coding skills: where they apply, one skill in full, whether the hooks send them | `.vibegraph/skills.json` | — |
+| `lessons list` | Rules sessions broke and put right, with the fix | nothing | — |
+| `architecture --propose \| --modify "<text>"` | Deployment / trust groups and a start-here path, every item citing what it saw; stored pending | `.vibegraph/architecture.json` | **yes** |
+| `architecture --ratify \| --reject` | Makes the pending proposal stated / drops it | `.vibegraph/architecture.json` | — |
+| `classify [--dry-run \| --apply]` | The role of tools no table knows; `--apply` stores each as a model-stated policy | `.vibegraph/constraints.json` | **yes** |
 | `--version` / `--help` | The version / every command and option | nothing | — |
 
 ### Every file VibeGraph makes
 
 All of it lives under `.vibegraph/` in **your** project (plus the `init`
-block in `CLAUDE.md`). **Derived** = read from the code, regenerated at will;
-**stated** = a person's decision (commit it); **proposed / drafted** = a
-model's, until a person ratifies it; **observed** = what a consented run saw.
+block in `CLAUDE.md`, and the hooks and skills under `.claude/`). **Derived** =
+read from the code, regenerated at will; **stated** = a person's decision
+(commit it); **proposed / drafted** = a model's, until a person ratifies it;
+**observed** = what a consented run saw.
 
 **For Claude — `.vibegraph/knowledge/`** (`export`; regenerate, don't commit)
 
 | File | Kind | What it holds | Use |
 |---|---|---|---|
 | `README.md` | derived | the index and reading order; what was skipped or could not be parsed | Claude reads it first |
-| `architecture.md` | derived + stated | the whole system on one page: start-here story, the system in a dozen arrows, where each process runs, what each calls and hops to (protocol and why), payloads, trust crossings, subsystems, thread-to-thread links, what the map leaves out | orient before a task that crosses processes |
+| `architecture.md` | derived + stated | the whole system on one page: start-here story, where each process runs, what each calls and hops to (protocol and why), payloads, trust crossings | orient before a task that crosses processes |
 | `constraints.md` | stated | the rules and their reasons, with who stated each | the requirements the code cannot show |
-| `threads/INDEX.md`, `threads/<entry>.md` | derived + stated | one **contract** per thread: data in/out, every external call and the tool it leaves through, round trips in loops, neighbouring threads, rules routed to it | what to keep true when editing that path |
-| `flows.md` | derived | end-to-end chains, page → component → call → script, with a reverse index | find everything a change touches downstream |
-| `reachability.md` | derived | the functions no entry point reaches, each with why: never named, exported but unused, called only from unreached code — or a resolution gap that means it IS used | before editing code no thread shows, and before calling anything dead |
-| `configuration.md` | derived | the environment variables the code reads by name, on which threads, and which are read but declared nowhere (`.env.example`, compose) | before deploying, or changing anything a variable switches |
-| `sources.json` | derived | a hash of every source file as the export read it | `coverage` compares against it to say what changed since |
+| `threads/INDEX.md`, `threads/<entry>.md` | derived + stated | one **contract** per thread: data in/out, what leaves the project and through which tool, round trips in loops, tests, configuration, untrusted input, neighbouring threads, the rules routed to it | what to keep true when editing that path |
+| `flows.md` | derived | end-to-end chains, page → component → call → script, with a reverse index | everything a change touches downstream |
+| `security.md` | derived | untrusted input reaching a shell, SQL text or eval, each with its path, and what the pass cannot see | a security review; before exposing an entry point |
+| `reachability.md` | derived | the functions no entry point reaches, each with why | before calling anything dead |
+| `configuration.md` | derived | the environment variables the code reads, on which threads, and which are declared nowhere | before deploying |
 | `system_spec.md` | derived + stated | the tools the project is built on, by role; the modules that wrap them; policies about them | use the existing tools and wrappers |
 | `skills/<entry>.md` | drafted, ratified | per-thread guidance a person approved (drafts and stale ones withheld, named) | how to work on that thread, and why |
+| `investigations/` | stated | the investigation boards, as hand-off documents | pick up a bug where a person left it |
 | `observations.json` | observed | what consented trace runs saw at each call site | resolve calls static analysis could not |
-| `plan.md`, `plan.json` | derived | with `--task`: the task as packets on the threads that own it, dependencies first | order the work |
+| `sources.json` | derived | a hash of every source file as the export read it | `coverage` says what changed since |
+| `plan.md`, `plan.json` | derived | with `--task`: the task as packets on the threads that own it | order the work |
 | `architecture.vibegraph.json`, `architecture.html` | derived + stated | with `--architecture`: the map as data (every lens) and as a picture | tools / people |
-| `ir/`, `envelope.json`, `stack.json`, `crossings.json`, `architecture.json`, `quality/` | derived | with `--with-ir`: the raw IR and indexes | tools, audits, your own scripts |
+| `ir/`, `envelope.json`, `stack.json`, `crossings.json`, `security.json`, `quality/` | derived | with `--with-ir`: the raw IR and indexes | tools, audits, your own scripts |
 
 **The system map — `.vibegraph/architecture-map/`** (`architecture`)
 
@@ -103,16 +113,22 @@ model's, until a person ratifies it; **observed** = what a consented run saw.
 
 | File | Kind | What it holds | Written by |
 |---|---|---|---|
-| `constraints.json` | stated | the rules, their reasons, scopes and machine checks; stack policies | `constraints`, `classify --apply`, the app |
-| `architecture.json` | stated / proposed | deployment and trust groups, names, the start-here path; a pending proposal | `architecture --propose/--ratify`, the app |
+| `constraints.json` | stated | the rules, their reasons, scopes and checks; stack policies | `constraints`, `classify --apply`, the app |
+| `architecture.json` | stated / proposed | deployment and trust groups, names, the start-here path; a pending proposal | `architecture`, the app |
 | `manual_seeds.json` | stated | entry points you named | `seeds`, by hand |
 | `thread-skills/` | drafted → ratified | per-thread skills with their freshness stamp | `skills`, the app, MCP |
+| `skills.json` | stated | which generic skills are on, and what the hooks send | `direction`, the app |
+| `investigations/` | stated | investigation boards: pins, the question, notes | the app |
 | `observations.json` | observed | trace-run results per call site | the app's Trace / Observe |
-| `skills.json` | stated | which generic coding skills are on for this project | the app |
 | `models.json` | stated | which model — or local Ollama — runs which kind of work | the app's Models panel |
-| `work-run.json`, `work-snapshots/` | runtime | an Agent Manager run's state, and the pre-edit snapshots a reject restores | the app |
-| `readmes/`, `VibeReadme.md` | drafted | model-written READMEs per scope | the app |
-| `build-plan.json`, `system-plan.json` | proposed → ratified | the plan and roadmap when building a project from scratch | the app |
+| `hooked-run.json`, `work-run.json`, `work-snapshots/` | runtime | an Agent Manager run's state, and the snapshot a reject restores | the app |
+| `.gitignore` | — | keeps the copies of code and runtime data above out of git | VibeGraph |
+
+**Outside the project** — `~/.cache/vibegraph-knowledge/`: the Python parser,
+the envelope cache the hooks read through (only changed files are re-parsed),
+per-session hook state, and **lessons** (a blocked violation that was fixed,
+with the fix). Clearing the cache clears them; the hooks write nothing into
+your project.
 
 ---
 
@@ -120,13 +136,15 @@ model's, until a person ratifies it; **observed** = what a consented run saw.
 
 ```bash
 cd /path/to/your/project
-vibegraph-knowledge init          # one marked block in CLAUDE.md pointing at the folder, + .gitignore line
-vibegraph-knowledge export        # parse, derive, write .vibegraph/knowledge/
+vibegraph-knowledge init --hooks --skill   # the hooks + the skills, a CLAUDE.md block, a .gitignore line
+vibegraph-knowledge export                 # parse, derive, write .vibegraph/knowledge/
 ```
 
-Open a Claude Code session in the project as usual. `CLAUDE.md` now tells it
-to read `.vibegraph/knowledge/README.md` first, and the README gives the
-reading order.
+Open a **new** Claude Code session in the project as usual. From its first
+prompt, the hooks hand Claude the contracts and rules of the code the prompt
+names and re-check the rules after every edit; `CLAUDE.md` points it at
+`.vibegraph/knowledge/README.md` for everything else. (Plain `init`, without
+`--hooks`, only writes that pointer.)
 
 Then add what only your team knows:
 
@@ -168,7 +186,7 @@ Writes one marked block into the project's `CLAUDE.md` (replaced on re-run,
 never duplicated) and adds `.vibegraph/knowledge/` to `.gitignore`.
 `--print` shows the block without writing. Zero tokens.
 
-**`--hooks`** also installs three [Claude Code hooks](https://docs.claude.com/en/docs/claude-code/hooks)
+**`--hooks`** also installs four [Claude Code hooks](https://docs.claude.com/en/docs/claude-code/hooks)
 in `.claude/settings.local.json` — the per-user settings file, never
 committed, because the commands name this machine's node, CLI and Python by
 absolute path. They run `vibegraph-knowledge hook <event>`, spend no tokens and
@@ -180,6 +198,8 @@ never write to your code:
 | you send a prompt | routes the prompt to the threads it names (files, symbols, node ids — the same matcher the app's chat uses) and adds each one's contract, the stated rules routed to it and its ratified skill, once per session. A prompt that names no code is matched on the code's own words (function names, file paths, docstrings) and the result is labelled a keyword guess; with no match at all it gets the project-wide rules once. |
 | Claude edits a file | re-checks every stated rule against the edited tree. A **new** violation of a rule whose check may reject stops Claude with the rule, its reason and the offending call, so it fixes it on the spot. New unverifiable or advisory findings, and the tests that reach the file, are added as notes. An edit that leaves the file unparseable is stopped too. |
 | Claude finishes a turn | the same check once more; a new violation keeps the turn going (at most twice, then it is reported to you instead). |
+
+![What Claude receives with a prompt that names telemetry/alerts.py: the thread, its two routed rules with their reasons, and its contract](../screenshots/13-hook-context.png)
 
 "New" means not already there at the session's first prompt: a violation
 your tree already had is reported by `check`, never blocked on. Each run reads
@@ -256,6 +276,10 @@ default it writes **prose** — what a reader actually opens:
 | `flows.md` | end-to-end chains from a page to the script it runs, and a reverse index |
 | `system_spec.md` | the tools the project is built on, the modules that wrap them, the policies stated about them |
 | `skills/<entry>.md` | ratified, fresh thread skills (drafts and stale ones are withheld and named) |
+| `security.md` | untrusted input reaching a shell, SQL text or eval, each with its path — see [`dataflow`](#dataflow--untrusted-input-to-a-dangerous-sink) |
+| `reachability.md` | the functions no entry point reaches, each with why |
+| `configuration.md` | the environment variables read, where, and which are declared nowhere |
+| `investigations/` | investigation boards from the app, as hand-off documents |
 | `observations.json` | what consented trace runs saw, when there are any |
 
 Options:
@@ -289,6 +313,43 @@ passed · 1 something violated · 2 nothing violated but something
 unverifiable. `--uncommitted` treats your working-tree changes as the delta
 (what a pre-commit hook has); `--git <range>` uses a commit range. Zero
 tokens. A good pre-commit or CI step.
+
+![check on the fleet example: three clauses pass, each saying what it could not follow; four rules are prose only](../screenshots/14-check.png)
+
+### `dataflow` — untrusted input to a dangerous sink
+
+```bash
+vibegraph-knowledge dataflow [<root>] [--json]
+```
+
+Follows untrusted input by name into places where it becomes code: a
+shell string (`os.system`, `subprocess(..., shell=True)`, `execSync`,
+`eval`/`sh -c` and a variable command word in bash), SQL query **text**
+(a value passed as a separate parameter is parameterised and is not a
+finding), `eval`/`exec`/`new Function`, and — as *review* — a list-form
+subprocess argument. Sources: request data (`request.args`/`.json`/`.form`,
+`req.body`/`.query`/`.params`, `searchParams`), route and MCP-tool handler
+parameters, `sys.argv`/`process.argv`, `input()`, stdin, and a script's
+`$1`…`$@`. The value is followed through assignments (destructuring
+included), loops, module-level values read inside functions, and into the
+parameters of the functions it is passed to, across files. `int()`,
+`shlex.quote`, `escape…`, `sanitize…` clean it.
+
+Each finding is **UNGUARDED** (nothing on the way) or **review** (an `if`
+mentions the value — read it; a condition is not proof it validates), with
+the source, the functions it passed through and the sink call. Exit 1 when
+anything is unguarded. The same findings are `security.md` in the export, a
+line in each thread contract, and — when an edit introduces a new one — an
+advisory note from the post-edit hook (it never blocks). Zero tokens.
+
+What it cannot see, and says on every report: statement order is not
+modelled; a value stored in an object or container and read back, dynamic
+dispatch, and a value that goes into a database or file and comes back out
+(second-order input) are not followed. **No findings is not a clean bill.**
+It does no secret scanning and knows no CVEs — run `npm audit` /
+`pip-audit` / `cargo audit` for dependencies.
+
+![dataflow on the test fixture: seven unguarded flows across Python, TypeScript and bash](../screenshots/15-dataflow.png)
 
 ### `constraints` — the rules the code cannot show
 

@@ -1,72 +1,109 @@
 # VibeGraph
 
-**See, run and edit a codebase as the structure it really has — and hand that
-structure, and the rules your team knows, to Claude before it edits.**
+**See a codebase as the structure it really has, and give that structure, and
+the rules your team knows, to Claude while it works.**
 
 VibeGraph parses your code (Python, TypeScript, bash, C++, Rust) into an IR,
-traces every entry point forward as a *thread* across files and languages,
-and draws the whole system as an architecture map whose every edge names the
-protocol it was read from. Click a node and you are editing the file on disk,
-through a chokepoint that rejects any change reaching beyond that node. The
-same knowledge is exported as plain files a Claude Code session reads first.
+traces every entry point forward as a *thread* across files and languages, and
+draws the whole system as an architecture map whose every edge names the
+protocol it was read from. You can use it two ways, and they share one
+`.vibegraph/` folder:
 
-> **Read [SECURITY.md](SECURITY.md) before pointing this at your own work.**
-> The visualisation spawns the `claude` CLI with `--dangerously-skip-permissions`
-> in the project you give it, writes to your files, executes your code (in a
-> sandbox copy, behind a consent gate), sends your source to Anthropic and
-> costs money per turn. Run it on a **git repo with a clean working tree**, so
-> anything it does is one `git diff` from review.
+| | **Claude Code + hooks** | **The visualisation** |
+|---|---|---|
+| What it is | Your normal Claude Code session, with VibeGraph wired in through four hooks | A local web app: the map, threads, running and editing code, agents |
+| What Claude gets | The contracts, rules and approved skills of the threads each prompt touches; every edit re-checked, a new rule violation stopped with its reason | The same, through the chat and the Agent Manager |
+| Runs a server? | **No.** Every command is a local process that exits | Yes, on `127.0.0.1` only |
+| Costs tokens? | No — the hooks are deterministic | Only the features that ask Claude |
+| Start with | `vibegraph-knowledge init --hooks --skill` | `vibegraph-knowledge view .` |
 
-![The launchpad — entry points grouped by what they are](docs/screenshots/01-launchpad.png)
+![The architecture map, Bird's-eye lens: the fleet example's processes, the hops between them and the tools they reach, each edge labelled with its protocol](docs/screenshots/05-architecture.png)
+
+> **Read [SECURITY.md](SECURITY.md) before pointing this at your own work.** The
+> hooks path runs nothing but local commands. The visualisation can spawn the
+> `claude` CLI with `--dangerously-skip-permissions`, writes to your files,
+> executes your code (in a sandbox copy, behind a consent gate) and sends your
+> source to Anthropic when you use its Claude features. Either way, work on a
+> **git repo with a clean working tree**, so anything that changed is one
+> `git diff` from review.
 
 ---
 
+## Contents
+
+- [Get started](#get-started) — install, the hooks, the visualisation
+- [What you get](#what-you-get) — the map, threads, code, investigations, agents, rules, security, direction
+- [Commands and files](#commands-and-files) — every command, every file it writes
+- [What it is](#what-it-is) · [Languages](#languages) · [Examples](#try-it--worked-examples) · [Development](#development) · [Limits](#limits-worth-knowing)
+
+| Guide | |
+|---|---|
+| **[SETUP.md](docs/guide/SETUP.md)** | Install, check it works on an example, point it at your code, settings, troubleshooting. |
+| **[VISUALISATION.md](docs/guide/VISUALISATION.md)** | The web app on your codebase: the map and its lenses, threads, running code, editing, rules, skills, agents, MCP. |
+| **[CLI.md](docs/guide/CLI.md)** | Every `vibegraph-knowledge` command, the hooks, the skills, what costs tokens, a team workflow. |
+
 ## Get started
 
-| | |
-|---|---|
-| **[docs/guide/SETUP.md](docs/guide/SETUP.md)** | Install, check it works on an example, point it at your code, settings, troubleshooting. |
-| **[docs/guide/VISUALISATION.md](docs/guide/VISUALISATION.md)** | Using the web app on your codebase: the architecture map and its lenses, threads, running code, editing, rules, skills, agents, MCP. |
-| **[docs/guide/CLI.md](docs/guide/CLI.md)** | The node commands (`vibegraph-knowledge`): every command, what it writes, what costs tokens, a team workflow. |
-
-### Install — one npm package, no clone
+### Install — one npm package
 
 ```bash
-npm install -g vibegraph-knowledge          # also installed as `vgk`
+npm install -g vibegraph-knowledge          # also installed as `vgk`; or use `npx vibegraph-knowledge …`
 ```
 
 You need **Node 20+** and **Python 3.10+** (`python3` on your PATH). The first
 run installs the Python parser and formatter (`libcst`, `black`) into
 `~/.cache/vibegraph-knowledge` by itself. **Claude Code** (`claude`, logged in)
-is optional: chat, drafting and proposals need it; everything deterministic
-works without it. On Windows, use WSL2.
+is optional for the visualisation and is what the hooks plug into. On Windows,
+use WSL2.
 
-### See it — the visualisation
+### Claude Code, with VibeGraph in the loop (recommended)
+
+```bash
+cd /path/to/your/project
+vibegraph-knowledge init --hooks --skill     # four hooks (per user, never committed) + the skills
+vibegraph-knowledge export                   # .vibegraph/knowledge/: the map, one contract per thread, the rules
+vibegraph-knowledge constraints add --kind invariant --files telemetry/ \
+  --text "Operators are paged only through alerts.notify after should_notify's dedup — a flapping sensor once paged forty times a minute." \
+  --check '{"rule":"calls-through","target":"notify","through":"should_notify"}'
+```
+
+Then start Claude Code as usual. From the **next** session:
+
+| When | The hook | What Claude gets |
+|---|---|---|
+| The session starts (and after a compaction) | `SessionStart` | One orientation: languages, entry points, every stated rule in a line |
+| You send a prompt | `UserPromptSubmit` | The contract, stated rules and approved skills of the threads the prompt names — once per session each, capped so it never spills into a file |
+| Claude edits (including through Bash) | `PostToolUse` | Every stated rule re-checked; a **new** violation stops the edit with the rule, its reason and the offending call |
+| The turn ends | `Stop` | One last check before Claude says it is done |
+
+![What Claude receives with a prompt about telemetry/alerts.py: the thread it touches, the two rules routed to it with their reasons, and the thread's contract](docs/screenshots/13-hook-context.png)
+
+**Measured** (one sample each, Opus, the same task on a codebase with rules
+the code does not show): with the
+rules only on disk, Claude never opened them and broke one (6/7). With the
+hooks it kept all seven, in **163 s for $1.19**, where the orchestrated
+Agent Manager needed 2,346 s and $12.08 for the same result.
+
+`init --skill` also installs five Claude Code skills. A skill costs about 100
+tokens until a task matches it:
+
+| Skill | For | Opens |
+|---|---|---|
+| `/vibegraph` | setting it up, stating rules, a blocked edit | `init`, `export`, `constraints`, `check` |
+| `/vibegraph-plan` | a change whose blast radius is unclear | `export --task` → `plan.md`, `brief`, the rules and stack, `affected` |
+| `/vibegraph-debug` | a failure whose cause is not in the file you are in | the thread index, `flows.md`, `brief`, where static knowledge ends |
+| `/vibegraph-security` | a security review or threat model | `dataflow`, what leaves the project, trust groups, configuration |
+| `/vibegraph-review` | before committing, or reviewing a diff | `check --uncommitted`, `affected`, `brief`, `dataflow` |
+
+### The visualisation
 
 ```bash
 vibegraph-knowledge view /path/to/your/project     # then open http://localhost:4200
 vibegraph-knowledge view . --open                  # or open the browser for you
 ```
 
-Ctrl-C stops it. The architecture map, threads across files, running code to
-a node, editing through the chokepoint, rules, skills and agents — walked
-through in [docs/guide/VISUALISATION.md](docs/guide/VISUALISATION.md).
-
-### Hand it to Claude — the knowledge commands
-
-```bash
-cd /path/to/your/project
-vibegraph-knowledge init                     # point CLAUDE.md at .vibegraph/knowledge/
-vibegraph-knowledge export                   # the architecture map, one contract per thread, the rules
-vibegraph-knowledge constraints add --kind invariant --all \
-  --text "Every outbound HTTP call goes through lib/http_client.py: it routes via the egress proxy."
-vibegraph-knowledge check                    # verify the stated rules against the code
-```
-
-Then open Claude Code in the project as usual: `CLAUDE.md` now tells it to
-read the knowledge first. Both halves share `.vibegraph/` in your project, so a
-rule stated in the browser is what `export` hands to Claude. Every command, and
-which three spend tokens: [docs/guide/CLI.md](docs/guide/CLI.md).
+Ctrl-C stops it. Walked through in
+[docs/guide/VISUALISATION.md](docs/guide/VISUALISATION.md).
 
 ### From a clone (to work on VibeGraph itself)
 
@@ -76,6 +113,120 @@ cd vibegraph && npm install
 ./runVis.sh /path/to/your/project            # the same app, built from source
 ```
 
+## What you get
+
+Every picture below is the real app on a real fixture, regenerated by
+`./scripts/docs_screenshots.sh`.
+
+### The architecture map
+
+One page of the whole system: processes, dispatchers and the tools they reach,
+every edge labelled with a protocol read from a fact in the code. Lenses change
+what is drawn, never what is true: *Bird's-eye*, *Overview*, *Tools*, *Flows*,
+*Payloads*, *Trust*, *Configuration* and *Journeys*. Deployment and trust
+groups are proposed by Claude, must cite what they were shown, and apply only
+when you ratify them.
+
+| Configuration: which process reads which environment variables | Journeys: which page links to which (Next.js) |
+|---|---|
+| ![Configuration lens](docs/screenshots/08-config-lens.png) | ![Journeys lens](docs/screenshots/10-journeys.png) |
+
+### Threads
+
+Every entry point (route, CLI, script, test, page, MCP tool) traced forward
+across files and languages. The list nests a sub-thread under the thread that
+starts it. On the canvas, **Primary / + Secondary / All** decides how much is
+drawn. Primary is what the thread does: the calls that leave your code, and the
+steps on the way to them. Nothing is thrown away; a card shows **+N** for what
+it hides. The **tested · N** and **env · N** chips list the tests that reach
+the thread and the configuration it reads.
+
+![A thread at the Primary level: the ingest route, the batch it accepts, the rows it writes, and the four database calls it makes](docs/screenshots/02-thread.png)
+
+| The thread list, nested | + Secondary, with the configuration chip open |
+|---|---|
+| ![Thread list](docs/screenshots/01-launchpad.png) | ![Thread with env chip](docs/screenshots/07-thread-config.png) |
+
+`dynamic` (genuine runtime dispatch) and `unresolved` (VibeGraph could not
+find the target) are drawn differently and never merged. **Run to here** runs
+the real code to one node in a throwaway copy; **Observe** and **trace** record
+what a dynamic call really called.
+
+### Code and files
+
+The code view carries the same knowledge beside the source: a gutter bar for
+each line a thread reaches, coloured by rank; a dot on each line that reads an
+environment variable (amber when the project declares it nowhere); code no
+entry point reaches dimmed, with the reason on hover. In **Files**, unreached,
+partly parsed and changed-since-export files are marked.
+
+![The code view on http_client.py: environment reads marked, rank bars in the gutter](docs/screenshots/06-code-insight.png)
+
+### Investigation board
+
+Pin nodes from every thread a bug crosses, write the question and a note on
+each, then **Hand off**: a Markdown document with each pin's code as it is now,
+saved under `.vibegraph/investigations/`, carried by every export and readable
+over MCP.
+
+![Two pins from the ingest route, a question and a note](docs/screenshots/09-investigation.png)
+
+### The Agent Manager
+
+The Agent Manager opens on **Claude Code + hooks**, the arrangement measured
+above. It runs one session with the hooks injected for that run only, and
+snapshots the project first. When the session ends, the server collects the
+evidence itself: every changed file, the stated rules before and after, and the
+tests that reach the change. Claude's summary is labelled as a self-report.
+**Accept** keeps the change; **Reject** restores the snapshot byte for byte.
+The earlier orchestrated engine is one toggle away.
+
+![A run whose edit broke a stated rule: the hook's block, the rule named as newly violated, the changed file, Accept and Reject](docs/screenshots/12-agent-manager.png)
+
+*Captured with the stub model the end-to-end test uses; the hooks it ran and
+the block they raised are real.*
+
+### Rules that are checked, not just written
+
+A stated rule can carry a check VibeGraph runs against the IR: `callers-only`,
+`import-only`, `calls-through`, `payload-keys`, `guards`, `not-in-loop`,
+`handles-failure`, `annotated` or `co-changes`. Each check has three verdicts:
+**pass**, which says what it could not follow; **violated**, which names the
+call; and **unverifiable**, which is never counted as a pass. Stack policies
+(*forbid*, *replace-with*) are checked the same way.
+
+![vibegraph-knowledge check on the fleet example: three checks pass, four rules are prose only](docs/screenshots/14-check.png)
+
+### Untrusted input
+
+`vibegraph-knowledge dataflow` follows request data, command-line arguments,
+stdin and script arguments by name into shell strings, SQL query text and
+`eval`. Each finding names the source, the path and the sink call. A condition
+that mentions the value turns it into *review*; it is never counted as proof.
+The same findings appear in `security.md`, in each thread's contract, and in
+the post-edit hook when an edit adds one. That hook only advises; it never
+blocks. Name-based, and it says what it cannot see.
+
+![dataflow on the test fixture: seven unguarded flows in three languages, each with its source and path](docs/screenshots/15-dataflow.png)
+
+### Generic direction
+
+Six coding skills (boundary integrity, change coupling, failure visibility,
+repetition cost, resolvability, retry root cause). Each rule in them carries
+its reason and the check that backs it. Every skill is off by default. When
+one is on, the hooks send its rule headlines once per session, or only a
+rule's reason when its check fires, or nothing. The full text is always
+available on demand (`direction <skill>`). The panel shows where each skill
+applies.
+
+![The Generic direction panel: six skills, where each applies, and what the hooks send](docs/screenshots/11-direction.png)
+
+### Other views
+
+| Arch: PyTorch models as layer schematics | Diagram: one file as structure |
+|---|---|
+| ![Arch view](docs/screenshots/03-arch.png) | ![Diagram view](docs/screenshots/04-fileview.png) |
+
 ## Commands and files
 
 ### Every command
@@ -84,82 +235,93 @@ cd vibegraph && npm install
 current directory. **Tokens** means the command asks a model (your `claude`
 CLI) and says so; everything else is deterministic.
 
+**Set up**
+
 | Command | What it does | What it writes | Tokens |
 |---|---|---|---|
-| `view [<path>] [--port n] [--open]` | Starts the visualisation — the web app at `http://localhost:4200` — until Ctrl-C | `.vibegraph/` state, as you use the app | only the app's Claude features |
 | `init [--print]` | Points Claude Code at the knowledge folder | a marked block in `CLAUDE.md`; a line in `.gitignore` | — |
-| `export` | Derives everything from the code and writes it for Claude | `.vibegraph/knowledge/` (see the files table) | — |
+| `init --hooks` / `--remove-hooks` | Installs (removes) the four Claude Code hooks | `.claude/settings.local.json` (per user, never committed) | — |
+| `init --skill [--user]` / `--skills plan,…` / `--remove-skill` | Installs (removes) `/vibegraph` and the four task skills | `.claude/skills/`, or `~/.claude/skills/` with `--user` | — |
+| `view [<path>] [--port n] [--open]` | Starts the visualisation until Ctrl-C | `.vibegraph/` state, as you use the app | only the app's Claude features |
+
+**Know the code**
+
+| Command | What it does | What it writes | Tokens |
+|---|---|---|---|
+| `export` | Derives everything and writes it for Claude | `.vibegraph/knowledge/` (see the files table) | — |
 | `export --task "<text>"` | …plus the task mapped onto the threads that own it, dependencies first | `plan.md`, `plan.json` | — |
-| `export --architecture` | …plus the system map as data and as a picture | `architecture.vibegraph.json`, `architecture.html` | — |
-| `export --with-ir` | …plus the raw derived forms | `ir/`, `envelope.json`, `stack.json`, `crossings.json`, `architecture.json`, `quality/` | — |
-| `export --archify` | …plus the map in Archify's schema | `architecture.archify.json` | — |
-| `check [--uncommitted \| --git <range>]` | Verifies every stated rule's checkable half against the code: PASS / VIOLATED (names the call) / UNVERIFIABLE | nothing | — |
-| `affected <file>… [--uncommitted]` | Lists the discovered tests that reach the changed files (what to run) and the threads the change touches; names changed files no test reaches | nothing | — |
-| `coverage <file>…` | Per file: parsed fully or partially, the threads and tests that reach it, its unreached functions and why, the environment variables it reads, whether it changed since the export — and what to do before trusting it | nothing | — |
-| `constraints list [--json]` | Shows the stated rules, who stated them, their scope and checks | nothing | — |
-| `constraints add …` | States a rule (human), refusing duplicates and malformed checks | `.vibegraph/constraints.json` | — |
-| `constraints remove <id>` / `ratify <id>` | Deletes a rule / makes a model-stated rule human-stated | `.vibegraph/constraints.json` | — |
-| `seeds list` | Shows the entry points you named, and whether each resolves | nothing | — |
-| `seeds add <file>[:<fn>]` / `remove …` | Names an entry point discovery cannot see (checked before it is saved) | `.vibegraph/manual_seeds.json` | — |
-| `skills list` | Every thread and its skill: none / draft / ratified and fresh / stale | nothing | — |
-| `skills draft <entry>… \| --missing` | Drafts per-thread guidance through VibeGraph's grounding gates; saved as a draft | `.vibegraph/thread-skills/` | **yes** |
-| `skills ratify` / `reaffirm` / `auto-reaffirm` | Approves a draft / re-stamps a still-correct stale skill / keeps one exported across changes | `.vibegraph/thread-skills/` | — |
+| `export --architecture` / `--with-ir` / `--archify` | …plus the map as data and a picture / the raw IR / Archify's schema | see the files table | — |
+| `brief <entry> [--max n]` | One thread: its contract, then the verbatim source of its primary functions, then secondary within a budget | nothing | — |
+| `affected <file>… [--uncommitted]` | The tests that reach the changed files, and the threads the change touches | nothing | — |
+| `coverage <file>…` | Per file: parsed fully?, what reaches and tests it, unreached functions and why, env vars read, changed since the export | nothing | — |
+| `dataflow [--json]` | Untrusted input → shell / SQL text / eval, with the path; exit 1 on an unguarded flow | nothing | — |
 | `architecture` | Writes the system map | `.vibegraph/architecture-map/` | — |
-| `architecture --propose` / `--modify "<text>"` | Asks for deployment / trust groups, names and a start-here path, every item citing what it saw; stored pending | `.vibegraph/architecture.json` (pending) | **yes** |
-| `architecture --ratify` / `--reject` | Makes the pending proposal stated / drops it | `.vibegraph/architecture.json` | — |
-| `classify [--dry-run \| --apply]` | Asks for the role of tools no table knows; `--apply` stores each as a model-stated policy | `.vibegraph/constraints.json` | **yes** |
+
+**State and check what the code cannot show**
+
+| Command | What it does | What it writes | Tokens |
+|---|---|---|---|
+| `check [--uncommitted \| --git <range>]` | Every stated rule's check: PASS / VIOLATED (names the call) / UNVERIFIABLE; exit 0 / 1 / 2 | nothing | — |
+| `constraints list \| add \| remove \| ratify` | The stated rules, their reasons, scopes and checks | `.vibegraph/constraints.json` | — |
+| `seeds list \| add \| remove` | Entry points discovery cannot see | `.vibegraph/manual_seeds.json` | — |
+| `skills list \| ratify \| reaffirm \| auto-reaffirm` | Per-thread skills: approve, re-stamp a still-correct stale one | `.vibegraph/thread-skills/` | — |
+| `skills draft <entry>… \| --missing` | Drafts per-thread guidance through the grounding gates (reads the thread's lessons) | `.vibegraph/thread-skills/` | **yes** |
+| `direction [<skill>]` / `enable \| disable <skill>` / `hooks headlines \| on-violation \| off` | The generic coding skills: where they apply, one skill in full, whether the hooks send them | `.vibegraph/skills.json` | — |
+| `lessons list` | Rules sessions broke and put right, with the fix | nothing | — |
+| `architecture --propose \| --modify "<text>"` | Deployment / trust groups and a start-here path, every item citing what it saw; stored pending | `.vibegraph/architecture.json` | **yes** |
+| `architecture --ratify \| --reject` | Makes the pending proposal stated / drops it | `.vibegraph/architecture.json` | — |
+| `classify [--dry-run \| --apply]` | The role of tools no table knows; `--apply` stores each as a model-stated policy | `.vibegraph/constraints.json` | **yes** |
 | `--version` / `--help` | The version / every command and option | nothing | — |
 
 ### Every file VibeGraph makes
 
 All of it lives under `.vibegraph/` in **your** project (plus the `init`
-block in `CLAUDE.md`). **Derived** = read from the code, regenerated at will;
-**stated** = a person's decision (commit it); **proposed / drafted** = a
-model's, until a person ratifies it; **observed** = what a consented run saw.
+block in `CLAUDE.md`, and the hooks and skills under `.claude/`). **Derived** =
+read from the code, regenerated at will; **stated** = a person's decision
+(commit it); **proposed / drafted** = a model's, until a person ratifies it;
+**observed** = what a consented run saw.
 
 **For Claude — `.vibegraph/knowledge/`** (`export`; regenerate, don't commit)
 
 | File | Kind | What it holds | Use |
 |---|---|---|---|
 | `README.md` | derived | the index and reading order; what was skipped or could not be parsed | Claude reads it first |
-| `architecture.md` | derived + stated | the whole system on one page: start-here story, the system in a dozen arrows, where each process runs, what each calls and hops to (protocol and why), payloads, trust crossings, subsystems, thread-to-thread links, what the map leaves out | orient before a task that crosses processes |
+| `architecture.md` | derived + stated | the whole system on one page: start-here story, where each process runs, what each calls and hops to (protocol and why), payloads, trust crossings | orient before a task that crosses processes |
 | `constraints.md` | stated | the rules and their reasons, with who stated each | the requirements the code cannot show |
-| `threads/INDEX.md`, `threads/<entry>.md` | derived + stated | one **contract** per thread: data in/out, every external call and the tool it leaves through, round trips in loops, neighbouring threads, rules routed to it | what to keep true when editing that path |
-| `flows.md` | derived | end-to-end chains, page → component → call → script, with a reverse index | find everything a change touches downstream |
-| `reachability.md` | derived | the functions no entry point reaches, each with why: never named, exported but unused, called only from unreached code — or a resolution gap that means it IS used | before editing code no thread shows, and before calling anything dead |
-| `configuration.md` | derived | the environment variables the code reads by name, on which threads, and which are read but declared nowhere (`.env.example`, compose) | before deploying, or changing anything a variable switches |
-| `sources.json` | derived | a hash of every source file as the export read it | `coverage` compares against it to say what changed since |
+| `threads/INDEX.md`, `threads/<entry>.md` | derived + stated | one **contract** per thread: data in/out, what leaves the project and through which tool, round trips in loops, tests, configuration, untrusted input, neighbouring threads, the rules routed to it | what to keep true when editing that path |
+| `flows.md` | derived | end-to-end chains, page → component → call → script, with a reverse index | everything a change touches downstream |
+| `security.md` | derived | untrusted input reaching a shell, SQL text or eval, each with its path, and what the pass cannot see | a security review; before exposing an entry point |
+| `reachability.md` | derived | the functions no entry point reaches, each with why | before calling anything dead |
+| `configuration.md` | derived | the environment variables the code reads, on which threads, and which are declared nowhere | before deploying |
 | `system_spec.md` | derived + stated | the tools the project is built on, by role; the modules that wrap them; policies about them | use the existing tools and wrappers |
 | `skills/<entry>.md` | drafted, ratified | per-thread guidance a person approved (drafts and stale ones withheld, named) | how to work on that thread, and why |
+| `investigations/` | stated | the investigation boards, as hand-off documents | pick up a bug where a person left it |
 | `observations.json` | observed | what consented trace runs saw at each call site | resolve calls static analysis could not |
-| `plan.md`, `plan.json` | derived | with `--task`: the task as packets on the threads that own it, dependencies first | order the work |
+| `sources.json` | derived | a hash of every source file as the export read it | `coverage` says what changed since |
+| `plan.md`, `plan.json` | derived | with `--task`: the task as packets on the threads that own it | order the work |
 | `architecture.vibegraph.json`, `architecture.html` | derived + stated | with `--architecture`: the map as data (every lens) and as a picture | tools / people |
-| `ir/`, `envelope.json`, `stack.json`, `crossings.json`, `architecture.json`, `quality/` | derived | with `--with-ir`: the raw IR and indexes | tools, audits, your own scripts |
-
-**The system map — `.vibegraph/architecture-map/`** (`architecture`)
-
-| File | What it holds | Use |
-|---|---|---|
-| `architecture.md` | the map as prose (as above) | read it, or hand it to an agent |
-| `architecture.vibegraph.json` | every box, edge and group with its source, each lens (Bird's-eye, Overview, Tools, Flows, Payloads, Trust) as the ids it selects, the hierarchy, subsystems, thread graph — schema `schemas/system_map.schema.json` | query it from scripts or agents |
-| `architecture.html` | the map, self-contained, every lens a toggle | open in any browser; share it |
-| `architecture.json` | the raw architecture model | tools |
-| `architecture.archify.json` | with `--archify`: the model in Archify's schema | Archify |
+| `ir/`, `envelope.json`, `stack.json`, `crossings.json`, `security.json`, `quality/` | derived | with `--with-ir`: the raw IR and indexes | tools, audits, your own scripts |
 
 **State you own — `.vibegraph/`** (commit the first three to share them with your team)
 
 | File | Kind | What it holds | Written by |
 |---|---|---|---|
-| `constraints.json` | stated | the rules, their reasons, scopes and machine checks; stack policies | `constraints`, `classify --apply`, the app |
-| `architecture.json` | stated / proposed | deployment and trust groups, names, the start-here path; a pending proposal | `architecture --propose/--ratify`, the app |
+| `constraints.json` | stated | the rules, their reasons, scopes and checks; stack policies | `constraints`, `classify --apply`, the app |
+| `architecture.json` | stated / proposed | deployment and trust groups, names, the start-here path; a pending proposal | `architecture`, the app |
 | `manual_seeds.json` | stated | entry points you named | `seeds`, by hand |
 | `thread-skills/` | drafted → ratified | per-thread skills with their freshness stamp | `skills`, the app, MCP |
+| `skills.json` | stated | which generic skills are on, and what the hooks send | `direction`, the app |
+| `investigations/` | stated | investigation boards: pins, the question, notes | the app |
 | `observations.json` | observed | trace-run results per call site | the app's Trace / Observe |
-| `skills.json` | stated | which generic coding skills are on for this project | the app |
 | `models.json` | stated | which model — or local Ollama — runs which kind of work | the app's Models panel |
-| `work-run.json`, `work-snapshots/` | runtime | an Agent Manager run's state, and the pre-edit snapshots a reject restores | the app |
-| `readmes/`, `VibeReadme.md` | drafted | model-written READMEs per scope | the app |
-| `build-plan.json`, `system-plan.json` | proposed → ratified | the plan and roadmap when building a project from scratch | the app |
+| `hooked-run.json`, `work-run.json`, `work-snapshots/` | runtime | an Agent Manager run's state, and the snapshot a reject restores | the app |
+| `.gitignore` | — | keeps the copies of code and runtime data above out of git | VibeGraph |
+
+**Outside the project** — `~/.cache/vibegraph-knowledge/`: the Python parser,
+the envelope cache the hooks read through (only changed files are re-parsed),
+per-session hook state, and **lessons** (a blocked violation that was fixed,
+with the fix). Clearing the cache clears them; the hooks write nothing into
+your project.
 
 ## What it is
 
@@ -170,7 +332,7 @@ the graph and a CST patch changes the file; edit the file in your own editor
 and a watcher re-derives the views within a few hundred milliseconds.
 
 ```
-source files ──parse──▶ IR {nodes, edges, symbolIndex} ──▶ threads · architecture map · views · exports
+source files ──parse──▶ IR {nodes, edges, symbolIndex} ──▶ threads · map · contracts · checks · hooks
      ▲                                                                   │
      └────────────── CST patch (format-and-diff confined) ◀──────────────┘
 ```
@@ -184,53 +346,12 @@ source files ──parse──▶ IR {nodes, edges, symbolIndex} ──▶ threa
   edited, it is rejected and nothing is written.**
 - **Uncertainty is typed, not flattened.** A call that is genuine runtime
   dispatch reads `dynamic`; one VibeGraph could not resolve reads
-  `unresolved`; the two are never merged. A value from made-up inputs says so.
-  **You should never have to guess whether what you are looking at is true.**
+  `unresolved`; a check that could not follow something says
+  *unverifiable*. **You should never have to guess whether what you are
+  looking at is true.**
 - **The model is a guest, not the engine.** Parsing, linking, threads, the
-  map, layout and the chokepoint are deterministic. Claude drafts and
+  map, the checks and the hooks are deterministic. Claude drafts and
   converses; everything it proposes lands behind a human gate.
-
-## What you can do with it
-
-- **Understand an unfamiliar system**: the architecture map shows processes,
-  dispatchers and the tools they call, each edge with its protocol and the
-  fact behind it; six lenses from a dozen-box bird's-eye view to the payloads
-  on every edge.
-- **Follow one execution path** across files and languages, instead of
-  chasing definitions.
-- **Answer "what does this actually return?"** — run the real code to one
-  node in a throwaway copy and see the value.
-- **Refactor with a structural safety net** — the chokepoint rejects an edit
-  that reaches beyond the node you targeted.
-- **Write down what the code cannot say** — rules with their reasons, some of
-  them machine-checked against the code; deployment and trust boundaries;
-  per-thread skills a person ratifies.
-- **Give every Claude session all of it** — `vibegraph-knowledge export`
-  writes the map, one contract per thread and the rules into
-  `.vibegraph/knowledge/`, and `check` verifies the rules in a hook or CI.
-- **Run agents on the structure** — a task mapped onto the threads that own
-  it, one bounded worker per packet, edits confined to its files, evidence
-  collected by the server, human gates where you want them.
-- **Drive it from your terminal** — the same tools are served over MCP.
-
-## The views
-
-| View | What it shows |
-|---|---|
-| **System → Architecture** | The whole system: processes, dispatchers, tools, protocols on every edge; lenses *Bird's-eye*, *Overview*, *Tools*, *Flows*, *Payloads*, *Trust*; groups you state or ratify. |
-| **System → Subsystems / Threads** | Subsystems and how threads touch them; which thread calls or hops into which. |
-| **Thread** | One entry point traced forward across files and languages, branches in their own colours, `dynamic` and `unresolved` marked, run / observe / trace from any step. |
-| **Diagram** | One file as structure — or, with the *Code* toggle, as its highlighted source in the same layout. |
-| **Code** | Monaco, with a focused editor for the node you click. |
-| **Arch** | PyTorch models as layer schematics with per-layer parameter counts. |
-
-![Architecture map, Bird's-eye lens — the fleet example's processes, the hops between them and the tools they reach, each edge labelled with its protocol](docs/screenshots/05-architecture.png)
-
-![Thread view — one execution path traced across files](docs/screenshots/02-thread.png)
-
-![Arch view — the layer stack with parameter counts](docs/screenshots/03-arch.png)
-
-![Diagram view — one file as structure](docs/screenshots/04-fileview.png)
 
 ## Languages
 
@@ -249,29 +370,30 @@ reported, never dropped silently.
 
 | | |
 |---|---|
+| [**examples/fleet-telemetry**](examples/fleet-telemetry/README.md) | Four languages and rules the code does not reveal — the example the measured runs and most screenshots above use. |
 | [**examples/pump-wear**](examples/pump-wear/README.md) | A finished PyTorch project: threads, the schematic, three run-to-here drills, chat edits, skills, agents. |
 | [**examples/pump-from-scratch**](examples/pump-from-scratch/README.md) | The same project built from an empty folder through ratified plans and gated increments. |
 | [**examples/pump-polyglot**](examples/pump-polyglot/README.md) | pump-wear plus a Flask API, a TypeScript dashboard, a bash pipeline and a C++ tool. |
-| [**examples/fleet-telemetry**](examples/fleet-telemetry/README.md) | Four languages and rules the code does not reveal — the example the measured agent runs used. |
 
 ## Development
 
 ```bash
 npm run build                 # web app + server bundle
 npm run build:cli             # the vibegraph-knowledge bundle + vendored parsers
-npm test                      # the full suite (unit + Playwright)
 npm run test:ir               # the Python parser snapshot
-npm run test:thread           # the thread extractor snapshot
-npm run test:cst              # the rewriter's ops and their confinement
+npm run test:hooks            # the hooks, end to end
 npm run test:cli-files        # the node commands, end to end
-npm run audit:arch            # the architecture map on every example
+./scripts/docs_screenshots.sh # regenerate the pictures in this README
 ```
+
+`npm test` is one chain that stops at the first red script. To see every
+failure, run the `test:*` scripts one by one.
 
 ```
 server.ts                    WebSocket runtime + MCP server (one process)
 scripts/                     the Python parser and rewriter, the thread extractor,
-                             the effect floor, tree-sitter frontends, the CLI (scripts/cli/)
-src/server/                  stack, crossings, contracts, constraints, architecture, agents
+                             the effect floor, tree-sitter frontends, the CLI and hooks (scripts/cli/)
+src/server/                  stack, crossings, contracts, constraints, data flow, architecture, agents
 src/webview/                 React + React Flow + Monaco
 schemas/                     the IR, project and system-map contracts
 packages/knowledge/          the vibegraph-knowledge package
@@ -287,18 +409,20 @@ test/                        fixtures, snapshots, Playwright specs
 - **A green check proves self-consistency, not correctness.** A builder given
   a vague data format invents one and checks against its own invention.
   Specify formats, not just field names.
+- **The data-flow pass is a lead, not an audit.** It follows names; a value
+  through a container, a callback or a database round trip is not followed,
+  and no findings is not a clean bill.
 - **C++ and Rust can be edited but not run.** Running a compiled language
-  needs a build and its own consent story. C++ linking follows header
-  conventions (no build graph).
-- **The server has no authentication.** It binds to `127.0.0.1`; keep it
-  there.
+  needs a build and its own consent story.
+- **The server has no authentication.** It binds to `127.0.0.1`, refuses
+  other web pages (Origin / Host checks), and should stay there.
 
 ## Security
 
-VibeGraph runs an LLM agent with write access to your source tree. See
-[SECURITY.md](SECURITY.md) for what it does on your machine, what protects
-you (the edit chokepoint, the effect floor, human gates, localhost binding)
-and what does not.
+See [SECURITY.md](SECURITY.md): what VibeGraph does on your machine, what
+protects you (the edit chokepoint, the effect floor, human gates, the local
+guard), which features send code to Anthropic, the dependency audit, and what
+does not protect you.
 
 ## License
 

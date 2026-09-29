@@ -60,6 +60,8 @@ system: *processes* (clusters of entry points under one package root),
 edge carries a **protocol read from a fact in the code** — `SQL`, `exec`,
 `Volt · WebSocket · command`, `HTTP GET` — never guessed.
 
+![The architecture map, Bird's-eye lens, on the fleet example](../screenshots/05-architecture.png)
+
 The **lens bar** changes what is drawn, never what is true:
 
 | Lens | Shows |
@@ -72,6 +74,10 @@ The **lens bar** changes what is drawn, never what is true:
 | **Trust** | only the edges that cross a deployment or trust boundary you stated |
 | **Configuration** | which process reads which environment variables |
 | **Journeys** | which page sends the user to which page: `<Link href>`, `router.push` and `redirect` literals joined to the page that serves the path (Next.js App Router) |
+
+| Configuration | Journeys |
+|---|---|
+| ![Configuration lens: processes and the environment variables they read, grouped by prefix](../screenshots/08-config-lens.png) | ![Journeys lens: page to page by the links each renders](../screenshots/10-journeys.png) |
 
 Click a box or an edge for the **inspector**: what it is, *why* its protocol
 reads as it does, the threads behind it, the call sites, and **Upstream**,
@@ -98,6 +104,8 @@ entry point sits under it ("sub-thread of X · also called from N"), each
 thread listed once; fold a parent with its arrow, or switch to **Flat list**.
 Inside a thread, the step where a sub-thread starts carries a **sub-thread**
 badge that opens it.
+
+![The Threads list: 47 entry points, sub-threads nested under the route that starts them](../screenshots/01-launchpad.png)
 
 How to read it:
 
@@ -128,6 +136,8 @@ that matter many times over.
   `returns if !apiKey`, with a shield icon.
 - **All** — every node the static walk reached, exactly as before.
 
+![The ingest route at Primary: 8 of its 65 nodes — the batch, the rows written, and the four database calls](../screenshots/02-thread.png)
+
 Nothing is thrown away. A card that owns hidden nodes shows **+N**; hover it
 for what they are ("12 hidden: 5 local ops, 4 logs, 3 UI state"), click it to
 show them in place, and click **hide** to fold them again. Identical calls from
@@ -144,10 +154,14 @@ dot in the margin marks a line that reads an environment variable, amber when
 the project declares it nowhere. Hover any mark for what it is. The layers
 button at the bottom right turns all of it off.
 
+![The code view on http_client.py: the two environment reads marked, rank bars in the gutter](../screenshots/06-code-insight.png)
+
 Two chips sit above each thread: **tested · N** (the discovered tests that
 exercise it; amber "no test" when none do) and **env · N** (the environment
 variables it reads, with how many are declared nowhere). Click either for the
 list; a test opens its own thread.
+
+![The ingest route at + Secondary, its env chip open: the three variables it reads](../screenshots/07-thread-config.png)
 
 In the **Files** panel, a file nothing reaches is dimmed, a file the parser
 could only partly read carries a warning icon, and a file that changed since
@@ -173,6 +187,8 @@ and the actions that apply to it:
   the question and a note on each, then **Hand off**: a Markdown document with
   each pin's code as it is now, saved to `.vibegraph/investigations/` and
   carried by every export (an agent can also read it over MCP).
+
+  ![An investigation: two pins from the ingest route, the question, a note](../screenshots/09-investigation.png)
 
 The thread view's **trace** button runs the whole entry point once and
 annotates every call site it touched with what it really called
@@ -232,7 +248,20 @@ Work on a clean git tree and review with `git diff`.
   right.
 - **Stack** (toolbar) — every tool the project uses, by role, with the
   evidence, the project modules that wrap them, and any policy stated about
-  them (*prefer*, *forbid*, *replace-with*…).
+  them (*prefer*, *forbid*, *replace-with*…). A policy's *forbid* and
+  *replace-with* are checked like any other rule.
+- **Generic direction** (toolbar, compass icon) — six coding skills
+  (boundary integrity, change coupling, failure visibility, repetition cost,
+  resolvability, retry root cause). Every rule in them carries its reason and
+  the check or fact behind it, and each skill says how many of your threads it
+  applies to. They are **off by default**; tick one to enable it for this
+  project. The **In Claude Code hooks** menu decides what a hooked session is
+  sent: the rule *headlines* once per session where a skill applies (default),
+  only a rule's reason *when its check fires*, or nothing. They are advice and
+  never block. Saved to `.vibegraph/skills.json`; the same switches are
+  `vibegraph-knowledge direction` on the command line.
+
+  ![The Generic direction panel: six skills, where each applies, what the hooks send](../screenshots/11-direction.png)
 
 All of this is what the node commands export for a plain Claude session —
 see [CLI.md](CLI.md).
@@ -253,6 +282,11 @@ violation of a stated rule is stopped and explained to Claude.
    newly broke is named), the tests that reach the changes, and Claude's own
    summary, labelled as a self-report.
 3. **Accept** keeps the changes; **Reject** restores the snapshot.
+
+![A run whose edit broke a stated rule: the hook's block, the rule named, the changed file, Accept / Reject](../screenshots/12-agent-manager.png)
+
+*(Captured with the stub model the end-to-end test uses; the hooks it ran and
+the block they raised are real.)*
 
 The hooks are passed to that one session only; nothing is written to your
 project's `.claude/` (and if you installed them yourself with `init --hooks`,
@@ -299,5 +333,7 @@ is the blast radius of changing `normalize`?"*, *"state a constraint that…"*,
 5. State the two or three rules everyone on the team knows and the code does
    not say — with their reasons.
 6. Draft and ratify skills for the threads you work on most.
-7. Run `vibegraph-knowledge export` ([CLI.md](CLI.md)) so every Claude
-   session in that repo starts from all of it.
+7. Run `vibegraph-knowledge init --hooks --skill` and `vibegraph-knowledge
+   export` ([CLI.md](CLI.md)) so every Claude Code session in that repo is
+   handed the contracts and rules of what it touches, and has its edits
+   checked against them.

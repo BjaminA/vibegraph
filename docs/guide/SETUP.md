@@ -3,11 +3,13 @@
 This gets you from nothing to VibeGraph running on your own codebase, both
 ways it can be used:
 
+- **Claude Code + hooks** — the node commands (`vibegraph-knowledge`) wire
+  VibeGraph into your normal Claude Code sessions: each prompt gets the
+  contracts and rules of the code it touches, and each edit is re-checked
+  against the rules. No server runs ([§4](#4-claude-code--hooks--the-recommended-way),
+  [CLI.md](CLI.md));
 - **the visualisation** — a local web app you open in a browser
-  ([VISUALISATION.md](VISUALISATION.md) walks through it);
-- **the node commands** (`vibegraph-knowledge`) — a command-line tool that
-  writes what VibeGraph knows about your code into files a plain Claude Code
-  session reads before it edits ([CLI.md](CLI.md)).
+  ([VISUALISATION.md](VISUALISATION.md) walks through it).
 
 Both read the same thing: an **IR** (intermediate representation) that
 VibeGraph derives from your source. Neither needs the other.
@@ -51,7 +53,7 @@ claude --version    # optional
 
 ```bash
 npm install -g vibegraph-knowledge
-vibegraph-knowledge --version            # 0.8.0 or later; also installed as `vgk`
+vibegraph-knowledge --version            # 0.13.0 or later; also installed as `vgk`
 ```
 
 (Or run any command without installing: `npx vibegraph-knowledge <command>`.)
@@ -84,19 +86,35 @@ internet connection; everything else works offline.
 
 Continue with [VISUALISATION.md](VISUALISATION.md).
 
-## 4. The knowledge commands — hand it all to Claude
+## 4. Claude Code + hooks — the recommended way
 
 ```bash
 cd /path/to/your/project
-vibegraph-knowledge init                 # one marked block in CLAUDE.md, + .gitignore line
+vibegraph-knowledge init --hooks --skill # the hooks, the skills, a CLAUDE.md block, a .gitignore line
 vibegraph-knowledge export               # writes .vibegraph/knowledge/
-ls .vibegraph/knowledge/                 # README.md, architecture.md, threads/, constraints.md, …
+ls .vibegraph/knowledge/                 # README.md, architecture.md, threads/, constraints.md, security.md, …
 ```
 
-Now open Claude Code in the project as you normally would: `CLAUDE.md` tells
-it to read `.vibegraph/knowledge/README.md` first. Add the rules your team
-knows (`vibegraph-knowledge constraints add …`), re-run `export` when the code
-or the rules change, and run `vibegraph-knowledge check` before committing.
+- `--hooks` writes four hooks into `.claude/settings.local.json` — per user,
+  never committed. They run from the **next** Claude Code session (`/hooks`
+  shows them): an orientation when the session starts; the contracts, rules
+  and approved skills of the threads each prompt names; a re-check of every
+  stated rule after each edit (Bash edits included) and at the end of each
+  turn, where a **new** violation stops the edit with the rule and its reason.
+  They spend no tokens and start no server. `--remove-hooks` takes exactly
+  them out.
+- `--skill` installs `/vibegraph` (set-up and use) and the task skills
+  `/vibegraph-plan`, `-debug`, `-security` and `-review`. `--skills
+  plan,security` picks some; `--user` installs them for every project on the
+  machine.
+- Add the rules your team knows, **with the reason**
+  (`vibegraph-knowledge constraints add …`, [CLI.md](CLI.md)); give each a
+  `--check` where the rule can be checked, so the hooks enforce it.
+- Re-run `export` after larger changes, and `vibegraph-knowledge check
+  --uncommitted` before committing.
+
+Without `--hooks`, `init` only points `CLAUDE.md` at the knowledge folder.
+Claude may read it, but nothing makes it, and nothing checks the edits.
 Everything else is in [CLI.md](CLI.md).
 
 Both halves read and write the same `.vibegraph/` folder in your project, so
