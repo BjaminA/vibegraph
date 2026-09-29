@@ -81,7 +81,11 @@ test.describe("M-RUST — Rust read-only experience", () => {
 
     // The hover tooltip on the seed: its source, EDITABLE since the Rust edit
     // floor (2026-09-25: rewrite_rust.mjs) — no read-only note, a Save — and
-    // never the "no source" placeholder.
+    // never the "no source" placeholder. The mouse is first moved off the
+    // canvas: it still rests where the index row was clicked, and a node
+    // drawn under that point opens its own tooltip over the seed.
+    await page.mouse.move(5, 5);
+    await page.waitForTimeout(700);
     await page.locator(".vg-thread-node-seed").first().hover();
     const tip = page.locator("[data-thread-tooltip]");
     await expect(tip).toBeVisible({ timeout: 5_000 });

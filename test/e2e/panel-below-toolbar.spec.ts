@@ -42,6 +42,9 @@ async function openPanelBox(page: Page) {
 }
 
 test.describe("right-edge panels clear the toolbar band at every width", () => {
+  // It needs a project (the thread index, the Stack panel): the catch-all
+  // run boots a single file. `npm run test:e2e-panels` gives it its fixture.
+  test.skip(!process.env.VG_FIXTURE?.includes("router_demo"), "Requires VG_FIXTURE=test/fixtures/cpp/router_demo (npm run test:e2e-panels)");
   test("no panel hides behind the wrapped toolbar, and none overruns the viewport", async ({ page }) => {
     const pageErrors: string[] = [];
     page.on("pageerror", (e) => pageErrors.push(e.message));
@@ -70,8 +73,16 @@ test.describe("right-edge panels clear the toolbar band at every width", () => {
         await page.waitForTimeout(450);
         const box = await openPanelBox(page);
         expect(box, `${name} at ${width}px: no panel box found`).not.toBeNull();
-        expect(box!.top, `${name} at ${width}px is UNDER the toolbar (band ends ${bottom})`)
-          .toBeGreaterThanOrEqual(bottom);
+        // The band as it is drawn WITH the panel open: at wide widths the
+        // toolbar shows its labels and wraps, and opening a panel compacts it
+        // back to one row, so the height read before the click is not the
+        // band the panel sits under.
+        const openBottom = await toolbarBottom(page);
+        const drawn = await page.evaluate(() =>
+          Math.round(document.querySelector("[data-top-toolbar]")!.getBoundingClientRect().bottom));
+        expect(openBottom, "the published band matches the toolbar as drawn").toBe(drawn);
+        expect(box!.top, `${name} at ${width}px is UNDER the toolbar (band ends ${openBottom})`)
+          .toBeGreaterThanOrEqual(openBottom);
         expect(box!.bottom, `${name} at ${width}px overruns the viewport`)
           .toBeLessThanOrEqual(box!.vh);
         await btn.click();

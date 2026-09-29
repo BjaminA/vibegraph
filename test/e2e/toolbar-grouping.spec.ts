@@ -50,13 +50,14 @@ test.describe("toolbar grouping", () => {
     for (const label of ["Draft"]) {
       await expect(claude.getByRole("button", { name: label, exact: true })).toHaveCount(1);
     }
-    // No stray ToolButton outside a group (the re-linking chip is not a button).
+    // No stray ToolButton outside a group (the re-linking chip is not a button,
+    // and a notice's own Dismiss — the no-claude-on-PATH banner — is not a tool).
     const allButtons = await page.locator("[data-toolbar-group] button").count();
     const barButtons = await page
       .locator("[data-toolbar-group]")
       .first()
       .locator("xpath=..")
-      .locator("button")
+      .locator("button:not([data-key-banner] button)")
       .count();
     expect(allButtons).toBe(barButtons);
   });

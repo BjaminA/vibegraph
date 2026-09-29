@@ -113,7 +113,9 @@ test("the tarball ships the bundle, the python scripts, the frontends and gramma
     "vendor/scripts/frontends/span_rewriter.mjs", "vendor/scripts/frontends/cpp/rewrite_cpp.mjs",
     "vendor/scripts/frontends/rust/rewrite_rust.mjs",
     // the Claude Code skill (init --skill, 2026-09-28)
-    "vendor/claude-skill/SKILL.md"]) {
+    "vendor/claude-skill/SKILL.md",
+    // the task skills (init --skill, 2026-09-29)
+    ...["plan", "debug", "security", "review"].map((t) => `vendor/claude-skills/vibegraph-${t}/SKILL.md`)]) {
     assert.ok(files.includes(f), `tarball has ${f}`);
   }
   for (const py of APP_PYTHON_SCRIPTS) assert.ok(files.includes(`vendor/scripts/${py}`), `tarball has ${py}`);
@@ -213,11 +215,13 @@ test("init --skill --user installs the skill for every project and touches no pr
   mkdirSync(home, { recursive: true });
   const r = spawnSync(process.execPath, [cli, "init", "--skill", "--user"], { cwd: tmp, encoding: "utf-8", env: { ...process.env, HOME: home, USERPROFILE: home } });
   assert.equal(r.status, 0, r.stderr);
-  assert.ok(existsSync(join(home, ".claude", "skills", "vibegraph", "SKILL.md")));
+  for (const n of ["vibegraph", "vibegraph-plan", "vibegraph-debug", "vibegraph-security", "vibegraph-review"]) {
+    assert.ok(existsSync(join(home, ".claude", "skills", n, "SKILL.md")), `${n} installed`);
+  }
   assert.ok(!existsSync(join(tmp, "CLAUDE.md")) && !existsSync(join(tmp, ".claude")), "no project was written");
   const rm = spawnSync(process.execPath, [cli, "init", "--remove-skill", "--user"], { cwd: tmp, encoding: "utf-8", env: { ...process.env, HOME: home, USERPROFILE: home } });
   assert.equal(rm.status, 0);
-  assert.ok(!existsSync(join(home, ".claude", "skills", "vibegraph")));
+  assert.deepEqual(readdirSync(join(home, ".claude", "skills")), [], "every one of ours taken out");
 });
 
 after(() => rmSync(tmp, { recursive: true, force: true }));

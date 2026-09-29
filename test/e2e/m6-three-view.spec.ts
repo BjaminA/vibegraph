@@ -57,7 +57,7 @@ test.describe("M6 wave 1 — three views switchable", () => {
     await fnNode.click();
 
     // Open the Code panel -- always enabled once a file is open.
-    await page.getByRole("button", { name: /code/i }).click();
+    await page.locator("[data-toolbar-group=\"views\"]").getByRole("button", { name: "Code", exact: true }).click();
     await expect(page.locator("[data-code-view]")).toBeVisible({ timeout: 10_000 });
     await page.waitForSelector("[data-code-view] .monaco-editor .view-line", { timeout: 15_000 });
 

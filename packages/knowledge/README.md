@@ -28,7 +28,15 @@ $1.19 against 2,346 s and $12.08 for the orchestrated run on the same task.
 Claude chat to set all of this up and use it — state rules with their reasons,
 check before finishing, what to do when a hook blocks. `init --skill --user`
 puts it in `~/.claude/skills/` so every project on the machine has it; then
-you can just ask Claude to "set up VibeGraph here".
+you can just ask Claude to "set up VibeGraph here". It also installs four task
+skills — `/vibegraph-plan`, `/vibegraph-debug`, `/vibegraph-security`,
+`/vibegraph-review` — each pointing Claude at the knowledge files and commands
+for that kind of work (`--skills plan,security` to choose).
+
+**`dataflow`** follows untrusted input (request data, argv, stdin, script
+arguments) by name into shell strings, SQL query text and eval, and names the
+path; it also lands in each thread contract and in `security.md`. It is
+name-based and says so: no findings is not a clean bill.
 
 **`view`** starts the web app — the architecture map, threads traced across
 files and languages, running code to a node, editing through a chokepoint

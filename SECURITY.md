@@ -128,6 +128,13 @@ Stated explicitly so you can make your own call:
   project, the agent acts without per-call confirmation.
 - **No secrets scanning.** If your source contains credentials, they are
   part of what gets sent to the model.
+- **`dataflow` is a lead, not an audit.** It follows untrusted input to a
+  shell, SQL text or eval BY NAME: a value passed through a container, a
+  callback, a class attribute or a database round trip (second-order input)
+  is not followed, and a condition that mentions a value is reported as
+  "review", not proven to be a guard. No findings is not a clean bill. It
+  knows nothing about dependency CVEs — run `npm audit` / `pip-audit` /
+  `cargo audit` for those.
 
 ## Reporting a vulnerability
 

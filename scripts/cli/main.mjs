@@ -19,11 +19,12 @@ import { PACKAGE_NAME, gitHead, locate, toolLabel } from "./paths.mjs";
 import { resolvePython } from "./pyenv.mjs";
 import { exportKnowledge } from "../export_knowledge.mjs";
 import { formatCheckReport, runConstraintChecks } from "./check.mjs";
-import { applyHooks, applyInit, applySkill, hookCommand, POINTER, SKILL_NAME } from "./init.mjs";
+import { applyHooks, applyInit, ALL_SKILLS, applySkills, hookCommand, POINTER, skillsFromList } from "./init.mjs";
 import { spawnSync } from "node:child_process";
 import { HOOK_EVENTS, runHook } from "./hooks.mjs";
 import { LESSONS_USAGE, runLessons } from "./lessons.mjs";
 import { DIRECTION_USAGE, runDirection } from "./direction.mjs";
+import { DATAFLOW_USAGE, runDataflow } from "./dataflow.mjs";
 import { BRIEF_USAGE, runBrief } from "./brief.mjs";
 import { formatClassifyReport, runClassify } from "./classify.mjs";
 import { runArchitecture } from "./architecture.mjs";
@@ -61,6 +62,7 @@ usage:
   ${PACKAGE_NAME} ${LESSONS_USAGE}
   ${PACKAGE_NAME} ${BRIEF_USAGE}
   ${PACKAGE_NAME} ${DIRECTION_USAGE}
+  ${PACKAGE_NAME} ${DATAFLOW_USAGE}
   ${PACKAGE_NAME} init [<root>] [--print]        point Claude at the folder: one marked block in CLAUDE.md
                                                (replaced on re-run, never duplicated) and the gitignore
                                                line for .vibegraph/knowledge/. --print shows the block only.
@@ -70,10 +72,13 @@ usage:
                            each edit and the end of each turn re-check every stated rule, and a NEW
                            violation blocks with the rule and the offending call. Zero tokens.
       --remove-hooks       take exactly those hooks out again
-      --skill              also install the Claude Code skill /vibegraph into .claude/skills/ — how a plain
-                           Claude chat sets this up and uses it; with --user into ~/.claude/skills/ instead
-                           (every project on this machine, and nothing else is written)
-      --remove-skill       take the skill out again (--user for the machine-wide one)
+      --skill              also install the Claude Code skills into .claude/skills/: /vibegraph (set up and
+                           use this) and the task skills /vibegraph-plan, -debug, -security, -review (which
+                           knowledge file and command to open for that task; ~100 tokens each until used);
+                           with --user into ~/.claude/skills/ instead (every project on this machine, and
+                           nothing else is written)
+      --skills <list>      only these task skills, e.g. --skills plan,security (/vibegraph always comes along)
+      --remove-skill       take every one of these skills out again (--user for the machine-wide ones)
   ${PACKAGE_NAME} classify [<root>] [options]   SPENDS TOKENS: ask a model what the tools
                                                no table knows are, from how the code uses them; show the answers
       --apply              store each answer as an AGENT-STATED policy in .vibegraph/constraints.json
@@ -241,23 +246,31 @@ function cmdInit(args) {
       args, allowPositionals: true,
       options: {
         print: { type: "boolean" }, hooks: { type: "boolean" }, "remove-hooks": { type: "boolean" },
-        skill: { type: "boolean" }, "remove-skill": { type: "boolean" }, user: { type: "boolean" },
+        skill: { type: "boolean" }, skills: { type: "string" }, "remove-skill": { type: "boolean" }, user: { type: "boolean" },
       },
     });
   } catch (e) {
     return fail(`${e.message}\n\n${USAGE}`);
   }
   const loc = locate();
-  // The Claude Code skill: into ~/.claude/skills with --user (and nothing
+  // The Claude Code skills: into ~/.claude/skills with --user (and nothing
   // else — a user-level install touches no project), else the project's.
-  if (parsed.values.skill || parsed.values["remove-skill"]) {
-    let sk;
+  // --skill installs the setup skill and all four task skills; --skills
+  // plan,debug chooses; --remove-skill takes every one of ours out.
+  if (parsed.values.skill || parsed.values.skills || parsed.values["remove-skill"]) {
+    let results;
     const user = parsed.values.user === true;
+    const remove = parsed.values["remove-skill"] === true;
     let skRoot = null;
     if (!user) { try { skRoot = projectRoot(parsed.positionals[0]); } catch (e) { return fail(e.message); } }
-    try { sk = applySkill({ root: skRoot, loc, user, remove: parsed.values["remove-skill"] === true }); } catch (e) { return fail(e.message); }
-    process.stdout.write(`${sk.path}: skill ${sk.state}${sk.state === "installed" || sk.state === "updated" ? ` (Claude Code loads it as /${SKILL_NAME}; ${user ? "every project on this machine" : "this project"})` : ""}\n`);
-    if (user || parsed.values["remove-skill"]) return 0;
+    try {
+      const names = remove ? ALL_SKILLS : skillsFromList(parsed.values.skills);
+      results = applySkills({ names, root: skRoot, loc, user, remove });
+    } catch (e) { return fail(e.message); }
+    for (const sk of results) {
+      process.stdout.write(`${sk.path}: skill ${sk.state}${sk.state === "installed" || sk.state === "updated" ? ` (/${sk.name}; ${user ? "every project on this machine" : "this project"})` : ""}\n`);
+    }
+    if (user || remove) return 0;
   }
   let absRoot;
   try { absRoot = projectRoot(parsed.positionals[0]); } catch (e) { return fail(e.message); }
@@ -510,6 +523,7 @@ export function main(argv) {
   if (command === "hook") return cmdHook(rest);
   if (command === "lessons") return cmdLessons(rest);
   if (command === "brief") return cmdBrief(rest);
+  if (command === "dataflow") { const r = runDataflow(rest); process.stdout.write(r.text); return r.exitCode; }
   if (command === "direction") { const r = runDirection(rest); process.stdout.write(r.text); return r.exitCode; }
   return fail(`unknown command: ${command}\n\n${USAGE}`);
 }

@@ -47,6 +47,7 @@ import { verbMayGate } from "../../src/server/quality/standings.ts";
 import { derivedPolicyClauses } from "../../src/server/policy_check.ts";
 import { archForPrompt } from "./arch_context.mjs";
 import { directionForPrompt, directionForFindings, enabledDirection } from "./direction.mjs";
+import { untrustedBaseline, newUntrustedNote } from "../dataflow_cache.mjs";
 import { languageForFile, shouldSkipDir } from "../../src/server/languages.ts";
 
 export const HOOK_EVENTS = ["session-start", "prompt", "post-edit", "stop"];
@@ -206,6 +207,7 @@ function onSessionStart(input, { absRoot, loaded, state, constraints }) {
     return null; // resumed with its context intact
   }
   if (!state.baseline) state.baseline = findingsOf(check(absRoot, loaded)).map((f) => f.key);
+  untrustedBaseline(loaded.envelope, absRoot, state);
   out.unshift(orientation(absRoot, loaded, constraints));
   const pn = parseNote(loaded);
   if (pn) { out.push(pn); state.parseNote = pn; }
@@ -219,7 +221,7 @@ function onPrompt(input, { absRoot, loaded, state, constraints }) {
   const env = loaded.envelope;
   const out = [];
   let room = INLINE_CAP - HEADER.length - 400;
-  if (!state.baseline) state.baseline = findingsOf(check(absRoot, loaded)).map((f) => f.key);
+  if (!state.baseline) { state.baseline = findingsOf(check(absRoot, loaded)).map((f) => f.key); untrustedBaseline(env, absRoot, state); }
   const pn = parseNote(loaded);
   if (pn && state.parseNote !== pn) { out.push(pn); state.parseNote = pn; room -= pn.length; }
 
@@ -429,6 +431,8 @@ function afterEdit(rel, input, { absRoot, loaded, state, constraints }) {
   if (note) notes.push(note);
   const why = directionForFindings(absRoot, fresh, state);
   if (why) notes.push(why);
+  const untrusted = newUntrustedNote(loaded.envelope, absRoot, state);
+  if (untrusted) notes.push(untrusted);
   const gating = fresh.filter((f) => f.gates);
   const advisory = fresh.filter((f) => !f.gates);
   if (advisory.length) {

@@ -909,6 +909,24 @@ function registerTools(server: McpServer, ctx: VibegraphMcpContext): void {
   );
 
   server.registerTool(
+    "vibegraph_dataflow",
+    {
+      description:
+        "Where UNTRUSTED INPUT reaches a dangerous sink: request data, route / MCP-tool handler parameters and " +
+        "command-line arguments followed by name through assignments and calls to shell commands, SQL query TEXT " +
+        "(a parameterised value is not a finding) and code evaluation — each with the path it took, the thread, and " +
+        "any condition on the way (a guard to verify, never proof). States its limits; no findings is not a clean " +
+        "bill. Read-only, deterministic, no model.",
+      inputSchema: {},
+    },
+    async () => {
+      const r = ctx.dataflow();
+      if (r.error) return { content: [{ type: "text", text: r.error }], isError: true };
+      return { content: [{ type: "text", text: r.text }] };
+    },
+  );
+
+  server.registerTool(
     "vibegraph_direction",
     {
       description:

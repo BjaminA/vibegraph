@@ -67,7 +67,7 @@ test.describe("M3 motion specs", () => {
     await page.waitForTimeout(500); // settle initial-load motion
     const banner = page.locator("[data-key-banner]");
     if ((await banner.count()) > 0) await banner.locator("button").click();
-    await page.getByRole("button", { name: /code/i }).click();
+    await page.locator("[data-toolbar-group=\"views\"]").getByRole("button", { name: "Code", exact: true }).click();
     await page.waitForSelector("[data-code-view]", { timeout: 10_000 });
     await page.waitForTimeout(500); // enter
     await page.keyboard.press("Escape"); // close

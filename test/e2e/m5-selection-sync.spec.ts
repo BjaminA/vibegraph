@@ -22,7 +22,7 @@ test.describe("M5 wave 3 — selection sync", () => {
     await page.waitForSelector(".react-flow__node-functionDefNode", { timeout: 15_000 });
     await page.waitForTimeout(600);
     // Open the code view first so it can listen / respond.
-    await page.getByRole("button", { name: /code/i }).click();
+    await page.locator("[data-toolbar-group=\"views\"]").getByRole("button", { name: "Code", exact: true }).click();
     await page.waitForSelector("[data-code-view] .monaco-editor .view-line", { timeout: 15_000 });
     await page.waitForTimeout(600);
   });

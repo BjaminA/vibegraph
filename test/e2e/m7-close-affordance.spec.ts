@@ -58,7 +58,7 @@ test.describe("M7 cleanup — close affordance", () => {
     const banner = page.locator("[data-key-banner]");
     if (await banner.count() > 0) await banner.locator("button").click();
 
-    await page.getByRole("button", { name: /code/i }).click();
+    await page.locator("[data-toolbar-group=\"views\"]").getByRole("button", { name: "Code", exact: true }).click();
     const codeView = page.locator("[data-code-view]");
     await expect(codeView).toBeVisible({ timeout: 10_000 });
     await page.waitForSelector("[data-code-view] .monaco-editor .view-line", { timeout: 15_000 });
@@ -67,7 +67,7 @@ test.describe("M7 cleanup — close affordance", () => {
     await expect(codeView).toHaveCount(0);
 
     // Re-open + Escape.
-    await page.getByRole("button", { name: /code/i }).click();
+    await page.locator("[data-toolbar-group=\"views\"]").getByRole("button", { name: "Code", exact: true }).click();
     await expect(page.locator("[data-code-view]")).toBeVisible({ timeout: 10_000 });
     await page.keyboard.press("Escape");
     await expect(page.locator("[data-code-view]")).toHaveCount(0);

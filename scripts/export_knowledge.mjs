@@ -47,6 +47,7 @@ import { computeReachability, formatReachabilityMd } from "../src/server/reachab
 import { formatEnvSurfaceMd } from "../src/shared/env_surface.ts";
 import { sha1 } from "../src/server/coverage.ts";
 import { listInvestigations, readInvestigation, readRel, renderHandoff } from "../src/server/investigations.ts";
+import { formatDataflowMd } from "../src/server/dataflow.ts";
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const README_HEAD = "# What VibeGraph derived from this codebase";
@@ -255,6 +256,9 @@ export function exportKnowledge({ root, out, task, envelope: envelopePath, commi
   // (src/shared/env_surface.ts; the same surface each contract's line reads).
   write("configuration.md", formatEnvSurfaceMd(ctx.envSurface));
   if (withIr) write("configuration.json", json(ctx.envSurface));
+  // 2026-09-29 — untrusted input → dangerous sinks (src/server/dataflow.ts).
+  write("security.md", formatDataflowMd(ctx.dataflow));
+  if (withIr) write("security.json", json(ctx.dataflow));
   // 2026-09-29 — INVESTIGATIONS a person saved on the board: each rendered as
   // its handoff (question, pins across threads, notes, code read now).
   const investigations = listInvestigations(absRoot)
@@ -443,6 +447,8 @@ export function exportKnowledge({ root, out, task, envelope: envelopePath, commi
     ] : [
       `${(skillLine ? 5 : 4) + (observations ? 2 : 1)}. The raw derived forms (per-file IR, the envelope, the stack index, the crossings, the quality profile) are not written by default — the source is the better reference once you start editing. \`--with-ir\` adds them.`,
     ]),
+    "",
+    `**Untrusted input:** \`security.md\` — request data, handler and tool parameters and command-line arguments followed by name to shell commands, SQL query text and code evaluation (${ctx.dataflow.findings.filter((f) => f.severity === "high").length} unguarded, ${ctx.dataflow.findings.filter((f) => f.severity === "review").length} to review). A place to look with its limits stated, never a clean bill.`,
     ...(investigations.length ? [
       "",
       `**Investigations a person saved:** ${investigations.map((i) => `\`investigations/${i.name}.md\``).join(", ")} — their question, the nodes they pinned across threads, their note on each (their reading, not verified fact) and each pin's code as it is now. Read one first when the task is about the bug it names.`,

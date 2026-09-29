@@ -40,6 +40,10 @@ test.describe("C++ / Rust edit floor", () => {
     await expect(page.locator("[data-thread-view]")).toBeVisible({ timeout: 10_000 });
     await page.waitForTimeout(700);
 
+    // Off the canvas first: the mouse still rests where the index row was
+    // clicked, and a node drawn under that point opens a tooltip over the seed.
+    await page.mouse.move(5, 5);
+    await page.waitForTimeout(700);
     await page.locator(".vg-thread-node-seed").first().click();
     await expect(page.locator("[data-node-editor-panel]")).toBeVisible({ timeout: 10_000 });
     await page.waitForSelector("[data-node-editor-panel] .monaco-editor .view-line", { timeout: 10_000 });

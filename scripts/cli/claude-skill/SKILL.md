@@ -62,6 +62,11 @@ enforces it. `vibegraph-knowledge constraints list` shows what is stated.
   the call that breaks it. Fix the code so the rule holds. Do not remove the
   hooks, edit `.vibegraph/`, or route around the check. If the rule itself
   looks wrong for this change, stop and ask the user.
+- **For a plan, a bug, a security review or a code review**, the task skills
+  `/vibegraph-plan`, `/vibegraph-debug`, `/vibegraph-security` and
+  `/vibegraph-review` say which knowledge file and command to open (installed
+  by `init --skill`). `vibegraph-knowledge dataflow` lists where untrusted
+  input reaches a shell, SQL text or eval.
 - **Before finishing:** `vibegraph-knowledge check --uncommitted` — exit 0
   every rule passed; 1 a rule is VIOLATED (the offender is named as
   `file:node`); 2 a rule could not be verified, which is **not** a pass.

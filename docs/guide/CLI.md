@@ -39,7 +39,8 @@ CLI) and says so; everything else is deterministic.
 | `init --hooks` / `--remove-hooks` | Installs (or removes) four Claude Code hooks: each session starts with an orientation (re-sent after a compaction); each prompt gets its threads' contracts, rules and skills; each edit and the end of each turn re-check every stated rule, and a new violation blocks | `.claude/settings.local.json` (per user, never committed) | — |
 | `lessons list` | What the hooks saw sessions break and put right: each blocked rule, where, and the diff when it cleared; `skills draft` hands a thread's lessons to the drafting prompt | nothing | — |
 | `direction [<skill>]` / `direction enable\|disable <skill>` / `direction hooks headlines\|on-violation\|off` | The generic coding direction (six skills): which apply to how many threads, one skill's rules with each why, and whether the hooks send them — rule headlines once per session where a skill applies (default), only a rule's why when its check fires, or nothing. Off until you enable one; the Skills panel writes the same file | `.vibegraph/skills.json` (enable / hooks only) | — |
-| `init --skill [--user]` / `--remove-skill` | Installs (or removes) the Claude Code skill `/vibegraph`: how a plain Claude chat sets this up and uses it | `.claude/skills/vibegraph/SKILL.md`, or `~/.claude/skills/…` with `--user` | — |
+| `dataflow [<root>] [--json]` | Untrusted input (request data, argv, stdin, script arguments, route / MCP handler parameters) followed by name into a shell string, SQL query text, eval or a subprocess argument list — each finding with its source, path and sink call; UNGUARDED or "review" (a condition on the way mentions the value). Exit 1 on an unguarded flow. Name-based: states its limits in every output | — | — |
+| `init --skill [--user]` / `--skills plan,debug,…` / `--remove-skill` | Installs (or removes) the Claude Code skills: `/vibegraph` (set up and use this) and the task skills `/vibegraph-plan`, `-debug`, `-security`, `-review` — which knowledge file and command to open for that task | `.claude/skills/<name>/SKILL.md`, or `~/.claude/skills/…` with `--user` | — |
 | `export` | Derives everything from the code and writes it for Claude | `.vibegraph/knowledge/` (see the files table) | — |
 | `export --task "<text>"` | …plus the task mapped onto the threads that own it, dependencies first | `plan.md`, `plan.json` | — |
 | `export --architecture` | …plus the system map as data and as a picture | `architecture.vibegraph.json`, `architecture.html` | — |
@@ -208,6 +209,24 @@ before finishing, and what to do when a hook blocks (fix the code; never
 remove the hooks or edit `.vibegraph/`; ask when the rule looks wrong).
 With the skill installed machine-wide you can simply ask Claude to "set up
 VibeGraph here". `--remove-skill` takes it out.
+
+It also installs four **task skills**, each a short list of which knowledge
+file and which command to open for one kind of work — the hooks already
+deliver the contracts and rules of the threads a prompt names; these cover
+what a hook cannot guess:
+
+| Skill | Opens |
+|---|---|
+| `/vibegraph-plan` | `export --task` → `plan.md`, `brief`, `constraints.md`, `system_spec.md`, `architecture.md`, `affected` |
+| `/vibegraph-debug` | `threads/INDEX.md`, `flows.md`, `brief`, "Where static knowledge ends", `affected`, `coverage` |
+| `/vibegraph-security` | `dataflow` / `security.md`, "Leaves the project through", `architecture.md` trust groups, `configuration.md`, `check` — and says what it cannot see |
+| `/vibegraph-review` | `check --uncommitted`, `affected`, `brief`, `system_spec.md`, `dataflow` |
+
+Claude Code keeps only a skill's name and description in context until a
+task matches it (about 100 tokens each). `--skills plan,security` installs
+just those (the setup skill always comes along); `test:task-skills` fails if
+a skill names a file the export no longer writes or a command the CLI no
+longer answers.
 
 **The envelope cache.** `check`, `affected`, `coverage` and the hooks keep
 the last parse under `~/.cache/vibegraph-knowledge/envelopes/`, outside the

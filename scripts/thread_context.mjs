@@ -17,6 +17,8 @@ import { readEnvDeclarations } from "../src/server/infra_manifests.ts";
 import { computeNearClones } from "../src/shared/near_clones.ts";
 import { rankThread } from "../src/shared/thread_rank.ts";
 import { threadFacts } from "../src/shared/thread_rank_facts.ts";
+import { findingsByThread } from "../src/server/dataflow.ts";
+import { cachedDataflow } from "./dataflow_cache.mjs";
 
 /** `.env.example` lines and compose `environment:` entries, as declarations. */
 export function envDeclarations(absRoot) {
@@ -35,6 +37,9 @@ export function threadContexts(env, absRoot, constraints, prebuilt = {}) {
   const envSurface = prebuilt.envSurface ?? buildEnvSurface(env, envDeclarations(absRoot));
   // 2026-09-29 - near-clones of every eligible function (shared/near_clones.ts).
   const clones = prebuilt.nearClones ?? computeNearClones(env.files);
+  // 2026-09-29 - untrusted input reaching a dangerous sink (server/dataflow.ts).
+  const dataflow = prebuilt.dataflow ?? cachedDataflow(env, absRoot);
+  const untrusted = findingsByThread(dataflow);
   const byEntry = new Map();
   for (const t of env.threads) {
     const ep = t.entryPointId;
@@ -42,10 +47,10 @@ export function threadContexts(env, absRoot, constraints, prebuilt = {}) {
     // `only` — the threads a caller needs (the prompt hook routes to three),
     // computed by the same recipe as the export.
     if (prebuilt.only && !prebuilt.only.has(ep)) continue;
-    const contract = computeThreadContract(t, { ...baseOpts, ...threadAdjacency(graph, ep), testedBy: tests.get(ep), configuredBy: configuredByFor(envSurface, ep), nearClonesFor: (f, id) => clones.get(`${f}::${id}`), rankFor: (th) => rankThread(th, threadFacts(th, env.files, stack, crossings)) });
+    const contract = computeThreadContract(t, { ...baseOpts, ...threadAdjacency(graph, ep), testedBy: tests.get(ep), configuredBy: configuredByFor(envSurface, ep), untrusted: untrusted.get(ep), nearClonesFor: (f, id) => clones.get(`${f}::${id}`), rankFor: (th) => rankThread(th, threadFacts(th, env.files, stack, crossings)) });
     const routed = routeConstraints(constraints, { entryPointId: ep, filesReached: contract.filesReached, stack: stack.byThread[ep] ?? [] });
     const rulesBlock = skillRulesBlock(routed);
     byEntry.set(ep, { thread: t, contract, routed, rulesBlock, stamp: threadSkillStamp(t, rulesBlock) });
   }
-  return { stack, crossings, graph, byEntry, envSurface, nearClones: clones };
+  return { stack, crossings, graph, byEntry, envSurface, nearClones: clones, dataflow };
 }

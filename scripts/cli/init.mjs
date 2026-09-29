@@ -152,22 +152,49 @@ export function cliInvocation(argv = process.argv, execPath = process.execPath, 
 
 export const SKILL_NAME = "vibegraph";
 
-export function skillSource(loc) {
+// 2026-09-29 — the TASK skills: when to open which crystallised file for
+// planning, debugging, a security review and a pre-commit review. Claude Code
+// keeps only a skill's name and description in context until a task matches,
+// so these cost ~100 tokens each until used. scripts/cli/claude-skills/<name>/.
+export const TASK_SKILLS = ["plan", "debug", "security", "review"];
+export const ALL_SKILLS = [SKILL_NAME, ...TASK_SKILLS.map((t) => `${SKILL_NAME}-${t}`)];
+
+/** `plan,debug` → ["vibegraph", "vibegraph-plan", "vibegraph-debug"]; the
+ *  setup skill always comes along. Unknown names are refused, never guessed. */
+export function skillsFromList(list) {
+  if (!list) return ALL_SKILLS;
+  const wanted = list.split(",").map((s) => s.trim().replace(/^vibegraph-?/, "")).filter(Boolean);
+  const bad = wanted.filter((w) => !TASK_SKILLS.includes(w));
+  if (bad.length) throw new Error(`unknown skill(s): ${bad.join(", ")} — one of: ${TASK_SKILLS.join(", ")}`);
+  return [SKILL_NAME, ...wanted.map((w) => `${SKILL_NAME}-${w}`)];
+}
+
+export function skillSource(loc, name = SKILL_NAME) {
+  if (name !== SKILL_NAME) {
+    return loc.mode === "installed"
+      ? join(loc.packageRoot, "vendor", "claude-skills", name, "SKILL.md")
+      : join(loc.repoRoot, "scripts", "cli", "claude-skills", name, "SKILL.md");
+  }
   return loc.mode === "installed"
     ? join(loc.packageRoot, "vendor", "claude-skill", "SKILL.md")
     : join(loc.repoRoot, "scripts", "cli", "claude-skill", "SKILL.md");
 }
 
 /** @returns {{ path, state: "installed"|"updated"|"unchanged"|"removed"|"absent" }} */
-export function applySkill({ root, loc, user = false, remove = false, home = homedir() }) {
-  const dir = join(user ? join(home, ".claude") : join(root, ".claude"), "skills", SKILL_NAME);
+/** Install (or remove) several skills; one result per skill. */
+export function applySkills({ names = ALL_SKILLS, ...rest }) {
+  return names.map((name) => ({ name, ...applySkill({ ...rest, name }) }));
+}
+
+export function applySkill({ root, loc, user = false, remove = false, home = homedir(), name = SKILL_NAME }) {
+  const dir = join(user ? join(home, ".claude") : join(root, ".claude"), "skills", name);
   const path = join(dir, "SKILL.md");
   if (remove) {
     if (!existsSync(path)) return { path, state: "absent" };
     rmSync(dir, { recursive: true, force: true });
     return { path, state: "removed" };
   }
-  const body = readFileSync(skillSource(loc), "utf-8");
+  const body = readFileSync(skillSource(loc, name), "utf-8");
   const had = existsSync(path) ? readFileSync(path, "utf-8") : null;
   if (had === body) return { path, state: "unchanged" };
   mkdirSync(dir, { recursive: true });

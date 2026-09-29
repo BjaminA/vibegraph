@@ -25,6 +25,7 @@ import { formatTestedBy, type TestedBy } from "../shared/test_reach.ts";
 import { formatConfiguredBy, type ConfiguredBy } from "../shared/env_surface.ts";
 import { ROLE_ORDER } from "../shared/stack_taxonomy.ts";
 import { formatNearClones, NEAR_CLONE_THRESHOLD, type NearClone } from "../shared/near_clones.ts";
+import { formatUntrustedLines, type DataflowFinding } from "./dataflow.ts";
 import { categoryWord } from "../shared/thread_rank.ts";
 
 /** The primary path (walk order, labels once) and the rest as counts. */
@@ -170,6 +171,9 @@ export interface ThreadContract {
   testedBy?: TestedBy;
   /** 2026-09-28 - present only when an env surface was injected. */
   configuredBy?: ConfiguredBy;
+  /** 2026-09-29 - untrusted input reaching a dangerous sink on this thread
+   *  (server/dataflow.ts). Present only when a data-flow report was injected. */
+  untrusted?: DataflowFinding[];
   /** 2026-09-29 - the seed's and steps' NEAR-CLONES (shared/near_clones.ts):
    *  functions of the same call shape elsewhere, which a fix here probably
    *  also needs. Present only when a near-clone index was injected. */
@@ -226,6 +230,8 @@ export interface ThreadContractOpts {
   /** 2026-09-28 - the environment variables this thread reads
    *  (shared/env_surface.ts). Absent = no surface: no line is rendered. */
   configuredBy?: ConfiguredBy;
+  /** 2026-09-29 - this thread's untrusted-input findings (dataflow.ts). */
+  untrusted?: DataflowFinding[];
   /** 2026-09-29 - near-clones of a function, by (file, irNodeId). Absent =
    *  no index: no line is rendered. */
   nearClonesFor?: (file: string, irNodeId: string) => NearClone[] | undefined;
@@ -519,6 +525,7 @@ export function computeThreadContract(thread: ContractInputThread, opts: ThreadC
     crossThread: { reaches: [...opts.reaches].sort(), reachedBy: [...opts.reachedBy].sort() },
     ...(opts.testedBy ? { testedBy: opts.testedBy } : {}),
     ...(opts.configuredBy ? { configuredBy: opts.configuredBy } : {}),
+    ...(opts.untrusted ? { untrusted: opts.untrusted } : {}),
     ...(opts.nearClonesFor ? { nearClones: nearClonesOf(thread, opts.nearClonesFor) } : {}),
     ...(ranks ? { ranked: rankedSummary(thread, ranks) } : {}),
     filesReached,
@@ -771,6 +778,8 @@ export function formatContractBlock(c: ThreadContract): string {
     lines.push(`Shaped like (same call sequence elsewhere — 3-gram Jaccard >= ${NEAR_CLONE_THRESHOLD}; a fix here probably applies there; structural, not verified):`, ...(clones as string[]));
   }
   if (configured) lines.push(configured);
+  const untrusted = formatUntrustedLines(c.untrusted);
+  if (untrusted) lines.push(untrusted);
   const b = c.boundaries;
   lines.push(`Where static knowledge ends: ${b.resolutionGaps} resolution gap(s), ${b.runtimeDispatch} runtime dispatch, ${b.uncaptured} uncaptured, ${b.unattributed} boundary/boundaries with no tool`);
   for (const n of c.notes) lines.push(`Note: ${n}`);

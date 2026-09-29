@@ -22,6 +22,7 @@ import { diffEditChecks, formatEditCheck, type EditCheckRow } from "./src/server
 import { derivedPolicyClauses, checkPolicyClause, describePolicyClause } from "./src/server/policy_check";
 import { startHookedRun, stopHookedRun, decideHookedRun, currentHookedRun, type HookedRunDeps } from "./src/server/hooked_runner";
 import { hostAllowed, originAllowed, jsonContentType, staticPath, ensurePrivateIgnore, type GuardConfig } from "./src/server/local_guard";
+import { computeDataflow, findingsByThread, formatDataflowMd, type DataflowReport } from "./src/server/dataflow";
 import { archModelForEnvelope } from "./src/server/arch_envelope";
 import { applyArchStore, loadArchStore, saveArchStore, ratifyProposal, rejectProposal, proposalGate } from "./src/server/arch_store";
 import { testReach, affectedTests } from "./src/shared/test_reach";
@@ -1942,6 +1943,17 @@ async function orchestratorReview(run: WorkRun, packet: RunPacket, evidence: Pac
 // goes through the CST chokepoint), a turn budget, and a remit rule
 // whose only outside move is escalation. Evidence is collected by the
 // SERVER from snapshots — never trusted from the worker's self-report.
+
+// 2026-09-29 — the untrusted-input report (src/server/dataflow.ts), computed
+// on first use after each derived pass: every pass replaces latestThreads, so
+// its identity is the memo key.
+let dataflowMemo: { threads: unknown; report: DataflowReport } | null = null;
+function liveDataflow(): DataflowReport {
+  if (dataflowMemo?.threads === latestThreads) return dataflowMemo.report;
+  const report = computeDataflow({ files: relativeProjectFiles() as any, entryPoints: latestEntryPoints as any, threads: latestThreads as any });
+  dataflowMemo = { threads: latestThreads, report };
+  return report;
+}
 
 // ── The HOOKED RUN (2026-09-29): the Agent Manager's default — one plain
 // Claude Code session with the VibeGraph hooks (src/server/hooked_run.ts,
@@ -6749,6 +6761,8 @@ function threadContractFor(entryPointId: string): ThreadContractContext {
     // 2026-09-28 - the discovered tests that exercise this thread.
     testedBy: testReach(latestThreads as any, latestEntryPoints as any).get(entryPointId),
     ...(latestEnvSurface ? { configuredBy: configuredByFor(latestEnvSurface, entryPointId) } : {}),
+    // 2026-09-29 - untrusted input reaching a dangerous sink on this thread.
+    untrusted: findingsByThread(liveDataflow()).get(entryPointId),
     ...(latestNearClones ? { nearClonesFor: (f: string, id: string) => latestNearClones!.get(`${f}::${id}`) } : {}),
     // 2026-09-29 - the contract ranked as the thread view ranks it.
     rankFor: (t: any) => rankThread(t, threadFacts(t, relativeProjectFiles() as any, latestStack as any, latestCrossings as any)),
@@ -7488,6 +7502,8 @@ const mcpContext: VibegraphMcpContext = {
     await settleDerived();
     return formatEditCheck(diffEditChecks(before as EditCheckRow[], statedCheckSnapshot()));
   },
+  // 2026-09-29 - untrusted input → dangerous sinks, the whole project.
+  dataflow: () => (isDirectory ? { text: formatDataflowMd(liveDataflow()) } : { text: "", error: "the data-flow report needs a project directory" }),
   // 2026-09-29 - generic direction on demand (the same files the hooks read).
   direction: (skill) => {
     if (skill) {
