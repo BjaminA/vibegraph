@@ -599,9 +599,17 @@ def emit_cross_file_edges(
             new_edges.append(edge)
             continue
 
-        if result.qualified not in project_symbols:
-            continue
-        target_file, target_id = project_symbols[result.qualified]
+        qualified = result.qualified
+        if qualified not in project_symbols:
+            # 2026-09-28 - `from telemetry import alerts` binds a MODULE, so
+            # `alerts.should_notify(...)` reads as "telemetry:alerts.should_notify"
+            # (the Class.method form) and finds nothing. When `telemetry.alerts`
+            # is itself one of this project's modules, the symbol is that
+            # module's function: a fact the symbol table holds, not a guess.
+            qualified = _submodule_form(qualified, project_symbols)
+            if qualified is None:
+                continue
+        target_file, target_id = project_symbols[qualified]
         if target_file == file_path:
             # Same-file reference; parse_cst.py already handled it via _defs.
             continue
@@ -610,9 +618,25 @@ def emit_cross_file_edges(
             "target": target_id,
             "type": "reference",
             "targetFile": target_file,
-            "qualifiedTarget": result.qualified,
+            "qualifiedTarget": qualified,
         })
     return new_edges
+
+
+def _submodule_form(
+    qualified: Optional[str],
+    project_symbols: Dict[QualifiedPath, Tuple[str, str]],
+) -> Optional[str]:
+    """``"pkg:mod.fn"`` -> ``"pkg.mod:fn"`` when that is a project symbol, else
+    None. Only the two-part form: a from-imported module plus one attribute."""
+    if not qualified or ":" not in qualified:
+        return None
+    module, rest = qualified.split(":", 1)
+    parts = rest.split(".")
+    if len(parts) != 2:
+        return None
+    candidate = f"{module}.{parts[0]}:{parts[1]}"
+    return candidate if candidate in project_symbols else None
 
 
 # ─────────────────────────────────────────── entry point ─────────────

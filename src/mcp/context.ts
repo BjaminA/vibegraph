@@ -369,6 +369,16 @@ export interface VibegraphMcpContext {
    * (a hop's kind, a tool's role) and refs to the call sites.
    */
   architecture(): { model: import("../shared/protocol").ArchModelRecord | null; error?: string };
+  /** 2026-09-28 - per file: parsed?, reached?, tested?, configured?, changed since export? (src/server/coverage.ts). */
+  coverage(paths: string[]): { rows: import("../server/coverage").PathCoverage[] | null; error?: string };
+  /** 2026-09-29 - a thread's contract plus the verbatim source of its PRIMARY functions (src/server/thread_brief.ts). */
+  threadBrief(entryPointId: string, maxChars?: number): { brief: import("../server/thread_brief").Brief | null; error?: string };
+  /** 2026-09-29 - the post-edit hook in-band (src/server/edit_check.ts): the
+   *  stated checks now, and after an edit what it introduced (null = no rule). */
+  checkSnapshot(): unknown[];
+  editCheckText(before: unknown[]): Promise<string | null>;
+  /** 2026-09-29 - a saved investigation rendered as its handoff, or the list (src/server/investigations.ts). */
+  investigation(name: string | null): { text: string; error?: string };
 
   /**
    * M-ARCH.4 - ask the thinking-tier model for deployment/trust groups,

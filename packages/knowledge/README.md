@@ -5,8 +5,30 @@
 ```
 npm install -g vibegraph-knowledge
 vibegraph-knowledge view /path/to/project     # the visualisation at http://localhost:4200
-vibegraph-knowledge init && vibegraph-knowledge export     # the knowledge, for Claude Code
+vibegraph-knowledge init --hooks --skill && vibegraph-knowledge export   # Claude Code, enforced
 ```
+
+**With Claude Code, the recommended setup is the hooks** (in the project):
+
+```
+npx vibegraph-knowledge init --hooks --skill
+```
+
+From the next Claude Code session on, every prompt gets the contracts, rules
+and approved skills of the threads it names, and every edit — Write, Edit or
+a shell command — is re-checked against the stated rules: a new violation
+stops the edit with the rule, its reason and the offending call, and Claude
+fixes it. Zero tokens; the hooks live in `.claude/settings.local.json` (per
+user, never committed) and `init --remove-hooks` takes them out. Measured on
+Opus 5 (reviews/h2h4): with the rules only on disk the session never opened
+them and broke one (6/7); with the hooks it kept all seven, at 163 s and
+$1.19 against 2,346 s and $12.08 for the orchestrated run on the same task.
+
+**`--skill`** installs a Claude Code skill (`/vibegraph`) that teaches a plain
+Claude chat to set all of this up and use it — state rules with their reasons,
+check before finishing, what to do when a hook blocks. `init --skill --user`
+puts it in `~/.claude/skills/` so every project on the machine has it; then
+you can just ask Claude to "set up VibeGraph here".
 
 **`view`** starts the web app — the architecture map, threads traced across
 files and languages, running code to a node, editing through a chokepoint
@@ -58,7 +80,7 @@ into a directory it owns and tells you where. `init` needs neither.
 sits between `<!-- vibegraph-knowledge:begin/end -->` markers and is
 replaced on a re-run, never duplicated; `.vibegraph/knowledge/` is added to
 `.gitignore` once. `init --print` shows the block and writes nothing. No
-hook or setting is ever installed.
+hook or setting is installed unless you pass `--hooks` (or `--skill`).
 
 ## What it writes
 

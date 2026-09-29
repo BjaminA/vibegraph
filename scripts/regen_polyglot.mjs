@@ -23,6 +23,35 @@ import {
   batchParseCommand, linkCommand, discoverCommand, discoverProjectCommand, moduleIdentity,
 } from "../src/server/languages.ts";
 import { readManualSeeds } from "../src/server/manual_seeds.ts";
+import { linkFiles as linkBash } from "./frontends/bash/link_bash.mjs";
+import { linkFiles as linkJsts } from "./frontends/jsts/link_jsts.mjs";
+import { linkFiles as linkCpp } from "./frontends/cpp/link_cpp.mjs";
+import { linkFiles as linkRust } from "./frontends/rust/link_rust.mjs";
+import { discover as discoverBash } from "./frontends/bash/discover_bash.mjs";
+import { discover as discoverJsts } from "./frontends/jsts/discover_jsts.mjs";
+import { discover as discoverCpp } from "./frontends/cpp/discover_cpp.mjs";
+import { discover as discoverRust } from "./frontends/rust/discover_rust.mjs";
+import { discoverProject } from "./discover_project.mjs";
+
+/** The Node frontends' link and discover steps, called directly. */
+const IN_PROCESS = {
+  bash: { link: linkBash, discover: discoverBash },
+  jsts: { link: linkJsts, discover: discoverJsts },
+  cpp: { link: linkCpp, discover: discoverCpp },
+  rust: { link: linkRust, discover: discoverRust },
+};
+
+/** A private copy for a linker, which stamps edges and effect kinds IN
+ *  PLACE: the parsed objects are shared with the parse cache, and a spawned
+ *  linker only ever saw a copy that crossed a pipe. Nodes and edges are
+ *  copied one level down, which is as deep as any linker writes. */
+function detached(subset) {
+  const out = {};
+  for (const [f, ir] of Object.entries(subset)) {
+    out[f] = { ...ir, nodes: (ir.nodes ?? []).map((n) => ({ ...n })), edges: (ir.edges ?? []).map((e) => ({ ...e })) };
+  }
+  return out;
+}
 
 const __filename = fileURLToPath(import.meta.url);
 export const ROOT = dirname(dirname(__filename));
@@ -129,6 +158,10 @@ export function buildPolyglotEnvelope(root = POLYGLOT_DIR, opts = {}) {
   const SCRIPTS = opts.scriptsDir ?? DEFAULT_SCRIPTS;
   const pipeline = { pythonBin: opts.pythonBin ?? null, pythonEnv: opts.pythonEnv ?? PYENV };
   const stepCwd = opts.cwd ?? ROOT;
+  // Optional stage timings (ms), for the cache measurements and --timing.
+  const timings = opts.timings ?? null;
+  let tMark = Date.now();
+  const lap = (name) => { if (timings) { const now = Date.now(); timings[name] = now - tMark; tMark = now; } };
   const { files: walked, skipped: skippedDirs } = walk(root, root);
   const perLang = new Map();
   for (const { rel: f, langId } of walked) {
@@ -142,17 +175,47 @@ export function buildPolyglotEnvelope(root = POLYGLOT_DIR, opts = {}) {
   //    the server's relativeProjectFiles() view; language stamped per file.
   let files = {};
   const parseErrors = {};
-  for (const [lang, list] of perLang) {
+  // `opts.parseCache` (scripts/envelope_cache.mjs) answers a file whose
+  // bytes and parse context have not moved; only the rest are parsed.
+  for (const [lang, all] of perLang) {
+    const list = [];
+    for (const f of all) {
+      const hit = opts.parseCache?.lookup(f, lang.id) ?? null;
+      if (hit) files[f] = hit; else list.push(f);
+    }
+    if (!list.length) continue;
     const cmd = batchParseCommand(lang, SCRIPTS);
     const input = list.map((f) => `${f}\t${moduleIdentity(lang, f)}`).join("\n") + "\n";
     const parsed = run(cmd, { input, cwd: root, pipeline });
-    Object.assign(parseErrors, parsed.errors ?? {});
-    for (const [f, ir] of Object.entries(parsed.files ?? {})) files[f] = { language: lang.id, ...ir };
+    // A file the frontend read PARTLY carries an IR (and `degraded` on it) and
+    // an errors entry beside it. It is not a parse failure: every consumer of
+    // parseErrors says "those files carry no IR", and the hooks refused edits
+    // to it (found 2026-09-29 on a private production codebase). Failed = no IR; partial is read
+    // from `ir.degraded` below, which also survives the parse cache.
+    for (const [f, msg] of Object.entries(parsed.errors ?? {})) {
+      if (!parsed.files?.[f]) parseErrors[f] = msg;
+    }
+    for (const [f, ir] of Object.entries(parsed.files ?? {})) {
+      files[f] = { language: lang.id, ...ir };
+      opts.parseCache?.store(f, lang.id, files[f]);
+    }
   }
+  // Walked order, so a partly cached parse keys the map exactly as a full one.
+  files = Object.fromEntries(walked.filter(({ rel }) => rel in files).map(({ rel }) => [rel, files[rel]]));
 
-  // 2. link — per language, own files only.
+  lap("parse");
+  // 2. link — per language, own files only. The Node linkers and
+  //    discoverers run IN-PROCESS (2026-09-29): measured on a private production codebase, their
+  //    spawns spent ~3.4 s of the ~3.9 s serialising the map through a pipe
+  //    (40 MB each way to the TypeScript linker, 85 MB to project discovery),
+  //    while the work itself took ~0.3 s. Same functions, same output — the
+  //    CLI path still exists (VG_SPAWN_PIPELINE=1 restores it). Python stays
+  //    a spawn: it is a different runtime.
+  const inProcess = process.env.VG_SPAWN_PIPELINE !== "1" && opts.inProcess !== false;
   const linked = {};
   for (const [lang, subset] of byLanguage(files)) {
+    const local = inProcess ? IN_PROCESS[lang.id] : null;
+    if (local) { Object.assign(linked, local.link(detached(subset))); continue; }
     const cmd = linkCommand(lang, SCRIPTS);
     if (!cmd) { Object.assign(linked, subset); continue; }
     const out = run(cmd, { input: JSON.stringify({ files: subset }), cwd: stepCwd, pipeline });
@@ -160,9 +223,12 @@ export function buildPolyglotEnvelope(root = POLYGLOT_DIR, opts = {}) {
   }
   files = linked;
 
+  lap("link");
   // 3. discover — per language; entries concatenate.
   const entryPoints = [];
   for (const [lang, subset] of byLanguage(files)) {
+    const local = inProcess ? IN_PROCESS[lang.id] : null;
+    if (local) { entryPoints.push(...local.discover(subset)); continue; }
     const cmd = discoverCommand(lang, SCRIPTS);
     if (!cmd) continue;
     const out = run(cmd, { input: JSON.stringify({ files: subset }), cwd: stepCwd, pipeline });
@@ -172,8 +238,10 @@ export function buildPolyglotEnvelope(root = POLYGLOT_DIR, opts = {}) {
   //     literal is run, whatever its own file says. After the per-language
   //     step so a richer discovered row is never displaced.
   {
-    const out = run(discoverProjectCommand(SCRIPTS), { input: JSON.stringify({ files, entryPoints }), cwd: stepCwd, pipeline });
-    for (const e of out.entryPoints ?? []) if (!entryPoints.some((x) => x.id === e.id)) entryPoints.push(e);
+    const found = inProcess
+      ? discoverProject(files, entryPoints)
+      : run(discoverProjectCommand(SCRIPTS), { input: JSON.stringify({ files, entryPoints }), cwd: stepCwd, pipeline }).entryPoints ?? [];
+    for (const e of found) if (!entryPoints.some((x) => x.id === e.id)) entryPoints.push(e);
   }
 
   // 3b. MANUAL SEEDS — a person's named entry points, in any language, after
@@ -186,25 +254,49 @@ export function buildPolyglotEnvelope(root = POLYGLOT_DIR, opts = {}) {
     if (!entryPoints.some((e) => e.id === seed.id)) entryPoints.push(seed);
   }
 
+  lap("discover");
   // 4. extract — ONE batch over the merged map (threads never cross languages).
   const seeds = entryPoints.map((e) => ({ seedFile: e.file, seedId: e.irNodeId, entryPointId: e.id }));
-  const extracted = run(
-    { bin: "python3", argv: [join(SCRIPTS, "extract_thread.py"), "--batch-seeds"], needsPythonEnv: true },
-    { input: JSON.stringify({ files, seeds }), cwd: stepCwd, pipeline },
-  );
-  const threads = extracted.threads ?? [];
+  // `opts.threadCache` may hand back threads whose inputs did not move; the
+  // rest are extracted, and the list is reassembled in seed order so the
+  // result is the one a full extraction would give.
+  const reuse = opts.threadCache?.select(seeds, files) ?? null;
+  const toExtract = reuse ? reuse.toExtract : seeds;
+  const fresh = toExtract.length
+    ? run(
+      { bin: "python3", argv: [join(SCRIPTS, "extract_thread.py"), "--batch-seeds"], needsPythonEnv: true },
+      { input: JSON.stringify({ files, seeds: toExtract }), cwd: stepCwd, pipeline },
+    ).threads ?? []
+    : [];
+  let threads = fresh;
+  if (reuse) {
+    const key = (ep, file) => `${ep}\u0000${file}`;
+    const byKey = new Map(fresh.map((t) => [key(t.entryPointId, t.seed?.file), t]));
+    threads = [];
+    for (const s of seeds) {
+      const t = reuse.cached.get(key(s.entryPointId, s.seedFile)) ?? byKey.get(key(s.entryPointId, s.seedFile));
+      if (t) threads.push(t);
+    }
+  }
 
-  // 5. system tier.
-  const sys = run(
+  lap("extract");
+  // 5. system tier — skipped when the caller only checks (opts.skipSystem).
+  const sys = opts.skipSystem ? { system: null } : run(
     { bin: "python3", argv: [join(SCRIPTS, "build_system_tier.py")], needsPythonEnv: true },
     { input: JSON.stringify({ files, entryPoints, threads, projectRoot: root }), cwd: stepCwd, pipeline },
   );
 
+  lap("system");
   const symbolIndex = [];
   for (const ir of Object.values(files)) if (ir.symbolIndex) symbolIndex.push(...ir.symbolIndex);
   return {
-    envelope: { version: "2.1", files, symbolIndex, entryPoints, threads, system: sys.system ?? { subsystems: [], edges: [] } },
+    envelope: {
+      version: "2.1", files, symbolIndex, entryPoints, threads,
+      ...(opts.skipSystem ? {} : { system: sys.system ?? { subsystems: [], edges: [] } }),
+    },
     parseErrors,
+    /** Files read PARTLY (they carry an IR with `degraded`), by message. */
+    partialParses: Object.fromEntries(Object.entries(files).filter(([, ir]) => ir.degraded).map(([f, ir]) => [f, typeof ir.degraded === "string" ? ir.degraded : JSON.stringify(ir.degraded)])),
     /** Compiled-output directories NOT walked, with what each held (M-CMD.1). */
     skippedDirs,
     /** Manual seeds a person named that did NOT resolve, with why (M-CMD.1). */

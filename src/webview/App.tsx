@@ -35,6 +35,7 @@ import { FiltersPanel, DEFAULT_FILTERS, type NodeFilters } from "./FiltersPanel"
 import { ModelTiersPanel } from "./ModelTiersPanel";
 // M-STACK.3 — what the project is built on, and the policies stated about it.
 import { StackPanel } from "./StackPanel";
+import { InvestigationPanel } from "./InvestigationPanel";
 // M-SKILLS.2 — generic direction skills, enabled per project.
 import { SkillsPanel } from "./SkillsPanel";
 import type { SkillsConfigPayload } from "../shared/generic_skills_wire";
@@ -73,6 +74,8 @@ import { CodeBlockNode } from "./nodes/CodeBlockNode";
 import { useWebSocketHandler, useEventBus, useSelectionBus, type EditState } from "./messaging";
 import { ViewTransition, MotionEdge, useNodeMotion } from "./motion";
 import { ThreadView, ThreadIndex, ThreadContainerNode, SkillBadge, ThreadSkillCard, ArtifactChip, ArtifactCard, artifactsForThread, type Thread } from "./threads";
+import { ThreadInsightChips } from "./threads/ThreadInsightChips";
+import { testReach } from "../shared/test_reach";
 import type { ThreadSkillRecord, ArtifactRecordWire } from "./types";
 import { SystemView } from "./system";
 import { ArchitectureView, deriveModels, type ArchModel } from "./architecture";
@@ -266,6 +269,11 @@ function Graph() {
   // M-XLANG.1 - where a thread leaves its own language over HTTP.
   const [crossings, setCrossings] = useState<import("../shared/protocol").CrossingIndexRecord | null>(null);
   const [architecture, setArchitecture] = useState<import("../shared/protocol").ArchModelRecord | null>(null);
+  // 2026-09-28 — reachability, env surface, freshness (envelope `insight`).
+  const [insight, setInsight] = useState<import("../shared/protocol").InsightRecord | null>(null);
+  // The discovered tests per thread — computed here, from threads the
+  // envelope already ships (src/shared/test_reach.ts), once per envelope.
+  const testReachMap = useMemo(() => testReach(projectThreads as never, entryPoints as never), [projectThreads, entryPoints]);
   // M-ARCH.4 — the architecture proposal's round trip.
   // `working` says a MODEL is drafting (propose / revise) — what the map animates;
   // ratify and reject are local writes and only set `busy`.
@@ -278,6 +286,8 @@ function Graph() {
   // PLAN-M-RUNTIME phase 3 — the trace overlay, when a run has produced one.
   const [observations, setObservations] = useState<import("../shared/protocol").ObservationStoreRecord | null>(null);
   const [stackOpen, setStackOpen] = useState(false);
+  const [investigateOpen, setInvestigateOpen] = useState(false);
+  const openInvestigation = useCallback(() => setInvestigateOpen(true), []);
   // M-ZOOM - the thread the reader zoomed OUT of, highlighted on arrival.
   const [zoomFocusEntry, setZoomFocusEntry] = useState<string | null>(null);
   const [policyPrefill, setPolicyPrefill] = useState<{ tool: string; role?: string } | null>(null);
@@ -339,6 +349,22 @@ function Graph() {
   const symbolIndexRef = useRef<SymbolEntry[]>([]);
   const projectDataRef = useRef<Record<string, ProjectFileData>>({});
   const nodesRef = useRef<Node[]>([]);
+  // The files panel's markers: nothing reaches it / partly parsed / changed
+  // since the export. Declared after projectDataRef, which it reads; the ref
+  // is refreshed by the same envelope that sets `insight`.
+  const fileStatus = useMemo(() => {
+    const out: Record<string, { unreached?: boolean; dropped?: number; changed?: boolean }> = {};
+    if (!insight) return out;
+    const unreached = new Set(insight.reachability.filesUnreached.map((f) => f.file));
+    const changed = new Set(insight.freshness.changed);
+    for (const [f, ir] of Object.entries(projectDataRef.current)) {
+      const dropped = (ir as { degraded?: { dropped?: number } }).degraded?.dropped;
+      if (unreached.has(f) || changed.has(f) || dropped) {
+        out[f] = { ...(unreached.has(f) ? { unreached: true } : {}), ...(dropped ? { dropped } : {}), ...(changed.has(f) ? { changed: true } : {}) };
+      }
+    }
+    return out;
+  }, [insight]);
 
   // Keep nodesRef in sync for stub positioning
   useEffect(() => { nodesRef.current = nodes; }, [nodes]);
@@ -356,7 +382,7 @@ function Graph() {
       setEntryPoints, setProjectThreads, setSystem, setSystemPlan,
       setPendingSystemPlan, setProjectMode, setPendingChangeset,
       setBuildPlan, setPendingBuildPlan, setBuildRunState, setRefreshesInFlight,
-      setReadmeStatus, setThreadSkills, setArtifacts, setViewMode, setWorkRun, setConstraints, setStack, setCrossings, setArchitecture,
+      setReadmeStatus, setThreadSkills, setArtifacts, setViewMode, setWorkRun, setConstraints, setStack, setCrossings, setArchitecture, setInsight,
       setArchPropose,
       setObservations,
       setModelTiers, setEndpointProbe: (p) => { setEndpointProbe(p); setEndpointProbing(false); },
@@ -1126,6 +1152,7 @@ function Graph() {
           activeEntryPointId={activeEntryPointId}
           onSelectEntry={handleSelectEntry}
           onSelectFile={handleSelectFile}
+          fileStatus={fileStatus}
         />
       )}
 
@@ -1159,6 +1186,7 @@ function Graph() {
             architecture={architecture}
             archPropose={archPropose}
             onArchAction={handleArchAction}
+            insight={insight}
           />
         ) : viewMode === "architecture" ? (
           <ArchitectureView projectIR={projectDataRef.current} onOpenForward={handleOpenForward} />
@@ -1211,6 +1239,15 @@ function Graph() {
                   <SkillBadge
                     record={threadSkills[activeEntryPointId] ?? null}
                     onOpen={() => setSkillCardOpen(true)}
+                  />
+                )}
+                {/* 2026-09-28 — tests + env for this thread (contract lines, on screen). */}
+                {activeEntryPointId && (
+                  <ThreadInsightChips
+                    testedBy={testReachMap.get(activeEntryPointId)}
+                    envNames={insight?.env?.byThread[activeEntryPointId] ?? []}
+                    undeclared={(insight?.env?.byThread[activeEntryPointId] ?? []).filter((n) => insight?.env?.undeclared.includes(n))}
+                    hasDeclarations={insight?.env?.hasDeclarations ?? false}
                   />
                 )}
                 {/* M-TRAINED.2 — artifact chip, third in the cluster. */}
@@ -1337,6 +1374,8 @@ function Graph() {
         stackOpen={stackOpen}
         stackAvailable={isDirectoryMode}
         onToggleStack={() => { setStackOpen((v) => !v); setModelsOpen(false); }}
+        investigateOpen={investigateOpen}
+        onToggleInvestigate={() => { setInvestigateOpen((v) => !v); setStackOpen(false); }}
         onToggleFilters={() => { setFiltersOpen((v) => !v); setAnalysisOpen(false); }}
         onToggleAnalysis={() => { setAnalysisOpen((v) => !v); setFiltersOpen(false); }}
         onToggleCode={handleToggleCode}
@@ -1834,6 +1873,12 @@ function Graph() {
         />
       )}
 
+      {/* 2026-09-29 — the investigation board: always mounted so a pin
+          taken while it is closed still lands (the pin opens it). */}
+      {isDirectoryMode && (
+        <InvestigationPanel open={investigateOpen} onOpen={openInvestigation} onClose={() => setInvestigateOpen(false)} />
+      )}
+
       {/* ── M-AGENT2 — the Agent Manager run board ── */}
       <WorkRunPanel
         open={workRunOpen}
@@ -1965,6 +2010,7 @@ function Graph() {
           projectIR={projectDataRef.current}
           stack={stack}
           crossings={crossings}
+          insight={insight}
         />
       )}
 

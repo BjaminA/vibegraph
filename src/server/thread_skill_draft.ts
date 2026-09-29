@@ -22,7 +22,7 @@ import { SKILL_INJECTION_BUDGET_CHARS } from "./thread_remit.ts";
 
 /** The drafting prompt. `rulesBlock` is skillRulesBlock(routed) — the rules
  *  routed to this thread, which the skill must carry with their reasons. */
-export function threadSkillPrompt(entryPointId: string, ir: any, rulesBlock: string): string {
+export function threadSkillPrompt(entryPointId: string, ir: any, rulesBlock: string, lessonsBlock = ""): string {
   const projected = projectThreadForAgent(ir as Thread);
   const steps = projected.nodes
     .filter((n) => ["seed", "step", "external"].includes(n.kind))
@@ -56,6 +56,9 @@ export function threadSkillPrompt(entryPointId: string, ir: any, rulesBlock: str
     "Steps in execution order:",
     steps,
     rulesBlock,
+    // 2026-09-29: what the hooks saw sessions break and put right on this
+    // thread (scripts/cli/lessons.mjs). Empty when there are none.
+    lessonsBlock,
   ].join("\n");
 }
 
@@ -63,6 +66,8 @@ export interface DraftInput {
   entryPointId: string;
   ir: any;
   rulesBlock: string;
+  /** Lessons the hooks recorded for this thread (scripts/cli/lessons.mjs). */
+  lessonsBlock?: string;
   /** every IR node id in the project: what a citation may name. */
   knownIds: Set<string>;
   /** one model call; null when it returned nothing. */
@@ -76,7 +81,7 @@ export interface DraftInput {
 /** Draft, gate and assemble a skill body. Writes nothing. */
 export async function draftThreadSkill(input: DraftInput): Promise<{ ok: boolean; body?: string; error?: string }> {
   const { entryPointId, ir, rulesBlock, knownIds, runLlm } = input;
-  const prompt = threadSkillPrompt(entryPointId, ir, rulesBlock);
+  const prompt = threadSkillPrompt(entryPointId, ir, rulesBlock, input.lessonsBlock ?? "");
   // The grounding gate tolerates ZERO ungrounded citations, so a single
   // invented id discards an otherwise good skill. Retry ONCE, naming the
   // invalid ids; the gate itself is unchanged.

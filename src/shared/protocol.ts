@@ -447,6 +447,27 @@ export interface ProjectEnvelope {
   // authorised a run and this is what it saw — so it is persisted
   // (.vibegraph/observations.json) and merely projected here.
   observations?: ObservationStoreRecord;
+  // 2026-09-28 — what the export already says in files, for the GUI:
+  // reachability, the configuration surface, freshness against the last
+  // export (src/server/insight.ts). Optional + additive; directory mode only.
+  insight?: InsightRecord;
+}
+
+export interface InsightRecord {
+  reachability: {
+    defs: number;
+    reached: number;
+    unreached: Array<{ file: string; id: string; name: string; line: number; reason: string }>;
+    filesUnreached: Array<{ file: string; defs: number }>;
+  };
+  env: {
+    vars: Array<{ name: string; declared: boolean; threads: string[]; readers: Array<{ file: string; line: number; fnId: string | null }> }>;
+    undeclared: string[];
+    byThread: Record<string, string[]>;
+    hasDeclarations: boolean;
+  } | null;
+  /** exported = a knowledge export exists to compare with; changed = files whose hash moved since. */
+  freshness: { exported: boolean; changed: string[] };
 }
 
 // ── PLAN-M-RUNTIME phase 3 — trace-overlay wire shapes ───────────────────
@@ -615,7 +636,7 @@ export interface CrossingRecord {
    *  entry (`path` is the literal, a target's `route` the parsed file).
    *  `tool`: an MCP tool name → its registration (`path` is the name).
    *  Absent = http (records written before the field existed). */
-  kind?: "http" | "command" | "tool";
+  kind?: "http" | "command" | "tool" | "navigation";
   entryPointId: string;
   file: string;
   nodeId: string;
@@ -635,6 +656,10 @@ export interface CrossingRecord {
 export interface CrossingIndexRecord {
   all: CrossingRecord[];
   byThread: Record<string, CrossingRecord[]>;
+  /** 2026-09-29 — `navigation` hops (a Link / router / redirect literal → a
+   *  page). Kept OUT of `all`/`byThread`: a link is the user's next page, not
+   *  a call, and every reader of those lists means execution. Absent = none. */
+  navigation?: CrossingRecord[];
 }
 
 // ── M-ARCH (PLAN-M-ARCH.md) — the ARCHITECTURE model ──────────────────────

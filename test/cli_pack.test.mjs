@@ -16,7 +16,7 @@
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -111,7 +111,9 @@ test("the tarball ships the bundle, the python scripts, the frontends and gramma
     "vendor/scripts/trace_bash.mjs", "vendor/scripts/vg_ollama_shim.mjs",
     // the C++ / Rust edit floors and their shared core (2026-09-25)
     "vendor/scripts/frontends/span_rewriter.mjs", "vendor/scripts/frontends/cpp/rewrite_cpp.mjs",
-    "vendor/scripts/frontends/rust/rewrite_rust.mjs"]) {
+    "vendor/scripts/frontends/rust/rewrite_rust.mjs",
+    // the Claude Code skill (init --skill, 2026-09-28)
+    "vendor/claude-skill/SKILL.md"]) {
     assert.ok(files.includes(f), `tarball has ${f}`);
   }
   for (const py of APP_PYTHON_SCRIPTS) assert.ok(files.includes(`vendor/scripts/${py}`), `tarball has ${py}`);
@@ -161,6 +163,61 @@ test("--version and --help answer without touching the project", () => {
   const bad = spawnSync(process.execPath, [cli, "frobnicate"], { cwd: tmp, encoding: "utf-8" });
   assert.equal(bad.status, 2);
   assert.match(bad.stderr, /unknown command: frobnicate/);
+});
+
+// 2026-09-28 — the hooks and the Claude Code skill, from the PACKAGE: what a
+// plain Claude chat installs with `npx vibegraph-knowledge init --hooks
+// --skill`. The hook commands written to settings.local.json are then run the
+// way Claude Code runs them — a shell, a JSON payload on stdin, and a bare
+// PATH (a hook does not get your shell's environment).
+test("init --hooks --skill from the package: the installed hook commands run on their own", () => {
+  const proj = join(tmp, "hooked");
+  cpSync(join(ROOT, "examples", "fleet-telemetry"), proj, { recursive: true, filter: (p) => !p.includes("__pycache__") });
+  const git = (...a) => spawnSync("git", a, { cwd: proj });
+  git("init", "-q"); git("add", "-A"); git("-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "base");
+  const home = join(tmp, "home");
+  const env = { ...process.env, VIBEGRAPH_PYDEPS: join(ROOT, ".pydeps"), VIBEGRAPH_KNOWLEDGE_HOME: home };
+  delete env.PYTHONPATH; delete env.VG_PYTHON;
+  const init = spawnSync(process.execPath, [cli, "init", "--hooks", "--skill", proj], { cwd: tmp, encoding: "utf-8", env });
+  assert.equal(init.status, 0, init.stderr);
+  assert.match(init.stdout, /hooks installed/);
+  assert.match(init.stdout, /skill installed/);
+  assert.match(init.stdout, /apply from the NEXT session/, "says when the hooks start to work");
+
+  const skill = readFileSync(join(proj, ".claude", "skills", "vibegraph", "SKILL.md"), "utf-8");
+  assert.match(skill, /^---\nname: vibegraph\ndescription: /, "a Claude Code skill: frontmatter with name and description");
+  assert.match(skill, /init --hooks/);
+
+  const settings = JSON.parse(readFileSync(join(proj, ".claude", "settings.local.json"), "utf-8"));
+  const cmd = (ev) => settings.hooks[ev][0].hooks[0].command;
+  assert.ok(cmd("UserPromptSubmit").includes(cli), "the hook re-runs THIS package's CLI");
+  assert.match(cmd("UserPromptSubmit"), /VG_PYTHON=/, "the verified Python is pinned");
+
+  const bare = { HOME: env.HOME, PATH: "/usr/bin:/bin", VIBEGRAPH_KNOWLEDGE_HOME: home, VG_CACHE_DIR: join(tmp, "hook-cache") };
+  const hookRun = (ev, payload) => spawnSync("bash", ["-c", cmd(ev)], { input: JSON.stringify(payload), encoding: "utf-8", env: bare, cwd: proj });
+  const p = hookRun("UserPromptSubmit", { session_id: "pack", prompt: "page on region changes in telemetry/alerts.py" });
+  assert.equal(p.status, 0, p.stderr);
+  const ctx = JSON.parse(p.stdout).hookSpecificOutput.additionalContext;
+  assert.match(ctx, /Thread contract/);
+  assert.match(ctx, /Operators are paged ONLY through alerts\.notify/);
+
+  writeFileSync(join(proj, "telemetry", "ingest.py"), readFileSync(join(proj, "telemetry", "ingest.py"), "utf-8")
+    + "\n\nfrom telemetry.alerts import notify\n\n\ndef page_direct(e):\n    notify(e)\n");
+  const e = hookRun("PostToolUse", { session_id: "pack", tool_name: "Bash", tool_input: { command: "…" } });
+  assert.equal(e.status, 2, "a new violation exits 2 — Claude Code shows stderr to Claude");
+  assert.match(e.stderr, /\[c3\]/);
+});
+
+test("init --skill --user installs the skill for every project and touches no project", () => {
+  const home = join(tmp, "user-home");
+  mkdirSync(home, { recursive: true });
+  const r = spawnSync(process.execPath, [cli, "init", "--skill", "--user"], { cwd: tmp, encoding: "utf-8", env: { ...process.env, HOME: home, USERPROFILE: home } });
+  assert.equal(r.status, 0, r.stderr);
+  assert.ok(existsSync(join(home, ".claude", "skills", "vibegraph", "SKILL.md")));
+  assert.ok(!existsSync(join(tmp, "CLAUDE.md")) && !existsSync(join(tmp, ".claude")), "no project was written");
+  const rm = spawnSync(process.execPath, [cli, "init", "--remove-skill", "--user"], { cwd: tmp, encoding: "utf-8", env: { ...process.env, HOME: home, USERPROFILE: home } });
+  assert.equal(rm.status, 0);
+  assert.ok(!existsSync(join(home, ".claude", "skills", "vibegraph")));
 });
 
 after(() => rmSync(tmp, { recursive: true, force: true }));

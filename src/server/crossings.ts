@@ -30,6 +30,9 @@ import type { CrossingRecord, CrossingTargetRecord, CrossingIndexRecord } from "
 // M-FLOW.2 — the script-literal join, shared with scripts/discover_project.mjs
 // (plain JS so a spawned discoverer and the server read ONE rule).
 import { nodeCallee, nodeScriptRefs, quotedLiterals, resolveScriptFiles } from "../../scripts/frontends/script_refs.mjs";
+// 2026-09-29 — the navigation join (Link / router / redirect → a page).
+import { navigationCrossings } from "./navigation.ts";
+export { navPath } from "./navigation.ts";
 
 /** A route this project serves, in any language. */
 export interface RouteEntryLike {
@@ -129,7 +132,7 @@ export function callerMethod(callee: string, args: string[]): { method: string |
  *  are ONE parameter segment, and all match an interpolated caller
  *  segment. Ported from the system tier's `_route_prefix`, which already
  *  knew all three syntaxes. */
-function isParamSegment(seg: string): boolean {
+export function isParamSegment(seg: string): boolean {
   return /^[<{:]/.test(seg) || seg === "*";
 }
 
@@ -376,8 +379,10 @@ export function buildCrossingIndex(env: CrossingEnvelopeLike): CrossingIndex {
     if (calls.length) callsByFile.set(file, calls);
   }
 
+  const pages = routes.filter((e) => (e.metadata as any)?.next === "page");
   const all: Crossing[] = [];
   const byThread: Record<string, Crossing[]> = {};
+  const navigation: Crossing[] = [];
   for (const th of env.threads ?? []) {
     const ep = th.entryPointId;
     if (!ep) continue;
@@ -450,8 +455,9 @@ export function buildCrossingIndex(env: CrossingEnvelopeLike): CrossingIndex {
       byThread[ep] = found;
       all.push(...found);
     }
+    navigation.push(...navigationCrossings(env, ep, reached, reachedNodeIds, pages));
   }
-  return { all, byThread };
+  return { all, byThread, ...(navigation.length ? { navigation } : {}) };
 }
 
 /** The languages a crossing joins, for a render that wants to say so. */

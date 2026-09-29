@@ -20,6 +20,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { basename, dirname, resolve } from "node:path";
 import { buildPolyglotEnvelope } from "./regen_polyglot.mjs";
+import { buildEnvelopeCached } from "./envelope_cache.mjs";
 import { buildStackIndex } from "../src/server/stack.ts";
 import { buildQualityFacts } from "../src/server/quality/facts.ts";
 import { newRegistry } from "../src/server/quality/verbs/index.ts";
@@ -58,15 +59,21 @@ export function gitDelta(range, cwd = ROOT) {
  * `pipeline` is handed to buildPolyglotEnvelope: scriptsDir / pythonBin /
  * pythonEnv / cwd for a caller that is not this checkout.
  */
-export function loadEnvelope(root, envelopePath, pipeline = {}) {
+export function loadEnvelope(root, envelopePath, pipeline = {}, opts = {}) {
   const absRoot = resolve(root);
   if (envelopePath) {
     return { absRoot, envelope: JSON.parse(readFileSync(resolve(envelopePath), "utf-8")), parseErrors: {}, skippedDirs: {}, unresolvedSeeds: [] };
   }
-  const built = buildPolyglotEnvelope(absRoot, pipeline);
+  // `cache` (check / affected / coverage / the hooks): the envelope cache,
+  // identical answers for what did not move, no system tier. VG_NO_CACHE=1
+  // turns it off everywhere.
+  const built = opts.cache && process.env.VG_NO_CACHE !== "1"
+    ? buildEnvelopeCached(absRoot, { pipeline })
+    : buildPolyglotEnvelope(absRoot, pipeline);
   return {
-    absRoot, envelope: built.envelope, parseErrors: built.parseErrors,
+    absRoot, envelope: built.envelope, parseErrors: built.parseErrors, partialParses: built.partialParses ?? {},
     skippedDirs: built.skippedDirs ?? {}, unresolvedSeeds: built.unresolvedSeeds ?? [],
+    ...(built.cache ? { cache: built.cache } : {}),
   };
 }
 

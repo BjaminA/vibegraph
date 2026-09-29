@@ -393,15 +393,26 @@ def module_seed_node(file_path: str) -> dict:
 
 
 def descendants(ir: dict, root_id: str) -> List[dict]:
-    """All nodes structurally inside `root_id` (parentId chain)."""
+    """All nodes structurally inside `root_id` (parentId chain) — stopping at
+    a NESTED function_def that a same-file reference edge targets
+    (2026-09-29). Such a helper is called by name and becomes its own step
+    when the call is walked; flattening its body into the parent put its
+    boundaries in the wrong function and outside any loop that calls it (on
+    a private production codebase: 1,625 boundaries, 222 returns that were really a helper's).
+    A nested function nobody links to (passed by name, never named) keeps
+    the old flattening, so its body is not lost."""
     by_parent: Dict[str, List[dict]] = {}
     for n in ir.get("nodes", []):
         by_parent.setdefault(n.get("parentId") or "", []).append(n)
+    linked = {e.get("target") for e in ir.get("edges", [])
+              if e.get("type") == "reference" and not e.get("targetFile")}
     out: List[dict] = []
     stack = [root_id]
     while stack:
         pid = stack.pop()
         for child in by_parent.get(pid, []):
+            if child.get("type") == "function_def" and child["id"] in linked and child["id"] != root_id:
+                continue
             out.append(child)
             stack.append(child["id"])
     return out

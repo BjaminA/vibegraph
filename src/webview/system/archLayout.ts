@@ -63,7 +63,7 @@ function chipTexts(n: ArchNodeRecord): string[] {
   if (n.labelSource) out.push(`named · ${n.labelSource}`);
   if (n.source !== "derived") out.push(n.source);
   if (n.dispatches?.length) out.push(`${n.dispatches.reduce((k, g) => k + g.scripts.length, 0)} scripts`);
-  if (n.members?.length) out.push(`${n.members.length} tools`);
+  if (n.members?.length && n.category !== "config") out.push(`${n.members.length} tools`);
   if (n.wrappedBy?.length) out.push(`via ${n.wrappedBy[0]}${n.wrappedBy.length > 1 ? ` +${n.wrappedBy.length - 1}` : ""}`);
   if (n.internalHops) out.push(`internal: ${Object.entries(n.internalHops).map(([k, v]) => `${v} ${k}`).join(", ")}`);
   return out;

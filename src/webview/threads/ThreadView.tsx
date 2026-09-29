@@ -82,6 +82,22 @@ const edgeTypes = { threadEdge: ThreadEdge };
 const FIT_TOP = 128;
 const FIT_PADDING = { top: `${FIT_TOP}px`, right: "8%", bottom: "8%", left: "8%" } as const;
 
+/** The band the canvas chrome (chip strip, rank control, nests toggle, trace
+ *  button) actually occupies, measured — never less than FIT_TOP. The chip
+ *  strip grows with what a thread has (skill, tests, env, artifact chips), and
+ *  a fixed reserve let the rank control sit on the seed card and take its
+ *  clicks (2026-09-28). */
+function fitTopNow(): number {
+  const flow = document.querySelector("[data-thread-view] .react-flow")?.getBoundingClientRect();
+  if (!flow) return FIT_TOP;
+  let bottom = 0;
+  for (const el of document.querySelectorAll("[data-chip-strip], [data-thread-rank-control], [data-thread-nests-toggle], [data-trace-thread]")) {
+    const r = el.getBoundingClientRect();
+    if (r.height > 0) bottom = Math.max(bottom, r.bottom);
+  }
+  return Math.max(FIT_TOP, Math.round(bottom - flow.top + 16));
+}
+
 function readVar(name: string, fallback: string): string {
   if (typeof window === "undefined" || typeof document === "undefined") return fallback;
   const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
@@ -277,9 +293,23 @@ function ThreadCanvas({ thread: rawThread, width, height, projectIR, entryPoints
   const layout = useThreadLayout(thread, width, height, fileGroups, projectIR, undefined, orientation);
   const rf = useReactFlow();
 
+  // Thread hierarchy (2026-09-29) — entry-point heads by where they live, so
+  // a step that STARTS another thread can say so (deriveThreadCalls' rule:
+  // exact file + irNodeId, never the seed's own head).
+  const headByKey = useMemo(() => {
+    const m = new Map<string, EntryPoint>();
+    for (const e of entryPoints ?? []) m.set(`${e.file}::${e.irNodeId}`, e);
+    return m;
+  }, [entryPoints]);
+
   const nodes = useMemo<Node[]>(() => {
     const seedFile = thread.seed.file;
+    const seedKey = `${thread.seed.file}::${thread.seed.irNodeId}`;
     return thread.nodes.map((n) => {
+      const subEp = n.kind === "step" && n.file && n.irNodeId ? headByKey.get(`${n.file}::${n.irNodeId}`) : undefined;
+      const subThread = subEp && `${subEp.file}::${subEp.irNodeId}` !== seedKey
+        ? { entryPointId: subEp.id, name: subEp.qualifiedName }
+        : null;
       const pos = layout.positions.get(n.id) ?? { x: 0, y: 0 };
       // M9.3 — per-node file hue + depth. Terminals (file=null) get
       // neither — they're library boundaries, not file groups.
@@ -368,13 +398,14 @@ function ThreadCanvas({ thread: rawThread, width, height, projectIR, entryPoints
           // literal): the uncaptured-nests honesty badge.
           nestsInnerCalls: n.nestsInnerCalls ?? false,
           nestExtracted: n.nestExtracted ?? false,
+          subThread,
           // Thread ranks — rank, guard label, ×N, remit badge.
           ...(rankLevel < 3 ? ranks.decorate(n.id) : {}),
         },
         draggable: true,
       };
     });
-  }, [thread, layout, projectIR, entryPoints, fileGroups, enterDelayById, orientation, isNestExpanded, ranks, rankLevel]);
+  }, [thread, layout, projectIR, entryPoints, headByKey, fileGroups, enterDelayById, orientation, isNestExpanded, ranks, rankLevel]);
 
   // M17.3 — react-flow nodes for each control-flow container. Position
   // + size are derived from the bounding box of the container's leaf
@@ -595,6 +626,8 @@ function ThreadCanvas({ thread: rawThread, width, height, projectIR, entryPoints
     const LEGIBLE_FIT_ZOOM = 0.6; // below this, labels are noise
     const LEGIBLE_START_ZOOM = 0.78;
     const fitLegibly = () => {
+      const FIT_TOP = fitTopNow();
+      const FIT_PADDING = { top: `${FIT_TOP}px`, right: "8%", bottom: "8%", left: "8%" } as const;
       // The flow is uncontrolled (nodes ride in as props), so getNodes()
       // returns the raw prop objects with no dimensions — measurements
       // live on the INTERNAL nodes.
@@ -1320,7 +1353,10 @@ export function ThreadView({ thread, projectIR, entryPoints, editorOpen, codeOpe
     const idx = crossingsRef.current;
     if (!idx || !d.irNodeId) return undefined;
     const list = idx.byThread[thread.entryPointId ?? ""] ?? idx.all;
-    return list.find((c) => c.nodeId === d.irNodeId);
+    return list.find((c) => c.nodeId === d.irNodeId)
+      // 2026-09-29 — a Link / router literal naming a page: kept apart from
+      // the execution hops, found here so the tooltip can walk it too.
+      ?? idx.navigation?.find((c) => c.nodeId === d.irNodeId && c.entryPointId === thread.entryPointId);
   };
   // The file a node BELONGS to, which is not the file it navigates to: a
   // terminal (`eng.run`, `$HOOK_CMD`) has `d.file === null` because there is
@@ -2068,6 +2104,7 @@ export function ThreadView({ thread, projectIR, entryPoints, editorOpen, codeOpe
       {tooltip && (
         <ThreadNodeTooltip
           {...tooltip}
+          entryPointId={thread.entryPointId ?? null}
           onPin={() => setTooltip((t) => t ? { ...t, pinned: !t.pinned } : t)}
           onClose={() => setTooltip(null)}
           onTooltipEnter={clearClose}

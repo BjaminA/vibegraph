@@ -94,6 +94,8 @@ CLI) and says so; everything else is deterministic.
 | `export --with-ir` | …plus the raw derived forms | `ir/`, `envelope.json`, `stack.json`, `crossings.json`, `architecture.json`, `quality/` | — |
 | `export --archify` | …plus the map in Archify's schema | `architecture.archify.json` | — |
 | `check [--uncommitted \| --git <range>]` | Verifies every stated rule's checkable half against the code: PASS / VIOLATED (names the call) / UNVERIFIABLE | nothing | — |
+| `affected <file>… [--uncommitted]` | Lists the discovered tests that reach the changed files (what to run) and the threads the change touches; names changed files no test reaches | nothing | — |
+| `coverage <file>…` | Per file: parsed fully or partially, the threads and tests that reach it, its unreached functions and why, the environment variables it reads, whether it changed since the export — and what to do before trusting it | nothing | — |
 | `constraints list [--json]` | Shows the stated rules, who stated them, their scope and checks | nothing | — |
 | `constraints add …` | States a rule (human), refusing duplicates and malformed checks | `.vibegraph/constraints.json` | — |
 | `constraints remove <id>` / `ratify <id>` | Deletes a rule / makes a model-stated rule human-stated | `.vibegraph/constraints.json` | — |
@@ -124,6 +126,9 @@ model's, until a person ratifies it; **observed** = what a consented run saw.
 | `constraints.md` | stated | the rules and their reasons, with who stated each | the requirements the code cannot show |
 | `threads/INDEX.md`, `threads/<entry>.md` | derived + stated | one **contract** per thread: data in/out, every external call and the tool it leaves through, round trips in loops, neighbouring threads, rules routed to it | what to keep true when editing that path |
 | `flows.md` | derived | end-to-end chains, page → component → call → script, with a reverse index | find everything a change touches downstream |
+| `reachability.md` | derived | the functions no entry point reaches, each with why: never named, exported but unused, called only from unreached code — or a resolution gap that means it IS used | before editing code no thread shows, and before calling anything dead |
+| `configuration.md` | derived | the environment variables the code reads by name, on which threads, and which are read but declared nowhere (`.env.example`, compose) | before deploying, or changing anything a variable switches |
+| `sources.json` | derived | a hash of every source file as the export read it | `coverage` compares against it to say what changed since |
 | `system_spec.md` | derived + stated | the tools the project is built on, by role; the modules that wrap them; policies about them | use the existing tools and wrappers |
 | `skills/<entry>.md` | drafted, ratified | per-thread guidance a person approved (drafts and stale ones withheld, named) | how to work on that thread, and why |
 | `observations.json` | observed | what consented trace runs saw at each call site | resolve calls static analysis could not |

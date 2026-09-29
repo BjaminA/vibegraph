@@ -361,7 +361,11 @@ def detect_public_api(file, ir, all_files, already_seeded_ids):
             if ":" in qt:
                 incoming_names.add(qt.split(":", 1)[1])
     for fn_id, fn in fn_by_id.items():
-        if fn_id in already_seeded_ids:
+        # Keyed by (file, id): node ids are structural paths and repeat across
+        # files, so a bare id let a cli entry in export.py hide the
+        # public_api entry of a same-named function in http_client.py
+        # (found 2026-09-29 by the incremental-link census).
+        if (file, fn_id) in already_seeded_ids:
             continue
         if fn["name"] in incoming_names:
             entries.append(make_entry(file, fn, kind="public_api"))
@@ -377,6 +381,20 @@ def detect_test(file, ir):
         if not TEST_FUNCNAME_RE.match(fn["name"]):
             continue
         entries.append(make_entry(file, fn, kind="test", framework="pytest"))
+    # 2026-09-28 — `test_*` METHODS of a module-scope test class: a
+    # unittest.TestCase subclass, or a pytest `class Test...`. Only module-level
+    # functions used to count, so a stdlib unittest suite (the fleet example's)
+    # discovered no test at all and every thread read as untested.
+    for cls in find_class_defs(ir):
+        bases = " ".join(cls.get("bases") or [])
+        is_case = "TestCase" in bases
+        if not (is_case or cls["name"].startswith("Test")):
+            continue
+        for fn in ir["nodes"]:
+            if fn["type"] != "function_def" or fn.get("parentId") != cls["id"]:
+                continue
+            if TEST_FUNCNAME_RE.match(fn["name"]):
+                entries.append(make_entry(file, fn, kind="test", framework="unittest" if is_case else "pytest"))
     return entries
 
 
@@ -483,7 +501,7 @@ def discover(all_files, manual_seeds_path: Optional[str] = None):
     for file, ir in all_files.items():
         claim(detect_test(file, ir), "test")
     # public_api needs the seeded set to skip route/cli/test entries.
-    seeded_node_ids = {e["irNodeId"] for bucket in by_kind.values() for e in bucket}
+    seeded_node_ids = {(e["file"], e["irNodeId"]) for bucket in by_kind.values() for e in bucket}
     for file, ir in all_files.items():
         for e in detect_public_api(file, ir, all_files, seeded_node_ids):
             key = (e["file"], e["irNodeId"])

@@ -17,10 +17,21 @@ import { planWork } from "./src/server/plan_work";
 // spec that renders them WITH the stated policies bound to each tool.
 import { buildStackIndex, contractStackForFile, stackForThread, stackCalledOnThread, toolsAddedByDelta, type StackIndex } from "./src/server/stack";
 import { buildCrossingIndex, type CrossingIndex } from "./src/server/crossings";
+import { handleInvestigation, listInvestigations, readInvestigation, renderHandoff, readRel } from "./src/server/investigations";
+import { diffEditChecks, formatEditCheck, type EditCheckRow } from "./src/server/edit_check";
 import { archModelForEnvelope } from "./src/server/arch_envelope";
 import { applyArchStore, loadArchStore, saveArchStore, ratifyProposal, rejectProposal, proposalGate } from "./src/server/arch_store";
+import { testReach } from "./src/shared/test_reach";
+import { buildEnvSurface, configuredByFor, type EnvSurface } from "./src/shared/env_surface";
+import { coverageFor } from "./src/server/coverage";
+import { buildThreadBrief } from "./src/server/thread_brief";
+import { computeNearClones, type NearClone } from "./src/shared/near_clones";
+import { rankThread } from "./src/shared/thread_rank";
+import { threadFacts } from "./src/shared/thread_rank_facts";
+import { buildInsight } from "./src/server/insight";
+import { computeReachability } from "./src/server/reachability";
 import { buildProposePrompt, docExcerpts, parseProposal } from "./src/server/arch_propose";
-import { readInfraManifests } from "./src/server/infra_manifests";
+import { readInfraManifests, readEnvDeclarations } from "./src/server/infra_manifests";
 import { readManualSeeds } from "./src/server/manual_seeds";
 import type { ArchModelRecord } from "./src/shared/protocol";
 // M-STACK.3 — the SYSTEM SPEC: the one render of stack facts WITH the
@@ -244,6 +255,9 @@ let latestSystem: { subsystems: any[]; edges: any[] } = { subsystems: [], edges:
 // rebuilt with the rest of the derived state, never persisted. Rides the
 // envelope as an OPTIONAL sibling of `constraints`.
 let latestStack: StackIndex = { tools: [], byFile: {}, byThread: {} };
+let latestEnvSurface: EnvSurface | null = null;
+let latestNearClones: Map<string, NearClone[]> | null = null;
+let latestInsight: import("./src/shared/protocol").InsightRecord | null = null;
 
 // M-XLANG.1 (PLAN-M-V5FORKS.md) - CROSSINGS: where a thread leaves its own
 // language over HTTP and which route serves it. Pure derivation over the
@@ -370,6 +384,33 @@ function rebuildStack(relFiles: typeof projectParse): void {
   } catch (e: any) {
     console.warn(`  [Stack] index failed: ${e?.message ?? e}`);
     latestStack = { tools: [], byFile: {}, byThread: {} };
+  }
+  // 2026-09-28 - the configuration surface rides the same pass: it reads the
+  // same files and threads, and each contract's "Configured by" line needs it.
+  try {
+    latestEnvSurface = buildEnvSurface(
+      { files: relFiles as any, threads: latestThreads as any },
+      isDirectory ? readEnvDeclarations(inputPath) : [],
+    );
+  } catch (e: any) {
+    console.warn(`  [Config] env surface failed: ${e?.message ?? e}`);
+    latestEnvSurface = null;
+  }
+  // 2026-09-29 - near-clones, for each contract's "Shaped like" line.
+  try {
+    latestNearClones = computeNearClones(relFiles as any);
+  } catch (e: any) {
+    console.warn(`  [NearClones] failed: ${e?.message ?? e}`);
+    latestNearClones = null;
+  }
+  // 2026-09-28 - reachability, the env surface and export freshness for the GUI.
+  try {
+    latestInsight = isDirectory
+      ? buildInsight(inputPath, { files: relFiles as any, threads: latestThreads as any, entryPoints: latestEntryPoints as any }, latestEnvSurface)
+      : null;
+  } catch (e: any) {
+    console.warn(`  [Insight] failed: ${e?.message ?? e}`);
+    latestInsight = null;
   }
 }
 
@@ -1095,9 +1136,11 @@ function buildProjectEnvelope(): {
     // stay byte-identical to pre-M-STACK ones).
     ...(latestStack.tools.length ? { stack: latestStack } : {}),
     // M-XLANG.1 - the cross-language crossings, when any were found.
-    ...(latestCrossings.all.length ? { crossings: latestCrossings } : {}),
+    ...(latestCrossings.all.length || latestCrossings.navigation?.length ? { crossings: latestCrossings } : {}),
     // M-ARCH.1 - the derived architecture, when it has anything to draw.
     ...(latestArch && latestArch.nodes.length ? { architecture: latestArch } : {}),
+    // 2026-09-28 - reachability, env surface, freshness (src/server/insight.ts).
+    ...(latestInsight ? { insight: latestInsight } : {}),
     // PLAN-M-RUNTIME phase 3 - the TRACE OVERLAY, when a run has produced
     // one. Read from disk rather than held in memory: it is the only
     // derived-looking thing here that a HUMAN authorised and that survives a
@@ -1577,6 +1620,16 @@ interface RoutedCheckResult {
   /** Derived bindings only: the offenders absent from the gate-time
    *  baseline. Empty means the violation is inherited, so it advises. */
   newOffenders?: string[];
+  /** 2026-09-29 — the offender refs, so the in-band post-edit check
+   *  (src/server/edit_check.ts) can tell a new offender from an old one. */
+  offenders?: string[];
+}
+
+/** 2026-09-29 — every stated rule's checkable half, evaluated over the live
+ *  envelope: the before/after the in-band post-edit check diffs. */
+function statedCheckSnapshot(): RoutedCheckResult[] {
+  if (!isDirectory) return [];
+  try { return evaluateRoutedChecks(null, null, loadConstraints(readmeRootDir())); } catch { return []; }
 }
 
 /** An offender ref as the baseline stores it, comparable across runs. */
@@ -1602,7 +1655,9 @@ function evaluateRoutedChecks(run: WorkRun | null, packet: RunPacket | null, con
   const evalClause = (id: string, source: string, clause: unknown, mayGate: boolean, baseline?: readonly string[]) => {
     if (isConstraintCheck(clause)) {
       const r = checkConstraint(facts, clause);
-      out.push({ id, source, described: describeCheck(clause), rule: clause.rule, verdict: r.verdict, reason: r.reason, gates: mayGate });
+      // The three original M-GRAMMAR verbs are live grammar and always may
+      // gate; payload-keys gates only once a calibration record says so.
+      out.push({ id, source, described: describeCheck(clause), rule: clause.rule, verdict: r.verdict, reason: r.reason, gates: mayGate && verbMayGate(clause.rule), offenders: offenderRefs(r as { offenders?: readonly unknown[] }) });
       return;
     }
     if (isRun1Check(clause)) {
@@ -1611,6 +1666,7 @@ function evaluateRoutedChecks(run: WorkRun | null, packet: RunPacket | null, con
         id, source, described: describeRun1Check(clause), rule: clause.rule,
         verdict: r.verdict, reason: r.reason,
         gates: mayGate && verbMayGate(clause.rule),
+        offenders: offenderRefs(r as { offenders?: readonly unknown[] }),
       };
       // A DERIVED binding carries a baseline: what this same check already
       // reported before any packet ran. src/server/quality/derived_gate.ts
@@ -1823,7 +1879,7 @@ async function orchestratorReview(run: WorkRun, packet: RunPacket, evidence: Pac
           stack: [...new Set(packet.plan.filesReached.flatMap((f) => latestStack.byFile[f] ?? []))],
         })
         : ctx.constraints,
-    ),
+    ).map(({ offenders: _offenders, ...row }) => row),
     // RUN1 4.2 — no-new-unattributed-boundary, from the contract summaries.
     unattributedBefore: packet.plan.contract?.unattributed,
     unattributedAfter: contractAfter?.unattributed,
@@ -6636,6 +6692,12 @@ function threadContractFor(entryPointId: string): ThreadContractContext {
   const contract = computeThreadContract(thread, {
     nodeFor: (f, irNodeId) => (irNodeId ? findNode(irNodeId, f ?? undefined) : null),
     ...threadAdjacency(graph, entryPointId),
+    // 2026-09-28 - the discovered tests that exercise this thread.
+    testedBy: testReach(latestThreads as any, latestEntryPoints as any).get(entryPointId),
+    ...(latestEnvSurface ? { configuredBy: configuredByFor(latestEnvSurface, entryPointId) } : {}),
+    ...(latestNearClones ? { nearClonesFor: (f: string, id: string) => latestNearClones!.get(`${f}::${id}`) } : {}),
+    // 2026-09-29 - the contract ranked as the thread view ranks it.
+    rankFor: (t: any) => rankThread(t, threadFacts(t, relativeProjectFiles() as any, latestStack as any, latestCrossings as any)),
     // M-STACK.1 — the tools this thread's files use (IR fact).
     stackFor: (f) => contractStackForFile(latestStack, f),
     // M-BOUNDARY.1 — what the boundary→tool join needs. External terminals
@@ -7350,6 +7412,59 @@ const mcpContext: VibegraphMcpContext = {
     if (!isDirectory) return { model: null, error: "the architecture model needs a project directory" };
     return latestArch ? { model: latestArch } : { model: null, error: "no architecture model yet (the project has not finished parsing, or the model failed - see the server log)" };
   },
+  // 2026-09-29 - one call: a thread's contract + its PRIMARY functions' source.
+  threadBrief: (entryPointId, maxChars) => {
+    const thread = latestThreads.find((t: any) => t.entryPointId === entryPointId) as any;
+    if (!thread) return { brief: null, error: `no thread for ${entryPointId}` };
+    const c = threadContractFor(entryPointId);
+    return {
+      brief: buildThreadBrief({
+        thread, files: relativeProjectFiles() as any, stack: latestStack as any, crossings: latestCrossings as any,
+        contractText: c.rendered.contract ?? "(no contract)",
+        readSource: (rel) => { try { return fs.readFileSync(path.join(inputPath, rel), "utf-8"); } catch { return null; } },
+        ...(maxChars ? { maxChars } : {}),
+      }),
+    };
+  },
+  // 2026-09-29 - the post-edit hook in-band: the stated checks before an edit,
+  // and after it (once derived state settles) what the edit introduced.
+  checkSnapshot: () => statedCheckSnapshot(),
+  editCheckText: async (before) => {
+    if (!before.length && !statedCheckSnapshot().length) return null;
+    await settleDerived();
+    return formatEditCheck(diffEditChecks(before as EditCheckRow[], statedCheckSnapshot()));
+  },
+  // 2026-09-29 - the investigation board, read-only for an agent.
+  investigation: (name) => {
+    const root = analyzedRoot();
+    if (!name) {
+      const list = listInvestigations(root);
+      return { text: list.length
+        ? list.map((i) => `- ${i.name} — ${i.pins} pin${i.pins === 1 ? "" : "s"}, updated ${i.updatedAt.slice(0, 16).replace("T", " ")}${i.question ? `: ${i.question.split("\n")[0].slice(0, 120)}` : ""}`).join("\n")
+        : "No investigations saved (.vibegraph/investigations/ is empty)." };
+    }
+    const inv = readInvestigation(root, name);
+    if (!inv) return { text: "", error: `No investigation named ${name}.` };
+    return { text: renderHandoff({
+      inv, files: relativeProjectFiles() as any, readSource: (f) => readRel(root, f),
+      threadLabel: (ep) => (latestEntryPoints as any[]).find((e) => e.id === ep)?.label ?? null,
+    }) };
+  },
+  // 2026-09-28 - what the server knows about the files an agent is about to trust.
+  coverage: (paths) => {
+    if (!isDirectory) return { rows: null, error: "coverage needs a project directory" };
+    const env = { files: relativeProjectFiles() as any, threads: latestThreads as any, entryPoints: latestEntryPoints as any };
+    const sourcesPath = path.join(inputPath, ".vibegraph", "knowledge", "sources.json");
+    let exported: Record<string, string> | null = null;
+    try { if (fs.existsSync(sourcesPath)) exported = JSON.parse(fs.readFileSync(sourcesPath, "utf-8")); } catch { exported = null; }
+    const rels = paths.map((p) => (path.isAbsolute(p) ? path.relative(inputPath, p) : p).split(path.sep).join("/"));
+    return {
+      rows: coverageFor(rels, {
+        env, reach: computeReachability(env), surface: latestEnvSurface, exported,
+        readFile: (p) => { try { return fs.readFileSync(path.join(inputPath, p), "utf-8"); } catch { return null; } },
+      }),
+    };
+  },
   // M-ARCH.4 - draft a grounded proposal; it stays pending until a human ratifies.
   proposeArchitecture: async () => {
     const r = await archProposeCore();
@@ -7854,6 +7969,13 @@ function setupWebSocket() {
           // PLAN-v7 Stage 3 — validate a proposed architecture at the
           // boundary; echo as a pending proposal. Reply: system-proposal.
           handleSystemPropose(msg.payload.plan, ws);
+        } else if (typeof msg.type === "string" && msg.type.startsWith("investigation-")) {
+          // 2026-09-29 — the investigation board (src/server/investigations.ts).
+          // Reply: investigation-state { list, current?, handoff?, error? }.
+          ws.send(JSON.stringify({ type: "investigation-state", payload: handleInvestigation(analyzedRoot(), msg, {
+            files: relativeProjectFiles() as any,
+            threadLabel: (ep: string) => (latestEntryPoints as any[]).find((e) => e.id === ep)?.label ?? null,
+          }) }));
         } else if (msg.type === "arch-propose" || msg.type === "arch-ratify" || msg.type === "arch-reject") {
           // M-ARCH.4 — propose spends tokens and stores a PENDING proposal;
           // ratify / reject are the human's. Reply: arch-proposal.

@@ -29,6 +29,7 @@ import { buildStackIndex } from "../src/server/stack.ts";
 import { buildQualityFacts } from "../src/server/quality/facts.ts";
 import { newRegistry } from "../src/server/quality/verbs/index.ts";
 import { loadEnvelope, gitDelta } from "./quality_check.mjs";
+import { checkPayloadKeys, sitesFor } from "../src/server/payload_check.ts";
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const args = process.argv.slice(2);
@@ -179,6 +180,62 @@ function calibrateCoChanges() {
   return { verb: "co-changes", unit: "commit touching schemas/ir.schema.json", checks: [check], samples, raw };
 }
 
+/** `payload-keys` (2026-09-29): one unit per CALL SITE, judged alone (the
+ *  verb over that one site), so an undecidable site cannot hide behind a
+ *  violation elsewhere. The risk that decides whether it may gate is a FALSE
+ *  VIOLATION — a key reported absent when it is merely not visible — so the
+ *  constructed pool is mostly calls that comply or cannot be decided, and the
+ *  real pool is a rule this repository holds everywhere: no `shell` option on
+ *  a child-process call. */
+function calibratePayloadKeys() {
+  const samples = [];
+  const raw = {};
+  const CALIB = "test/fixtures/quality/calib/payload";
+  const { absRoot, envelope, stack } = project(CALIB);
+  const facts = buildQualityFacts({ envelope, root: absRoot, commit: COMMIT, stack });
+  const constructed = "CONSTRUCTED (test/fixtures/quality/calib/payload): compliant, broken and undecidable spellings of one payload rule";
+  const pools = [
+    { file: "calib_payload.py", check: { rule: "payload-keys", target: "requests.post", require: ["json.region"], forbid: ["json.password"] } },
+    { file: "calib_payload.ts", check: { rule: "payload-keys", target: "publish", require: ["region"], forbid: ["password"] } },
+  ];
+  for (const { file, check } of pools) {
+    for (const site of sitesFor(facts.callSites.filter((s) => s.file === file), check.target)) {
+      const fn = /\/([A-Za-z_]+)\.fn\//.exec(site.nodeId)?.[1] ?? "?";
+      const r = checkPayloadKeys([site], check);
+      const id = `${CALIB}/${file}:${site.nodeId}`;
+      raw[id] = r;
+      const label = /^good/.test(fn) ? "known-good" : /^bad/.test(fn) ? "known-bad" : "expected-unverifiable";
+      samples.push({ id, label, source: constructed, verdict: r.verdict, fired: r.verdict === "violated", ...(label === "expected-unverifiable" ? { detail: r.reason } : {}) });
+    }
+  }
+  // REAL: every child-process call in this repository's own scripts and
+  // server code, under "never pass `shell`". Presumed good: a fire is a
+  // finding or a false positive for the review to name.
+  const real = [
+    { root: "scripts", targets: ["spawnSync", "spawn", "execFileSync", "execSync", "execFile", "exec", "subprocess.run", "subprocess.Popen", "subprocess.check_output", "subprocess.call"] },
+    { root: "src", targets: ["spawnSync", "spawn", "execFileSync", "execSync", "execFile", "exec"] },
+  ];
+  for (const { root, targets } of real) {
+    const p = project(root);
+    const f = buildQualityFacts({ envelope: p.envelope, root: p.absRoot, commit: COMMIT, stack: p.stack });
+    for (const target of targets) {
+      const check = { rule: "payload-keys", target, forbid: ["shell"] };
+      for (const site of sitesFor(f.callSites, target)) {
+        if (site.callee !== target && !site.callee.endsWith(`.${target}`)) continue; // resolved-name matches only
+        const r = checkPayloadKeys([site], check);
+        const id = `${root}/${site.file}:${site.nodeId}`;
+        raw[id] = r;
+        samples.push({ id, label: "presumed-good", source: `REAL: this repository's own ${root}/ — no child-process call passes \`shell\``, verdict: r.verdict, fired: r.verdict === "violated", detail: `${target}: ${r.verdict}` });
+      }
+    }
+  }
+  return {
+    verb: "payload-keys", unit: "call site",
+    checks: [pools[0].check, pools[1].check, { rule: "payload-keys", target: "<child-process call>", forbid: ["shell"] }],
+    samples, raw,
+  };
+}
+
 // ── the candidate record ─────────────────────────────────────────────
 
 function summarise(c) {
@@ -274,8 +331,9 @@ async function record(verb, reviewPath) {
  *    CANDIDATE         no human review yet: advisory only
  *  A verb with no candidate at all does not exist for gating purposes. */
 function status() {
-  const verbs = ["guards", "not-in-loop", "handles-failure", "annotated", "co-changes"];
-  const file = (v) => join(ROOT, "src", "server", "quality", "verbs", `${v.replace(/-/g, "_")}.ts`);
+  const verbs = ["guards", "not-in-loop", "handles-failure", "annotated", "co-changes", "payload-keys"];
+  // payload-keys is grammar (constraint_grammar.ts), not a Run 1 verb: its source lives beside the grammar.
+  const file = (v) => v === "payload-keys" ? join(ROOT, "src", "server", "payload_check.ts") : join(ROOT, "src", "server", "quality", "verbs", `${v.replace(/-/g, "_")}.ts`);
   const rows = [];
   for (const v of verbs) {
     let rec = null, cand = null;
@@ -343,7 +401,7 @@ if (flag("--ratify")) {
   status();
 } else {
   mkdirSync(OUT, { recursive: true });
-  const all = [calibrateGuards(), calibrateNotInLoop(), calibrateHandlesFailure(), calibrateAnnotated(), calibrateCoChanges()].map(summarise);
+  const all = [calibrateGuards(), calibrateNotInLoop(), calibrateHandlesFailure(), calibrateAnnotated(), calibrateCoChanges(), calibratePayloadKeys()].map(summarise);
   for (const c of all) writeFileSync(join(OUT, `${c.verb}.candidate.json`), JSON.stringify(c, null, 2) + "\n");
   const fmt = (r) => (r.of ? `${r.fired}/${r.of}` : "-");
   console.log("| verb | unit | known-bad fired | known-good fired | presumed-good fired | neutral fired | degenerate | FP candidates |");

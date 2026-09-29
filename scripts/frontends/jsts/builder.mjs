@@ -12,6 +12,7 @@ import { Parser, Language } from "web-tree-sitter";
 import { effectKindForCallee } from "./tables.mjs";
 import { docFromComments } from "../doc_comments.mjs";
 import { hasNestedCall, directCallArgs } from "../nests.mjs";
+import { collectEnvReads } from "./env_reads.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 // TWO dialects, and the file's extension picks one. tree-sitter ships
@@ -161,6 +162,9 @@ export class JstsGraphBuilder {
               for (const q of v.namedChildren) {
                 if (q.type === "shorthand_property_identifier") keys.push(`${k}.${this.text(q)}`);
                 else if (q.type === "pair") keys.push(`${k}.${this.text(q.childForFieldName("key")).replace(/^["']|["']$/g, "")}`);
+                // A nested spread hides keys: recorded, so a payload check can
+                // say "not visible" instead of "absent".
+                else if (q.type === "spread_element") keys.push(`${k}.${this.text(q).slice(0, 40)}`);
               }
             }
           } else if (p.type === "spread_element") keys.push(this.text(p).slice(0, 40));
@@ -1012,12 +1016,60 @@ export class JstsGraphBuilder {
     }
   }
 
-  // Same-file references for bare callees naming a top-level function.
+  // Same-file references for bare callees. SCOPE-AWARE (2026-09-29): a call
+  // resolves to a function defined in its innermost enclosing function that
+  // defines the name, then the module — so `useEffect(() => { async function
+  // load() {…}; load(); })` links `load()` to the nested `load` (414 helpers
+  // on a private production codebase were never walked), and an inner `shadow` no longer links to
+  // a top-level `shadow`. Refused (no edge): two definitions of the name in
+  // one scope (flattened inline callbacks can do that), or a parameter or
+  // local of that name in a nearer function scope.
   resolveLocalReferences() {
+    const defs = new Map(); // scope id → Map(name → [ids])
+    const shadows = new Map(); // scope id → Set(names bound as params / locals)
+    const scopeOf = (id) => {
+      const segs = id.split("/");
+      for (let i = segs.length - 2; i > 0; i--) if (segs[i].endsWith(".fn")) return segs.slice(0, i + 1).join("/");
+      return "module";
+    };
+    for (const n of this.nodes) {
+      if (n.type === "function_def" && n.name && !(n.parentId ?? "").endsWith(".class")) {
+        const scope = scopeOf(n.id);
+        // The module level is exactly what it was: top-level functions only.
+        if (scope === "module" && n.parentId) continue;
+        if (!defs.has(scope)) defs.set(scope, new Map());
+        const m = defs.get(scope);
+        m.set(n.name, [...(m.get(n.name) ?? []), n.id]);
+        const own = shadows.get(n.id) ?? new Set();
+        for (const p of n.params ?? []) {
+          const name = /^[.\s]*([A-Za-z_$][\w$]*)/.exec(String(p))?.[1];
+          if (name) own.add(name);
+        }
+        shadows.set(n.id, own);
+      } else if (n.type === "assignment" && n.parentId && typeof n.name === "string" && /^[A-Za-z_$][\w$]*$/.test(n.name)) {
+        const scope = scopeOf(n.id);
+        if (scope !== "module") {
+          if (!shadows.has(scope)) shadows.set(scope, new Set());
+          shadows.get(scope).add(n.name);
+        }
+      }
+    }
     for (const { id, callee } of this.callSites) {
       if (callee.includes(".")) continue;
-      const fnId = this.functionIds.get(callee);
-      if (fnId) this.edges.push({ source: id, target: fnId, type: "reference" });
+      let scope = scopeOf(id);
+      while (true) {
+        const found = defs.get(scope)?.get(callee);
+        if (found) {
+          // Module level keeps its old rule (the last definition wins);
+          // inside a function, two definitions of one name are ambiguous.
+          if (scope === "module") this.edges.push({ source: id, target: found[found.length - 1], type: "reference" });
+          else if (found.length === 1) this.edges.push({ source: id, target: found[0], type: "reference" });
+          break;
+        }
+        if (scope === "module") break;
+        if (shadows.get(scope)?.has(callee)) break; // a param or local of that name: not ours to guess
+        scope = scopeOf(scope);
+      }
     }
   }
 }
@@ -1041,6 +1093,10 @@ export async function buildFromSource(source, moduleId, dialect = "ts") {
     symbolIndex: b.symbolIndex,
   };
   if (moduleId) ir.modulePath = moduleId;
+  // 2026-09-28 — environment variables read by name (env_reads.mjs). Only
+  // when non-empty, so every file that reads none is byte-identical.
+  const envReads = collectEnvReads(tree.rootNode);
+  if (envReads.length) ir.envReads = envReads;
   // M-FLOW.1 — a `#!` first line marks the file as a SCRIPT, which is the
   // evidence discover_jsts seeds on (the bash builder stamps the same).
   if (source.startsWith("#!")) {

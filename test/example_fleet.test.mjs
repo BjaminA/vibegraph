@@ -99,7 +99,14 @@ test("every file in all four languages parses; the shape the README describes", 
   // The last three are calls inside a DICT LITERAL passed as an argument —
   // which is the entire body of two of this example's Flask routes. The
   // routes were discovered; what they actually did was not.
-  assert.deepEqual(perLang, { python: 27, jsts: 8, bash: 2, cpp: 3 });
+  //
+  // 34 since 2026-09-28: the six `test_*` METHODS of the two unittest
+  // suites (only module-level `def test_*` used to count, so the example's
+  // stdlib unittest tests were no tests at all), and `alerts.should_notify`
+  // as a public_api — `from telemetry import alerts` then
+  // `alerts.should_notify(...)` in a test now links, so it has a cross-file
+  // caller.
+  assert.deepEqual(perLang, { python: 34, jsts: 8, bash: 2, cpp: 3 });
   for (const id of ["telemetry/auth.py:require_token", "telemetry/alerts.py:recent_events",
                     "telemetry/devices.py:list_device_ids", "telemetry/metrics_math.py:rolling_mean"]) {
     assert.ok(env.entryPoints.some((e) => e.id === id),

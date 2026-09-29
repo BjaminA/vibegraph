@@ -13,7 +13,11 @@ import { archVisual } from "./arch_visual";
 import { ARCH_LENSES, edgeLabel, type ArchLens } from "./archLayout";
 import { ArchDispatchList } from "./ArchDispatchList";
 
-const LENS_LABEL: Record<ArchLens, string> = { birdseye: "Bird's-eye", overview: "Overview", tools: "Tools", flows: "Flows", payloads: "Payloads", trust: "Trust" };
+const LENS_LABEL: Record<ArchLens | "config" | "journeys", string> = { birdseye: "Bird's-eye", overview: "Overview", tools: "Tools", flows: "Flows", payloads: "Payloads", trust: "Trust", config: "Configuration", journeys: "Journeys" };
+const GUI_LENS_TITLE: Record<"config" | "journeys", string> = {
+  config: "Which process reads which environment variables, grouped by prefix; amber groups hold variables declared nowhere",
+  journeys: "Which page sends the user to which page: Link href, router.push and redirect literals joined to the page that serves the path",
+};
 
 const SOURCE_TONE: Record<string, string> = {
   derived: "var(--text-muted)", stated: "var(--accent-config)", observed: "var(--accent-thread)",
@@ -35,11 +39,16 @@ const traceBtn: React.CSSProperties = {
   color: "var(--text-primary)", fontFamily: "var(--font-ui)", fontSize: "var(--fs-11)", cursor: "pointer",
 };
 
-export function ArchLensBar({ lens, onLens, onStory }: { lens: ArchLens; onLens: (l: ArchLens) => void; onStory?: () => void }) {
+/** The map's lenses: the shared six, plus the GUI-only Configuration lens
+ *  (arch_config.ts) — which process reads which environment variables. */
+export type MapLens = ArchLens | "config" | "journeys";
+
+export function ArchLensBar({ lens, onLens, onStory }: { lens: MapLens; onLens: (l: MapLens) => void; onStory?: () => void }) {
   return (
     <div data-arch-lens-bar style={{ ...panel, position: "absolute", top: "max(84px, calc(var(--vg-toolbar-bottom, 43px) + 8px))", left: 250, zIndex: 30, display: "flex", padding: 4, gap: 4 }}>
-      {ARCH_LENSES.map((l) => (
+      {[...ARCH_LENSES, "config" as const, "journeys" as const].map((l) => (
         <button key={l} data-arch-lens={l} data-active={l === lens ? "true" : "false"} onClick={() => onLens(l)}
+          title={l === "config" || l === "journeys" ? GUI_LENS_TITLE[l] : undefined}
           style={{
             border: "none", borderRadius: 4, padding: "4px 8px", cursor: "pointer",
             background: l === lens ? "color-mix(in oklab, var(--accent-thread) 18%, transparent)" : "transparent",
@@ -261,7 +270,9 @@ export function ArchInspector({ selected, model, onClose, onOpenThread, onReach,
           {selected.node.wrappedBy?.length ? <div style={{ marginTop: 4 }}>{`project funnels: ${selected.node.wrappedBy.join(", ")}`}</div> : null}
           {selected.node.members?.length ? (
             <div data-arch-members style={{ marginTop: 8 }}>
-              <div style={{ color: "var(--text-primary)", marginBottom: 4 }}>{`${selected.node.members.length} tools in this box (the Tools lens draws each)`}</div>
+              <div style={{ color: "var(--text-primary)", marginBottom: 4 }}>{selected.node.category === "config"
+                ? `${selected.node.members.length} environment variable${selected.node.members.length === 1 ? "" : "s"} in this group`
+                : `${selected.node.members.length} tools in this box (the Tools lens draws each)`}</div>
               {selected.node.members.map((m) => <div key={m} style={{ ...mono, color: "var(--text-muted)" }}>{m.replace(/^tool:/, "")}</div>)}
             </div>
           ) : null}

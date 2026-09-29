@@ -57,12 +57,22 @@ function stampAliases(ir, file) {
   if (!tsPaths) return;
   ir.tsPaths = tsPaths;
   for (const n of ir.nodes ?? []) {
-    if (n.type !== "import_from" && n.type !== "import") continue;
-    const spec = typeof n.module === "string" ? n.module : "";
+    // 2026-09-29: also a dynamic `import("@/x")` bound by an assignment, and a
+    // `vi.mock("@/x")` / `jest.mock` — their specifier is the first argument.
+    const dynamic = (n.type === "assignment" && n.callTarget === "import")
+      || (n.type === "call" && /^(vi|jest)\.(mock|doMock)$|^mock\.module$/.test(n.funcName ?? ""));
+    if (n.type !== "import_from" && n.type !== "import" && !dynamic) continue;
+    const spec = dynamic ? specifierLiteral(n.args?.[0]) : typeof n.module === "string" ? n.module : "";
     if (!spec || spec.startsWith(".") || spec.startsWith("/")) continue;
     const target = resolveAliasTarget(spec, tsPaths, base);
     if (target) n.aliasTarget = absolute ? join(root, target) : target;
   }
+}
+
+/** A string literal argument's text, or "" for anything computed. */
+function specifierLiteral(arg) {
+  const m = /^\s*(["'`])([^"'`$]*)\1\s*$/.exec(arg ?? "");
+  return m ? m[2] : "";
 }
 
 async function runBatch() {

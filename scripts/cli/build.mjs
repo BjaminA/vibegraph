@@ -94,6 +94,8 @@ export async function buildPackage({ quiet = false } = {}) {
     logLevel: quiet ? "error" : "warning",
   });
   cpSync(join(ROOT, "skills"), join(PKG, "vendor", "skills"), { recursive: true });
+  // The Claude Code skill (`init --skill`): how a plain Claude chat sets this up.
+  cpSync(join(ROOT, "scripts", "cli", "claude-skill"), join(PKG, "vendor", "claude-skill"), { recursive: true });
 
   const bundleBytes = statSync(outfile).size;
   if (!quiet) {

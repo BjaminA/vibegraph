@@ -81,6 +81,17 @@
         "additionalProperties": true
       }
     },
+    "insight": {
+      "description": "2026-09-28 (additive, OPTIONAL - no version bump; envelopes without it validate unchanged): what the knowledge export says in files, projected for the GUI - `reachability` (functions no entry point reaches, each with its reason), `env` (the configuration surface: variables read by name, declared or not, per thread) and `freshness` (files whose hash moved since the last export). Built by src/server/insight.ts; inner shape pinned by InsightRecord in src/shared/protocol.ts.",
+      "type": "object",
+      "required": ["reachability", "env", "freshness"],
+      "additionalProperties": false,
+      "properties": {
+        "reachability": { "type": "object", "additionalProperties": true },
+        "env": { "type": ["object", "null"], "additionalProperties": true },
+        "freshness": { "type": "object", "additionalProperties": true }
+      }
+    },
     "crossings": {
       "description": "M-XLANG.1 (additive, OPTIONAL - no version bump; crossing-less envelopes validate unchanged): where a logic thread LEAVES its own language over HTTP, and which route in this project serves the path it calls. Derived from parsed data on both sides - the caller's URL argument reduced to a static path shape, and the receiver's route metadata from any language's discoverer (src/server/crossings.ts). WEIGHED, never resolved: `confidence` is path+method only when BOTH sides parsed a method, `ambiguous` names every candidate and claims none, `unmatched` means the path resolved but nothing here serves it, and `note` always says what the match could not establish. A crossing does NOT widen the thread - `threads[].filesReached` stays one language.",
       "type": "object",
@@ -91,6 +102,10 @@
         "byThread": {
           "type": "object",
           "additionalProperties": { "type": "array", "items": { "$ref": "#/$defs/Crossing" } }
+        },
+        "navigation": {
+          "description": "2026-09-29: `kind: navigation` hops — a Link href / router.push / redirect LITERAL naming a page this project serves. Kept apart from `all`/`byThread` because a link is the user's next page, not a call.",
+          "type": "array", "items": { "$ref": "#/$defs/Crossing" }
         }
       }
     },
@@ -157,7 +172,7 @@
       "required": ["entryPointId", "file", "nodeId", "callee", "path", "method", "targets", "confidence", "note"],
       "additionalProperties": false,
       "properties": {
-        "kind": { "type": "string", "enum": ["http", "command", "tool"] },
+        "kind": { "type": "string", "enum": ["http", "command", "tool", "navigation"] },
         "entryPointId": { "type": "string" },
         "file": { "type": "string" },
         "nodeId": { "type": "string" },

@@ -121,6 +121,22 @@
 .monaco-editor .vg-rank-gutter-2 { background: color-mix(in oklab, var(--accent-thread) 60%, transparent); }
 .monaco-editor .vg-rank-gutter-3 { background: color-mix(in oklab, var(--text-muted) 35%, transparent); }
 
+/* Code-view insight (src/webview/codeInsight.ts): a function no entry point
+   reaches, for a reason that suggests dead code, reads receded; a line that
+   reads an environment variable carries a dot, amber when it is declared
+   nowhere. Static. */
+.monaco-editor .vg-unreached-code { opacity: 0.5; }
+.monaco-editor .vg-env-glyph::after {
+  content: "";
+  display: block;
+  width: 8px;
+  height: 8px;
+  margin: 4px auto;
+  border-radius: 50%;
+  background: color-mix(in oklab, var(--accent-thread) 70%, transparent);
+}
+.monaco-editor .vg-env-glyph-undeclared::after { background: var(--accent-warning); }
+
 /* ── U2 — thread edges (PLAN.md updateUI §3, vibegraph-aesthetic skill) ──
    Glow via drop-shadow (4px blur, accent-thread @ 60% opacity), three-tier
    stroke-width by call-frequency, dashed for cross-file boundaries, gentle

@@ -237,7 +237,14 @@
             "\"A320\"",
             "{\"velocity\": 250.0, \"density\": 1.225}"
           ],
-          "isEffect": false
+          "isEffect": false,
+          "argKeys": [
+            [],
+            [
+              "velocity",
+              "density"
+            ]
+          ]
         }
       ],
       "edges": [

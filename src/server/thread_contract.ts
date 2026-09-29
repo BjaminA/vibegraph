@@ -21,7 +21,49 @@
 import type { Thread, ThreadNode } from "../webview/threads/types";
 import type { Crossing } from "./crossings.ts";
 import { languageForPath } from "../shared/languages.ts";
+import { formatTestedBy, type TestedBy } from "../shared/test_reach.ts";
+import { formatConfiguredBy, type ConfiguredBy } from "../shared/env_surface.ts";
 import { ROLE_ORDER } from "../shared/stack_taxonomy.ts";
+import { formatNearClones, NEAR_CLONE_THRESHOLD, type NearClone } from "../shared/near_clones.ts";
+import { categoryWord } from "../shared/thread_rank.ts";
+
+/** The primary path (walk order, labels once) and the rest as counts. */
+function rankedSummary(thread: Thread, ranks: { rank: Map<string, 1 | 2 | 3>; category: Map<string, string> }) {
+  const path: string[] = [];
+  const counts = { primary: 0, secondary: 0, tertiary: 0 };
+  const parts: Record<2 | 3, Map<string, number>> = { 2: new Map(), 3: new Map() };
+  for (const n of thread.nodes) {
+    if (n.kind === "container") continue;
+    const r = ranks.rank.get(n.id);
+    if (!r) continue;
+    if (r === 1) {
+      counts.primary++;
+      if (!path.includes(n.label)) path.push(n.label);
+    } else {
+      counts[r === 2 ? "secondary" : "tertiary"]++;
+      const cat = ranks.category.get(n.id) ?? "call";
+      const word = categoryWord(cat as never) ?? cat;
+      parts[r].set(word, (parts[r].get(word) ?? 0) + 1);
+    }
+  }
+  const sorted = (m: Map<string, number>) => [...m].sort((a, b) => b[1] - a[1]).map(([w, v]) => [v === 1 || /state$/.test(w) ? w : `${w}s`, v] as [string, number]);
+  return { path, counts, secondaryParts: sorted(parts[2]), tertiaryParts: sorted(parts[3]) };
+}
+
+/** The seed's and the steps' near-clones, once per function, in walk order. */
+function nearClonesOf(thread: Thread, lookup: (file: string, irNodeId: string) => NearClone[] | undefined) {
+  const out: Array<{ label: string; file: string; irNodeId: string; peers: NearClone[] }> = [];
+  const seen = new Set<string>();
+  for (const n of thread.nodes) {
+    if ((n.kind !== "seed" && n.kind !== "step") || !n.file || !n.irNodeId) continue;
+    const key = `${n.file}::${n.irNodeId}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const peers = lookup(n.file, n.irNodeId);
+    if (peers?.length) out.push({ label: n.label, file: n.file, irNodeId: n.irNodeId, peers });
+  }
+  return out;
+}
 import {
   attributeBoundary, attributionLabel, effectFromRole,
   type Attribution, type ImportBinding, type LocalBinding, type StackLike,
@@ -58,6 +100,9 @@ export interface ContractExternal {
   /** PLAN-M-RUNTIME phase 3 - what a consented trace run SAW here. Beside
    *  the static facts above, never instead of them. */
   observed?: ContractObservation[];
+  /** 2026-09-29 - the node's thread rank (1 primary, 2 secondary, 3
+   *  tertiary), when ranks were injected. */
+  rank?: 1 | 2 | 3;
 }
 
 export interface ContractRoundTrip {
@@ -121,6 +166,23 @@ export interface ThreadContract {
   effectsByRole: Record<string, number>;
   roundTrips: ContractRoundTrip[];
   crossThread: { reaches: string[]; reachedBy: string[] };
+  /** 2026-09-28 - present only when a test index was injected. */
+  testedBy?: TestedBy;
+  /** 2026-09-28 - present only when an env surface was injected. */
+  configuredBy?: ConfiguredBy;
+  /** 2026-09-29 - the seed's and steps' NEAR-CLONES (shared/near_clones.ts):
+   *  functions of the same call shape elsewhere, which a fix here probably
+   *  also needs. Present only when a near-clone index was injected. */
+  nearClones?: Array<{ label: string; file: string; irNodeId: string; peers: NearClone[] }>;
+  /** 2026-09-29 - the thread RANKED as the thread view ranks it
+   *  (shared/thread_rank.ts): the primary path in walk order, and the rest as
+   *  counts by category. Present only when ranks were injected. */
+  ranked?: {
+    path: string[];
+    counts: { primary: number; secondary: number; tertiary: number };
+    secondaryParts: Array<[string, number]>;
+    tertiaryParts: Array<[string, number]>;
+  };
   filesReached: string[];
   /** M-STACK.1 — the tools this thread's files use, project funnels first.
    *  Empty when no stack index was injected (the pre-M-STACK shape). */
@@ -158,6 +220,18 @@ export interface ThreadContractOpts {
   nodeFor: (file: string | null, irNodeId: string | null) => Record<string, unknown> | null;
   reaches: string[];
   reachedBy: string[];
+  /** 2026-09-28 - the discovered tests that exercise this thread
+   *  (shared/test_reach.ts). Absent = no test index: no line is rendered. */
+  testedBy?: TestedBy;
+  /** 2026-09-28 - the environment variables this thread reads
+   *  (shared/env_surface.ts). Absent = no surface: no line is rendered. */
+  configuredBy?: ConfiguredBy;
+  /** 2026-09-29 - near-clones of a function, by (file, irNodeId). Absent =
+   *  no index: no line is rendered. */
+  nearClonesFor?: (file: string, irNodeId: string) => NearClone[] | undefined;
+  /** 2026-09-29 - the thread's ranks (rankThread over threadFacts, the thread
+   *  view's own ranking). Absent = the unranked contract, as before. */
+  rankFor?: (thread: Thread) => { rank: Map<string, 1 | 2 | 3>; category: Map<string, string> } | null;
   /** M-STACK.1 — the stack facts for one file (project funnels first).
    *  Injected so the contract stays PURE over the IR; absent = no index. */
   stackFor?: (file: string) => ContractStackEntry[];
@@ -272,6 +346,7 @@ export function computeThreadContract(thread: ContractInputThread, opts: ThreadC
   const docstring = typeof seedIr.docstring === "string" ? seedIr.docstring : null;
 
   const byId = new Map(thread.nodes.map((n) => [n.id, n]));
+  const ranks = opts.rankFor?.(thread) ?? null;
   const externals: ContractExternal[] = [];
   const effects: Record<string, number> = {};
   const effectsByRole: Record<string, number> = {};
@@ -338,6 +413,7 @@ export function computeThreadContract(thread: ContractInputThread, opts: ThreadC
       ...(tool ? { tool } : {}),
       ...(roleEffect ? { effectFromRole: roleEffect } : {}),
       ...(observed.length ? { observed } : {}),
+      ...(ranks?.rank.get(n.id) ? { rank: ranks.rank.get(n.id)! } : {}),
     });
   }
   // The tools this thread actually CALLS — index order is not available
@@ -441,6 +517,10 @@ export function computeThreadContract(thread: ContractInputThread, opts: ThreadC
     effectsByRole,
     roundTrips,
     crossThread: { reaches: [...opts.reaches].sort(), reachedBy: [...opts.reachedBy].sort() },
+    ...(opts.testedBy ? { testedBy: opts.testedBy } : {}),
+    ...(opts.configuredBy ? { configuredBy: opts.configuredBy } : {}),
+    ...(opts.nearClonesFor ? { nearClones: nearClonesOf(thread, opts.nearClonesFor) } : {}),
+    ...(ranks ? { ranked: rankedSummary(thread, ranks) } : {}),
     filesReached,
     stack,
     called,
@@ -560,6 +640,12 @@ export function formatContractBlock(c: ThreadContract): string {
   const leaves = c.interface.returns ? `declared return ${c.interface.returns}` : "no declared return type";
   lines.push(`Leaves: ${leaves}${c.interface.returnPreviews.length ? `; returns ${c.interface.returnPreviews.map((p) => `\`${p}\``).join(", ")}` : ""}`);
   if (c.interface.docstring) lines.push(`Doc: ${c.interface.docstring.split("\n")[0]}`);
+  if (c.ranked) {
+    const shown = c.ranked.path.slice(0, 14);
+    lines.push(`Path (primary — what this thread does, in walk order): ${shown.join(" → ")}${c.ranked.path.length > 14 ? ` → … (+${c.ranked.path.length - 14})` : ""}`);
+    const said = (parts: Array<[string, number]>) => parts.slice(0, 4).map(([w, n]) => `${n} ${w}`).join(", ");
+    lines.push(`Also on this thread: ${c.ranked.counts.secondary} secondary${c.ranked.secondaryParts.length ? ` (${said(c.ranked.secondaryParts)})` : ""}, ${c.ranked.counts.tertiary} tertiary${c.ranked.tertiaryParts.length ? ` (${said(c.ranked.tertiaryParts)})` : ""} — ranked as the thread view ranks them; the lists below lead with what matters.`);
+  }
 
   // M-BOUNDARY.1 — an effect the tool's ROLE implies counts here too, and
   // says so. Before it, a db call the parser gave no effectKind (every
@@ -598,7 +684,11 @@ export function formatContractBlock(c: ThreadContract): string {
   }
   const other = c.externals.filter((e) => !effectOfExternal(e) && e.kind !== "external");
   if (other.length) {
-    lines.push(`Untraceable hops: ${other.map((e) => `${e.label} [${e.kind}]`).join(", ")}`);
+    // Ranked: tertiary hops (local data work, runtime, logging) are counted,
+    // not listed — they were most of this line and none of its point.
+    const listed = c.ranked ? other.filter((e) => e.rank !== 3) : other;
+    const counted = other.length - listed.length;
+    lines.push(`Untraceable hops: ${listed.length ? listed.map((e) => `${e.label} [${e.kind}]`).join(", ") : "(none that matter)"}${counted ? `; +${counted} tertiary (local data work, runtime, logging)` : ""}`);
   }
   lines.push(...boundarySection(c));
 
@@ -673,6 +763,14 @@ export function formatContractBlock(c: ThreadContract): string {
   }
 
   lines.push("", `Cross-thread: reaches ${c.crossThread.reaches.join(", ") || "(none)"}; reached by ${c.crossThread.reachedBy.join(", ") || "(none)"}`);
+  const tested = formatTestedBy(c.testedBy);
+  if (tested) lines.push(tested);
+  const configured = formatConfiguredBy(c.configuredBy);
+  const clones = (c.nearClones ?? []).map((x) => formatNearClones(x.label, x.peers)).filter(Boolean);
+  if (clones.length) {
+    lines.push(`Shaped like (same call sequence elsewhere — 3-gram Jaccard >= ${NEAR_CLONE_THRESHOLD}; a fix here probably applies there; structural, not verified):`, ...(clones as string[]));
+  }
+  if (configured) lines.push(configured);
   const b = c.boundaries;
   lines.push(`Where static knowledge ends: ${b.resolutionGaps} resolution gap(s), ${b.runtimeDispatch} runtime dispatch, ${b.uncaptured} uncaptured, ${b.unattributed} boundary/boundaries with no tool`);
   for (const n of c.notes) lines.push(`Note: ${n}`);

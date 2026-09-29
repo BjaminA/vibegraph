@@ -58,7 +58,7 @@ function probeBase(base, files) {
  *   an alias that expands to nothing on disk stays external — resolution is
  *   still by what exists, never by the pattern alone.
  */
-function resolveSpecifier(fromFile, spec, files, aliasTarget) {
+export function resolveSpecifier(fromFile, spec, files, aliasTarget) {
   if (!spec.startsWith("./") && !spec.startsWith("../")) {
     // M-CMD.1 — a bare specifier is external UNLESS the PARSER already
     // resolved it through a tsconfig alias and probed it on disk.
@@ -106,6 +106,30 @@ export function linkFiles(files) {
       }
     }
 
+    // 2026-09-29 — `const { a, b: c } = await import("./x")`: the dynamic
+    // form `vi.resetModules()` forces in tests (a private production codebase: 263 of them, 185
+    // into project files). A name bound twice to different targets, or also
+    // bound statically, is refused: the file does not say which one runs.
+    const dynamicBound = new Map();
+    const refused = new Set();
+    for (const n of nodes) {
+      if (n.type !== "assignment" || n.callTarget !== "import") continue;
+      const m = /^\s*(["'`])([^"'`$]*)\1\s*$/.exec(n.args?.[0] ?? "");
+      const pattern = /^\s*\{([^}]*)\}\s*$/.exec(n.name ?? "");
+      if (!m || !pattern) continue;
+      const target = resolveSpecifier(rel, m[2], files, n.aliasTarget);
+      if (!target) continue;
+      for (const part of pattern[1].split(",")) {
+        const p = part.trim().replace(/\s*=.*$/, "");
+        if (!p || p.startsWith("...")) continue;
+        const [exported, local] = p.includes(":") ? p.split(":").map((x) => x.trim()) : [p, p];
+        const prev = dynamicBound.get(local);
+        if (bindings.has(local) || (prev && (prev.file !== target || prev.exportedName !== exported))) { refused.add(local); continue; }
+        dynamicBound.set(local, { file: target, exportedName: exported });
+      }
+    }
+    for (const [local, b] of dynamicBound) if (!refused.has(local)) bindings.set(local, b);
+
     const hasRef = new Set(edges.filter((e) => e.type === "reference").map((e) => e.source));
     const callShapes = [];
     for (const n of nodes) {
@@ -135,7 +159,9 @@ export function linkFiles(files) {
   return files;
 }
 
-if (process.argv[1] && import.meta.url.endsWith(process.argv[1].split("/").pop())) {
+// Main guard by this file's NAME: the pipeline imports linkFiles in-process,
+// and inside the packaged bundle import.meta.url IS argv[1].
+if (process.argv[1] && /link_jsts\.mjs$/.test(process.argv[1])) {
   let raw = "";
   process.stdin.setEncoding("utf-8");
   for await (const chunk of process.stdin) raw += chunk;

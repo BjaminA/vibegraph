@@ -1,0 +1,10 @@
+{
+  "seeds": [
+    { "file": "page.tsx", "irNodeId": "module/Panel.fn" },
+    { "file": "page.tsx", "irNodeId": "module/helper.fn" },
+    { "file": "page.tsx", "irNodeId": "module/twice.fn" },
+    { "file": "helpers.py", "irNodeId": "module/outer.fn" },
+    { "file": "helpers.py", "irNodeId": "module/uses_shadow.fn" },
+    { "file": "helpers.py", "irNodeId": "module/takes_callable.fn" }
+  ]
+}

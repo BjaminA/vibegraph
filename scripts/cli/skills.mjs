@@ -26,12 +26,14 @@ import { draftThreadSkill, threadSkillPrompt } from "../../src/server/thread_ski
 import { loadEnvelope } from "../quality_check.mjs";
 import { threadContexts } from "../thread_context.mjs";
 import { spawnClassifier } from "./classify.mjs";
+import { lessonsBlock, lessonsForThread, readLessons } from "./lessons.mjs";
 
 export const SKILLS_USAGE = `skills list|draft|ratify|reaffirm|auto-reaffirm [...]   per-thread skills (.vibegraph/thread-skills/)
       list [<root>]
       draft <entry id>... | --missing [<root>]   SPENDS TOKENS (one model call per skill, a retry if it cites
                            an id that does not exist); written as a DRAFT, never ratified
           --dry-run  print the prompt, spawn nothing · --reply <file> use a saved reply · --model <id>
+          --no-lessons  leave out what the hooks recorded (\`lessons list\`)
       ratify <entry id> [<root>]      the draft becomes ratified (whoever runs this reviewed it)
       reaffirm <entry id> [<root>]    a stale ratified skill is still accurate: re-stamp it
       auto-reaffirm <entry id> on|off [<root>]   keep a ratified skill injecting across code changes, with a caveat`;
@@ -80,15 +82,21 @@ export async function runSkills({ root, sub, targets, values, envelope, pipeline
       return typeof n?.effectKind === "string" ? n.effectKind : null;
     };
     const saved = values.reply ? readFileSync(values.reply, "utf-8") : null;
+    // What the hooks saw sessions break and put right (scripts/cli/lessons.mjs),
+    // unless --no-lessons.
+    const lessons = values["no-lessons"] ? [] : readLessons(root);
     let failed = 0;
     for (const ep of eps) {
       const c = need(ep);
       if (!c) { failed++; continue; }
-      if (values["dry-run"]) { lines.push(`── prompt for ${ep} ──`, threadSkillPrompt(ep, c.thread, c.rulesBlock)); continue; }
+      const mine = lessonsForThread(lessons, { routedIds: c.routed.map((k) => k.id), filesReached: c.contract.filesReached ?? [] });
+      const lb = lessonsBlock(mine);
+      if (mine.length) messages.push(`${ep}: ${mine.length} lesson(s) from the hooks go into the prompt`);
+      if (values["dry-run"]) { lines.push(`── prompt for ${ep} ──`, threadSkillPrompt(ep, c.thread, c.rulesBlock, lb)); continue; }
       let label = saved ? "saved reply" : null;
       if (!saved) messages.push(`drafting ${ep} (this spends tokens)`);
       const r = await draftThreadSkill({
-        entryPointId: ep, ir: c.thread, rulesBlock: c.rulesBlock, knownIds, effectKindFor,
+        entryPointId: ep, ir: c.thread, rulesBlock: c.rulesBlock, lessonsBlock: lb, knownIds, effectKindFor,
         runLlm: async (prompt) => {
           if (saved) return saved;
           const out = spawnClassifier({ prompt, model: values.model, cwd: root, env });

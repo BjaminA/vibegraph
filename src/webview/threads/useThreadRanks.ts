@@ -11,9 +11,10 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  rankThread, projectRanks, factsFrom, remitText,
+  rankThread, projectRanks, remitText,
   type Rank, type RankProjection, type Ranked, type RankNode, type NodeFacts,
 } from "../../shared/thread_rank";
+import { threadFacts as sharedThreadFacts } from "../../shared/thread_rank_facts";
 import type { Thread } from "./types";
 import type { ProjectFileData, StackIndexRecord, CrossingIndexRecord } from "../../shared/protocol";
 
@@ -89,36 +90,16 @@ export interface RankedView {
   decorate: (id: string) => RankDecoration;
 }
 
-/** The facts one thread's terminals are ranked from, in the webview: the
- *  owning file's IR node and the stack index, through `factsFrom` — shared by
- *  the thread view and the code view so the two never rank a call apart. */
+/** The facts one thread's terminals are ranked from — now shared
+ *  (src/shared/thread_rank_facts.ts) so the server and the CLI rank a thread
+ *  exactly as the thread view and the code view do. */
 export function threadFacts(
   thread: Pick<Thread, "nodes" | "entryPointId">,
   projectIR: Record<string, ProjectFileData> | null,
   stack: StackIndexRecord | null,
   crossings: CrossingIndexRecord | null,
 ): (n: RankNode) => NodeFacts {
-  const files = projectIR ?? {};
-  // one pass over the project: irNodeId → owning file, and the node itself
-  const byId = new Map<string, { file: string; node: { effectKind?: unknown } }>();
-  const wanted = new Set(thread.nodes.map((n) => n.irNodeId).filter(Boolean) as string[]);
-  for (const [file, data] of Object.entries(files)) {
-    for (const n of (data?.nodes ?? []) as Array<{ id?: string; effectKind?: unknown }>) {
-      if (n.id && wanted.has(n.id) && !byId.has(`${file}|${n.id}`)) byId.set(`${file}|${n.id}`, { file, node: n });
-    }
-  }
-  const fileOf = new Map<string, string>();
-  for (const [k, v] of byId) fileOf.set(k.slice(v.file.length + 1), v.file);
-  const list = crossings?.byThread?.[thread.entryPointId ?? ""] ?? crossings?.all ?? [];
-  const crossingIds = new Set(list.map((c) => c.nodeId));
-  return factsFrom({
-    ownerFile: (n) => n.file ?? (n.irNodeId ? fileOf.get(n.irNodeId) ?? null : null),
-    irNode: (file, id) => byId.get(`${file}|${id}`)?.node ?? null,
-    imports: (f) => stack?.importsByFile?.[f] ?? [],
-    locals: (f) => stack?.localsByFile?.[f] ?? [],
-    stack: stack ?? null,
-    crossing: (n) => !!n.irNodeId && crossingIds.has(n.irNodeId),
-  });
+  return sharedThreadFacts(thread as never, projectIR as never, stack as never, crossings as never);
 }
 
 /** Rank the RAW thread (before nest collapse) and project it. */

@@ -23,7 +23,9 @@ import { ArchGroupBox } from "./ArchGroupBox";
 import { buildArchLayout, ARCH_LENSES, layoutBounds, readableViewport, type ArchLens } from "./archLayout";
 import { ArchEdge } from "./ArchEdge";
 import { ArchTraceBar, useArchTrace } from "./ArchTrace";
-import { ArchInspector, ArchLegend, ArchLensBar, ArchProposalBar } from "./ArchPanel";
+import { ArchInspector, ArchLegend, ArchLensBar, ArchProposalBar, type MapLens } from "./ArchPanel";
+import { configModel } from "./arch_config";
+import { journeysModel } from "./arch_journeys";
 import { ArchProposingCard } from "./ArchProposingCard";
 import type { ArchModelRecord, ArchNodeRecord, ArchEdgeRecord, ArchGroupRecord } from "../../shared/protocol";
 
@@ -66,6 +68,8 @@ const MAP_INSET = { top: 136, left: 0, pad: 24, right: 64 };
 type SystemMode = "subsystems" | "threads" | "map";
 
 interface Props {
+  /** 2026-09-28 — the configuration surface, for the Configuration lens. */
+  insight?: import("../../shared/protocol").InsightRecord | null;
   system: SystemTier | null;
   /** PLAN-v7 Stage 3 — the proposed architecture (pending or ratified). A
       SIBLING of the honest tier: composed only inside buildSystemLayout,
@@ -117,6 +121,7 @@ export function SystemView({
   architecture = null,
   archPropose,
   onArchAction,
+  insight = null,
 }: Props) {
   // M-ZOOM - armed after mount for the same reason ThreadView is: this
   // view is arrived at, and an unarmed descend bounces straight back.
@@ -146,15 +151,15 @@ export function SystemView({
   // From the map the subsystem/thread toggle returns to subsystems first.
   const toggleMode = () => setMode((m) => persistMode(m === "subsystems" ? "threads" : "subsystems"));
   const toggleMap = () => setMode((m) => persistMode(m === "map" ? "subsystems" : "map"));
-  const [lens, setLensState] = useState<ArchLens>(() => {
+  const [lens, setLensState] = useState<MapLens>(() => {
     try {
-      const l = localStorage.getItem("vg-arch-lens") as ArchLens | null;
-      return l && ARCH_LENSES.includes(l) ? l : "overview";
+      const l = localStorage.getItem("vg-arch-lens") as MapLens | null;
+      return l && (ARCH_LENSES.includes(l as ArchLens) || l === "config" || l === "journeys") ? l : "overview";
     } catch {
       return "overview";
     }
   });
-  const setLens = (l: ArchLens) => {
+  const setLens = (l: MapLens) => {
     setLensState(l);
     try { localStorage.setItem("vg-arch-lens", l); } catch { /* ignore */ }
   };
@@ -167,7 +172,14 @@ export function SystemView({
 
   const base = useMemo((): { nodes: Node[]; edges: Edge[]; hiddenTools?: string[]; hiddenClusters?: string[] } => {
     if (mode === "map" && !focusEntryPointId) {
-      return architecture ? buildArchLayout(architecture, lens) : { nodes: [], edges: [] };
+      // 2026-09-29 — the Journeys lens draws pages and the links between
+      // them through the Flows pipeline; it needs no architecture model.
+      if (lens === "journeys") return buildArchLayout(journeysModel(entryPoints, crossings), "flows");
+      if (!architecture) return { nodes: [], edges: [] };
+      // The Configuration lens draws its own model through the Tools pipeline.
+      return lens === "config"
+        ? buildArchLayout(configModel(architecture, insight?.env), "tools")
+        : buildArchLayout(architecture, lens);
     }
     if (mode === "threads" || focusEntryPointId) {
       const laid = buildThreadInteractionLayout(threads, entryPoints, crossings);
@@ -186,7 +198,7 @@ export function SystemView({
     // the whole view then.
     if (system || plan) return buildSystemLayout(system ?? { subsystems: [], edges: [] }, plan, cardHeights ?? undefined);
     return { nodes: [], edges: [] };
-  }, [mode, system, plan, threads, entryPoints, crossings, focusEntryPointId, architecture, lens, cardHeights]);
+  }, [mode, system, plan, threads, entryPoints, crossings, focusEntryPointId, architecture, lens, cardHeights, insight]);
 
   // Inject the drill-down callback into each node's data (react-flow custom
   // nodes receive only `data`): subsystem endpoint rows AND thread nodes both
@@ -337,7 +349,7 @@ export function SystemView({
         Architecture
       </button>
       {mode === "map" && <ArchLensBar lens={lens} onLens={(l) => { setLens(l); setArchSelected(null); }} onStory={trace.beats.length ? trace.actions.story : undefined} />}
-      {mode === "map" && architecture && <ArchLegend model={architecture} hiddenTools={base.hiddenTools ?? []} hiddenClusters={base.hiddenClusters ?? []} lens={lens} fold={!!archSelected} />}
+      {mode === "map" && architecture && <ArchLegend model={architecture} hiddenTools={base.hiddenTools ?? []} hiddenClusters={base.hiddenClusters ?? []} lens={lens === "config" ? "tools" : lens === "journeys" ? "flows" : lens} fold={!!archSelected} />}
       {mode === "map" && <ArchTraceBar mode={trace.mode} beats={trace.beats} labelOf={labelOf} actions={trace.actions} />}
       {mode === "map" && architecture && (
         <ArchProposalBar model={architecture} state={archPropose ?? { busy: false, error: null }} onAction={onArchAction} />

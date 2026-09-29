@@ -27,6 +27,11 @@
 // Pure over injected facts: no fs, no live state, no IR walking of its own.
 // The caller supplies what the project's edges already say.
 
+import {
+  checkPayloadKeys, describePayloadKeys, isPayloadKeysCheck,
+  type CallSiteFact, type PayloadKeysCheck,
+} from "./payload_check.ts";
+
 /** What a human can say that the IR can check.
  *
  *  `calls-through` is its OWN predicate, and a first cut got it wrong in a
@@ -44,9 +49,10 @@
 export type ConstraintCheck =
   | { rule: "callers-only"; target: string; files?: string[]; functions?: string[] }
   | { rule: "import-only"; tool: string; files: string[] }
-  | { rule: "calls-through"; target: string; through: string };
+  | { rule: "calls-through"; target: string; through: string }
+  | PayloadKeysCheck;
 
-export const CHECK_RULES = ["callers-only", "import-only", "calls-through"] as const;
+export const CHECK_RULES = ["callers-only", "import-only", "calls-through", "payload-keys"] as const;
 
 /** One resolved call, as the linker recorded it. */
 export interface ReferenceFact {
@@ -75,6 +81,10 @@ export interface CheckFacts {
   definedNames: string[];
   /** Dynamic / unresolved calls. A hidden caller can only hide here. */
   unresolved: UnresolvedFact[];
+  /** Every call site with the keys its arguments spell (`payload-keys`).
+   *  Optional: a builder that does not supply it makes that verb
+   *  unverifiable, never a pass. */
+  callSites?: CallSiteFact[];
 }
 
 export interface CheckResult {
@@ -165,6 +175,7 @@ export function isConstraintCheck(v: unknown): v is ConstraintCheck {
   if (c.rule === "import-only") return typeof c.tool === "string" && !!c.tool && strs(c.files);
   if (c.rule === "calls-through") return typeof c.target === "string" && !!c.target
     && typeof c.through === "string" && !!c.through;
+  if (c.rule === "payload-keys") return isPayloadKeysCheck(c);
   return false;
 }
 
@@ -282,6 +293,7 @@ export function checkConstraint(facts: CheckFacts, check: ConstraintCheck): Chec
     case "import-only": return checkImportOnly(facts, check);
     case "calls-through": return checkCallsThrough(facts, check);
     case "callers-only": return checkCallersOnly(facts, check);
+    case "payload-keys": return checkPayloadKeys(facts.callSites, check);
   }
 }
 
@@ -299,5 +311,7 @@ export function describeCheck(check: ConstraintCheck): string {
       return `\`${check.tool}\` imported only in ${check.files.join(", ")}`;
     case "calls-through":
       return `every call to \`${check.target}\` goes through \`${check.through}\``;
+    case "payload-keys":
+      return describePayloadKeys(check);
   }
 }

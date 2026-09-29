@@ -21,6 +21,7 @@ export const ARCH_ACCENT: Record<ArchCategory, { accent: string; quiet?: boolean
   cloud: { accent: "--accent-io" },
   external: { accent: "--accent-io", quiet: true },
   unknown: { accent: "--text-muted", quiet: true },
+  config: { accent: "--accent-config" },
 };
 
 export function archAccent(c: ArchCategory): { accent: string; quiet?: boolean } {

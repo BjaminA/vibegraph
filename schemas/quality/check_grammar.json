@@ -2,10 +2,10 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://vibegraph.dev/schemas/quality/check_grammar.json",
   "title": "VibeGraph quality layer: the check grammar",
-  "description": "The eight verbs a checkable half may use: the three M-GRAMMAR verbs already in constraint_grammar.ts (callers-only, import-only, calls-through) and the five Run 1 forced into existence (guards, not-in-loop, handles-failure, annotated, co-changes; reviews/quality-layer/RUN1.md section 3). Operand shapes only. Decision procedures are specified in RUN1.md and implemented in Run 3. A malformed check is refused at the boundary, never coerced (constraint_store.ts precedent).",
+  "description": "The verbs a checkable half may use: the M-GRAMMAR verbs in constraint_grammar.ts (callers-only, import-only, calls-through, and payload-keys, added 2026-09-28 in src/server/payload_check.ts) and the five Run 1 forced into existence (guards, not-in-loop, handles-failure, annotated, co-changes; reviews/quality-layer/RUN1.md section 3). Operand shapes only. Decision procedures are specified in RUN1.md and implemented in Run 3. A malformed check is refused at the boundary, never coerced (constraint_store.ts precedent).",
   "$defs": {
     "CheckRule": {
-      "enum": ["callers-only", "import-only", "calls-through", "guards", "not-in-loop", "handles-failure", "annotated", "co-changes"]
+      "enum": ["callers-only", "import-only", "calls-through", "payload-keys", "guards", "not-in-loop", "handles-failure", "annotated", "co-changes"]
     },
     "StackRole": {
       "description": "Mirrors STACK_ROLES in src/shared/stack_taxonomy.ts.",
@@ -43,6 +43,19 @@
         "target": { "type": "string", "minLength": 1 },
         "through": { "type": "string", "minLength": 1 }
       }
+    },
+    "PayloadKeys": {
+      "description": "Every call to target spells the required key paths and none of the forbidden ones, read from the literal arguments at each call site (the IR node's argKeys). A path is `key` or `key.inner`. A key hidden by a spread, a computed key or a non-literal value makes that site unverifiable, never violated. Values are never read.",
+      "type": "object",
+      "required": ["rule", "target"],
+      "additionalProperties": false,
+      "properties": {
+        "rule": { "const": "payload-keys" },
+        "target": { "type": "string", "minLength": 1 },
+        "require": { "type": "array", "minItems": 1, "items": { "type": "string", "pattern": "^[^\\s.]+(\\.[^\\s.]+)?$" } },
+        "forbid": { "type": "array", "minItems": 1, "items": { "type": "string", "pattern": "^[^\\s.]+(\\.[^\\s.]+)?$" } }
+      },
+      "anyOf": [{ "required": ["require"] }, { "required": ["forbid"] }]
     },
     "Guards": {
       "description": "RUN1 3.1. Every call to target is governed by a call to guard: the guard sits in an if-test whose arm contains the target call, or precedes it in the same or an enclosing block with no return between. Stricter than calls-through, which stays for co-occurrence.",
@@ -104,6 +117,7 @@
         { "$ref": "#/$defs/CallersOnly" },
         { "$ref": "#/$defs/ImportOnly" },
         { "$ref": "#/$defs/CallsThrough" },
+        { "$ref": "#/$defs/PayloadKeys" },
         { "$ref": "#/$defs/Guards" },
         { "$ref": "#/$defs/NotInLoop" },
         { "$ref": "#/$defs/HandlesFailure" },

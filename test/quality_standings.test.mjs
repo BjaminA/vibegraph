@@ -35,8 +35,9 @@ test("the bundle carries the standings (dist/server.js names every verb's standi
   }
 });
 
-test("at this commit: guards, not-in-loop, handles-failure, annotated MAY-GATE; co-changes is DEMOTE (advisory)", () => {
-  assert.deepEqual([...calibratedVerbs()].sort(), ["annotated", "guards", "handles-failure", "not-in-loop"]);
+test("at this commit: guards, not-in-loop, handles-failure, annotated, payload-keys MAY-GATE; co-changes is DEMOTE (advisory)", () => {
+  assert.deepEqual([...calibratedVerbs()].sort(), ["annotated", "guards", "handles-failure", "not-in-loop", "payload-keys"]);
+  assert.equal(verbMayGate("payload-keys"), true);
   assert.equal(verbMayGate("guards"), true);
   assert.equal(verbMayGate("not-in-loop"), true);
   assert.equal(verbMayGate("co-changes"), false);

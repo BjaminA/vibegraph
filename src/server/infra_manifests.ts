@@ -206,6 +206,50 @@ export function readInfraManifests(root: string): { facts: InfraFact[]; files: s
   return { facts, files: rels, truncated: false };
 }
 
+/**
+ * 2026-09-28 — every environment variable the project DECLARES, by NAME only:
+ * each `KEY=` line of an env example file (a commented `# KEY=` line counts —
+ * it documents an optional variable) and each key of a compose
+ * `environment:` block. Values are never read into the result: an example
+ * file is non-secret by convention, but a name is all a declaration needs.
+ * Separate from readInfraManifests on purpose: that one keeps only the keys
+ * the architecture map can use (addresses, directories), which made
+ * `OPENAI_API_KEY` look undeclared in a project that declares it.
+ */
+export function readEnvDeclarations(root: string): Array<{ name: string; file: string; line: number }> {
+  const out: Array<{ name: string; file: string; line: number }> = [];
+  for (const full of walk(root)) {
+    const name = path.basename(full);
+    const isEnv = /^\.env\./.test(name);
+    const isCompose = /compose[\w.-]*\.ya?ml$/i.test(name);
+    if (!isEnv && !isCompose) continue;
+    let lines: string[];
+    try {
+      if (fs.statSync(full).size > 256 * 1024) continue;
+      lines = fs.readFileSync(full, "utf-8").split(/\r?\n/);
+    } catch { continue; }
+    const rel = path.relative(root, full).split(path.sep).join("/");
+    if (isEnv) {
+      lines.forEach((raw, i) => {
+        const m = /^\s*#?\s*(?:export\s+)?([A-Z][A-Z0-9_]*)\s*=/.exec(raw);
+        if (m) out.push({ name: m[1], file: rel, line: i + 1 });
+      });
+      continue;
+    }
+    // compose: the keys under an `environment:` key, list or mapping form.
+    let envIndent = -1;
+    lines.forEach((raw, i) => {
+      const indent = raw.length - raw.trimStart().length;
+      if (/^\s*environment:\s*$/.test(raw)) { envIndent = indent; return; }
+      if (envIndent < 0) return;
+      if (raw.trim() && indent <= envIndent) { envIndent = -1; return; }
+      const m = /^\s*-?\s*["']?([A-Za-z_][A-Za-z0-9_]*)["']?\s*[:=]/.exec(raw);
+      if (m) out.push({ name: m[1], file: rel, line: i + 1 });
+    });
+  }
+  return out;
+}
+
 export function factCitation(f: InfraFact): string {
   return `${f.file}:${f.line}`;
 }

@@ -50,10 +50,21 @@ test.describe("M-FS1 — initial thread framing", () => {
       // Fits vertically → framed: the gaps are within ~180px of each other.
       expect(Math.abs(topGap - bottomGap), `topGap=${topGap} bottomGap=${bottomGap} — cross extent should be framed, not seed-centred`).toBeLessThan(180);
     } else {
-      // Doesn't fit → top-anchored near the pad. The pad is FIT_TOP (128,
-      // ThreadView): the first card must sit below the canvas's top-left
-      // pills (skill / nests), which a 48px pad put it under.
-      expect(topGap, "overflowing thread should anchor its top at the pad").toBeLessThan(160);
+      // Doesn't fit → top-anchored at the pad. The pad is the canvas chrome's
+      // measured bottom (ThreadView fitTopNow, 2026-09-28 — it was a fixed
+      // 128 until the chip strip grew tests/env chips and the rank control
+      // landed on the seed): the first card sits BELOW the top-left pills,
+      // and not far below them.
+      const chromeBottom = await page.evaluate(() => {
+        let b = 0;
+        for (const el of document.querySelectorAll("[data-chip-strip], [data-thread-rank-control], [data-thread-nests-toggle], [data-trace-thread]")) {
+          const r = el.getBoundingClientRect();
+          if (r.height > 0) b = Math.max(b, r.bottom);
+        }
+        return b;
+      });
+      expect(top, "the first card sits below the canvas pills").toBeGreaterThanOrEqual(chromeBottom);
+      expect(top - chromeBottom, "overflowing thread should anchor its top at the pad").toBeLessThan(48);
     }
 
     // The seed stays in view at the main-axis start.

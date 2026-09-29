@@ -26,6 +26,7 @@ import type { ThreadNodeKind } from "./types";
 import type { AddComponentDropDetail } from "./useAddComponentDrag";
 import { tierForZoom, lodLabelFontSize } from "./lod";
 import { RemitBadge } from "./RemitBadge";
+import { SubThreadBadge } from "./SubThreadBadge";
 import type { RankDecoration } from "./useThreadRanks";
 
 // 2026-09-25 — thread ranks: the rank, a folded guard's label, `×N` for
@@ -87,6 +88,9 @@ export interface ThreadNodeData extends Partial<RankDecoration> {
   // badge: the path is incomplete here, honestly, never silently complete.
   nestsInnerCalls?: boolean;
   nestExtracted?: boolean;
+  // Thread hierarchy (2026-09-29) — this step is another entry point's head,
+  // so the thread it starts is a sub-tree of this one: badge + one-click jump.
+  subThread?: { entryPointId: string; name: string } | null;
 }
 
 // Per-thread-kind layout shape only — colour comes from the U3.2
@@ -442,6 +446,7 @@ export function ThreadNode({ id, data }: NodeProps) {
       {tier === "full" && (
         <RemitBadge nodeId={id} count={d.remitCount} text={d.remitText} open={d.remitOpen} />
       )}
+      {tier === "full" && d.subThread && <SubThreadBadge entryPointId={d.subThread.entryPointId} name={d.subThread.name} />}
 
       {/* M-NA7 — below full tier the label leaves the card: rendered
           outside at inverse-zoom scale (~constant on-screen size), so

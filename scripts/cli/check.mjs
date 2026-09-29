@@ -61,8 +61,9 @@ function joinVerdicts(per) {
  *   `results` has one row per (constraint, clause): id / rule / described /
  *   verdict / reason / offenders (`file:node`) / notFollowed / threads.
  */
-export function runConstraintChecks({ root, envelope: envelopePath, pipeline, git, uncommitted, commit }) {
-  const { absRoot, envelope: env, parseErrors } = loadEnvelope(root, envelopePath, pipeline ?? {});
+export function runConstraintChecks({ root, envelope: envelopePath, pipeline, git, uncommitted, commit, cache = false, loaded = null }) {
+  // `loaded` — an envelope the caller already has (the hooks reuse one per run).
+  const { absRoot, envelope: env, parseErrors } = loaded ?? loadEnvelope(root, envelopePath, pipeline ?? {}, { cache });
   const constraints = existsSync(join(absRoot, ".vibegraph", "constraints.json")) ? loadConstraints(absRoot) : [];
   const stack = buildStackIndex(env, absRoot);
   const registry = newRegistry();

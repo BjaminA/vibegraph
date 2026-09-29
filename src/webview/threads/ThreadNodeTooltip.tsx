@@ -25,7 +25,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import Editor from "@monaco-editor/react";
 import { monacoLanguageForPath, capabilitiesForPath } from "../../shared/languages";
 import { CODE_WRAP_OPTIONS } from "../monaco_options";
-import { X, Check, AlertCircle, ExternalLink, Pin, FileCode, Sparkles, Activity } from "lucide-react";
+import { X, Check, AlertCircle, ExternalLink, Pin, FileCode, Sparkles, Activity, ClipboardPlus } from "lucide-react";
 import { bridge, type ExtensionMessage, type ThreadRunResult, type ThreadSynthProposal, type ThreadDataProposal, type EffectOffense } from "../types";
 import { runDate } from "../../shared/observations";
 import { defineVibegraphDark, VIBEGRAPH_DARK } from "../themes/vibegraph-dark";
@@ -81,6 +81,9 @@ export interface ThreadNodeTooltipProps {
   // terminal is not `file` (null: there is nothing to open) but is still
   // where the call is written. Decides the language for the Observe gate.
   ownerFile?: string | null;
+  /** 2026-09-29 — the thread this node was seen on, for the investigation
+   *  board's pin (the handoff says which thread each pin came from). */
+  entryPointId?: string | null;
   // M-RUN3 — structural runnability (ThreadView computes via planRunToNode):
   // the run-to-here button only renders when the node can actually produce a
   // value. Absent (older callers/tests) → keep the legacy always-offer.
@@ -625,6 +628,30 @@ export function ThreadNodeTooltip(props: ThreadNodeTooltipProps) {
             <FileCode size={13} strokeWidth={1.75} />
           </button>
         )}
+        {irNodeId && (file ?? ownerFile) && (
+          <button
+            data-investigate-pin
+            onClick={() => {
+              document.dispatchEvent(new CustomEvent("vg-investigation-pin", {
+                detail: { file: file ?? ownerFile, irNodeId, label, kind, entryPointId: props.entryPointId ?? null },
+              }));
+            }}
+            title="Add to the investigation board — collect nodes from several threads, note what you found, hand it to an agent"
+            aria-label="Add to investigation"
+            style={{
+              background: "transparent",
+              border: "1px solid var(--border-edge)",
+              borderRadius: 4,
+              color: "var(--text-secondary)",
+              padding: "3px 6px",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+            }}
+          >
+            <ClipboardPlus size={13} strokeWidth={1.75} />
+          </button>
+        )}
         <button
           onClick={onPin}
           title={pinned ? "Pinned (click to unpin)" : "Pin tooltip"}
@@ -719,13 +746,15 @@ export function ThreadNodeTooltip(props: ThreadNodeTooltipProps) {
               ? `Runs a script: ${crossing.path}`
               : crossing.kind === "tool"
                 ? `Calls a tool: ${crossing.path}`
-                : `Leaves this language: ${crossing.method ?? "?"} ${crossing.path}`}
+                : crossing.kind === "navigation"
+                  ? `Navigates to: ${crossing.path}`
+                  : `Leaves this language: ${crossing.method ?? "?"} ${crossing.path}`}
             {crossing.methodAssumed ? " (method assumed)" : ""}
             {crossing.confidence === "ambiguous" ? " - AMBIGUOUS, nothing here separates these" : ""}
           </div>
           {crossing.targets.length === 0 ? (
             <div style={{ fontSize: 11, color: "var(--accent-warning)", fontFamily: "var(--font-mono)" }}>
-              {crossing.kind === "command" ? "No parsed file is that script." : crossing.kind === "tool" ? "No tool is registered under that name here." : "No route in this project serves that path."}
+              {crossing.kind === "command" ? "No parsed file is that script." : crossing.kind === "tool" ? "No tool is registered under that name here." : crossing.kind === "navigation" ? "No page in this project serves that path." : "No route in this project serves that path."}
             </div>
           ) : (
             crossing.targets.map((t) => (

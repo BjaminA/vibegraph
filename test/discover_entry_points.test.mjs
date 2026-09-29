@@ -102,6 +102,20 @@ test("public_api: cross-file callees only (db._get_conn excluded)", () => {
   }
 });
 
+test("public_api dedup is keyed by FILE and id: a cli `main` in one file does not hide another file's `main`", () => {
+  // Node ids are structural paths, so `module/main.fn` exists in many files.
+  // The seeded set was keyed by the bare id, so cli.py's `main` hid a
+  // cross-file-called `main` in db.py (found 2026-09-29).
+  const files = JSON.parse(readFileSync(FLASK_IR, "utf-8"));
+  files["db.py"].nodes.push({ id: "module/main.fn", type: "function_def", parentId: null, line: 900, endLine: 901, col: 0, endCol: 1, name: "main", params: [], decorators: [], isAsync: false });
+  files["app.py"].edges.push({ source: "module/list_users_route.fn", target: "module/main.fn", type: "reference", targetFile: "db.py", qualifiedTarget: "db:main" });
+  const r = spawnSync("python3", [DISCOVER], { env: { ...process.env, PYTHONPATH: PYDEPS }, encoding: "utf-8", cwd: ROOT, input: JSON.stringify({ files }) });
+  assert.equal(r.status, 0, r.stderr);
+  const entries = JSON.parse(r.stdout).entryPoints;
+  assert.ok(entries.some((e) => e.kind === "cli" && e.file === "cli.py" && e.irNodeId === "module/main.fn"), "cli.py:main is still the cli entry");
+  assert.ok(entries.some((e) => e.kind === "public_api" && e.file === "db.py" && e.irNodeId === "module/main.fn"), "db.py:main is its own public_api entry");
+});
+
 test("precedence dedup: route handlers do NOT also appear as public_api", () => {
   const entries = discover();
   const apis = new Set(entries.filter((e) => e.kind === "public_api").map((e) => e.qualifiedName));

@@ -18,7 +18,7 @@
 // script sources, not an entry. A real codebase's whole invoked layer
 // (77 .sh backend scripts run by a platform command) was dark for this.
 
-function discover(files) {
+export function discover(files) {
   const entryPoints = [];
   for (const [rel, ir] of Object.entries(files)) {
     if (ir.language !== "bash") continue;
@@ -61,8 +61,13 @@ function discover(files) {
   return entryPoints;
 }
 
-let raw = "";
-process.stdin.setEncoding("utf-8");
-for await (const chunk of process.stdin) raw += chunk;
-const { files } = JSON.parse(raw);
-process.stdout.write(JSON.stringify({ entryPoints: discover(files ?? {}) }));
+// Main guard by this file's NAME (never import.meta.url === argv[1]: inside
+// the packaged bundle both are the bundle, and the pipeline now imports
+// `discover` in-process — regen_polyglot.mjs, 2026-09-29).
+if (process.argv[1] && /discover_bash\.mjs$/.test(process.argv[1])) {
+  let raw = "";
+  process.stdin.setEncoding("utf-8");
+  for await (const chunk of process.stdin) raw += chunk;
+  const { files } = JSON.parse(raw);
+  process.stdout.write(JSON.stringify({ entryPoints: discover(files ?? {}) }));
+}

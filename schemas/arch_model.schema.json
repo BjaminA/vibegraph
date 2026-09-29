@@ -169,7 +169,8 @@
         "model",
         "cloud",
         "external",
-        "unknown"
+        "unknown",
+        "config"
       ]
     },
     "Ref": {

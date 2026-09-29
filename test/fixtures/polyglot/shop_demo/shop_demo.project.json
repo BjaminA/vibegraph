@@ -160,7 +160,13 @@
             "\"/orders\"",
             "[\"POST\"]"
           ],
-          "isEffect": false
+          "isEffect": false,
+          "argKeys": [
+            [],
+            [
+              "methods"
+            ]
+          ]
         },
         {
           "id": "module/create_order.fn",
@@ -267,7 +273,18 @@
             "2"
           ],
           "isEffect": false,
-          "effectKind": "http"
+          "effectKind": "http",
+          "argKeys": [
+            [],
+            [
+              "json",
+              "json.order_id",
+              "json.sku"
+            ],
+            [
+              "timeout"
+            ]
+          ]
         },
         {
           "id": "module/create_order.fn/return@0",
@@ -293,7 +310,13 @@
           "args": [
             "{\"id\": order_id, \"total\": priced[\"total\"]}"
           ],
-          "isEffect": false
+          "isEffect": false,
+          "argKeys": [
+            [
+              "id",
+              "total"
+            ]
+          ]
         }
       ],
       "edges": [
@@ -519,6 +542,11 @@
               "name": "description",
               "value": "\"export orders\""
             }
+          ],
+          "argKeys": [
+            [
+              "description"
+            ]
           ]
         },
         {
@@ -535,7 +563,16 @@
             "int",
             "10"
           ],
-          "isEffect": false
+          "isEffect": false,
+          "argKeys": [
+            [],
+            [
+              "type"
+            ],
+            [
+              "default"
+            ]
+          ]
         },
         {
           "id": "module/main.fn/args.assign",
@@ -899,7 +936,18 @@
             "r[1]",
             "r[2]"
           ],
-          "isEffect": false
+          "isEffect": false,
+          "argKeys": [
+            [
+              "id"
+            ],
+            [
+              "customer"
+            ],
+            [
+              "total"
+            ]
+          ]
         },
         {
           "id": "module/insert_order.fn",
@@ -1409,6 +1457,15 @@
               "name": "text",
               "value": "True"
             }
+          ],
+          "argKeys": [
+            [],
+            [
+              "capture_output"
+            ],
+            [
+              "text"
+            ]
           ],
           "nestsInnerCalls": true,
           "nestExtracted": true
@@ -2060,7 +2117,14 @@
           "source": "async function postOrder(input: OrderInput): Promise<OrderSummary> {\n  const res = await fetch(`${API_BASE}/orders`, {\n    method: \"POST\",\n    headers: { \"content-type\": \"application/json\" },\n    body: JSON.stringify(input),\n  });\n  if (!res.ok) {\n    throw new Error(`api rejected order: ${res.status}`);\n  }\n  return res.json();\n}"
         }
       ],
-      "modulePath": "gateway/client.ts"
+      "modulePath": "gateway/client.ts",
+      "envReads": [
+        {
+          "name": "SHOP_API",
+          "line": 4,
+          "form": "member"
+        }
+      ]
     },
     "gateway/schema.ts": {
       "language": "jsts",
@@ -3226,7 +3290,24 @@
         }
       ],
       "modulePath": "ops/deploy.sh",
-      "shebang": "#!/usr/bin/env bash"
+      "shebang": "#!/usr/bin/env bash",
+      "envReads": [
+        {
+          "name": "DB_HOST",
+          "line": 16,
+          "form": "inherited"
+        },
+        {
+          "name": "API_HOST",
+          "line": 20,
+          "form": "inherited"
+        },
+        {
+          "name": "GATEWAY_HOST",
+          "line": 20,
+          "form": "inherited"
+        }
+      ]
     },
     "ops/lib/env.sh": {
       "language": "bash",
@@ -3368,7 +3449,24 @@
           "source": "log_step() {\n  echo \"[deploy] $1\"\n  logger -t shop-deploy \"$1\"\n}"
         }
       ],
-      "modulePath": "ops/lib/env.sh"
+      "modulePath": "ops/lib/env.sh",
+      "envReads": [
+        {
+          "name": "DB_HOST",
+          "line": 10,
+          "form": "inherited"
+        },
+        {
+          "name": "API_HOST",
+          "line": 11,
+          "form": "inherited"
+        },
+        {
+          "name": "GATEWAY_HOST",
+          "line": 12,
+          "form": "inherited"
+        }
+      ]
     },
     "worker/main.cpp": {
       "language": "cpp",

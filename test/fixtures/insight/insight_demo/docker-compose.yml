@@ -1,0 +1,8 @@
+# insight_demo declares API_KEY only; REGION is read by app.py and declared
+# nowhere, so the GUI marks it amber.
+services:
+  app:
+    image: python:3.12-slim
+    command: python app.py
+    environment:
+      - API_KEY=${API_KEY}

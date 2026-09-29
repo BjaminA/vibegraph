@@ -1,0 +1,5 @@
+{
+  "seeds": [
+    { "file": "charity.py", "irNodeId": "module/fetch_details.fn" }
+  ]
+}

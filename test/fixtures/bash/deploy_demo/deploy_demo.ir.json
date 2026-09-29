@@ -764,7 +764,19 @@
       }
     ],
     "modulePath": "deploy.sh",
-    "shebang": "#!/usr/bin/env bash"
+    "shebang": "#!/usr/bin/env bash",
+    "envReads": [
+      {
+        "name": "DEPLOY_HOOK",
+        "line": 56,
+        "form": "inherited"
+      },
+      {
+        "name": "POST_DEPLOY",
+        "line": 58,
+        "form": "inherited"
+      }
+    ]
   },
   "lib/common.sh": {
     "version": "2.0",

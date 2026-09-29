@@ -113,6 +113,17 @@ function refusalText(what: string, message?: string, errorKind?: string): string
 }
 
 function registerTools(server: McpServer, ctx: VibegraphMcpContext): void {
+  // 2026-09-29 — the post-edit hook, in-band: what an edit introduced against
+  // the stated rules rides its own result (src/server/edit_check.ts). A
+  // failing check never fails the edit — it already happened.
+  const editCheckTail = async (before: unknown[]): Promise<string> => {
+    try {
+      const t = await ctx.editCheckText(before);
+      return t ? `\n\n${t}` : "";
+    } catch {
+      return "";
+    }
+  };
   server.registerTool(
     "vibegraph_list_files",
     {
@@ -258,6 +269,7 @@ function registerTools(server: McpServer, ctx: VibegraphMcpContext): void {
       },
     },
     async ({ nodeId, op, payload, filePath }) => {
+      const before = ctx.checkSnapshot();
       const r = await ctx.rewriteNode({ nodeId, op, payload: payload ?? {}, filePath });
       if (!r.success) {
         return {
@@ -268,7 +280,7 @@ function registerTools(server: McpServer, ctx: VibegraphMcpContext): void {
       // B3 — the structural IR delta rides the edit response so the agent can
       // self-verify the change moved what it intended.
       const delta = r.delta ? `\nStructural delta: ${JSON.stringify(r.delta.summary)}\n${JSON.stringify(r.delta, null, 2)}` : "";
-      return { content: [{ type: "text", text: `Rewrote ${nodeId} (${op})${delta}` }] };
+      return { content: [{ type: "text", text: `Rewrote ${nodeId} (${op})${delta}${await editCheckTail(before)}` }] };
     },
   );
 
@@ -289,6 +301,7 @@ function registerTools(server: McpServer, ctx: VibegraphMcpContext): void {
       },
     },
     async (args) => {
+      const before = ctx.checkSnapshot();
       const r = await ctx.composeInsert(args);
       if (!r.success) {
         return {
@@ -297,7 +310,7 @@ function registerTools(server: McpServer, ctx: VibegraphMcpContext): void {
         };
       }
       const delta = r.delta ? `\nStructural delta: ${JSON.stringify(r.delta.summary)}\n${JSON.stringify(r.delta, null, 2)}` : "";
-      return { content: [{ type: "text", text: `Inserted (mode=${args.mode})${delta}` }] };
+      return { content: [{ type: "text", text: `Inserted (mode=${args.mode})${delta}${await editCheckTail(before)}` }] };
     },
   );
 
@@ -318,9 +331,10 @@ function registerTools(server: McpServer, ctx: VibegraphMcpContext): void {
       },
     },
     async ({ path, source }) => {
+      const before = ctx.checkSnapshot();
       const r = await ctx.createFile(path, source);
       if (!r.ok) return { content: [{ type: "text", text: `Create-file refused: ${r.message}` }], isError: true };
-      return { content: [{ type: "text", text: r.message }] };
+      return { content: [{ type: "text", text: `${r.message}${await editCheckTail(before)}` }] };
     },
   );
 
@@ -744,11 +758,14 @@ function registerTools(server: McpServer, ctx: VibegraphMcpContext): void {
           z.object({ rule: z.literal("callers-only"), target: z.string(), files: z.array(z.string()).optional(), functions: z.array(z.string()).optional() }),
           z.object({ rule: z.literal("import-only"), tool: z.string(), files: z.array(z.string()) }),
           z.object({ rule: z.literal("calls-through"), target: z.string(), through: z.string() }),
+          z.object({ rule: z.literal("payload-keys"), target: z.string(), require: z.array(z.string()).optional(), forbid: z.array(z.string()).optional() }),
         ]).optional().describe(
           "M-GRAMMAR — the CHECKABLE half, when the rule is one the IR can settle: "
           + "callers-only (every caller of `target` is in these files/functions), "
           + "import-only (only these files may import `tool`), "
-          + "calls-through (every call to `target` goes through `through`). "
+          + "calls-through (every call to `target` goes through `through`), "
+          + "payload-keys (every call to `target` passes the `require` key paths and none of the `forbid` ones — "
+          + "`key` or `key.inner`, read from the literal arguments; use it for a payload-schema rule). "
           + "`text` stays the human sentence; this is what the deterministic pre-checks EVALUATE, "
           + "so the rule stops being prose a reviewer reads and agrees with. "
           + "A constraint the IR cannot settle comes back `unverifiable` and goes to the model — never a silent pass.",
@@ -844,6 +861,68 @@ function registerTools(server: McpServer, ctx: VibegraphMcpContext): void {
       const r = ctx.architecture();
       if (!r.model) return { content: [{ type: "text", text: `Architecture unavailable: ${r.error ?? "no model"}` }], isError: true };
       return { content: [{ type: "text", text: JSON.stringify(r.model, null, 2) }] };
+    },
+  );
+
+  server.registerTool(
+    "vibegraph_coverage",
+    {
+      description:
+        "Before trusting what VibeGraph says about some files, or before claiming anything in them is unused, " +
+        "untested or unconfigured, ask this. Per file: whether it was parsed fully, partially (constructs dropped), " +
+        "failed, or never read; the threads and discovered tests that reach it; how many of its functions are on a " +
+        "thread and WHY the rest are not (only never-named / exported-never-named suggest dead code); the " +
+        "environment variables it reads; whether it changed since the knowledge export; and one recommended action. " +
+        "Best-effort: nothing recorded against a file is not proof it is fully understood. Read-only.",
+      inputSchema: {
+        paths: z.array(z.string()).min(1).max(50).describe("Project-relative (or absolute) file paths."),
+      },
+    },
+    async ({ paths }) => {
+      const r = ctx.coverage(paths);
+      if (!r.rows) return { content: [{ type: "text", text: `Coverage unavailable: ${r.error ?? "unknown"}` }], isError: true };
+      return { content: [{ type: "text", text: JSON.stringify(r.rows, null, 2) }] };
+    },
+  );
+
+  server.registerTool(
+    "vibegraph_thread_brief",
+    {
+      description:
+        "ONE call for a thread: its contract (IR fact — what enters and leaves, every call that leaves the project " +
+        "and the tool it goes through, round trips in loops, neighbouring threads, tests, environment, where static " +
+        "knowledge ends) followed by the VERBATIM source of its PRIMARY functions only — the seed and the steps on " +
+        "the path to what leaves the project, ranked as the thread view ranks them, each function once, in walk " +
+        "order, under a character budget. Secondary and tertiary code (local data work, logging, pure helpers) is " +
+        "not shown; anything over budget is named, to fetch with vibegraph_get_node_source. Use it instead of " +
+        "reading a thread's files one by one. Read-only.",
+      inputSchema: {
+        entryPointId: z.string().describe("The thread's entry-point id (e.g. api/app.py:create_order)."),
+        maxChars: z.number().int().min(2000).max(60000).optional().describe("Budget for the whole answer (default 16000)."),
+      },
+    },
+    async ({ entryPointId, maxChars }) => {
+      const r = ctx.threadBrief(entryPointId, maxChars);
+      if (!r.brief) return { content: [{ type: "text", text: `Thread brief unavailable: ${r.error ?? "unknown"}` }], isError: true };
+      return { content: [{ type: "text", text: r.brief.text }] };
+    },
+  );
+
+  server.registerTool(
+    "vibegraph_investigation",
+    {
+      description:
+        "Read an INVESTIGATION a person saved on the board (.vibegraph/investigations/<name>.json): their question, the " +
+        "nodes they pinned across threads, their note on each, and each pin's code read from disk now. The notes are the " +
+        "person's reading, not verified fact. Omit `name` to list the saved investigations. Read-only.",
+      inputSchema: {
+        name: z.string().regex(/^[a-z0-9][a-z0-9_-]{0,63}$/).optional().describe("The investigation's name; omit to list them."),
+      },
+    },
+    async ({ name }) => {
+      const r = ctx.investigation(name ?? null);
+      if (r.error) return { content: [{ type: "text", text: r.error }], isError: true };
+      return { content: [{ type: "text", text: r.text }] };
     },
   );
 

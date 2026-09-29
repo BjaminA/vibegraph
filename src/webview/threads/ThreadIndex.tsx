@@ -14,208 +14,14 @@
 // right-click a function (manual seed UX is M8.3.3).
 
 import React, { useEffect, useState } from "react";
-import {
-  Globe,
-  Terminal,
-  FlaskConical,
-  Code2,
-  Pin,
-  Network,
-  ChevronRight,
-  BookDashed,
-  BookText,
-  Loader2,
-} from "lucide-react";
+import { Pin, ChevronRight, ChevronDown, ListTree, List, BookDashed, BookText, Loader2 } from "lucide-react";
 import { bridge, type EntryPoint, type ProjectThread, type ThreadSkillRecord, type ExtensionMessage } from "../types";
-import { skillStateOf, type SkillBadgeState } from "./SkillBadge";
+import { skillStateOf } from "./SkillBadge";
+import { nestThreads, type NestedRow } from "./threadNesting";
+import { deriveThreadCalls } from "../system/threadInteraction";
+import { IndexRow, GroupHeader, filesReachedFor } from "./ThreadIndexRow";
 
-// M-SKILL.3 — launchpad skill-coverage dot: one glance answers "which
-// threads have ratified guidance". Same three state colours as the badge.
-const DOT_COLOUR: Record<SkillBadgeState, string> = {
-  none: "var(--border-edge)",
-  draft: "var(--proposed-border)",
-  ratified: "var(--accent-thread)",
-  stale: "var(--accent-warning)",
-};
-const DOT_TITLE: Record<SkillBadgeState, string> = {
-  none: "No thread skill",
-  draft: "Thread skill drafted — awaiting ratification",
-  ratified: "Thread skill ratified",
-  stale: "Thread skill stale — re-draft to refresh",
-};
-
-const KIND_ICON: Record<EntryPoint["kind"], React.ComponentType<any>> = {
-  route: Globe,
-  model: Network,
-  cli: Terminal,
-  test: FlaskConical,
-  public_api: Code2,
-  manual: Pin,
-};
-
-const KIND_LABEL: Record<EntryPoint["kind"], string> = {
-  route: "Route",
-  model: "Model",
-  cli: "CLI",
-  test: "Test",
-  public_api: "Public API",
-  manual: "Manual",
-};
-
-function filesReachedFor(threads: ProjectThread[], entryPointId: string): number {
-  const t = threads.find((t) => t.entryPointId === entryPointId);
-  return t?.filesReached?.length ?? 0;
-}
-
-function frameworkChip(framework: string | null | undefined): string | null {
-  if (!framework) return null;
-  // Capitalise — Inter 11px reads better with sentence-cased framework
-  // names than lowercase.
-  return framework[0].toUpperCase() + framework.slice(1);
-}
-
-interface RowProps {
-  entry: EntryPoint;
-  filesReached: number;
-  skillState: SkillBadgeState;
-  onSelect: (entry: EntryPoint) => void;
-}
-
-function IndexRow({ entry, filesReached, skillState, onSelect }: RowProps) {
-  const Icon = KIND_ICON[entry.kind];
-  const fw = frameworkChip(entry.framework);
-  return (
-    <button
-      type="button"
-      data-thread-index-row
-      data-entry-id={entry.id}
-      data-entry-kind={entry.kind}
-      onClick={() => onSelect(entry)}
-      style={{
-        display: "grid",
-        gridTemplateColumns: "20px 1fr auto auto auto auto",
-        alignItems: "center",
-        gap: 12,
-        width: "100%",
-        padding: "12px 16px",
-        background: "transparent",
-        border: "1px solid transparent",
-        borderRadius: 8,
-        cursor: "pointer",
-        textAlign: "left",
-        color: "var(--text-primary)",
-        transition: "background-color var(--motion-hover-dur, 120ms) var(--easing-standard, cubic-bezier(0.2,0,0,1)), border-color 120ms",
-      }}
-      onMouseEnter={(e) => {
-        e.currentTarget.style.background = "var(--bg-node-hover)";
-        e.currentTarget.style.borderColor = "var(--border-edge)";
-      }}
-      onMouseLeave={(e) => {
-        e.currentTarget.style.background = "transparent";
-        e.currentTarget.style.borderColor = "transparent";
-      }}
-    >
-      <Icon size={20} strokeWidth={1.5} />
-      <div style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
-        <div style={{
-          fontFamily: "var(--font-mono)",
-          fontSize: "var(--fs-13)",
-          color: "var(--text-primary)",
-          overflow: "hidden",
-          textOverflow: "ellipsis",
-          whiteSpace: "nowrap",
-        }}>
-          {entry.qualifiedName}
-        </div>
-        {/* M-FS6 — the row a user picks a route BY shows the route:
-            "POST /expenses", not just the handler's function name. The
-            IR has carried this metadata since M8.2; only the thread
-            seed's badge surfaced it. */}
-        {entry.kind === "route" && typeof entry.metadata?.route === "string" && (
-          <div
-            data-entry-route
-            style={{
-              fontFamily: "var(--font-mono)",
-              fontSize: "var(--fs-12)",
-              color: "var(--text-secondary)",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
-            }}
-          >
-            {typeof entry.metadata?.method === "string" ? `${entry.metadata.method} ` : ""}
-            {entry.metadata.route}
-          </div>
-        )}
-        {entry.summary && (
-          <div style={{
-            fontSize: "var(--fs-12)",
-            color: "var(--text-secondary)",
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
-          }}>
-            {entry.summary}
-          </div>
-        )}
-      </div>
-      {fw && (
-        <span style={{
-          fontSize: "var(--fs-11)",
-          color: "var(--text-muted)",
-          padding: "2px 6px",
-          border: "1px solid var(--border-edge)",
-          borderRadius: 4,
-          whiteSpace: "nowrap",
-        }}>
-          {fw}
-        </span>
-      )}
-      <span style={{
-        fontSize: "var(--fs-11)",
-        color: "var(--text-muted)",
-        whiteSpace: "nowrap",
-      }}>
-        {filesReached === 0 ? "—" : `${filesReached} file${filesReached === 1 ? "" : "s"}`}
-      </span>
-      <span
-        data-skill-state={skillState}
-        title={DOT_TITLE[skillState]}
-        style={{
-          width: 8,
-          height: 8,
-          borderRadius: "50%",
-          background: DOT_COLOUR[skillState],
-          justifySelf: "center",
-        }}
-      />
-      <ChevronRight size={16} strokeWidth={1.5} color="var(--text-muted)" />
-    </button>
-  );
-}
-
-interface GroupHeaderProps {
-  kind: EntryPoint["kind"];
-  count: number;
-}
-
-function GroupHeader({ kind, count }: GroupHeaderProps) {
-  return (
-    <div style={{
-      display: "flex",
-      alignItems: "center",
-      gap: 8,
-      padding: "16px 16px 8px",
-      fontSize: "var(--fs-11)",
-      color: "var(--text-muted)",
-      textTransform: "uppercase",
-      letterSpacing: "0.06em",
-    }}>
-      <span>{KIND_LABEL[kind]}</span>
-      <span style={{ opacity: 0.6 }}>{count}</span>
-    </div>
-  );
-}
+const LAYOUT_KEY = "vg-thread-index-layout";
 
 export interface ThreadIndexProps {
   entryPoints: EntryPoint[];
@@ -237,6 +43,52 @@ export function ThreadIndex({ entryPoints, threads, threadSkills, onSelectEntry,
       .map((k) => ({ kind: k, items: entryPoints.filter((e) => e.kind === k) }))
       .filter((g) => g.items.length > 0);
   }, [entryPoints]);
+
+  // Thread hierarchy (2026-09-29): nested by default — a thread sits under
+  // the thread whose walk reaches its head — and the flat list one toggle
+  // away. Every thread still appears exactly once either way.
+  const [layout, setLayout] = useState<"nested" | "flat">(() => {
+    try { return localStorage.getItem(LAYOUT_KEY) === "flat" ? "flat" : "nested"; } catch { return "nested"; }
+  });
+  const chooseLayout = (l: "nested" | "flat") => {
+    setLayout(l);
+    try { localStorage.setItem(LAYOUT_KEY, l); } catch { /* per-viewer convenience only */ }
+  };
+  const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
+  const epById = React.useMemo(() => new Map(entryPoints.map((e) => [e.id, e])), [entryPoints]);
+  const nesting = React.useMemo(() => {
+    const order = grouped.flatMap((g) => g.items.map((e) => e.id));
+    const edges = deriveThreadCalls(threads, entryPoints).edges;
+    return nestThreads(order, edges);
+  }, [grouped, threads, entryPoints]);
+  const hasNesting = nesting.some((r) => r.depth > 0);
+  const nestedGroups = React.useMemo(() => {
+    if (layout === "flat" || !hasNesting) {
+      return grouped.map((g) => ({ kind: g.kind, rows: g.items.map((e) => ({ id: e.id, depth: 0, parent: null, callers: [], childCount: 0 } as NestedRow)) }));
+    }
+    const out: Array<{ kind: EntryPoint["kind"]; rows: NestedRow[] }> = [];
+    for (const row of nesting) {
+      const kind = row.depth === 0 ? epById.get(row.id)!.kind : out[out.length - 1].kind;
+      if (row.depth === 0 && out[out.length - 1]?.kind !== kind) out.push({ kind, rows: [] });
+      out[out.length - 1].rows.push(row);
+    }
+    return out;
+  }, [layout, hasNesting, grouped, nesting, epById]);
+  const parentOf = React.useMemo(() => new Map(nesting.map((r) => [r.id, r.parent])), [nesting]);
+  // A row is hidden when any ancestor it is placed under is folded.
+  const hiddenBy = (id: string): boolean => {
+    if (layout === "flat") return false;
+    for (let p = parentOf.get(id); p; p = parentOf.get(p)) if (collapsed.has(p)) return true;
+    return false;
+  };
+  const nameOf = (id: string) => epById.get(id)?.qualifiedName ?? id;
+  const nestNote = (row: NestedRow): string | null => {
+    if (row.parent) {
+      const more = row.callers.length - 1;
+      return `sub-thread of ${nameOf(row.parent)}${more > 0 ? ` · also called from ${more} other thread${more === 1 ? "" : "s"}` : ""}`;
+    }
+    return row.callers.length ? `called from ${row.callers.length} thread${row.callers.length === 1 ? "" : "s"} in a cycle` : null;
+  };
 
   // M-SKILL.4 — coverage sweep progress (local: this launchpad started it).
   const [sweep, setSweep] = useState<
@@ -387,22 +239,74 @@ export function ThreadIndex({ entryPoints, threads, threadSkills, onSelectEntry,
                   {sweep.line}
                 </span>
               )}
+              {hasNesting && (
+                <button
+                  data-thread-index-layout={layout}
+                  onClick={() => chooseLayout(layout === "nested" ? "flat" : "nested")}
+                  title={layout === "nested"
+                    ? "Threads sit under the thread whose walk reaches them — show every thread as one flat list"
+                    : "Show sub-threads under the threads that call them"}
+                  style={{
+                    display: "flex", alignItems: "center", gap: 6, marginLeft: "auto",
+                    background: "none", border: "1px solid var(--border-edge)", borderRadius: 6,
+                    padding: "4px 12px", cursor: "pointer",
+                    color: "var(--text-secondary)", fontFamily: "var(--font-ui)", fontSize: "var(--fs-12)",
+                  }}
+                >
+                  {layout === "nested" ? <List size={14} strokeWidth={1.5} /> : <ListTree size={14} strokeWidth={1.5} />}
+                  {layout === "nested" ? "Flat list" : "Nest sub-threads"}
+                </button>
+              )}
             </>
           )}
         </div>
-        {grouped.map((g) => (
+        {nestedGroups.map((g) => (
           <div key={g.kind}>
-            <GroupHeader kind={g.kind} count={g.items.length} />
+            <GroupHeader kind={g.kind} count={g.rows.length} />
             <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-              {g.items.map((entry) => (
-                <IndexRow
-                  key={entry.id}
-                  entry={entry}
-                  filesReached={filesReachedFor(threads, entry.id)}
-                  skillState={skillStateOf(threadSkills?.[entry.id])}
-                  onSelect={onSelectEntry}
-                />
-              ))}
+              {g.rows.map((row) => {
+                if (hiddenBy(row.id)) return null;
+                const entry = epById.get(row.id)!;
+                return (
+                  <div
+                    key={row.id}
+                    data-thread-index-item
+                    data-depth={row.depth}
+                    style={{ display: "flex", alignItems: "center", gap: 4, marginLeft: Math.min(row.depth, 4) * 24 }}
+                  >
+                    {layout === "nested" && (
+                      row.childCount > 0 ? (
+                        <button
+                          type="button"
+                          data-thread-index-fold={row.id}
+                          aria-expanded={!collapsed.has(row.id)}
+                          title={`${row.childCount} sub-thread${row.childCount === 1 ? "" : "s"} — the threads this one's walk passes through`}
+                          onClick={() => setCollapsed((s) => {
+                            const n = new Set(s);
+                            if (n.has(row.id)) n.delete(row.id); else n.add(row.id);
+                            return n;
+                          })}
+                          style={{ display: "flex", alignItems: "center", gap: 2, background: "none", border: "none", padding: 4, cursor: "pointer", color: "var(--text-muted)", fontSize: "var(--fs-11)", width: 32 }}
+                        >
+                          {collapsed.has(row.id)
+                            ? <ChevronRight size={16} strokeWidth={1.5} />
+                            : <ChevronDown size={16} strokeWidth={1.5} />}
+                          {row.childCount}
+                        </button>
+                      ) : <span style={{ width: 32, flex: "none" }} />
+                    )}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <IndexRow
+                        entry={entry}
+                        filesReached={filesReachedFor(threads, entry.id)}
+                        skillState={skillStateOf(threadSkills?.[entry.id])}
+                        onSelect={onSelectEntry}
+                        note={layout === "nested" ? nestNote(row) : null}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         ))}

@@ -18,9 +18,15 @@
 // non-IR input and wait for a deliberate decision; cross-file handler
 // identifiers don't resolve here.
 
+import { resolveSpecifier } from "./link_jsts.mjs";
+
 const ROUTE_RE = /^[A-Za-z_$][\w$]*\.(get|post|put|delete|patch|all)$/;
-const TEST_FILE_RE = /\.(test|spec)\.[jt]sx?$/;
+// .mjs / .cjs too (2026-09-29): node:test suites are plain ES modules.
+const TEST_FILE_RE = /\.(test|spec)\.[cm]?[jt]sx?$/;
 const TEST_CALLEES = new Set(["test", "it"]);
+// A suite call at module level: describe / it / test, with .each / .only /
+// .skip / .concurrent / .todo spelled on it.
+const SUITE_CALL = /^(describe|it|test|suite)(\.(each|only|skip|concurrent|todo|sequential))*$/;
 
 // M-FLOW.3 — the MCP SDK is imported by SUBPATH (`…/sdk/server/mcp.js`), so
 // the framework is read from the package prefix, not an exact specifier.
@@ -162,7 +168,7 @@ function scriptEntryPoint(rel, ir, nodes, topLevelFns) {
   };
 }
 
-function discover(files) {
+export function discover(files) {
   const entryPoints = [];
   for (const [rel, ir] of Object.entries(files)) {
     if (ir.language !== "jsts") continue;
@@ -172,6 +178,7 @@ function discover(files) {
         .map((n) => [n.name, n]),
     );
     const isTestFile = TEST_FILE_RE.test(rel);
+    let namedTests = 0;
 
     // M-CMD.1 — the App Router's files are named for their role, so this is
     // decided by path + export name, not by a call the file makes.
@@ -233,6 +240,7 @@ function discover(files) {
         const cbName = (n.args?.[1] ?? "").trim();
         const fn = fns.get(cbName);
         if (!fn) continue;
+        namedTests++;
         const title = (n.args?.[0] ?? "").replace(/^["'`]|["'`]$/g, "");
         entryPoints.push({
           id: `${rel}:${fn.name}`,
@@ -246,12 +254,57 @@ function discover(files) {
         });
       }
     }
+
+    // 2026-09-29 — a test file whose suites are INLINE arrows (nearly all of
+    // them: a private production codebase's 95 test files gave 0 test entries) is seeded on its
+    // MODULE, the M-FLOW.1 module seed. The builder flattens inline
+    // callbacks into the module scope, so walking the module walks every
+    // describe / it / beforeEach body — one entry per file, not per test.
+    if (isTestFile && namedTests === 0) {
+      const suites = nodes.filter((n) => n.type === "call" && n.parentId === null && SUITE_CALL.test(n.funcName ?? ""));
+      if (suites.length) {
+        const mocks = mockedModules(ir, rel, files);
+        const titles = suites.map((n) => (n.args?.[0] ?? "").replace(/^["'`]|["'`]$/g, "")).filter(Boolean);
+        entryPoints.push({
+          id: `${rel}:module`,
+          kind: "test",
+          file: rel,
+          irNodeId: "module",
+          qualifiedName: `${ir.modulePath ?? rel}:module`,
+          label: rel.split("/").pop(),
+          summary: titles.length ? `tests: ${titles.slice(0, 3).join("; ")}${titles.length > 3 ? ` (+${titles.length - 3})` : ""}` : "test suite",
+          framework: frameworkFromImports(ir, ["test", "vitest", "jest", "mocha"]),
+          metadata: { seed: "module", suites: suites.length, ...(mocks.length ? { mocks } : {}) },
+        });
+      }
+    }
   }
   return entryPoints;
 }
 
-let raw = "";
-process.stdin.setEncoding("utf-8");
-for await (const chunk of process.stdin) raw += chunk;
-const { files } = JSON.parse(raw);
-process.stdout.write(JSON.stringify({ entryPoints: discover(files ?? {}) }));
+/** The files a test replaces with a mock (`vi.mock` / `jest.mock` /
+ *  `mock.module`) — resolved by the parser into `aliasTarget` when it can,
+ *  else the specifier as written. A reach through one of these is the
+ *  mock's, not the real code's (src/shared/test_reach.ts). */
+export function mockedModules(ir, rel = null, files = null) {
+  const out = [];
+  for (const n of ir.nodes ?? []) {
+    if (n.type !== "call" || !/^(vi|jest)\.(mock|doMock)$|^mock\.module$/.test(n.funcName ?? "")) continue;
+    const spec = (n.args?.[0] ?? "").trim().replace(/^["'`]|["'`]$/g, "");
+    const file = rel && files ? resolveSpecifier(rel, spec, files, n.aliasTarget) : null;
+    const key = file ?? n.aliasTarget ?? spec;
+    if (key && !out.includes(key)) out.push(key);
+  }
+  return out;
+}
+
+// Main guard by this file's NAME (never import.meta.url === argv[1]: inside
+// the packaged bundle both are the bundle, and the pipeline now imports
+// `discover` in-process — regen_polyglot.mjs, 2026-09-29).
+if (process.argv[1] && /discover_jsts\.mjs$/.test(process.argv[1])) {
+  let raw = "";
+  process.stdin.setEncoding("utf-8");
+  for await (const chunk of process.stdin) raw += chunk;
+  const { files } = JSON.parse(raw);
+  process.stdout.write(JSON.stringify({ entryPoints: discover(files ?? {}) }));
+}

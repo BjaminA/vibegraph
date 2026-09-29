@@ -70,6 +70,8 @@ The **lens bar** changes what is drawn, never what is true:
 | **Flows** | processes only, and the hops between them (HTTP, command, MCP tool) |
 | **Payloads** | each edge labelled with what crosses it — the keys the code spells |
 | **Trust** | only the edges that cross a deployment or trust boundary you stated |
+| **Configuration** | which process reads which environment variables |
+| **Journeys** | which page sends the user to which page: `<Link href>`, `router.push` and `redirect` literals joined to the page that serves the path (Next.js App Router) |
 
 Click a box or an edge for the **inspector**: what it is, *why* its protocol
 reads as it does, the threads behind it, the call sites, and **Upstream**,
@@ -90,6 +92,12 @@ every export.
 Pick an entry point in **Threads** (or a box on the map) to open the
 **Thread** view: that entry point traced forward through every function it
 calls, across files and languages, left to right.
+
+The Threads list is **nested**: a thread whose walk passes through another
+entry point sits under it ("sub-thread of X · also called from N"), each
+thread listed once; fold a parent with its arrow, or switch to **Flat list**.
+Inside a thread, the step where a sub-thread starts carries a **sub-thread**
+badge that opens it.
 
 How to read it:
 
@@ -129,9 +137,24 @@ the thread's total. VibeGraph remembers your choice; the first one comes from
 
 The **code view** shows the same ranks beside the source: a bar in the gutter
 of every line a thread reaches — blue for primary (it leaves your code, or it
-is an entry point), teal for secondary, grey for tertiary. Hover a line for
-what it is and how many threads reach it. The layers button at the bottom
-right turns the marks off.
+is an entry point), teal for secondary, grey for tertiary. A function no entry
+point reaches is dimmed when the reason suggests dead code (never named
+anywhere, exported but unused, or called only from other unreached code); a
+dot in the margin marks a line that reads an environment variable, amber when
+the project declares it nowhere. Hover any mark for what it is. The layers
+button at the bottom right turns all of it off.
+
+Two chips sit above each thread: **tested · N** (the discovered tests that
+exercise it; amber "no test" when none do) and **env · N** (the environment
+variables it reads, with how many are declared nowhere). Click either for the
+list; a test opens its own thread.
+
+In the **Files** panel, a file nothing reaches is dimmed, a file the parser
+could only partly read carries a warning icon, and a file that changed since
+the last knowledge export carries a history icon — its contracts describe the
+old file. The architecture map's **Configuration** lens draws which process
+reads which environment variables, grouped by prefix, with undeclared ones
+counted on each group.
 
 **Hover a step** for its tooltip: the call's arguments, where it is written,
 and the actions that apply to it:
@@ -145,6 +168,11 @@ and the actions that apply to it:
   what the receiver really was.
 - **Scope** — on a `dynamic`/`unresolved` call: asks Claude what the target
   most likely is (marked as a model's answer).
+- **Add to investigation** (clipboard icon) — pins the node on the
+  **Investigate** board. Pin nodes from as many threads as a bug crosses, write
+  the question and a note on each, then **Hand off**: a Markdown document with
+  each pin's code as it is now, saved to `.vibegraph/investigations/` and
+  carried by every export (an agent can also read it over MCP).
 
 The thread view's **trace** button runs the whole entry point once and
 annotates every call site it touched with what it really called
@@ -193,7 +221,7 @@ Work on a clean git tree and review with `git diff`.
   "every outbound HTTP call leaves through `http_client.py`", "the export's
   first four columns never move". Write the **reason** into the rule. A rule
   can carry a **check** VibeGraph verifies against the code (`callers-only`,
-  `import-only`, `calls-through`, `guards`, `not-in-loop`…), which reports
+  `import-only`, `calls-through`, `payload-keys`, `guards`, `not-in-loop`…), which reports
   *pass*, *violated* (naming the offending call) or *unverifiable* — never a
   silent pass. Saved to `.vibegraph/constraints.json`.
 - **Thread skills** — on a thread, **draft** a skill: Claude writes guidance

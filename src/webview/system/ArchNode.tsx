@@ -26,7 +26,7 @@ export function ArchNode({ data, selected }: { data: { node: ArchNodeRecord; dim
     const total = n.dispatches.reduce((k, g) => k + g.scripts.length, 0);
     chips.push({ text: `${total} scripts`, title: `dispatches ${total} scripts in ${n.dispatches.length} directories — click the card for the list`, tone: "var(--accent-thread)" });
   }
-  if (n.members?.length) chips.push({ text: `${n.members.length} tools`, title: `one box for ${n.members.length} tools of this kind; the Tools lens draws each`, tone: "var(--text-muted)" });
+  if (n.members?.length && n.category !== "config") chips.push({ text: `${n.members.length} tools`, title: `one box for ${n.members.length} tools of this kind; the Tools lens draws each`, tone: "var(--text-muted)" });
   if (n.wrappedBy?.length) chips.push({ text: `via ${n.wrappedBy[0]}${n.wrappedBy.length > 1 ? ` +${n.wrappedBy.length - 1}` : ""}`, title: `wrapped by the project funnel(s) ${n.wrappedBy.join(", ")}`, tone: "var(--text-muted)" });
   const internal = n.internalHops ? Object.entries(n.internalHops).map(([k, v]) => `${v} ${k}`).join(", ") : "";
 

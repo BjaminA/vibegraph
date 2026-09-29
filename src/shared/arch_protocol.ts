@@ -25,11 +25,14 @@ export interface ProtocolAnswer {
  *  for; it maps to the three accent families in the view. */
 export type ArchCategory =
   | "frontend" | "backend" | "scripts" | "agent" | "pipeline"
-  | "platform" | "database" | "cache" | "storage" | "queue" | "model" | "cloud" | "external" | "unknown";
+  | "platform" | "database" | "cache" | "storage" | "queue" | "model" | "cloud" | "external" | "unknown"
+  // 2026-09-28 — the Configuration lens's variable groups (GUI only; the
+  // derived model never emits it).
+  | "config";
 
 export const ARCH_CATEGORIES: readonly ArchCategory[] = [
   "frontend", "backend", "scripts", "agent", "pipeline",
-  "platform", "database", "cache", "storage", "queue", "model", "cloud", "external", "unknown",
+  "platform", "database", "cache", "storage", "queue", "model", "cloud", "external", "unknown", "config",
 ];
 
 export const ARCH_CATEGORY_LABEL: Record<ArchCategory, string> = {
@@ -47,6 +50,7 @@ export const ARCH_CATEGORY_LABEL: Record<ArchCategory, string> = {
   cloud: "cloud",
   external: "external",
   unknown: "unclassified",
+  config: "environment variables",
 };
 
 /** Stack roles that ARE architecture boundaries: a call through one leaves

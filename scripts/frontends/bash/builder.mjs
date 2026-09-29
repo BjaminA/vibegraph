@@ -18,6 +18,7 @@ import { Parser, Language } from "web-tree-sitter";
 import { effectKindForCommand, isDynamicCallee, SKIP_BUILTINS } from "./tables.mjs";
 import { docFromComments } from "../doc_comments.mjs";
 import { topLevelDescendants } from "../nests.mjs";
+import { collectEnvReads } from "./env_reads.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const GRAMMAR = join(HERE, "..", "grammars", "tree-sitter-bash.wasm");
@@ -670,6 +671,9 @@ export async function buildFromSource(source, moduleId) {
   // discover_bash.mjs keys the cli-entry rule on it — the IR is the
   // only thing discovery sees, and node lists don't carry the shebang.
   if (source.startsWith("#!")) ir.shebang = source.slice(0, source.indexOf("\n"));
+  // 2026-09-28 — the environment this script inherits (env_reads.mjs).
+  const envReads = collectEnvReads(tree.rootNode);
+  if (envReads.length) ir.envReads = envReads;
   return { builder: b, ir, dropped: b.dropped };
 }
 

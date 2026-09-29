@@ -43,6 +43,10 @@ import { deriveStackProfile } from "../src/server/quality/profile.ts";
 import { deriveQualityModel } from "../src/server/quality/model.ts";
 import { computeAcceptance } from "../src/server/quality/acceptance.ts";
 import { calibratedVerbs } from "../src/server/quality/standings.ts";
+import { computeReachability, formatReachabilityMd } from "../src/server/reachability.ts";
+import { formatEnvSurfaceMd } from "../src/shared/env_surface.ts";
+import { sha1 } from "../src/server/coverage.ts";
+import { listInvestigations, readInvestigation, readRel, renderHandoff } from "../src/server/investigations.ts";
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const README_HEAD = "# What VibeGraph derived from this codebase";
@@ -192,6 +196,7 @@ export function exportKnowledge({ root, out, task, envelope: envelopePath, commi
     "A hop is a weighed claim over parsed data on both sides: the caller names its target by a literal (a URL shape, a script path, a tool name) and the callee declares it (a route, a parsed file, a registration). `path` = one target; `ambiguous` = several named, none claimed; `unmatched` = the literal names nothing this project parses. Read top-down from what the user sees to the script that ingests; the reverse index below reads the other way. A hop never widens a thread: each thread's own files stay one language.",
     "",
   ];
+  const navs = crossings.navigation ?? [];
   if (!hops.length) flowLines.push("No crossing found: no thread names a route, script or tool outside its own files.", "");
   const byKind = {};
   for (const h of hops) (byKind[h.kind ?? "http"] ??= []).push(h);
@@ -210,6 +215,20 @@ export function exportKnowledge({ root, out, task, envelope: envelopePath, commi
     }
     flowLines.push("");
   }
+  // 2026-09-29 — navigation: a page's Link / router / redirect literal naming
+  // another page. Not a hop (nothing is called) and not in the reverse index.
+  if (navs.length) {
+    flowLines.push("## Navigation — a page sends the user to a page", "", "A `<Link href>`, `router.push` / `replace` or `redirect` LITERAL naming a page this project serves. The user's next page, not a call; a computed target (`router.push(url)`) is not listed.", "");
+    const seen = new Set();
+    for (const h of navs) {
+      const to = h.targets.length ? h.targets.map((t) => `\`${t.entryPointId}\``).join(" OR ") : "**unmatched** (no page serves it)";
+      const line = `- \`${h.entryPointId}\` → ${h.callee} \`${h.path}\` → ${to}${h.confidence === "ambiguous" ? " [ambiguous]" : ""} (${h.file})`;
+      if (seen.has(line)) continue;
+      seen.add(line);
+      flowLines.push(line);
+    }
+    flowLines.push("");
+  }
   const reverse = new Map();
   for (const h of hops) for (const t of h.targets) {
     if (!reverse.has(t.entryPointId)) reverse.set(t.entryPointId, []);
@@ -224,6 +243,34 @@ export function exportKnowledge({ root, out, task, envelope: envelopePath, commi
     flowLines.push("");
   }
   write("flows.md", flowLines.join("\n"));
+
+  // 2b-ii. 2026-09-28 — REACHABILITY: the functions no entry point reaches,
+  //     each with the reason it is unreached (src/server/reachability.ts).
+  //     Unreached is not unused, and the report says which is which.
+  const reach = computeReachability(env);
+  write("reachability.md", formatReachabilityMd(reach));
+  if (withIr) write("reachability.json", json(reach));
+  // 2026-09-28 — the CONFIGURATION surface: which environment variables the
+  // code reads, on which threads, and which the project never declares
+  // (src/shared/env_surface.ts; the same surface each contract's line reads).
+  write("configuration.md", formatEnvSurfaceMd(ctx.envSurface));
+  if (withIr) write("configuration.json", json(ctx.envSurface));
+  // 2026-09-29 — INVESTIGATIONS a person saved on the board: each rendered as
+  // its handoff (question, pins across threads, notes, code read now).
+  const investigations = listInvestigations(absRoot)
+    .map((i) => readInvestigation(absRoot, i.name)).filter(Boolean);
+  const epLabelOf = (ep) => env.entryPoints.find((e) => e.id === ep)?.label ?? null;
+  for (const inv of investigations) {
+    write(`investigations/${inv.name}.md`, renderHandoff({ inv, files: env.files, readSource: (f) => readRel(absRoot, f), threadLabel: epLabelOf }));
+  }
+  // 2026-09-28 — FRESHNESS: the hash of every source file as it was read, so
+  // `vibegraph-knowledge coverage` can say which files changed since this
+  // folder was written (and so which contracts describe an old file).
+  const sources = {};
+  for (const rel of Object.keys(env.files).sort()) {
+    try { sources[rel] = sha1(readFileSync(join(absRoot, rel), "utf-8")); } catch { /* unreadable: no hash, reads as changed */ }
+  }
+  write("sources.json", json(sources));
 
   // 2c. M-ARCH.1 — the derived architecture model, from the contracts just
   //     computed. The JSON rides with the raw forms; M-ARCH.5 adds the prose
@@ -382,7 +429,10 @@ export function exportKnowledge({ root, out, task, envelope: envelopePath, commi
     "",
     `1. **\`constraints.md\`** (STATED) — the operators' rules with their reasons. They are not in the code; they are the part of the task you cannot infer. The raw form with scopes and checkable halves is \`../constraints.json\`.`,
     ...(plan ? [`2. **\`plan.md\`** (DERIVED) — the task decomposed onto the threads that own it, dependencies first, with each packet's files, its escalation surface and its closing bar (what a review would check). \`plan.json\` is the raw form.`] : ["2. (no task was given, so there is no plan)"]),
-    `3. **\`threads/INDEX.md\`** then **\`threads/<entry point>.md\`** (DERIVED) — one contract per thread: what enters and leaves, every external call with its literal call text and the tool it leaves through, round trips inside loops, the thread's stack, the hops that cross into another language or process, and the stated rules routed to that thread. This is exactly what a VibeGraph worker is handed before it edits. **\`flows.md\`** (DERIVED) renders every such hop terminal to terminal — the page, the literal it hands the platform, the script it runs, what that script leaves through — with a reverse index of what runs each script.`,
+    `3. **\`threads/INDEX.md\`** then **\`threads/<entry point>.md\`** (DERIVED) — one contract per thread: what enters and leaves, every external call with its literal call text and the tool it leaves through, round trips inside loops, the thread's stack, the hops that cross into another language or process, and the stated rules routed to that thread. This is exactly what a VibeGraph worker is handed before it edits. **\`flows.md\`** (DERIVED) renders every such hop terminal to terminal — the page, the literal it hands the platform, the script it runs, what that script leaves through — with a reverse index of what runs each script. Each contract's **Tested by** line names the discovered tests that exercise the thread. **\`reachability.md\`** (DERIVED) — the functions no entry point reaches (${reach.defs - reach.reached} of ${reach.defs}), each with WHY: never named anywhere, exported but unused here, called only from other unreached code, or a resolution gap / VibeGraph limit that means it IS used. Check it before editing code no thread shows you, and before calling anything dead. **\`configuration.md\`** (DERIVED) — the ${ctx.envSurface.vars.length} environment variable(s) the code reads by name, on which threads, and ${ctx.envSurface.hasDeclarations ? `the ${ctx.envSurface.undeclared.length} read but declared nowhere (.env.example / compose)` : "no declarations to check them against"}; each contract's **Configured by** line is its thread's share.`,
+    "",
+    "**Before claiming anything is absent, unused, untested or unconfigured, check — never infer it from what this folder does not mention.** `reachability.md` says why a function is on no thread (and two of its five reasons mean it IS used); `vibegraph-knowledge coverage <file>…` says, per file, whether it was parsed fully, which threads and tests reach it, which environment variables it reads, whether it changed since this folder was written (`sources.json` holds the hashes), and what to do before trusting it. Nothing recorded against a file is not proof it is fully understood.",
+    "",
     ...(skillLine ? [`4. ${skillLine}`] : []),
     `${skillLine ? 5 : 4}. **\`architecture.md\`** (DERIVED + STATED) — the whole system on one page: the start-here story, the system in a dozen arrows, where each process runs, what each one calls and hops to (with the protocol and the fact it was read from), what crosses each edge, the deployment boundaries, the subsystems, which threads drive which, and what the map leaves out. Read it before a task that crosses processes. **\`system_spec.md\`** (DERIVED + STATED) — the tools the project is built on, with roles and evidence, project funnels (a module wrapping a tool, imported by two or more files — edit inside the funnel, not around it), and the policies stated about them.`,
     ...(observations ? [`${skillLine ? 6 : 5}. **\`observations.json\`** (OBSERVED) — what consented runs saw at each call site: the receiver a \`dynamic\` call actually dispatched to. Per site, per run; two runs that disagree both survive. Judge staleness against the current files yourself — it is never recorded.`] : []),
@@ -393,6 +443,10 @@ export function exportKnowledge({ root, out, task, envelope: envelopePath, commi
     ] : [
       `${(skillLine ? 5 : 4) + (observations ? 2 : 1)}. The raw derived forms (per-file IR, the envelope, the stack index, the crossings, the quality profile) are not written by default — the source is the better reference once you start editing. \`--with-ir\` adds them.`,
     ]),
+    ...(investigations.length ? [
+      "",
+      `**Investigations a person saved:** ${investigations.map((i) => `\`investigations/${i.name}.md\``).join(", ")} — their question, the nodes they pinned across threads, their note on each (their reading, not verified fact) and each pin's code as it is now. Read one first when the task is about the bug it names.`,
+    ] : []),
     ...(withArch ? [
       "",
       `**The system map as data:** \`architecture.vibegraph.json\` (format \`vibegraph.system-map\`) holds every box, edge and group with its provenance, each lens of the map (Bird's-eye, Overview, Tools, Flows, Payloads, Trust) as the ids it selects, the hierarchy, the start-here story, the subsystems and the thread graph — query it when \`architecture.md\` caps a list. **For a person:** \`architecture.html\` is the same map, self-contained, with every lens as a toggle — open it in a browser.${archify ? " \`architecture.archify.json\` is the model in Archify's schema, for that tool." : ""} Everything in them is derived from the code or stated by a person; a model's proposal appears only marked *proposed*.`,

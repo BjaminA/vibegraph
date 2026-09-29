@@ -130,7 +130,13 @@
           "\"/users/<int:uid>\"",
           "[\"GET\"]"
         ],
-        "isEffect": false
+        "isEffect": false,
+        "argKeys": [
+          [],
+          [
+            "methods"
+          ]
+        ]
       },
       {
         "id": "module/get_user_route.fn",
@@ -203,7 +209,12 @@
         "args": [
           "{\"error\": \"not found\"}"
         ],
-        "isEffect": false
+        "isEffect": false,
+        "argKeys": [
+          [
+            "error"
+          ]
+        ]
       },
       {
         "id": "module/get_user_route.fn/return@0",
@@ -302,7 +313,12 @@
         "args": [
           "{\"uid\": user.uid}"
         ],
-        "isEffect": false
+        "isEffect": false,
+        "argKeys": [
+          [
+            "uid"
+          ]
+        ]
       }
     ],
     "edges": [
@@ -635,6 +651,11 @@
             "name": "description",
             "value": "\"flask_demo CLI\""
           }
+        ],
+        "argKeys": [
+          [
+            "description"
+          ]
         ]
       },
       {
@@ -658,6 +679,14 @@
             "name": "required",
             "value": "True"
           }
+        ],
+        "argKeys": [
+          [
+            "dest"
+          ],
+          [
+            "required"
+          ]
         ]
       },
       {
@@ -673,7 +702,13 @@
           "\"list\"",
           "\"list all users\""
         ],
-        "isEffect": false
+        "isEffect": false,
+        "argKeys": [
+          [],
+          [
+            "help"
+          ]
+        ]
       },
       {
         "id": "module/main.fn/create.assign",
@@ -695,6 +730,12 @@
             "name": "help",
             "value": "\"add a user\""
           }
+        ],
+        "argKeys": [
+          [],
+          [
+            "help"
+          ]
         ]
       },
       {
@@ -1599,7 +1640,18 @@
           "r[1]",
           "r[2]"
         ],
-        "isEffect": false
+        "isEffect": false,
+        "argKeys": [
+          [
+            "uid"
+          ],
+          [
+            "name"
+          ],
+          [
+            "email"
+          ]
+        ]
       },
       {
         "id": "module/create_user.fn",
@@ -1940,7 +1992,7 @@
         "endCol": 13,
         "name": "_helper_not_a_test",
         "params": [],
-        "docstring": "Leading underscore \u2014 must NOT be detected as a test seed.",
+        "docstring": "Leading underscore — must NOT be detected as a test seed.",
         "decorators": [],
         "isAsync": false,
         "returns": null
@@ -2047,8 +2099,8 @@
           "endCol": 13
         },
         "signature": "def _helper_not_a_test()",
-        "docstring": "Leading underscore \u2014 must NOT be detected as a test seed.",
-        "source": "\n\ndef _helper_not_a_test():\n    \"\"\"Leading underscore \u2014 must NOT be detected as a test seed.\"\"\"\n    return 42\n"
+        "docstring": "Leading underscore — must NOT be detected as a test seed.",
+        "source": "\n\ndef _helper_not_a_test():\n    \"\"\"Leading underscore — must NOT be detected as a test seed.\"\"\"\n    return 42\n"
       }
     ],
     "modulePath": "test_flow"

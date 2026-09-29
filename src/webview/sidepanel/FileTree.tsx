@@ -5,7 +5,12 @@
 // active file is highlighted; selection is purely local to this tree.
 
 import React from "react";
-import { FileCode, Folder } from "lucide-react";
+import { FileCode, Folder, AlertTriangle, History } from "lucide-react";
+
+/** 2026-09-28 — what the export knows about a file, shown in the tree
+ *  (envelope `insight` + each file's IR): nothing reaches it, it was only
+ *  partly parsed, it changed since the knowledge export. */
+export interface FileStatus { unreached?: boolean; dropped?: number; changed?: boolean }
 
 interface FileNode {
   type: "file";
@@ -53,9 +58,10 @@ interface RowProps {
   depth: number;
   activeFilePath: string | null;
   onSelectFile: (filePath: string) => void;
+  status?: Record<string, FileStatus>;
 }
 
-function TreeRow({ node, depth, activeFilePath, onSelectFile }: RowProps) {
+function TreeRow({ node, depth, activeFilePath, onSelectFile, status }: RowProps) {
   if (node.type === "folder") {
     return (
       <>
@@ -72,16 +78,26 @@ function TreeRow({ node, depth, activeFilePath, onSelectFile }: RowProps) {
         {node.children.map((c, i) => (
           <TreeRow key={c.type === "file" ? c.path : `${node.name}/${i}`}
             node={c} depth={depth + 1}
-            activeFilePath={activeFilePath} onSelectFile={onSelectFile} />
+            activeFilePath={activeFilePath} onSelectFile={onSelectFile} status={status} />
         ))}
       </>
     );
   }
   const active = node.path === activeFilePath;
+  const st = status?.[node.path];
+  const why = [
+    st?.unreached ? "no entry point reaches anything in this file (reachability.md)" : null,
+    st?.dropped ? `only partly parsed: ${st.dropped} construct(s) dropped — read the source before trusting it` : null,
+    st?.changed ? "changed since the knowledge export — its contracts describe the old file" : null,
+  ].filter(Boolean).join("\n");
   return (
     <button
       type="button"
       data-file-tree-row={node.path}
+      data-file-unreached={st?.unreached ? "true" : undefined}
+      data-file-partial={st?.dropped ? "true" : undefined}
+      data-file-changed={st?.changed ? "true" : undefined}
+      title={why || undefined}
       onClick={() => onSelectFile(node.path)}
       style={{
         display: "flex", alignItems: "center", gap: 6,
@@ -92,6 +108,7 @@ function TreeRow({ node, depth, activeFilePath, onSelectFile }: RowProps) {
         fontFamily: "var(--font-mono)",
         fontSize: "var(--fs-12)",
         color: active ? "var(--accent-thread)" : "var(--text-primary)",
+        opacity: st?.unreached && !active ? 0.55 : 1,
       }}
       onMouseEnter={(e) => {
         if (!active) e.currentTarget.style.background = "var(--bg-node)";
@@ -101,7 +118,9 @@ function TreeRow({ node, depth, activeFilePath, onSelectFile }: RowProps) {
       }}
     >
       <FileCode size={12} strokeWidth={1.5} color="var(--text-secondary)" />
-      {node.name}
+      <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>{node.name}</span>
+      {st?.dropped ? <AlertTriangle size={12} strokeWidth={1.5} color="var(--accent-warning)" aria-label="partly parsed" /> : null}
+      {st?.changed ? <History size={12} strokeWidth={1.5} color="var(--text-secondary)" aria-label="changed since export" /> : null}
     </button>
   );
 }
@@ -110,9 +129,10 @@ export interface FileTreeProps {
   filePaths: string[];
   activeFilePath: string | null;
   onSelectFile: (filePath: string) => void;
+  status?: Record<string, FileStatus>;
 }
 
-export function FileTree({ filePaths, activeFilePath, onSelectFile }: FileTreeProps) {
+export function FileTree({ filePaths, activeFilePath, onSelectFile, status }: FileTreeProps) {
   const tree = React.useMemo(() => buildTree(filePaths), [filePaths]);
   if (filePaths.length === 0) {
     return (
@@ -123,10 +143,17 @@ export function FileTree({ filePaths, activeFilePath, onSelectFile }: FileTreePr
   }
   return (
     <div data-file-tree style={{ padding: "8px 0", display: "flex", flexDirection: "column" }}>
+      {status && Object.keys(status).length > 0 && (
+        <div data-file-tree-legend style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "0 8px 8px", fontSize: "var(--fs-11)", color: "var(--text-muted)" }}>
+          <span style={{ opacity: 0.55 }}>dim = nothing reaches</span>
+          <span style={{ display: "flex", alignItems: "center", gap: 4 }}><AlertTriangle size={12} strokeWidth={1.5} color="var(--accent-warning)" />partly parsed</span>
+          <span style={{ display: "flex", alignItems: "center", gap: 4 }}><History size={12} strokeWidth={1.5} />changed since export</span>
+        </div>
+      )}
       {tree.map((n, i) => (
         <TreeRow key={n.type === "file" ? n.path : `root/${i}`}
           node={n} depth={0}
-          activeFilePath={activeFilePath} onSelectFile={onSelectFile} />
+          activeFilePath={activeFilePath} onSelectFile={onSelectFile} status={status} />
       ))}
     </div>
   );

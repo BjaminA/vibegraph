@@ -33,6 +33,8 @@ const TYPE_OF: Record<ArchCategory, ArchifyType> = {
   queue: "messagebus",
   platform: "cloud", cloud: "cloud", model: "cloud",
   external: "external", unknown: "external",
+  // GUI-only (the Configuration lens); never in an exported model.
+  config: "security",
 };
 
 const BOUNDARY_KIND: Record<string, "region" | "security-group"> = {

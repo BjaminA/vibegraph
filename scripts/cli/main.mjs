@@ -12,20 +12,27 @@
 //
 // Dev:  node --experimental-strip-types --no-warnings scripts/cli/main.mjs export examples/fleet-telemetry
 // Built: packages/knowledge/dist/cli.mjs (scripts/cli/build.mjs)
-import { existsSync, statSync } from "node:fs";
+import { appendFileSync, existsSync, readFileSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { PACKAGE_NAME, gitHead, locate, toolLabel } from "./paths.mjs";
 import { resolvePython } from "./pyenv.mjs";
 import { exportKnowledge } from "../export_knowledge.mjs";
 import { formatCheckReport, runConstraintChecks } from "./check.mjs";
-import { applyInit, POINTER } from "./init.mjs";
+import { applyHooks, applyInit, applySkill, hookCommand, POINTER, SKILL_NAME } from "./init.mjs";
+import { spawnSync } from "node:child_process";
+import { HOOK_EVENTS, runHook } from "./hooks.mjs";
+import { LESSONS_USAGE, runLessons } from "./lessons.mjs";
+import { BRIEF_USAGE, runBrief } from "./brief.mjs";
 import { formatClassifyReport, runClassify } from "./classify.mjs";
 import { runArchitecture } from "./architecture.mjs";
 import { CONSTRAINTS_USAGE, runConstraints } from "./constraints.mjs";
 import { SEEDS_USAGE, runSeeds } from "./seeds.mjs";
 import { SKILLS_USAGE, runSkills } from "./skills.mjs";
 import { VIEW_USAGE, runView } from "./view.mjs";
+import { AFFECTED_USAGE, formatAffected, runAffected } from "./affected.mjs";
+import { COVERAGE_USAGE, runCoverage } from "./coverage.mjs";
+import { formatCoverage } from "../../src/server/coverage.ts";
 
 const USAGE = `${PACKAGE_NAME} — what VibeGraph derives from a codebase and what its operators stated, on disk for a plain Claude.
 
@@ -48,9 +55,23 @@ usage:
       --json               the raw results instead of the report
       exit 0 every clause passed · 1 a clause is VIOLATED (offenders named as file:node)
            · 2 nothing violated but a clause is UNVERIFIABLE, which is not a pass
+  ${PACKAGE_NAME} ${AFFECTED_USAGE}
+  ${PACKAGE_NAME} ${COVERAGE_USAGE}
+  ${PACKAGE_NAME} ${LESSONS_USAGE}
+  ${PACKAGE_NAME} ${BRIEF_USAGE}
   ${PACKAGE_NAME} init [<root>] [--print]        point Claude at the folder: one marked block in CLAUDE.md
                                                (replaced on re-run, never duplicated) and the gitignore
                                                line for .vibegraph/knowledge/. --print shows the block only.
+      --hooks              also install four Claude Code hooks in .claude/settings.local.json (per user,
+                           never committed): each session starts with an orientation (re-sent after a
+                           compaction); each prompt gets its threads' contracts, rules and skills;
+                           each edit and the end of each turn re-check every stated rule, and a NEW
+                           violation blocks with the rule and the offending call. Zero tokens.
+      --remove-hooks       take exactly those hooks out again
+      --skill              also install the Claude Code skill /vibegraph into .claude/skills/ — how a plain
+                           Claude chat sets this up and uses it; with --user into ~/.claude/skills/ instead
+                           (every project on this machine, and nothing else is written)
+      --remove-skill       take the skill out again (--user for the machine-wide one)
   ${PACKAGE_NAME} classify [<root>] [options]   SPENDS TOKENS: ask a model what the tools
                                                no table knows are, from how the code uses them; show the answers
       --apply              store each answer as an AGENT-STATED policy in .vibegraph/constraints.json
@@ -93,6 +114,11 @@ VG_PYTHON names the interpreter; VIBEGRAPH_PYDEPS names a directory that already
 function fail(msg, code = 2) {
   process.stderr.write(`${msg}\n`);
   return code;
+}
+
+/** This package's version (for a hook that must re-run it through npx). */
+function packageVersion(loc) {
+  try { return JSON.parse(readFileSync(join(loc.packageRoot, "package.json"), "utf-8")).version ?? null; } catch { return null; }
 }
 
 function projectRoot(positional) {
@@ -147,7 +173,7 @@ function cmdCheck(args) {
   try {
     parsed = parseArgs({
       args,
-      options: { git: { type: "string" }, uncommitted: { type: "boolean" }, json: { type: "boolean" }, envelope: { type: "string" } },
+      options: { git: { type: "string" }, uncommitted: { type: "boolean" }, json: { type: "boolean" }, envelope: { type: "string" }, "no-cache": { type: "boolean" } },
       allowPositionals: true,
     });
   } catch (e) {
@@ -162,20 +188,97 @@ function cmdCheck(args) {
     root: absRoot, envelope: parsed.values.envelope, pipeline, git: parsed.values.git,
     uncommitted: parsed.values.uncommitted === true,
     commit: gitHead(absRoot) ?? "no-git",
+    cache: parsed.values["no-cache"] !== true,
   });
   process.stdout.write(parsed.values.json ? JSON.stringify(r, null, 2) + "\n" : formatCheckReport(r));
   return r.exitCode;
 }
 
-function cmdInit(args) {
+function cmdAffected(args) {
   let parsed;
   try {
-    parsed = parseArgs({ args, options: { print: { type: "boolean" } }, allowPositionals: true });
+    parsed = parseArgs({ args, options: { uncommitted: { type: "boolean" }, json: { type: "boolean" }, envelope: { type: "string" }, "no-cache": { type: "boolean" } }, allowPositionals: true });
   } catch (e) {
     return fail(`${e.message}\n\n${USAGE}`);
   }
+  // A leading directory is the root; everything else is a changed file.
+  const pos = [...parsed.positionals];
+  let absRoot;
+  if (pos.length && existsSync(resolve(pos[0])) && statSync(resolve(pos[0])).isDirectory()) absRoot = resolve(pos.shift());
+  else absRoot = resolve(".");
+  if (!pos.length && !parsed.values.uncommitted) return fail(`name the changed files, or pass --uncommitted\n\n${USAGE}`);
+  let pipeline;
+  try { pipeline = pipelineFor(locate(), absRoot); } catch (e) { return fail(e.message, 3); }
+  const r = runAffected({ root: absRoot, files: pos, uncommitted: parsed.values.uncommitted === true, envelope: parsed.values.envelope, pipeline, cache: parsed.values["no-cache"] !== true });
+  process.stdout.write(parsed.values.json ? JSON.stringify(r, null, 2) + "\n" : formatAffected(r));
+  return 0;
+}
+
+function cmdCoverage(args) {
+  let parsed;
+  try {
+    parsed = parseArgs({ args, options: { json: { type: "boolean" }, envelope: { type: "string" }, "no-cache": { type: "boolean" } }, allowPositionals: true });
+  } catch (e) {
+    return fail(`${e.message}\n\n${USAGE}`);
+  }
+  const pos = [...parsed.positionals];
+  let absRoot = resolve(".");
+  if (pos.length > 1 && existsSync(resolve(pos[0])) && statSync(resolve(pos[0])).isDirectory()) absRoot = resolve(pos.shift());
+  if (!pos.length) return fail(`name the files to check\n\n${USAGE}`);
+  let pipeline;
+  try { pipeline = pipelineFor(locate(), absRoot); } catch (e) { return fail(e.message, 3); }
+  const rows = runCoverage({ root: absRoot, files: pos, envelope: parsed.values.envelope, pipeline, cache: parsed.values["no-cache"] !== true });
+  process.stdout.write(parsed.values.json ? JSON.stringify(rows, null, 2) + "\n" : formatCoverage(rows));
+  return 0;
+}
+
+function cmdInit(args) {
+  let parsed;
+  try {
+    parsed = parseArgs({
+      args, allowPositionals: true,
+      options: {
+        print: { type: "boolean" }, hooks: { type: "boolean" }, "remove-hooks": { type: "boolean" },
+        skill: { type: "boolean" }, "remove-skill": { type: "boolean" }, user: { type: "boolean" },
+      },
+    });
+  } catch (e) {
+    return fail(`${e.message}\n\n${USAGE}`);
+  }
+  const loc = locate();
+  // The Claude Code skill: into ~/.claude/skills with --user (and nothing
+  // else — a user-level install touches no project), else the project's.
+  if (parsed.values.skill || parsed.values["remove-skill"]) {
+    let sk;
+    const user = parsed.values.user === true;
+    let skRoot = null;
+    if (!user) { try { skRoot = projectRoot(parsed.positionals[0]); } catch (e) { return fail(e.message); } }
+    try { sk = applySkill({ root: skRoot, loc, user, remove: parsed.values["remove-skill"] === true }); } catch (e) { return fail(e.message); }
+    process.stdout.write(`${sk.path}: skill ${sk.state}${sk.state === "installed" || sk.state === "updated" ? ` (Claude Code loads it as /${SKILL_NAME}; ${user ? "every project on this machine" : "this project"})` : ""}\n`);
+    if (user || parsed.values["remove-skill"]) return 0;
+  }
   let absRoot;
   try { absRoot = projectRoot(parsed.positionals[0]); } catch (e) { return fail(e.message); }
+  if (parsed.values.hooks || parsed.values["remove-hooks"]) {
+    let h;
+    try {
+      const remove = parsed.values["remove-hooks"] === true;
+      let env = {};
+      if (!remove) {
+        // Pin the interpreter verified NOW, by absolute path.
+        const py = resolvePython(loc, { log: (m) => process.stderr.write(`  ${m}\n`) });
+        const exe = spawnSync(py.bin, ["-c", "import sys; print(sys.executable)"], { encoding: "utf-8" }).stdout.trim() || py.bin;
+        // `how` is "as installed", "VIBEGRAPH_PYDEPS=<dir>" or the directory itself.
+        const deps = py.how === "as installed" ? null
+          : py.how.startsWith("VIBEGRAPH_PYDEPS=") ? py.how.slice("VIBEGRAPH_PYDEPS=".length) : py.how;
+        env = { VG_PYTHON: exe, ...(deps ? { VIBEGRAPH_PYDEPS: deps } : {}) };
+      }
+      const version = packageVersion(loc);
+      h = applyHooks({ root: absRoot, remove, command: (root, event) => hookCommand(root, event, env, process.argv, process.execPath, process.execArgv, version) });
+    } catch (e) { return fail(e.message); }
+    process.stdout.write(`${h.path}: hooks ${h.state}${h.state === "removed" ? "" : " (prompt → routed contracts, rules and skills; post-edit and stop → every stated rule re-checked, a new violation blocks). Claude Code reads hooks when a session starts: they apply from the NEXT session (review them with /hooks)."}\n`);
+    if (parsed.values["remove-hooks"]) return 0;
+  }
   const r = applyInit({ root: absRoot, print: parsed.values.print === true });
   if (r.claudeMd === "printed") { process.stdout.write(POINTER + "\n"); return 0; }
   process.stdout.write(`${r.paths.claudeMd}: ${r.claudeMd} (the block between ${"<!-- vibegraph-knowledge:begin/end -->"} is replaced on re-run)\n`);
@@ -303,7 +406,7 @@ async function cmdSkills(args) {
   try {
     parsed = parseArgs({
       args, allowPositionals: true,
-      options: { missing: { type: "boolean" }, "dry-run": { type: "boolean" }, reply: { type: "string" }, model: { type: "string" }, envelope: { type: "string" } },
+      options: { missing: { type: "boolean" }, "dry-run": { type: "boolean" }, "no-lessons": { type: "boolean" }, reply: { type: "string" }, model: { type: "string" }, envelope: { type: "string" } },
     });
   } catch (e) { return fail(`${e.message}\n\n${USAGE}`); }
   const { sub, args: rest, root } = subAndRoot(parsed.positionals);
@@ -312,6 +415,71 @@ async function cmdSkills(args) {
     try { pipeline = pipelineFor(locate(), root); } catch (e) { return fail(e.message, 3); }
   }
   return report(await runSkills({ root, sub, targets: rest, values: parsed.values, envelope: parsed.values.envelope, pipeline }));
+}
+
+/** `hook <event>` — run by Claude Code (installed by `init --hooks`), never by
+ *  hand. Reads the hook payload on stdin. Exit 0 with JSON on stdout, or exit
+ *  2 with the reason on stderr (the form Claude Code shows to Claude). */
+function cmdHook(args) {
+  let parsed;
+  try { parsed = parseArgs({ args, allowPositionals: true, options: { root: { type: "string" }, "vg-hook": { type: "boolean" } } }); }
+  catch (e) { return fail(`${e.message}\n\n${USAGE}`); }
+  const event = parsed.positionals[0];
+  if (!HOOK_EVENTS.includes(event)) return fail(`hook event must be one of: ${HOOK_EVENTS.join(", ")}`);
+  let input = {};
+  try { input = JSON.parse(readFileSync(0, "utf-8") || "{}"); } catch { input = {}; }
+  const silent = (msg) => { process.stdout.write(JSON.stringify({ systemMessage: msg })); return 0; };
+  let absRoot;
+  try { absRoot = projectRoot(parsed.values.root ?? process.env.CLAUDE_PROJECT_DIR ?? input.cwd); }
+  catch (e) { return silent(`VibeGraph ${event} hook: ${e.message}`); }
+  let pipeline;
+  try { pipeline = pipelineFor(locate(), absRoot); } catch (e) { return silent(`VibeGraph ${event} hook could not start the parser: ${e.message}`); }
+  const t0 = Date.now();
+  const r = runHook(event, input, { absRoot, pipeline });
+  // VG_HOOK_LOG: one JSON line per run (event, ms, blocked) — what a drill
+  // reports as the hooks' cost. Never the payload, never the prompt.
+  if (process.env.VG_HOOK_LOG) {
+    try {
+      appendFileSync(process.env.VG_HOOK_LOG, JSON.stringify({
+        at: new Date().toISOString(), event, ms: Date.now() - t0, blocked: !!r?.block,
+        file: event === "post-edit" ? input.tool_input?.file_path ?? null : undefined,
+        block: r?.block ? r.block.slice(0, 600) : undefined,
+      }) + "\n");
+    } catch { /* a log that cannot be written must not break the hook */ }
+  }
+  if (r?.block) { process.stderr.write(`${r.block}\n`); return 2; }
+  if (r?.json) process.stdout.write(JSON.stringify(r.json));
+  return 0;
+}
+
+function cmdBrief(args) {
+  let parsed;
+  try { parsed = parseArgs({ args, allowPositionals: true, options: { max: { type: "string" } } }); }
+  catch (e) { return fail(`${e.message}\n\n${USAGE}`); }
+  const [entryPointId, rootArg] = parsed.positionals;
+  if (!entryPointId) return fail(`brief needs an entry id (see \`skills list\` or the export's threads/INDEX.md)\n\n${USAGE}`);
+  const maxChars = parsed.values.max ? Number(parsed.values.max) : undefined;
+  if (maxChars !== undefined && !(maxChars >= 2000)) return fail("--max must be a number of characters, at least 2000");
+  let absRoot;
+  try { absRoot = projectRoot(rootArg); } catch (e) { return fail(e.message); }
+  let pipeline;
+  try { pipeline = pipelineFor(locate(), absRoot); } catch (e) { return fail(e.message, 3); }
+  const r = runBrief({ root: absRoot, entryPointId, maxChars, pipeline });
+  process.stdout.write(r.text);
+  return r.exitCode;
+}
+
+function cmdLessons(args) {
+  let parsed;
+  try { parsed = parseArgs({ args, allowPositionals: true, options: { json: { type: "boolean" } } }); }
+  catch (e) { return fail(`${e.message}\n\n${USAGE}`); }
+  const sub = parsed.positionals[0];
+  if (sub !== "list") return fail(`lessons: the one subcommand is \`list\`\n\n${USAGE}`);
+  let absRoot;
+  try { absRoot = projectRoot(parsed.positionals[1]); } catch (e) { return fail(e.message); }
+  const r = runLessons({ root: absRoot, json: parsed.values.json === true });
+  process.stdout.write(r.text);
+  return r.exitCode;
 }
 
 function cmdView(args) {
@@ -335,6 +503,11 @@ export function main(argv) {
   if (command === "constraints") return cmdConstraints(rest);
   if (command === "seeds") return cmdSeeds(rest);
   if (command === "skills") return cmdSkills(rest);
+  if (command === "affected") return cmdAffected(rest);
+  if (command === "coverage") return cmdCoverage(rest);
+  if (command === "hook") return cmdHook(rest);
+  if (command === "lessons") return cmdLessons(rest);
+  if (command === "brief") return cmdBrief(rest);
   return fail(`unknown command: ${command}\n\n${USAGE}`);
 }
 

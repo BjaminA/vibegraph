@@ -224,5 +224,9 @@ test("the whole recovery, end to end: what this fixture yielded before and after
   assert.equal(env.entryPoints.length, 15);
   assert.equal(env.threads.length, 15);
   assert.equal((stack.tools ?? []).filter((t) => t.wraps).length, 6, "db, model-api, two agent-protocol halves, the table-known platform client and the stated private one — no noise beside them");
-  assert.equal(Object.keys(built.parseErrors).length, 1, "and the one genuinely broken file is still named");
+  // 2026-09-29: the broken file is PARTLY read (it carries an IR with
+  // `degraded`), so it is named as partial, not as a parse failure — every
+  // consumer of parseErrors reads it as "no IR", and the hooks refused edits.
+  assert.equal(Object.keys(built.parseErrors).length, 0, "a partly read file is not a parse failure");
+  assert.deepEqual(Object.keys(built.partialParses), ["lib/degraded.ts"], "and it is still named, as partial");
 });

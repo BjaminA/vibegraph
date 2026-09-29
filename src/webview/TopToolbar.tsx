@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Cpu, Spline, GitBranch, FileText, Pencil, Network, Boxes, Layers, Sparkles, DraftingCompass, Hammer, Bot, Compass } from "lucide-react";
+import { Cpu, Spline, GitBranch, FileText, Pencil, Network, Boxes, Layers, Sparkles, DraftingCompass, Hammer, Bot, Compass, ClipboardList } from "lucide-react";
 
 interface Props {
   filtersOpen: boolean;
@@ -53,6 +53,9 @@ interface Props {
   stackOpen: boolean;
   stackAvailable: boolean;
   onToggleStack: () => void;
+  /** 2026-09-29 — the investigation board (InvestigationPanel). */
+  investigateOpen?: boolean;
+  onToggleInvestigate?: () => void;
   // M-SKILLS.2 — the Skills panel: generic direction, enabled per project.
   // Directory mode only (the enable file lives under the project).
   skillsOpen: boolean;
@@ -194,6 +197,7 @@ export function TopToolbar({
   describeAvailable, describeOpen, describing, onToggleDescribe,
   buildAvailable, buildOpen, building, onToggleBuild,
   onToggleFilters, onToggleModels, stackOpen, stackAvailable, onToggleStack,
+  investigateOpen, onToggleInvestigate,
   skillsOpen, skillsAvailable, onToggleSkills,
   workRunOpen, workRunAvailable, onToggleWorkRun,
   onToggleAnalysis, onToggleCode, onToggleThread,
@@ -423,6 +427,20 @@ export function TopToolbar({
         >
           <Layers size={16} strokeWidth={1.5} />
           Stack
+        </ToolButton>
+      )}
+      {/* 2026-09-29 — the investigation board: nodes pinned across threads,
+          notes, a handoff for an agent. */}
+      {stackAvailable && onToggleInvestigate && (
+        <ToolButton
+          data-investigate-toggle
+          active={!!investigateOpen}
+          onClick={onToggleInvestigate}
+          title="Investigation board — nodes you pinned across threads, your notes, and a handoff an agent can read"
+          accent="var(--accent-thread)"
+        >
+          <ClipboardList size={16} strokeWidth={1.5} />
+          Investigate
         </ToolButton>
       )}
       {/* M-SKILLS.2 — generic direction: the prose half of each quality

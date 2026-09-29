@@ -160,7 +160,9 @@ export function linkFiles(files) {
   return files;
 }
 
-if (process.argv[1] && import.meta.url.endsWith(process.argv[1].split("/").pop())) {
+// Main guard by this file's NAME: the pipeline imports linkFiles in-process,
+// and inside the packaged bundle import.meta.url IS argv[1].
+if (process.argv[1] && /link_cpp\.mjs$/.test(process.argv[1])) {
   let raw = "";
   process.stdin.setEncoding("utf-8");
   for await (const chunk of process.stdin) raw += chunk;

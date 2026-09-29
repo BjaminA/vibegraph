@@ -36,12 +36,17 @@ CLI) and says so; everything else is deterministic.
 |---|---|---|---|
 | `view [<path>] [--port n] [--open]` | Starts the visualisation — the web app at `http://localhost:4200` — until Ctrl-C | `.vibegraph/` state, as you use the app | only the app's Claude features |
 | `init [--print]` | Points Claude Code at the knowledge folder | a marked block in `CLAUDE.md`; a line in `.gitignore` | — |
+| `init --hooks` / `--remove-hooks` | Installs (or removes) four Claude Code hooks: each session starts with an orientation (re-sent after a compaction); each prompt gets its threads' contracts, rules and skills; each edit and the end of each turn re-check every stated rule, and a new violation blocks | `.claude/settings.local.json` (per user, never committed) | — |
+| `lessons list` | What the hooks saw sessions break and put right: each blocked rule, where, and the diff when it cleared; `skills draft` hands a thread's lessons to the drafting prompt | nothing | — |
+| `init --skill [--user]` / `--remove-skill` | Installs (or removes) the Claude Code skill `/vibegraph`: how a plain Claude chat sets this up and uses it | `.claude/skills/vibegraph/SKILL.md`, or `~/.claude/skills/…` with `--user` | — |
 | `export` | Derives everything from the code and writes it for Claude | `.vibegraph/knowledge/` (see the files table) | — |
 | `export --task "<text>"` | …plus the task mapped onto the threads that own it, dependencies first | `plan.md`, `plan.json` | — |
 | `export --architecture` | …plus the system map as data and as a picture | `architecture.vibegraph.json`, `architecture.html` | — |
 | `export --with-ir` | …plus the raw derived forms | `ir/`, `envelope.json`, `stack.json`, `crossings.json`, `architecture.json`, `quality/` | — |
 | `export --archify` | …plus the map in Archify's schema | `architecture.archify.json` | — |
 | `check [--uncommitted \| --git <range>]` | Verifies every stated rule's checkable half against the code: PASS / VIOLATED (names the call) / UNVERIFIABLE | nothing | — |
+| `affected <file>… [--uncommitted]` | Lists the discovered tests that reach the changed files (what to run) and the threads the change touches; names changed files no test reaches | nothing | — |
+| `coverage <file>…` | Per file: parsed fully or partially, the threads and tests that reach it, its unreached functions and why, the environment variables it reads, whether it changed since the export — and what to do before trusting it | nothing | — |
 | `constraints list [--json]` | Shows the stated rules, who stated them, their scope and checks | nothing | — |
 | `constraints add …` | States a rule (human), refusing duplicates and malformed checks | `.vibegraph/constraints.json` | — |
 | `constraints remove <id>` / `ratify <id>` | Deletes a rule / makes a model-stated rule human-stated | `.vibegraph/constraints.json` | — |
@@ -72,6 +77,9 @@ model's, until a person ratifies it; **observed** = what a consented run saw.
 | `constraints.md` | stated | the rules and their reasons, with who stated each | the requirements the code cannot show |
 | `threads/INDEX.md`, `threads/<entry>.md` | derived + stated | one **contract** per thread: data in/out, every external call and the tool it leaves through, round trips in loops, neighbouring threads, rules routed to it | what to keep true when editing that path |
 | `flows.md` | derived | end-to-end chains, page → component → call → script, with a reverse index | find everything a change touches downstream |
+| `reachability.md` | derived | the functions no entry point reaches, each with why: never named, exported but unused, called only from unreached code — or a resolution gap that means it IS used | before editing code no thread shows, and before calling anything dead |
+| `configuration.md` | derived | the environment variables the code reads by name, on which threads, and which are read but declared nowhere (`.env.example`, compose) | before deploying, or changing anything a variable switches |
+| `sources.json` | derived | a hash of every source file as the export read it | `coverage` compares against it to say what changed since |
 | `system_spec.md` | derived + stated | the tools the project is built on, by role; the modules that wrap them; policies about them | use the existing tools and wrappers |
 | `skills/<entry>.md` | drafted, ratified | per-thread guidance a person approved (drafts and stale ones withheld, named) | how to work on that thread, and why |
 | `observations.json` | observed | what consented trace runs saw at each call site | resolve calls static analysis could not |
@@ -158,6 +166,58 @@ Writes one marked block into the project's `CLAUDE.md` (replaced on re-run,
 never duplicated) and adds `.vibegraph/knowledge/` to `.gitignore`.
 `--print` shows the block without writing. Zero tokens.
 
+**`--hooks`** also installs three [Claude Code hooks](https://docs.claude.com/en/docs/claude-code/hooks)
+in `.claude/settings.local.json` — the per-user settings file, never
+committed, because the commands name this machine's node, CLI and Python by
+absolute path. They run `vibegraph-knowledge hook <event>`, spend no tokens and
+never write to your code:
+
+| When | What the hook does |
+|---|---|
+| a session starts | an orientation: the project's languages and entry points, every stated rule in one line with its checks, the ratified skills, where the knowledge folder is. After a **compaction** (or `/clear`) it also resets what counts as already delivered — that context is gone — so contracts and rules are sent again when a prompt names their code. |
+| you send a prompt | routes the prompt to the threads it names (files, symbols, node ids — the same matcher the app's chat uses) and adds each one's contract, the stated rules routed to it and its ratified skill, once per session. A prompt that names no code is matched on the code's own words (function names, file paths, docstrings) and the result is labelled a keyword guess; with no match at all it gets the project-wide rules once. |
+| Claude edits a file | re-checks every stated rule against the edited tree. A **new** violation of a rule whose check may reject stops Claude with the rule, its reason and the offending call, so it fixes it on the spot. New unverifiable or advisory findings, and the tests that reach the file, are added as notes. An edit that leaves the file unparseable is stopped too. |
+| Claude finishes a turn | the same check once more; a new violation keeps the turn going (at most twice, then it is reported to you instead). |
+
+"New" means not already there at the session's first prompt: a violation
+your tree already had is reported by `check`, never blocked on. Each run reads
+the project through the envelope cache (below), so it costs about a second
+when little changed. Everything a hook hands Claude stays under Claude Code's
+10,000-character inline limit (over it, Claude Code saves the text to a file
+Claude must then read); what does not fit is named and sent on a later
+prompt. When a blocked violation clears, the hook records a **lesson** (the
+rule, where it broke, the file's diff when it cleared) under
+`~/.cache/vibegraph-knowledge`; `lessons list` shows them, and `skills draft`
+hands a thread's lessons to the drafting prompt — a lesson reaches a future
+session only through a skill a person ratifies. `--remove-hooks` takes out exactly these four entries
+and leaves any other hook alone.
+
+Claude Code reads hook settings when a session starts, so the hooks work
+from the **next** session (you can review them with `/hooks`). Run from
+`npx`, the hooks call `npx --yes vibegraph-knowledge@<that version>`
+(npx's own cache is not a stable path); from a global or project install,
+they call that install directly.
+
+**`--skill`** installs the Claude Code skill `/vibegraph` into
+`.claude/skills/vibegraph/SKILL.md` (with `--user`, into `~/.claude/skills/`,
+for every project on the machine, and nothing else is written). It tells a
+plain Claude chat how to set VibeGraph up (`init --hooks`, `export`), how to
+state rules with their reasons and checks, to run `check --uncommitted`
+before finishing, and what to do when a hook blocks (fix the code; never
+remove the hooks or edit `.vibegraph/`; ask when the rule looks wrong).
+With the skill installed machine-wide you can simply ask Claude to "set up
+VibeGraph here". `--remove-skill` takes it out.
+
+**The envelope cache.** `check`, `affected`, `coverage` and the hooks keep
+the last parse under `~/.cache/vibegraph-knowledge/envelopes/`, outside the
+project. Nothing changed → it is read back; files changed → only those are
+re-parsed and only the threads that walk them re-extracted; a new file, a
+tsconfig / Cargo.toml / manual-seeds change, a different Python or a new
+VibeGraph version → a full rebuild. The result is the same as a full parse
+(`test:envelope-cache` compares them after every kind of edit). On a
+1,128-file project `check` went from 17 s to 3 s with nothing changed and
+about 8 s after an edit. `--no-cache` or `VG_NO_CACHE=1` turns it off.
+
 ### `export` — write the knowledge folder
 
 ```bash
@@ -230,9 +290,13 @@ vibegraph-knowledge constraints ratify <id> [<root>]
   or `'{"rule":"callers-only","target":"charge","files":["api/checkout.py"]}'`
   (only `api/checkout.py` may call `charge`), or
   `'{"rule":"calls-through","target":"notify","through":"should_notify"}'`
-  (every function that calls `notify` also calls `should_notify`). Targets
-  are function names.
-  Rules: `callers-only`, `import-only`, `calls-through`, `guards`,
+  (every function that calls `notify` also calls `should_notify`), or
+  `rule:payload-keys`
+  (every call passes those keys and never those — read from the literal
+  arguments at each call site; a key hidden by a spread or a variable payload
+  makes that call *unverifiable*, never violated). Targets are function names
+  or callees as written.
+  Rules: `callers-only`, `import-only`, `calls-through`, `payload-keys`, `guards`,
   `not-in-loop`, `handles-failure`, `annotated`, `co-changes`.
 - **`--policy`** (for `stack-policy`) states a decision about a tool:
   `'{"tool":"requests","rule":"replace-with","with":"lib.http_client"}'`

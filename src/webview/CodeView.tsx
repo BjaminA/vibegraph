@@ -10,14 +10,15 @@
 // messages, and passes them in here as props. CodeView itself is
 // stateless past the editor instance ref.
 
-import React, { useRef, useEffect, useState } from "react";
+import React, { useRef, useEffect, useState, useMemo } from "react";
 import Editor, { type OnMount } from "@monaco-editor/react";
 import { monacoLanguageForPath } from "../shared/languages";
 import { X, Maximize2, Minimize2, WrapText, Layers } from "lucide-react";
 import { defineVibegraphDark, VIBEGRAPH_DARK } from "./themes/vibegraph-dark";
 import type { AstNode } from "./types";
 import { useCodeRanks, rankDecorations } from "./codeRanks";
-import type { ProjectFileData, ProjectThread, StackIndexRecord, CrossingIndexRecord } from "../shared/protocol";
+import { codeInsightFor, insightMonacoDecorations } from "./codeInsight";
+import type { ProjectFileData, ProjectThread, StackIndexRecord, CrossingIndexRecord, InsightRecord } from "../shared/protocol";
 
 // Dock geometry — App tiles CodeView and NodeEditorPanel side-by-side when
 // both are open (read here, edit there). Defaults to the solo full-width
@@ -66,6 +67,8 @@ interface Props {
   projectIR?: Record<string, ProjectFileData> | null;
   stack?: StackIndexRecord | null;
   crossings?: CrossingIndexRecord | null;
+  /** 2026-09-28 — reachability + env reads for this file (codeInsight.ts). */
+  insight?: InsightRecord | null;
 }
 
 // Find the smallest AST node whose [line, endLine] span contains the
@@ -89,7 +92,7 @@ function nodeAtLine(astNodes: AstNode[], line: number): AstNode | null {
 
 export function CodeView({
   filePath, source, error, astNodes, selectedNodeId, onClose, dock = SOLO_DOCK,
-  threads, projectIR, stack, crossings,
+  threads, projectIR, stack, crossings, insight,
 }: Props) {
   const editorRef = useRef<Parameters<OnMount>[0] | null>(null);
   // Saved on mount so the pulse decoration can construct a monaco.Range.
@@ -115,6 +118,8 @@ export function CodeView({
   const [mounted, setMounted] = useState(false);
   const rankDecorationsRef = useRef<string[]>([]);
   const rankedLines = useCodeRanks(filePath, astNodes, threads, projectIR, stack, crossings, showRanks);
+  const insightDecos = useMemo(() => codeInsightFor(filePath, astNodes, insight), [filePath, astNodes, insight]);
+  const hasEnvGlyphs = showRanks && insightDecos.some((d) => d.kind === "env" || d.kind === "env-undeclared");
 
   const handleMount: OnMount = (editor, monaco) => {
     editorRef.current = editor;
@@ -194,9 +199,9 @@ export function CodeView({
     if (!mounted || !editor || !monaco) return;
     rankDecorationsRef.current = editor.deltaDecorations(
       rankDecorationsRef.current,
-      (showRanks ? rankDecorations(monaco, rankedLines) : []) as Parameters<typeof editor.deltaDecorations>[1],
+      (showRanks ? [...rankDecorations(monaco, rankedLines), ...insightMonacoDecorations(monaco, insightDecos)] : []) as Parameters<typeof editor.deltaDecorations>[1],
     );
-  }, [mounted, showRanks, rankedLines, source]);
+  }, [mounted, showRanks, rankedLines, insightDecos, source]);
 
   // Header label: just the basename so a long absolute path doesn't
   // dominate the bar. Full path lives in the title= tooltip.
@@ -357,7 +362,7 @@ export function CodeView({
               automaticLayout: true,
               renderLineHighlight: "all",
               padding: { top: 12, bottom: 12 },
-              glyphMargin: false,
+              glyphMargin: hasEnvGlyphs,
               folding: false,
               lineDecorationsWidth: 8,
               overviewRulerBorder: false,
@@ -399,7 +404,7 @@ export function CodeView({
               return !v;
             })}
             title={showRanks
-              ? "Thread ranks: on. The gutter marks primary (leaves the project), secondary and tertiary lines; hover a line for what it is. Click to hide."
+              ? "Annotations: on. The gutter marks each line by thread rank (primary leaves the project), functions nothing reaches are dimmed, and a dot marks a line that reads an environment variable; hover for what each is. Click to hide."
               : "Thread ranks: off. Click to mark primary / secondary / tertiary lines."}
             aria-label="Toggle thread ranks"
             style={headerBtnStyle(showRanks)}

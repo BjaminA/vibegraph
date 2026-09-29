@@ -132,7 +132,13 @@
             "\"/users/<int:uid>\"",
             "[\"GET\"]"
           ],
-          "isEffect": false
+          "isEffect": false,
+          "argKeys": [
+            [],
+            [
+              "methods"
+            ]
+          ]
         },
         {
           "id": "module/get_user_route.fn",
@@ -205,7 +211,12 @@
           "args": [
             "{\"error\": \"not found\"}"
           ],
-          "isEffect": false
+          "isEffect": false,
+          "argKeys": [
+            [
+              "error"
+            ]
+          ]
         },
         {
           "id": "module/get_user_route.fn/return@0",
@@ -304,7 +315,12 @@
           "args": [
             "{\"uid\": user.uid}"
           ],
-          "isEffect": false
+          "isEffect": false,
+          "argKeys": [
+            [
+              "uid"
+            ]
+          ]
         }
       ],
       "edges": [
@@ -637,6 +653,11 @@
               "name": "description",
               "value": "\"flask_demo CLI\""
             }
+          ],
+          "argKeys": [
+            [
+              "description"
+            ]
           ]
         },
         {
@@ -660,6 +681,14 @@
               "name": "required",
               "value": "True"
             }
+          ],
+          "argKeys": [
+            [
+              "dest"
+            ],
+            [
+              "required"
+            ]
           ]
         },
         {
@@ -675,7 +704,13 @@
             "\"list\"",
             "\"list all users\""
           ],
-          "isEffect": false
+          "isEffect": false,
+          "argKeys": [
+            [],
+            [
+              "help"
+            ]
+          ]
         },
         {
           "id": "module/main.fn/create.assign",
@@ -697,6 +732,12 @@
               "name": "help",
               "value": "\"add a user\""
             }
+          ],
+          "argKeys": [
+            [],
+            [
+              "help"
+            ]
           ]
         },
         {
@@ -1601,7 +1642,18 @@
             "r[1]",
             "r[2]"
           ],
-          "isEffect": false
+          "isEffect": false,
+          "argKeys": [
+            [
+              "uid"
+            ],
+            [
+              "name"
+            ],
+            [
+              "email"
+            ]
+          ]
         },
         {
           "id": "module/create_user.fn",

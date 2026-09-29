@@ -42,6 +42,20 @@
       "description": "Optional source path attached by the server when emitting an AstPayload. Not produced by the bare parser.",
       "type": "string"
     },
+    "envReads": {
+      "description": "2026-09-28 — the environment variables this file reads BY NAME, present only when there is at least one (field-additive: a file that reads none is byte-identical to before). A member access or subscript is not a call, so no node carries `process.env.X` / `os.environ['X']`; the frontend records it here. Forms: `member` (process.env.X, import.meta.env.X), `index` (process.env['X'], os.environ['X']), `destructure` (const {X} = process.env), `call` (os.environ.get('X'), os.getenv('X')), `inherited` (bash: an UPPERCASE variable expanded and never assigned in the file). A name built at runtime is not a name and is never recorded. Consumed by src/shared/env_surface.ts.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "line", "form"],
+        "additionalProperties": false,
+        "properties": {
+          "name": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$" },
+          "line": { "type": "integer", "minimum": 1 },
+          "form": { "enum": ["member", "index", "destructure", "call", "inherited"] }
+        }
+      }
+    },
     "degraded": {
       "description": "M-CMD.1 — present ONLY when the frontend could not read part of this file and dropped it. The IR is still emitted (a partial map beats no map) but it is INCOMPLETE, and a consumer must be able to learn that from the IR itself rather than from a separate error map it may never see. Absence means nothing was dropped. Field-additive; emitted by the four tree-sitter frontends, which count ERROR and MISSING nodes as they walk. libcst either parses a file or raises, so Python emits no IR at all for a file it cannot read and never carries this field.",
       "type": "object",
@@ -345,6 +359,11 @@
           "items": {
             "type": "string"
           }
+        },
+        "argKeys": {
+          "description": "The payload KEYS the call spells, one list per argument: object-literal keys (TS), keyword names and dict-literal keys (Python), one nested level as outer.inner. Spreads (...x, **x) and computed keys ([k]) are recorded as markers. Keys, never values. Absent when no argument spells a key.",
+          "type": "array",
+          "items": { "type": "array", "items": { "type": "string" } }
         },
         "kwargs": {
           "type": "array",
@@ -665,6 +684,7 @@
             "type": "string"
           }
         },
+        "argKeys": { "$ref": "#/$defs/AssignmentNode/properties/argKeys" },
         "isEffect": {
           "type": "boolean"
         },

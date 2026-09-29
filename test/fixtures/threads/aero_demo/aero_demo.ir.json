@@ -235,7 +235,14 @@
           "\"A320\"",
           "{\"velocity\": 250.0, \"density\": 1.225}"
         ],
-        "isEffect": false
+        "isEffect": false,
+        "argKeys": [
+          [],
+          [
+            "velocity",
+            "density"
+          ]
+        ]
       }
     ],
     "edges": [
@@ -800,7 +807,7 @@
           "velocity",
           "density"
         ],
-        "docstring": "Combine velocity and density into a corrected airspeed.\n    Calls math.sqrt \u2014 a library boundary the thread must mark as external.",
+        "docstring": "Combine velocity and density into a corrected airspeed.\n    Calls math.sqrt — a library boundary the thread must mark as external.",
         "decorators": [],
         "isAsync": false,
         "returns": "float",
@@ -941,8 +948,8 @@
           "endCol": 60
         },
         "signature": "def apply_correction_factor(velocity, density)",
-        "docstring": "Combine velocity and density into a corrected airspeed.\n    Calls math.sqrt \u2014 a library boundary the thread must mark as external.",
-        "source": "\n\ndef apply_correction_factor(velocity: float, density: float) -> float:\n    \"\"\"Combine velocity and density into a corrected airspeed.\n    Calls math.sqrt \u2014 a library boundary the thread must mark as external.\"\"\"\n    return velocity * math.sqrt(density / REFERENCE_DENSITY)\n"
+        "docstring": "Combine velocity and density into a corrected airspeed.\n    Calls math.sqrt — a library boundary the thread must mark as external.",
+        "source": "\n\ndef apply_correction_factor(velocity: float, density: float) -> float:\n    \"\"\"Combine velocity and density into a corrected airspeed.\n    Calls math.sqrt — a library boundary the thread must mark as external.\"\"\"\n    return velocity * math.sqrt(density / REFERENCE_DENSITY)\n"
       }
     ],
     "modulePath": "processing"

@@ -1,0 +1,6 @@
+{
+  "name": "journeys-demo",
+  "private": true,
+  "type": "module",
+  "dependencies": { "next": "15.0.0", "react": "19.0.0" }
+}

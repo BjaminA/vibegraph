@@ -1,12 +1,13 @@
 {
-  "generatedAt": "2026-09-21T12:20:36.075Z",
-  "commit": "016fcd9",
+  "generatedAt": "2026-09-29T10:29:29.816Z",
+  "commit": "5b1de6c",
   "verbs": {
     "guards": "MAY-GATE",
     "not-in-loop": "MAY-GATE",
     "handles-failure": "MAY-GATE",
     "annotated": "MAY-GATE",
-    "co-changes": "DEMOTE"
+    "co-changes": "DEMOTE",
+    "payload-keys": "MAY-GATE"
   },
   "records": {
     "guards": {
@@ -107,10 +108,109 @@
       "samplesFrom": "reviews/quality-layer/calibration/not-in-loop.candidate.json"
     },
     "handles-failure": {
-      "commit": "92091cb",
-      "at": "2026-09-12T16:01:42.372Z",
+      "commit": "ffd09cb",
+      "at": "2026-09-29T08:51:40.608Z",
       "sampleSet": {
         "knownGood": [
+          "scripts/arch_artifacts.mjs:module/git.fn/except@0",
+          "scripts/arch_audit.mjs:module/for@0/except@0",
+          "scripts/cli/affected.mjs:module/runAffected.fn/if@0/except@0",
+          "scripts/cli/check.mjs:module/runConstraintChecks.fn/if@0/except@0",
+          "scripts/cli/classify.mjs:module/spawnClassifier.fn/except@0",
+          "scripts/cli/constraints.mjs:module/parseJson.fn/except@0",
+          "scripts/cli/coverage.mjs:module/runCoverage.fn/if@0/except@0",
+          "scripts/cli/hooks.mjs:module/readSession.fn/except@0",
+          "scripts/cli/hooks.mjs:module/afterEdit.fn/if@0/except@0",
+          "scripts/cli/hooks.mjs:module/runHook.fn/except@0",
+          "scripts/cli/init.mjs:module/applyHooks.fn/if@0/except@0",
+          "scripts/cli/lessons.mjs:module/fileDiff.fn/except@0",
+          "scripts/cli/lessons.mjs:module/readLessons.fn/for@0/except@0",
+          "scripts/cli/main.mjs:module/packageVersion.fn/except@0",
+          "scripts/cli/main.mjs:module/cmdExport.fn/except@0",
+          "scripts/cli/main.mjs:module/cmdExport.fn/except@1",
+          "scripts/cli/main.mjs:module/cmdExport.fn/except@2",
+          "scripts/cli/main.mjs:module/cmdCheck.fn/except@0",
+          "scripts/cli/main.mjs:module/cmdCheck.fn/except@1",
+          "scripts/cli/main.mjs:module/cmdCheck.fn/except@2",
+          "scripts/cli/main.mjs:module/cmdAffected.fn/except@0",
+          "scripts/cli/main.mjs:module/cmdAffected.fn/except@1",
+          "scripts/cli/main.mjs:module/cmdCoverage.fn/except@0",
+          "scripts/cli/main.mjs:module/cmdCoverage.fn/except@1",
+          "scripts/cli/main.mjs:module/cmdInit.fn/except@0",
+          "scripts/cli/main.mjs:module/cmdInit.fn/if@0/if@0/except@0",
+          "scripts/cli/main.mjs:module/cmdInit.fn/if@0/except@0",
+          "scripts/cli/main.mjs:module/cmdInit.fn/except@1",
+          "scripts/cli/main.mjs:module/cmdInit.fn/if@1/except@0",
+          "scripts/cli/main.mjs:module/cmdClassify.fn/except@0",
+          "scripts/cli/main.mjs:module/cmdClassify.fn/except@1",
+          "scripts/cli/main.mjs:module/cmdClassify.fn/if@0/except@0",
+          "scripts/cli/main.mjs:module/cmdArchitecture.fn/except@0",
+          "scripts/cli/main.mjs:module/cmdArchitecture.fn/except@1",
+          "scripts/cli/main.mjs:module/cmdArchitecture.fn/if@1/except@0",
+          "scripts/cli/main.mjs:module/cmdConstraints.fn/except@0",
+          "scripts/cli/main.mjs:module/cmdSeeds.fn/except@0",
+          "scripts/cli/main.mjs:module/cmdSeeds.fn/if@0/except@0",
+          "scripts/cli/main.mjs:module/cmdSkills.fn/except@0",
+          "scripts/cli/main.mjs:module/cmdSkills.fn/if@0/except@0",
+          "scripts/cli/main.mjs:module/cmdHook.fn/except@0",
+          "scripts/cli/main.mjs:module/cmdHook.fn/except@1",
+          "scripts/cli/main.mjs:module/cmdHook.fn/except@2",
+          "scripts/cli/main.mjs:module/cmdHook.fn/except@3",
+          "scripts/cli/main.mjs:module/cmdHook.fn/if@1/except@0",
+          "scripts/cli/main.mjs:module/cmdLessons.fn/except@0",
+          "scripts/cli/main.mjs:module/cmdLessons.fn/except@1",
+          "scripts/cli/main.mjs:module/cmdView.fn/except@0",
+          "scripts/cli/paths.mjs:module/toolLabel.fn/except@0",
+          "scripts/cli/paths.mjs:module/gitHead.fn/except@0",
+          "scripts/cli/seeds.mjs:module/runSeeds.fn/except@0",
+          "scripts/cli/view.mjs:module/runView.fn/except@0",
+          "scripts/drive_work_run.mjs:module/except@0",
+          "scripts/envelope_cache.mjs:module/toolFingerprint.fn/add.fn/except@0",
+          "scripts/envelope_cache.mjs:module/readJson.fn/except@0",
+          "scripts/envelope_cache.mjs:module/buildEnvelopeCached.fn/except@0",
+          "scripts/export_knowledge.mjs:module/exportKnowledge.fn/for@4/except@0",
+          "scripts/frontends/bash/parse_bash.mjs:module/runBatch.fn/for@1/except@0",
+          "scripts/frontends/bash/parse_bash.mjs:module/if@0/except@0",
+          "scripts/frontends/bash/rewrite_bash.mjs:module/shfmtAvailable.fn/if@0/except@0",
+          "scripts/frontends/bash/rewrite_bash.mjs:module/formatCandidates.fn/if@0/except@0",
+          "scripts/frontends/bash/rewrite_bash.mjs:module/main.fn/try@0/for@0/except@0",
+          "scripts/frontends/bash/rewrite_bash.mjs:module/main.fn/except@0",
+          "scripts/frontends/cpp/parse_cpp.mjs:module/runBatch.fn/for@1/except@0",
+          "scripts/frontends/cpp/parse_cpp.mjs:module/if@0/if@0/except@0",
+          "scripts/frontends/jsts/parse_jsts.mjs:module/runBatch.fn/for@1/except@0",
+          "scripts/frontends/jsts/parse_jsts.mjs:module/if@0/except@0",
+          "scripts/frontends/jsts/rewrite_jsts.mjs:module/getPrettier.fn/if@0/except@0",
+          "scripts/frontends/jsts/rewrite_jsts.mjs:module/formatCandidates.fn/if@0/except@0",
+          "scripts/frontends/jsts/rewrite_jsts.mjs:module/formatCandidates.fn/if@0/except@1",
+          "scripts/frontends/jsts/rewrite_jsts.mjs:module/main.fn/try@0/for@0/except@0",
+          "scripts/frontends/jsts/rewrite_jsts.mjs:module/main.fn/except@0",
+          "scripts/frontends/jsts/tsconfig.mjs:module/findTsPaths.fn/for@0/for@0/except@0",
+          "scripts/frontends/rust/parse_rust.mjs:module/runBatch.fn/for@1/except@0",
+          "scripts/frontends/rust/parse_rust.mjs:module/if@0/if@0/except@0",
+          "scripts/frontends/span_rewriter.mjs:module/runSpanRewriter.fn/try@0/for@0/except@0",
+          "scripts/frontends/span_rewriter.mjs:module/runSpanRewriter.fn/except@0",
+          "scripts/gen_stack_tables.mjs:module/if@0/except@0",
+          "scripts/quality_calibrate.mjs:module/nodeTypeEnumAt.fn/except@0",
+          "scripts/quality_calibrate.mjs:module/status.fn/for@0/except@0",
+          "scripts/quality_calibrate.mjs:module/status.fn/for@0/except@1",
+          "scripts/quality_calibrate.mjs:module/status.fn/for@0/except@2",
+          "scripts/quality_calibrate.mjs:module/status.fn/if@0/for@0/except@0",
+          "scripts/quality_check.mjs:module/if@0/except@0",
+          "scripts/review_overlaps.mjs:module/except@0",
+          "scripts/skills_validate.mjs:module/commitOf.fn/except@0",
+          "scripts/thread_context.mjs:module/envDeclarations.fn/except@0",
+          "scripts/trace_bash.mjs:module/main.fn/try@0/except@0",
+          "scripts/trace_bash.mjs:module/main.fn/except@0",
+          "scripts/trace_bash.mjs:module/main.fn/finally@0/except@0",
+          "scripts/vg_ollama_shim.mjs:module/connectMcp.fn/except@0",
+          "scripts/vg_ollama_shim.mjs:module/callTool.fn/except@0",
+          "scripts/vg_ollama_shim.mjs:module/parseLenient.fn/except@0",
+          "scripts/vg_ollama_shim.mjs:module/parseLenient.fn/for@0/for@0/except@0",
+          "scripts/vg_ollama_shim.mjs:module/main.fn/except@0",
+          "scripts/vg_ollama_shim.mjs:module/main.fn/try@1/while@0/for@0/if@0/except@0",
+          "scripts/vg_ollama_shim.mjs:module/main.fn/except@1",
+          "scripts/vg_ollama_shim.mjs:module/main.fn/except@1/except@0",
+          "scripts/vg_ollama_shim.mjs:module/main.fn/except@2",
           "scripts/build_system_tier.py:module/_detect_frontend.fn/for@0/for@0/if@0/except@0",
           "scripts/build_system_tier.py:module/_scan_calls_edges.fn/for@0/except@0",
           "scripts/check_literals.py:module/_validate_expr.fn/except@0",
@@ -247,8 +347,8 @@
       },
       "fireRate": {
         "onKnownGood": {
-          "fired": 3,
-          "of": 129
+          "fired": 1,
+          "of": 228
         },
         "onKnownBad": {
           "fired": 1,
@@ -257,7 +357,7 @@
       },
       "falsePositiveReview": {
         "reviewedBy": "model",
-        "model": "claude:claude-fable-5-1",
+        "model": "claude:claude-opus-5-5",
         "delegatedBy": {
           "source": "human",
           "id": "ruling:2026-09-12:calibration-review-delegated",
@@ -265,19 +365,9 @@
         },
         "notes": [
           {
-            "id": "scripts/build_system_tier.py:module/_detect_frontend.fn/for@0/for@0/if@0/except@0",
-            "verdict": "finding",
-            "why": "`except Exception: pass` around reading and parsing a package.json while probing for a frontend framework. A malformed manifest, a permissions error or a bug in the probe all vanish identically and the system tier reports no frontend. A narrow `except (OSError, ValueError)` with a note would make the skip intentional; as written it is a swallow."
-          },
-          {
-            "id": "scripts/build_system_tier.py:module/_scan_calls_edges.fn/for@0/except@0",
-            "verdict": "finding",
-            "why": "`except Exception: continue` around `open(full).read()` in a file loop. An unreadable file is a legitimate skip, but `Exception` also hides a UnicodeDecodeError on a file the scan should have seen, silently dropping its edges. `except (OSError, UnicodeDecodeError)` would name the skip."
-          },
-          {
             "id": "scripts/trace_run.py:module/_Tracer.class/__call__.fn/except@0",
             "verdict": "intended",
-            "why": "`except Exception: pass  # noqa: BLE001 - a tracer must never break the run`. The shape is a real broad swallow and the author meant it: a sys.setprofile hook that raises would abort the traced program (PLAN-M-RUNTIME phase 3). The IR cannot read the comment; this wants a stated allowance on the node, not a verb change."
+            "why": "Unchanged from the 2026-09-12 review, re-read in source: `except Exception: pass  # noqa: BLE001 - a tracer must never break the run`. A sys.setprofile hook that raises would abort the traced program (PLAN-M-RUNTIME phase 3). The author meant the broad swallow; it wants a stated allowance on the node, not a verb change."
           }
         ],
         "falsePositives": [],
@@ -346,6 +436,104 @@
         "intended": []
       },
       "samplesFrom": "reviews/quality-layer/calibration/annotated.candidate.json"
+    },
+    "payload-keys": {
+      "commit": "5b1de6c",
+      "at": "2026-09-29T10:29:29.538Z",
+      "sampleSet": {
+        "knownGood": [
+          "test/fixtures/quality/calib/payload/calib_payload.py:module/good_literal.fn/requests_post.call",
+          "test/fixtures/quality/calib/payload/calib_payload.py:module/good_extra_keys.fn/requests_post.call",
+          "test/fixtures/quality/calib/payload/calib_payload.ts:module/goodLiteral.fn/publish.call",
+          "test/fixtures/quality/calib/payload/calib_payload.ts:module/goodPair.fn/publish.call",
+          "scripts/cli/classify.mjs:module/spawnClassifier.fn/r.assign",
+          "scripts/cli/pyenv.mjs:module/probe.fn/r.assign",
+          "scripts/cli/pyenv.mjs:module/resolvePython.fn/for@0/spawnSync.call",
+          "scripts/cli/pyenv.mjs:module/resolvePython.fn/pip.assign",
+          "scripts/cli/pyenv.mjs:module/ensureBlack.fn/spawnSync.call",
+          "scripts/cli/pyenv.mjs:module/ensureBlack.fn/pip.assign",
+          "scripts/cli/pyenv.mjs:module/ensureBlack.fn/spawnSync.call@1",
+          "scripts/cli/view.mjs:module/openBrowser.fn/for@0/r.assign",
+          "scripts/cli/view.mjs:module/runView.fn/spawnSync.call",
+          "scripts/frontends/bash/rewrite_bash.mjs:module/shfmtAvailable.fn/if@0/try@0/spawnSync.call",
+          "scripts/frontends/bash/rewrite_bash.mjs:module/runShfmt.fn/r.assign",
+          "scripts/frontends/cpp/rewrite_cpp.mjs:module/clangFormatAvailable.fn/if@0/r.assign",
+          "scripts/frontends/cpp/rewrite_cpp.mjs:module/clangFormat.fn/r.assign",
+          "scripts/frontends/rust/rewrite_rust.mjs:module/rustfmtAvailable.fn/if@0/r.assign",
+          "scripts/frontends/rust/rewrite_rust.mjs:module/formatCandidates.fn/r.assign",
+          "scripts/regen_polyglot.mjs:module/run.fn/r.assign",
+          "scripts/regen_project_envelopes.mjs:module/buildEnvelope.fn/dr.assign",
+          "scripts/regen_project_envelopes.mjs:module/buildEnvelope.fn/er.assign",
+          "scripts/regen_project_envelopes.mjs:module/buildEnvelope.fn/sr.assign",
+          "scripts/cli/view.mjs:module/runView.fn/child.assign",
+          "scripts/arch_artifacts.mjs:module/git.fn/try@0/return@0/execFileSync.call",
+          "scripts/cli/check.mjs:module/workingTreeDelta.fn/out.assign",
+          "scripts/cli/lessons.mjs:module/fileDiff.fn/try@0/d.assign",
+          "scripts/cli/paths.mjs:module/gitHead.fn/try@0/execFileSync_git_rev-parse_--short_HEAD_cwd_dir_encoding_utf-8_stdio_ignore_pipe_ignore_trim.call/execFileSync.call",
+          "scripts/export_knowledge.mjs:module/if@0/execFileSync_git_rev-parse_--short_HEAD_cwd_ROOT_encoding_utf-8_trim.call/execFileSync.call",
+          "scripts/gen_stack_tables.mjs:module/py.fn/return@0/execFileSync.call",
+          "scripts/gen_stack_tables.mjs:module/collect.fn/bashVersion.assign/execFileSync.call",
+          "scripts/gen_stack_tables.mjs:module/collect.fn/bashBuiltins.assign/execFileSync_bash_-c_compgen_-b_encoding_utf8_trim_split.call/execFileSync_bash_-c_compgen_-b_encoding_utf8_trim.call/execFileSync.call",
+          "scripts/gen_stack_tables.mjs:module/collect.fn/bashKeywords.assign/execFileSync_bash_-c_compgen_-k_encoding_utf8_trim_split.call/execFileSync_bash_-c_compgen_-k_encoding_utf8_trim.call/execFileSync.call",
+          "scripts/quality_calibrate.mjs:module/COMMIT.assign/execFileSync.call",
+          "scripts/quality_calibrate.mjs:module/nodeTypeEnumAt.fn/try@0/text.assign",
+          "scripts/quality_calibrate.mjs:module/calibrateCoChanges.fn/revs.assign/execFileSync_git_log_--format_h_--_schemas_ir_schema_json_cwd_ROOT_encoding_utf-8_trim_split.call/execFileSync_git_log_--format_h_--_schemas_ir_schema_json_cwd_ROOT_encoding_utf-8_trim.call/execFileSync.call",
+          "scripts/quality_calibrate.mjs:module/calibrateCoChanges.fn/for@0/subject.assign/execFileSync.call",
+          "scripts/quality_calibrate.mjs:module/status.fn/for@0/lastChange.assign/execFileSync.call",
+          "scripts/quality_calibrate.mjs:module/status.fn/for@0/try@2/execFileSync.call",
+          "scripts/quality_check.mjs:module/gitDelta.fn/execFileSync_git_rev-list_--reverse_range_cwd_encoding_utf-8_trim_split_n_filter.call/execFileSync_git_rev-list_--reverse_range_cwd_encoding_utf-8_trim_split.call/execFileSync_git_rev-list_--reverse_range_cwd_encoding_utf-8_trim.call/execFileSync.call",
+          "scripts/quality_check.mjs:module/gitDelta.fn/for@0/out.assign",
+          "scripts/quality_check.mjs:module/if@0/execFileSync_git_rev-parse_--short_HEAD_cwd_ROOT_encoding_utf-8_trim.call/execFileSync.call",
+          "scripts/quality_derive.mjs:module/if@0/execFileSync_git_rev-parse_--short_HEAD_cwd_ROOT_encoding_utf-8_trim.call/execFileSync.call",
+          "scripts/skills_validate.mjs:module/commitOf.fn/try@0/return@0/execFileSync.call",
+          "scripts/trace_bash.mjs:module/main.fn/try@0/execFile.call",
+          "scripts/with_glm.sh:module/exec.call",
+          "scripts/cst_rewrite.py:module/_run_black.fn/proc.assign",
+          "scripts/regen_link_fixtures.py:module/parse_file.fn/r.assign",
+          "scripts/regen_link_fixtures.py:module/link.fn/r.assign",
+          "scripts/run_block.py:module/run_block.fn/try@0/result.assign",
+          "scripts/run_to_node.py:module/run.fn/try@0/r.assign",
+          "scripts/synth_scale_fixture.py:module/generate_ir.fn/for@0/for@0/r.assign",
+          "scripts/synth_scale_fixture.py:module/generate_ir.fn/linked.assign",
+          "src/server/build_plan_draft.ts:module/draftBuildPlan.fn/child.assign",
+          "src/server/changeset_draft.ts:module/draftChangeset.fn/child.assign",
+          "src/server/chat/claude_p_backend.ts:module/ClaudePHeadlessBackend.class/send.fn/child.assign",
+          "src/server/chat/claude_stdio_backend.ts:module/StdioSession.class/ensureChild.fn/child.assign",
+          "src/server/compose_draft.ts:module/draftInsertion.fn/child.assign",
+          "src/server/run/synth_args.ts:module/synthesizeArgs.fn/child.assign",
+          "src/server/run/synth_data.ts:module/synthesizeDataFile.fn/child.assign",
+          "src/server/system_draft.ts:module/draftSystemPlan.fn/child.assign"
+        ],
+        "knownBad": [
+          "test/fixtures/quality/calib/payload/calib_payload.py:module/bad_missing.fn/requests_post.call",
+          "test/fixtures/quality/calib/payload/calib_payload.py:module/bad_forbidden.fn/requests_post.call",
+          "test/fixtures/quality/calib/payload/calib_payload.ts:module/badMissing.fn/publish.call",
+          "test/fixtures/quality/calib/payload/calib_payload.ts:module/badForbidden.fn/publish.call"
+        ]
+      },
+      "fireRate": {
+        "onKnownGood": {
+          "fired": 0,
+          "of": 61
+        },
+        "onKnownBad": {
+          "fired": 4,
+          "of": 4
+        }
+      },
+      "falsePositiveReview": {
+        "reviewedBy": "model",
+        "model": "claude:claude-opus-5-5",
+        "delegatedBy": {
+          "source": "human",
+          "id": "ruling:2026-09-12:calibration-review-delegated",
+          "at": "2026-09-12T16:00:00.000Z"
+        },
+        "notes": [],
+        "falsePositives": [],
+        "intended": []
+      },
+      "samplesFrom": "reviews/quality-layer/calibration/payload-keys.candidate.json"
     }
   }
 }

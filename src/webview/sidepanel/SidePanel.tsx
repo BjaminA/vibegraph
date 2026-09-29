@@ -7,7 +7,7 @@
 
 import React, { useEffect, useState } from "react";
 import { ThreadTree } from "./ThreadTree";
-import { FileTree } from "./FileTree";
+import { FileTree, type FileStatus } from "./FileTree";
 import type { EntryPoint, ProjectThread } from "../types";
 
 const STORAGE_KEY = "vg.sidepanel.tab";
@@ -36,6 +36,8 @@ export interface SidePanelProps {
   activeEntryPointId: string | null;
   onSelectEntry: (entry: EntryPoint) => void;
   onSelectFile: (filePath: string) => void;
+  /** 2026-09-28 — per-file reachability / parse / freshness markers. */
+  fileStatus?: Record<string, FileStatus>;
 }
 
 export function SidePanel(props: SidePanelProps) {
@@ -102,6 +104,7 @@ export function SidePanel(props: SidePanelProps) {
             filePaths={props.filePaths}
             activeFilePath={props.activeFilePath}
             onSelectFile={props.onSelectFile}
+            status={props.fileStatus}
           />
         )}
       </div>

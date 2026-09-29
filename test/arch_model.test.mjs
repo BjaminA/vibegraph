@@ -57,9 +57,10 @@ test("a cluster is a framework's family under a package root — never a directo
   const fl = fleet.nodes.filter((n) => n.kind === "cluster").map((n) => n.id).sort();
   assert.ok(fl.includes("cluster:api-express:.") && fl.includes("cluster:api-flask:."), fl.join(", "));
   assert.equal(node(fleet, "cluster:api-express:.").internalHops, undefined, "the gateway's calls to Flask are NOT internal");
-  // Tests are not architecture; they are counted, not drawn.
-  assert.equal(fleet.unplaced.tests, 5);
-  assert.match(fleet.notes.join(" "), /5 test entry point/);
+  // Tests are not architecture; they are counted, not drawn. 11 since
+  // 2026-09-28: the fleet's six unittest METHODS are test entry points now.
+  assert.equal(fleet.unplaced.tests, 11);
+  assert.match(fleet.notes.join(" "), /11 test entry point/);
   // A language-named CLI when no framework names it.
   assert.equal(familyOf({ id: "a:main", kind: "cli", file: "tool/main.cpp", framework: null }, "cpp").label, "CLI (cpp)");
   // The package root is the nearest manifest directory.

@@ -7,7 +7,7 @@
 
 import {
   AppWindow, Server, TerminalSquare, Bot, Workflow, Layers, Database, Zap, Radio,
-  Sparkles, Cloud, Globe, Circle, FolderOpen, type LucideIcon,
+  Sparkles, Cloud, Globe, Circle, FolderOpen, KeyRound, type LucideIcon,
 } from "lucide-react";
 import type { ArchCategory } from "../../shared/arch_protocol";
 import { archAccent } from "./arch_accent";
@@ -17,7 +17,7 @@ export interface ArchVisual { accent: string; icon: LucideIcon; quiet?: boolean 
 const ICON: Record<ArchCategory, LucideIcon> = {
   frontend: AppWindow, backend: Server, scripts: TerminalSquare, agent: Bot, pipeline: Workflow,
   platform: Layers, database: Database, cache: Zap, storage: FolderOpen, queue: Radio, model: Sparkles, cloud: Cloud,
-  external: Globe, unknown: Circle,
+  external: Globe, unknown: Circle, config: KeyRound,
 };
 
 export function archVisual(c: ArchCategory): ArchVisual {

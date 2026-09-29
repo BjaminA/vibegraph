@@ -10,6 +10,7 @@
 // they are; a follow-up may point them here.
 
 import type { ReferenceFact, UnresolvedFact } from "../constraint_grammar.ts";
+import { flattenArgKeys, type CallSiteFact } from "../payload_check.ts";
 import { computeThreadContract, type ThreadContract, type ContractInputThread } from "../thread_contract.ts";
 import { buildStackIndex, contractStackForFile, type StackIndex } from "../stack.ts";
 import { buildCrossingIndex } from "../crossings.ts";
@@ -20,7 +21,7 @@ interface IrNodeLike {
   id: string; type: string; parentId?: string | null; line?: number; col?: number;
   name?: string; funcName?: string; callTarget?: string; effectKind?: string | null; paramTypes?: Record<string, string>;
   params?: string[]; condition?: string; elseLine?: number; exceptType?: string | null;
-  iterName?: string; valueKind?: string;
+  iterName?: string; valueKind?: string; argKeys?: unknown;
 }
 interface IrEdgeLike { type?: string; source?: string; target?: string; targetFile?: string; qualifiedTarget?: string }
 export interface EnvelopeLike {
@@ -115,8 +116,10 @@ export function buildQualityFacts(input: FactsInput): QualityFacts {
   const definedNames = new Set<string>();
   const nodesByFile = new Map<string, FactNode[]>();
   const referenceTargets = new Map<string, { toFile: string | null; toNodeId: string }>();
+  const callSites: CallSiteFact[] = [];
   for (const [file, ir] of Object.entries(env.files)) {
     const resolved = new Set<string>();
+    const resolvedName = new Map<string, string>();
     for (const e of ir.edges ?? []) {
       if (e.type !== "reference" || typeof e.source !== "string") continue;
       resolved.add(e.source);
@@ -127,12 +130,19 @@ export function buildQualityFacts(input: FactsInput): QualityFacts {
       if (!toName) continue;
       const toFile = typeof e.targetFile === "string" ? e.targetFile : null;
       references.push({ fromFile: file, fromNodeId: e.source, toFile, toName });
+      resolvedName.set(e.source, toName);
       if (typeof e.target === "string") referenceTargets.set(`${file}:${e.source}`, { toFile, toNodeId: e.target });
     }
     const facts: FactNode[] = [];
     for (const n of ir.nodes ?? []) {
       if (n.type === "function_def" && typeof n.name === "string") definedNames.add(n.name);
       facts.push(toFactNode(n, resolved));
+      // payload-keys: every call site with the keys it spells. An assignment
+      // whose value is a call IS that call's node (parse_cst claims it).
+      const callee = n.type === "call" ? (n.funcName ?? n.callTarget) : n.type === "assignment" ? n.callTarget : undefined;
+      if (typeof callee === "string" && callee) {
+        callSites.push({ file, nodeId: n.id, callee, resolvedName: resolvedName.get(n.id) ?? null, keys: flattenArgKeys(n.argKeys) });
+      }
       if (n.type !== "call" || resolved.has(n.id)) continue;
       const label = typeof n.funcName === "string" ? n.funcName : "";
       if (label) unresolved.push({ file, label });
@@ -172,6 +182,7 @@ export function buildQualityFacts(input: FactsInput): QualityFacts {
     importsByFile: Object.fromEntries(Object.entries(stack.byFile ?? {}).map(([f, tools]) => [f, [...(tools as string[])]])),
     definedNames: [...definedNames],
     unresolved,
+    callSites,
     commit,
     ...(input.entryPointId ? { entryPointId: input.entryPointId } : {}),
     ...(input.scopeFiles ? { scopeFiles: input.scopeFiles } : {}),

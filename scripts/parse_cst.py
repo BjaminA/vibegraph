@@ -22,7 +22,7 @@ re-deriving paths from the filesystem.
 import argparse
 import json
 import sys
-from typing import Optional, Union
+from typing import Dict, List, Optional, Union
 import libcst as cst
 import libcst.metadata as meta  # noqa: F401  (Optional is re-used by helper signatures)
 import libcst.matchers as m
@@ -317,6 +317,55 @@ class GraphBuilder(cst.CSTVisitor):
         # nested set; otherwise (list/binop/…) any contained call is nested.
         return len(all_calls) > 1 if isinstance(value, cst.Call) else True
 
+    def _arg_keys(self, call: cst.Call) -> Optional[list]:
+        """The payload KEYS a call spells, one list per argument, aligned with
+        `call.args` — the jsts builder's `argKeys` shape, so one reader serves
+        both languages (arch payloads, the `payload-keys` check).
+
+        A keyword argument contributes its name, and when its value is a dict
+        literal, `name.key` for each literal key (`json={"device": d}` →
+        `json`, `json.device`); a positional dict literal contributes its keys,
+        one nested level as `outer.inner`. Keys, never values. What the call
+        does NOT spell is marked rather than dropped, so a reader can tell
+        "absent" from "not visible": `**x` and `{**x}` are `**x`, a
+        non-string dict key is `[expr]`. Null when no argument spells a key,
+        so a node without one is unchanged."""
+        out: list = []
+        found = False
+        for a in call.args:
+            keys: list[str] = []
+            if a.star == "**":
+                keys.append("**" + self._code(a.value).strip()[:40])
+            elif a.keyword is not None:
+                name = a.keyword.value
+                keys.append(name)
+                keys.extend(f"{name}.{k}" for k in self._dict_keys(a.value, nested=False))
+            elif a.star == "":
+                keys.extend(self._dict_keys(a.value, nested=True))
+            if keys:
+                found = True
+            out.append(keys[:16])
+        return out if found else None
+
+    def _dict_keys(self, value: cst.BaseExpression, nested: bool) -> list[str]:
+        if not isinstance(value, cst.Dict):
+            return []
+        keys: list[str] = []
+        for el in value.elements:
+            if isinstance(el, cst.StarredDictElement):
+                keys.append("**" + self._code(el.value).strip()[:40])
+                continue
+            if isinstance(el.key, cst.SimpleString):
+                k = el.key.evaluated_value
+                k = k if isinstance(k, str) else k.decode("utf-8", "replace")
+            else:
+                keys.append("[" + self._code(el.key).strip()[:40] + "]")
+                continue
+            keys.append(k)
+            if nested:
+                keys.extend(f"{k}.{inner}" for inner in self._dict_keys(el.value, nested=False))
+        return keys
+
     def _emit_nested_call(self, call: cst.Call, depth: int) -> int:
         """Emit one nested `call` node (parent = current _parent_id, so _emit
         wires the contains edge outer→inner) and recurse into its call-valued
@@ -347,6 +396,9 @@ class GraphBuilder(cst.CSTVisitor):
             "nested": True,
             "nestedDepth": depth,
         }
+        keys = self._arg_keys(call)
+        if keys:
+            extras["argKeys"] = keys
         ek = self._classify_effect_kind(func_name)
         if ek is not None:
             extras["effectKind"] = ek
@@ -530,6 +582,9 @@ class GraphBuilder(cst.CSTVisitor):
                 extras["args"] = pos_args
             if kw_args:
                 extras["kwargs"] = kw_args
+            keys = self._arg_keys(node.value)
+            if keys:
+                extras["argKeys"] = keys
         self._emit(node_id, "assignment", self._pos(node),
                    cst_node=node, **extras)
         assign_node = self.nodes[-1]
@@ -624,6 +679,9 @@ class GraphBuilder(cst.CSTVisitor):
                 extras["args"] = pos_args
             if kw_args:
                 extras["kwargs"] = kw_args
+            keys = self._arg_keys(node.value)
+            if keys:
+                extras["argKeys"] = keys
         self._emit(node_id, "assignment", self._pos(node), cst_node=node, **extras)
         assign_node = self.nodes[-1]
         # An augmented assignment never DEFINES a name (the target already
@@ -1124,6 +1182,9 @@ class GraphBuilder(cst.CSTVisitor):
         ek = self._classify_effect_kind(func_name)
         if ek is not None:
             extras["effectKind"] = ek
+        keys = self._arg_keys(call)
+        if keys:
+            extras["argKeys"] = keys
         self._emit(node_id, "call", self._pos(call), cst_node=owner, **extras)
         emitted = self.nodes[-1]
         base = func_name.split(".")[0]
@@ -1152,6 +1213,9 @@ class GraphBuilder(cst.CSTVisitor):
                 ek = self._classify_effect_kind(func_name)
                 if ek is not None:
                     extras["effectKind"] = ek
+                keys = self._arg_keys(call)
+                if keys:
+                    extras["argKeys"] = keys
                 self._emit(node_id, "assignment", self._pos(call), cst_node=node, **extras)
                 emitted = self.nodes[-1]
                 if not self._parent_stack and "." not in asname:
@@ -1172,6 +1236,9 @@ class GraphBuilder(cst.CSTVisitor):
                 ek = self._classify_effect_kind(func_name)
                 if ek is not None:
                     extras["effectKind"] = ek
+                keys = self._arg_keys(call)
+                if keys:
+                    extras["argKeys"] = keys
                 self._emit(node_id, "call", self._pos(call), cst_node=node, **extras)
                 emitted = self.nodes[-1]
                 base = func_name.split(".")[0]
@@ -1323,6 +1390,9 @@ class GraphBuilder(cst.CSTVisitor):
         extras = {"funcName": func_name, "args": args, "isEffect": is_effect}
         if effect_kind is not None:
             extras["effectKind"] = effect_kind
+        keys = self._arg_keys(call)
+        if keys:
+            extras["argKeys"] = keys
         self._emit(call_id, "call", self._pos(call), cst_node=node, **extras)
         call_node = self.nodes[-1]
         # Reference edge: call site → function/class definition
@@ -1343,6 +1413,122 @@ IR_VERSION = "1.3"
 IR_VERSION_CONTAINERS = "1.5"
 
 
+class EnvReadCollector(cst.CSTVisitor):
+    """2026-09-28 - the environment variables this file reads BY NAME:
+    `os.environ["X"]`, `os.environ.get("X")`, `os.getenv("X")` (and the bare
+    `environ` / `getenv` a `from os import` binds). A subscript is not a call,
+    so no IR node carries it; the reads ride the IR root as `envReads`.
+    A name built at runtime (`os.environ[key]`) is not a name and is skipped."""
+
+    METADATA_DEPENDENCIES = (meta.PositionProvider,)
+    _ENV_OBJ = ("os.environ", "environ")
+    _ENV_CALLS = ("os.environ.get", "environ.get", "os.getenv", "getenv")
+
+    def __init__(self, module: cst.Module):
+        self._module = module
+        self.reads: List[dict] = []
+
+    def _code(self, node) -> str:
+        return self._module.code_for_node(node)
+
+    def _add(self, node, name: str, form: str) -> None:
+        line = self.get_metadata(meta.PositionProvider, node).start.line
+        self.reads.append({"name": name, "line": line, "form": form})
+
+    @staticmethod
+    def _literal(node) -> Optional[str]:
+        if isinstance(node, cst.SimpleString):
+            v = node.evaluated_value
+            return v if isinstance(v, str) and v else None
+        return None
+
+    def visit_Subscript(self, node: cst.Subscript) -> None:
+        if self._code(node.value) not in self._ENV_OBJ or len(node.slice) != 1:
+            return
+        el = node.slice[0].slice
+        if isinstance(el, cst.Index):
+            name = self._literal(el.value)
+            if name:
+                self._add(node, name, "index")
+
+    def visit_Call(self, node: cst.Call) -> None:
+        if self._code(node.func) not in self._ENV_CALLS or not node.args:
+            return
+        name = self._literal(node.args[0].value)
+        if name:
+            self._add(node, name, "call")
+
+
+def resolve_nested_references(nodes: list, edges: list) -> list:
+    """Scope-aware same-file references for bare calls (2026-09-29).
+
+    The visitor links a bare call only to a MODULE-level def (`_defs`), so a
+    helper defined inside a function and called there got no edge (the thread
+    walk then flattened its body into the caller), and an inner def that
+    shadows a module def linked to the MODULE one — a false edge. This pass
+    resolves each bare call to the def in its innermost enclosing function
+    that defines the name, falling back to what the visitor already did.
+    Refused (no edge): two defs of the name in one scope, or a parameter of
+    that name in a nearer function (the call then names the argument).
+    """
+    def scope_of(node_id: str) -> str:
+        segs = node_id.split("/")
+        for i in range(len(segs) - 2, 0, -1):
+            if segs[i].endswith(".fn"):
+                return "/".join(segs[: i + 1])
+        return "module"
+
+    defs: Dict[str, Dict[str, List[str]]] = {}
+    params: Dict[str, set] = {}
+    for n in nodes:
+        if n.get("type") != "function_def":
+            continue
+        parent = n.get("parentId") or ""
+        if parent.endswith(".class"):
+            continue
+        params[n["id"]] = {str(p).split(":")[0].split("=")[0].strip().lstrip("*") for p in n.get("params") or []}
+        scope = scope_of(n["id"])
+        if scope == "module":
+            continue  # module level: the visitor's `_defs` already decided
+        defs.setdefault(scope, {}).setdefault(n["name"], []).append(n["id"])
+    if not defs:
+        return edges
+
+    by_source: Dict[str, List[dict]] = {}
+    for e in edges:
+        if e.get("type") == "reference":
+            by_source.setdefault(e["source"], []).append(e)
+    for n in nodes:
+        callee = n.get("funcName") if n.get("type") == "call" else n.get("callTarget")
+        if not isinstance(callee, str) or not callee or "." in callee:
+            continue
+        scope = scope_of(n["id"])
+        target: Optional[str] = None
+        refused = False
+        while scope != "module":
+            found = defs.get(scope, {}).get(callee)
+            if found:
+                if len(found) == 1:
+                    target = found[0]
+                else:
+                    refused = True
+                break
+            if callee in params.get(scope, set()):
+                refused = True
+                break
+            scope = scope_of(scope)
+        if target is None and not refused:
+            continue  # nothing nested claims it: the visitor's edge (or none) stands
+        # A nested def (or an ambiguity) outranks the module-level def the
+        # visitor linked: drop that same-file edge.
+        for e in by_source.get(n["id"], []):
+            if not e.get("targetFile"):
+                edges.remove(e)
+        if target is not None:
+            edges.append({"source": n["id"], "target": target, "type": "reference"})
+    return edges
+
+
 def parse_file(path: str, module_path: Optional[str] = None) -> dict:
     with open(path, "r", encoding="utf-8") as f:
         source = f.read()
@@ -1350,15 +1536,21 @@ def parse_file(path: str, module_path: Optional[str] = None) -> dict:
     wrapper = meta.MetadataWrapper(module)
     builder = GraphBuilder(module)
     wrapper.visit(builder)
+    env_reads = EnvReadCollector(module)
+    wrapper.visit(env_reads)
     version = IR_VERSION_CONTAINERS if builder._uses_containers else IR_VERSION
     result: dict = {
         "version": version,
         "nodes": builder.nodes,
-        "edges": builder.edges,
+        "edges": resolve_nested_references(builder.nodes, builder.edges),
         "symbolIndex": builder.symbol_index,
     }
     if module_path is not None:
         result["modulePath"] = module_path
+    # Field-additive and emitted only when non-empty, so a file that reads no
+    # environment variable is byte-identical to before.
+    if env_reads.reads:
+        result["envReads"] = env_reads.reads
     return result
 
 

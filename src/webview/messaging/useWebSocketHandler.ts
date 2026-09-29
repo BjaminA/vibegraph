@@ -96,6 +96,7 @@ export interface WebSocketHandlerActions {
   setCrossings?: React.Dispatch<React.SetStateAction<import("../../shared/protocol").CrossingIndexRecord | null>>;
   // M-ARCH.2 - the derived architecture model rides the envelope (absent = none).
   setArchitecture?: React.Dispatch<React.SetStateAction<import("../../shared/protocol").ArchModelRecord | null>>;
+  setInsight?: React.Dispatch<React.SetStateAction<import("../../shared/protocol").InsightRecord | null>>;
   /** M-ARCH.4 — the propose / ratify / reject round trip's state. */
   setArchPropose?: React.Dispatch<React.SetStateAction<{ busy: boolean; error: string | null; working?: "propose" | "revise" | null }>>;
   setObservations?: React.Dispatch<React.SetStateAction<import("../../shared/protocol").ObservationStoreRecord | null>>;
@@ -139,7 +140,7 @@ export function useWebSocketHandler(actions: WebSocketHandlerActions, deps: WebS
     setEntryPoints, setProjectThreads, setSystem, setSystemPlan,
     setPendingSystemPlan, setProjectMode, setPendingChangeset,
     setBuildPlan, setPendingBuildPlan, setBuildRunState, setRefreshesInFlight,
-    setReadmeStatus, setThreadSkills, setArtifacts, setViewMode, setWorkRun, setConstraints, setStack, setCrossings, setArchitecture, setArchPropose,
+    setReadmeStatus, setThreadSkills, setArtifacts, setViewMode, setWorkRun, setConstraints, setStack, setCrossings, setArchitecture, setArchPropose, setInsight,
     setObservations,
     setModelTiers, setEndpointProbe, setSkillsState,
   } = actions;
@@ -199,6 +200,7 @@ export function useWebSocketHandler(actions: WebSocketHandlerActions, deps: WebS
         setStack?.(msg.payload.stack ?? null);
         setCrossings?.(msg.payload.crossings ?? null);
         setArchitecture?.(msg.payload.architecture ?? null);
+        setInsight?.(msg.payload.insight ?? null);
         setObservations?.(msg.payload.observations ?? null);
         // M26.2 — re-resolve the selection against the fresh envelope.
         // Structural ids are file-scoped, so look in the active file

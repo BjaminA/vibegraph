@@ -7,9 +7,12 @@
 // It touches two files the person owns, so both writes are marked and
 // idempotent: the CLAUDE.md block sits between markers and is REPLACED on
 // a re-run, never duplicated; the .gitignore line is added once. `--print`
-// shows the block and writes nothing. No hook is installed (D7).
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+// shows the block and writes nothing. No hook is installed unless asked
+// (`--hooks`, below).
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { join } from "node:path";
+import { PACKAGE_NAME } from "./paths.mjs";
 
 export const BEGIN = "<!-- vibegraph-knowledge:begin -->";
 export const END = "<!-- vibegraph-knowledge:end -->";
@@ -35,6 +38,14 @@ export const POINTER = [
   "uncommitted changes as the delta — run it before you finish;",
   "exit 1 names the offending node, exit 2 means a rule could not be",
   "verified, which is not a pass.",
+  "",
+  "Never claim code is unused, dead, untested or unconfigured because the",
+  "folder does not mention it. Check first: `reachability.md` says why a",
+  "function is on no thread (some reasons mean it IS used), and",
+  "`npx vibegraph-knowledge coverage <file>…` says whether a file was fully",
+  "parsed, what reaches and tests it, what environment it reads, and",
+  "whether it changed since the export. `npx vibegraph-knowledge affected",
+  "--uncommitted` lists the tests to run for your changes.",
   END,
 ].join("\n");
 
@@ -86,4 +97,114 @@ export function applyInit({ root, print = false }) {
     }
   }
   return { claudeMd: claudeState, gitignore: ignoreState, paths: { claudeMd, gitignore } };
+}
+
+// ── `init --hooks` (2026-09-28) ─────────────────────────────────────────
+// Opt-in only, and the reversal of D7 is Ben's call ("go with your proposed
+// plan" after the hooks were explained): four Claude Code hooks that run
+// `vibegraph-knowledge hook <event>` (scripts/cli/hooks.mjs). Written to
+// .claude/settings.local.json — the PER-USER settings file, never committed —
+// because the command names this machine's node and CLI by absolute path.
+// Entries are recognised by the trailing `--vg-hook` marker, so a re-run
+// replaces them and `--remove-hooks` takes exactly them out; every other hook
+// in the file is left alone.
+
+export const HOOK_MARKER = "--vg-hook";
+const HOOK_SPECS = [
+  // Every source: startup orients; compact / clear reset what "already
+  // delivered" means, since that context is gone (2026-09-29).
+  { claudeEvent: "SessionStart", event: "session-start", timeout: 60 },
+  { claudeEvent: "UserPromptSubmit", event: "prompt", timeout: 60 },
+  { claudeEvent: "PostToolUse", event: "post-edit", timeout: 120, matcher: "Write|Edit|MultiEdit|NotebookEdit|Bash" },
+  { claudeEvent: "Stop", event: "stop", timeout: 180 },
+];
+
+const q = (s) => `"${String(s).replace(/(["\\$`])/g, "\\$1")}"`;
+
+/** The command a hook runs: this node, its flags, this CLI — as run now —
+ *  with the Python it verified PINNED in front (`env`: VG_PYTHON and, when
+ *  libcst came from a directory, VIBEGRAPH_PYDEPS). Claude Code runs hooks
+ *  with whatever PATH it was started under; an unpinned hook once found the
+ *  system Python 3.12, which could not load a libcst built for 3.13, and
+ *  parsed no Python at all. */
+export function hookCommand(root, event, env = {}, argv = process.argv, execPath = process.execPath, execArgv = process.execArgv, version = null) {
+  const prefix = Object.entries(env).map(([k, v]) => `${k}=${q(v)}`);
+  return [...prefix, ...cliInvocation(argv, execPath, execArgv, version), "hook", event, "--root", q(root), HOOK_MARKER].join(" ");
+}
+
+/** How a hook reaches this CLI again. Run from npx, the script lives in
+ *  npx's cache (`…/_npx/<hash>/…`), which npm may clean at any time — a hook
+ *  pinned to it would stop working without a word. So an npx run writes
+ *  `npx --yes vibegraph-knowledge@<this version>` (slower to start, stable);
+ *  a global or project install writes its own path. */
+export function cliInvocation(argv = process.argv, execPath = process.execPath, execArgv = process.execArgv, version = null) {
+  const script = String(argv[1] ?? "");
+  if (/[\\/]_npx[\\/]/.test(script)) return ["npx", "--yes", `${PACKAGE_NAME}@${version ?? "latest"}`];
+  return [q(execPath), ...execArgv.map(q), q(script)];
+}
+
+// ── `init --skill` (2026-09-28) ─────────────────────────────────────────
+// The Claude Code skill this package ships (scripts/cli/claude-skill/SKILL.md,
+// vendored to vendor/claude-skill/): what lets a plain Claude chat set
+// VibeGraph up and use it without anyone reading the docs. Into the
+// project's .claude/skills/, or with `user` into ~/.claude/skills/ so every
+// project on the machine has it.
+
+export const SKILL_NAME = "vibegraph";
+
+export function skillSource(loc) {
+  return loc.mode === "installed"
+    ? join(loc.packageRoot, "vendor", "claude-skill", "SKILL.md")
+    : join(loc.repoRoot, "scripts", "cli", "claude-skill", "SKILL.md");
+}
+
+/** @returns {{ path, state: "installed"|"updated"|"unchanged"|"removed"|"absent" }} */
+export function applySkill({ root, loc, user = false, remove = false, home = homedir() }) {
+  const dir = join(user ? join(home, ".claude") : join(root, ".claude"), "skills", SKILL_NAME);
+  const path = join(dir, "SKILL.md");
+  if (remove) {
+    if (!existsSync(path)) return { path, state: "absent" };
+    rmSync(dir, { recursive: true, force: true });
+    return { path, state: "removed" };
+  }
+  const body = readFileSync(skillSource(loc), "utf-8");
+  const had = existsSync(path) ? readFileSync(path, "utf-8") : null;
+  if (had === body) return { path, state: "unchanged" };
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(path, body);
+  return { path, state: had === null ? "installed" : "updated" };
+}
+
+const isOurs = (h) => typeof h?.command === "string" && h.command.includes(HOOK_MARKER);
+
+/** @returns {{ path, state: "installed"|"updated"|"removed"|"unchanged" }} */
+export function applyHooks({ root, remove = false, command = hookCommand }) {
+  const dir = join(root, ".claude");
+  const path = join(dir, "settings.local.json");
+  let settings = {};
+  if (existsSync(path)) {
+    try { settings = JSON.parse(readFileSync(path, "utf-8")); }
+    catch (e) { throw new Error(`${path} is not valid JSON (${e.message}); fix it or move it aside — it was not changed`); }
+  }
+  const before = JSON.stringify(settings);
+  const hooks = { ...(settings.hooks ?? {}) };
+  for (const spec of HOOK_SPECS) {
+    const groups = (hooks[spec.claudeEvent] ?? [])
+      .map((g) => ({ ...g, hooks: (g.hooks ?? []).filter((h) => !isOurs(h)) }))
+      .filter((g) => g.hooks.length > 0);
+    if (!remove) {
+      groups.push({
+        ...(spec.matcher ? { matcher: spec.matcher } : {}),
+        hooks: [{ type: "command", command: command(root, spec.event), timeout: spec.timeout }],
+      });
+    }
+    if (groups.length) hooks[spec.claudeEvent] = groups; else delete hooks[spec.claudeEvent];
+  }
+  const next = { ...settings };
+  if (Object.keys(hooks).length) next.hooks = hooks; else delete next.hooks;
+  const had = before.includes(HOOK_MARKER);
+  if (JSON.stringify(next) === before) return { path, state: "unchanged" };
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+  writeFileSync(path, JSON.stringify(next, null, 2) + "\n");
+  return { path, state: remove ? "removed" : had ? "updated" : "installed" };
 }

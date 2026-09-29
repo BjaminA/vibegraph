@@ -114,7 +114,7 @@ export function validateConstraintInput(x: unknown): { ok: true; value: Constrai
       return {
         ok: false,
         error: "check must be one of: {rule:\"callers-only\", target, files?/functions?}, "
-          + "{rule:\"import-only\", tool, files}, {rule:\"calls-through\", target, through}, "
+          + "{rule:\"import-only\", tool, files}, {rule:\"calls-through\", target, through}, {rule:\"payload-keys\", target, require?/forbid?}, "
           + "{rule:\"guards\", target, guard}, {rule:\"not-in-loop\", target?/role?, except?}, "
           + "{rule:\"handles-failure\", scope}, {rule:\"annotated\", at}, {rule:\"co-changes\", when, require}",
       };
