@@ -7,36 +7,27 @@
 // check that rejects). Claude Code hooks give a single session both, with no
 // extra model spawn:
 //
-//   session-start  SessionStart — an orientation (the project, its entry
-//              points, every stated rule in one line, the skills) and the
-//              session's BASELINE of findings. After a COMPACTION (or /clear)
-//              the delivery record is reset, because what earlier prompts
-//              delivered was summarised away and "already given" is no longer
-//              true (2026-09-29, found reviewing OpenViking's hooks).
-//   prompt     UserPromptSubmit — route the prompt to the threads that own it
-//              (the chat's remit matcher) and add their contract, routed
-//              rules and ratified skill, once per session each. A prompt that
-//              names no code gets a KEYWORD match over the code's own words,
-//              labelled a guess (thread_keywords.ts).
-//   post-edit  PostToolUse on Write|Edit|MultiEdit|NotebookEdit|Bash — re-check
-//              every stated rule. A NEW violation of a rule whose verb may
-//              gate BLOCKS, naming the rule and the offending call; anything
-//              else new is a note; the tests that reach the edit are listed.
-//   stop       Stop — the same check once more before the turn may end.
+//   session-start  an orientation (the project, entry points, every stated
+//              rule in one line, the skills) and the session's BASELINE of
+//              findings; after a compaction or /clear the delivery record is
+//              reset — what was delivered was summarised away.
+//   prompt     route the prompt to the threads that own it (the remit
+//              matcher; else a KEYWORD guess, labelled) and add, once per
+//              session each: contract, routed rules, ratified skill, the
+//              STATED architecture (arch_context.mjs) and enabled generic
+//              direction as rule headlines (direction.mjs).
+//   post-edit  Write|Edit|MultiEdit|NotebookEdit|Bash — re-check every stated
+//              rule; a NEW violation of a gating verb BLOCKS with the rule,
+//              the offending call and, once, an enabled skill's why for it.
+//   stop       the same check once more before the turn may end.
 //
-// Every context a hook hands Claude stays under Claude Code's 10,000-
-// character inline limit (INLINE_CAP): over it, Claude Code saves the text to
-// a file and Claude must spend a tool call reading it — which h2h4's arms did.
-// What does not fit is named and left undelivered, so a later prompt sends it.
-//
-// Only NEW findings count (relative to the session baseline): a violation
-// the tree already had is not this session's doing, and blocking on it would
-// block forever — the derived-gate rule (src/server/quality/derived_gate.ts).
-// A blocked violation that later clears is recorded as a LESSON
-// (scripts/cli/lessons.mjs) — raw material for a skill draft, never injected.
-// Zero tokens, nothing written to the project; state lives beside the
-// envelope cache under ~/.cache. A hook that fails says so to the person
-// (`systemMessage`) and never blocks: a silent hook would look like a pass.
+// Every context stays under Claude Code's 10,000-char inline limit
+// (INLINE_CAP); what does not fit is named and sent by a later prompt. Only
+// NEW findings count (the derived-gate rule): a violation the tree already
+// had is not this session's doing. A blocked violation that later clears is
+// recorded as a LESSON (lessons.mjs), never injected. Zero tokens, nothing
+// written to the project (state under ~/.cache); a failing hook tells the
+// person (`systemMessage`) and never blocks — silence would look like a pass.
 
 import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { basename, isAbsolute, join, relative, resolve } from "node:path";
@@ -55,6 +46,7 @@ import { affectedTests } from "../../src/shared/test_reach.ts";
 import { verbMayGate } from "../../src/server/quality/standings.ts";
 import { derivedPolicyClauses } from "../../src/server/policy_check.ts";
 import { archForPrompt } from "./arch_context.mjs";
+import { directionForPrompt, directionForFindings, enabledDirection } from "./direction.mjs";
 import { languageForFile, shouldSkipDir } from "../../src/server/languages.ts";
 
 export const HOOK_EVENTS = ["session-start", "prompt", "post-edit", "stop"];
@@ -189,6 +181,8 @@ export function orientation(absRoot, loaded, constraints) {
   lines.push("", skills.ratified.length
     ? `Ratified thread skills (${skills.ratified.length}): ${skills.ratified.slice(0, 12).join(", ")}${skills.ratified.length > 12 ? ", …" : ""} — each arrives when a prompt names its thread.${skills.draft ? ` ${skills.draft} draft(s) await ratification.` : ""}`
     : `No ratified thread skills${skills.draft ? ` (${skills.draft} draft(s) await ratification)` : ""}.`);
+  const dir = enabledDirection(absRoot);
+  if (dir && dir.mode !== "off") lines.push(`Generic direction enabled: ${dir.skills.map((s) => s.name).join(", ")} — ${dir.mode === "headlines" ? "rule headlines arrive with a thread they apply to" : "a rule's why arrives when its check fires"}; \`vibegraph-knowledge direction <skill>\` has each rule's why.`);
   const readme = join(absRoot, ".vibegraph", "knowledge", "README.md");
   if (existsSync(readme)) {
     const hours = Math.round((Date.now() - statSync(readme).mtimeMs) / 3_600_000);
@@ -259,7 +253,9 @@ function onPrompt(input, { absRoot, loaded, state, constraints }) {
     const sentRules = new Set(state.rules ?? []);
     const injected = new Map(Object.entries(state.injectedSkills ?? {}));
     const deferred = [];
-    const archFor = archForPrompt(absRoot, env, applied.routed.map((r) => r.entryPointId), state, constraints);
+    const routedEps = applied.routed.map((r) => r.entryPointId);
+    const archFor = archForPrompt(absRoot, env, routedEps, state, constraints);
+    const dirFor = directionForPrompt(absRoot, env, routedEps, state);
     for (const r of applied.routed) {
       const c = ctx.byEntry.get(r.entryPointId);
       const terms = weakBy.get(r.entryPointId);
@@ -270,12 +266,11 @@ function onPrompt(input, { absRoot, loaded, state, constraints }) {
       const fresh = (c?.routed ?? []).filter((k) => !sentRules.has(k.id));
       const rules = formatConstraintsBlock(fresh);
       if (rules) parts.push(rules);
-      const archBefore = JSON.stringify(state.arch ?? null);
-      const archLines = archFor(r.entryPointId);
-      if (archLines) parts.push(archLines);
+      const before = JSON.stringify([state.arch ?? null, state.direction ?? null]);
+      parts.push(...[archFor(r.entryPointId), dirFor(r.entryPointId)].filter(Boolean));
       let block = parts.join("\n");
       // Not sent: nothing about it may be remembered as sent.
-      if (block.length > room) { state.arch = JSON.parse(archBefore) ?? undefined; deferred.push(r.qualifiedName); continue; }
+      if (block.length > room) { [state.arch, state.direction] = JSON.parse(before).map((x) => x ?? undefined); deferred.push(r.qualifiedName); continue; }
       room -= block.length;
       for (const k of fresh) sentRules.add(k.id);
       if (r.skill && r.skill.length + 40 <= room) {
@@ -432,6 +427,8 @@ function afterEdit(rel, input, { absRoot, loaded, state, constraints }) {
   if (partial.length) notes.push(`${partial.join(", ")} was read only partly (${loaded.partialParses[partial[0]]}); rules are checked on the rest of it.`);
   const { fresh, note } = newFindings(absRoot, loaded, state, textById, input.session_id);
   if (note) notes.push(note);
+  const why = directionForFindings(absRoot, fresh, state);
+  if (why) notes.push(why);
   const gating = fresh.filter((f) => f.gates);
   const advisory = fresh.filter((f) => !f.gates);
   if (advisory.length) {
@@ -463,7 +460,8 @@ function onStop(input, { absRoot, loaded, state, constraints }) {
     return other ? { json: { systemMessage: capped(other) } } : null;
   }
   remember(state, gating);
-  const body = renderFindings(gating, textById);
+  const why = directionForFindings(absRoot, gating, state);
+  const body = `${renderFindings(gating, textById)}${why ? `\n\n${why}` : ""}`;
   // At most twice per prompt, and never when Claude is already continuing
   // because of this hook: past that it is said to the person, not looped.
   state.stopBlocks = (state.stopBlocks ?? 0) + 1;

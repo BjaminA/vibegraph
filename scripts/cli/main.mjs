@@ -23,6 +23,7 @@ import { applyHooks, applyInit, applySkill, hookCommand, POINTER, SKILL_NAME } f
 import { spawnSync } from "node:child_process";
 import { HOOK_EVENTS, runHook } from "./hooks.mjs";
 import { LESSONS_USAGE, runLessons } from "./lessons.mjs";
+import { DIRECTION_USAGE, runDirection } from "./direction.mjs";
 import { BRIEF_USAGE, runBrief } from "./brief.mjs";
 import { formatClassifyReport, runClassify } from "./classify.mjs";
 import { runArchitecture } from "./architecture.mjs";
@@ -59,6 +60,7 @@ usage:
   ${PACKAGE_NAME} ${COVERAGE_USAGE}
   ${PACKAGE_NAME} ${LESSONS_USAGE}
   ${PACKAGE_NAME} ${BRIEF_USAGE}
+  ${PACKAGE_NAME} ${DIRECTION_USAGE}
   ${PACKAGE_NAME} init [<root>] [--print]        point Claude at the folder: one marked block in CLAUDE.md
                                                (replaced on re-run, never duplicated) and the gitignore
                                                line for .vibegraph/knowledge/. --print shows the block only.
@@ -508,6 +510,7 @@ export function main(argv) {
   if (command === "hook") return cmdHook(rest);
   if (command === "lessons") return cmdLessons(rest);
   if (command === "brief") return cmdBrief(rest);
+  if (command === "direction") { const r = runDirection(rest); process.stdout.write(r.text); return r.exitCode; }
   return fail(`unknown command: ${command}\n\n${USAGE}`);
 }
 

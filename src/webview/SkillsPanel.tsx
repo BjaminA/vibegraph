@@ -17,7 +17,7 @@ import { belowToolbar, heightBelowToolbar } from "./TopToolbar";
 
 interface Props {
   state: SkillsConfigPayload | null;
-  onChange: (enabled: string[]) => void;
+  onChange: (enabled: string[], hooks?: "headlines" | "on-violation" | "off") => void;
   onClose: () => void;
 }
 
@@ -64,9 +64,24 @@ export function SkillsPanel({ state, onChange, onClose }: Props) {
       </div>
       <div style={{ fontSize: 11, color: "var(--text-muted)", lineHeight: 1.5, marginBottom: 12 }}>
         Each skill is the prose half of a quality dimension — the why beside the check that catches a violation.
-        Enabled skills ride worker and chat prompts after the thread skill, labelled, and never gate anything.
-        Off by default.
+        An enabled skill reaches the chat, work-run workers and thread agents (in full, labelled) and Claude Code
+        hooks (as set below). Advice only — it never blocks anything. Off by default.
       </div>
+      {state && (
+        <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11, color: "var(--text-secondary)", marginBottom: 12 }}>
+          In Claude Code hooks
+          <select
+            data-skills-hooks
+            value={state.config.hooks ?? "headlines"}
+            onChange={(e) => onChange([...enabled], e.target.value as "headlines" | "on-violation" | "off")}
+            style={{ background: "var(--bg-canvas)", color: "var(--text-primary)", border: "1px solid var(--border-edge)", borderRadius: 4, padding: "4px 8px", fontSize: 11 }}
+          >
+            <option value="headlines">rule headlines, once per session</option>
+            <option value="on-violation">only a rule's why, when its check fires</option>
+            <option value="off">nothing</option>
+          </select>
+        </label>
+      )}
 
       {!state && (
         <div data-skills-loading style={{ fontSize: 11, color: "var(--text-muted)" }}>Waiting for the server…</div>

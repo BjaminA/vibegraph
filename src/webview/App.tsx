@@ -202,8 +202,8 @@ function Graph() {
   // stale placeholder could show a skill as on that the server has off.
   const [skillsOpen, setSkillsOpen] = useState(false);
   const [skillsState, setSkillsState] = useState<SkillsConfigPayload | null>(null);
-  const changeSkills = (enabled: string[]) => {
-    bridge.postMessage({ type: "set-skills-config", payload: { version: "1.0", enabled } });
+  const changeSkills = (enabled: string[], hooks?: string) => {
+    bridge.postMessage({ type: "set-skills-config", payload: { version: "1.0", enabled, ...(hooks ? { hooks } : {}) } });
   };
   const [endpointProbe, setEndpointProbe] = useState<import("./ModelTiersPanel").EndpointProbeResult | null>(null);
   const [endpointProbing, setEndpointProbing] = useState(false);

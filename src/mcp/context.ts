@@ -377,6 +377,8 @@ export interface VibegraphMcpContext {
    *  stated checks now, and after an edit what it introduced (null = no rule). */
   checkSnapshot(): unknown[];
   editCheckText(before: unknown[]): Promise<string | null>;
+  /** 2026-09-29 - generic direction on demand: the list, or one skill's rules with why and binding. */
+  direction(skill: string | null): { text: string; error?: string };
   /** 2026-09-29 - a saved investigation rendered as its handoff, or the list (src/server/investigations.ts). */
   investigation(name: string | null): { text: string; error?: string };
 

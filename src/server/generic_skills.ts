@@ -224,7 +224,8 @@ export function readSkillsConfig(root: string): { config: SkillsConfig; problems
     const raw = JSON.parse(readFileSync(p, "utf-8"));
     if (!raw || raw.version !== "1.0" || !Array.isArray(raw.enabled)) return { config: off, problems: [`${p}: not a v1.0 skills config — nothing enabled`] };
     const enabled = raw.enabled.filter((x: unknown) => typeof x === "string");
-    return { config: { version: "1.0", enabled, ...(raw.enabledBy && typeof raw.enabledBy === "object" ? { enabledBy: raw.enabledBy } : {}) }, problems: [] };
+    const hooks = HOOK_MODES.includes(raw.hooks) ? { hooks: raw.hooks } : {};
+    return { config: { version: "1.0", enabled, ...(raw.enabledBy && typeof raw.enabledBy === "object" ? { enabledBy: raw.enabledBy } : {}), ...hooks }, problems: [] };
   } catch (e: any) {
     return { config: off, problems: [`${p}: ${e?.message ?? e} — nothing enabled`] };
   }
@@ -324,13 +325,36 @@ export function sanitiseSkillsConfig(
   stamp: { source: "human"; id?: string; at: string },
   prev?: SkillsConfig,
 ): SkillsConfig {
-  const r = (raw ?? {}) as { enabled?: unknown };
+  const r = (raw ?? {}) as { enabled?: unknown; hooks?: unknown };
   const wanted = Array.isArray(r.enabled) ? r.enabled.filter((x): x is string => typeof x === "string") : [];
   const enabled = [...new Set(wanted.filter((n) => known.includes(n)))];
   const enabledBy: NonNullable<SkillsConfig["enabledBy"]> = {};
   for (const n of enabled) enabledBy[n] = prev?.enabledBy?.[n] ?? stamp;
-  return { version: "1.0", enabled, ...(enabled.length ? { enabledBy } : {}) };
+  // The hook mode: a valid one from the payload, else whatever was set.
+  const hooks = HOOK_MODES.includes(r.hooks as never) ? r.hooks as SkillsConfig["hooks"] : prev?.hooks;
+  return { version: "1.0", enabled, ...(enabled.length ? { enabledBy } : {}), ...(hooks ? { hooks } : {}) };
 }
+
+const evidenceTag = (s: GenericSkill) => (s.evidence === "validated" ? "drilled" : "unvalidated");
+
+/** 2026-09-29 — a skill's rule HEADLINES, one line per rule: what the hooks
+ *  send (165–573 chars against a 2.4–4 KB body). */
+export function skillHeadlines(s: GenericSkill): string {
+  return `${s.name} [${evidenceTag(s)}]:\n${s.rules.map((r) => `- ${r.text}`).join("\n")}`;
+}
+
+/** The whole rule set of one skill with each why and binding — what the CLI
+ *  `direction <skill>` and MCP `vibegraph_direction` return on demand. */
+export function describeGenericSkill(s: GenericSkill): string {
+  return [
+    `# ${s.name} v${s.skillVersion} [${evidenceTag(s)}]`, "", s.description, "",
+    ...s.rules.map((r) => `- **${r.text}**\n  why: ${r.why}\n  bound: ${r.binding}`),
+    ...(s.limits.length ? ["", "What this cannot check:", ...s.limits.map((l) => `- ${l}`)] : []),
+  ].join("\n");
+}
+
+/** What the Claude Code hooks may send for enabled skills (direction.mjs). */
+export const HOOK_MODES: ReadonlyArray<NonNullable<SkillsConfig["hooks"]>> = ["headlines", "on-violation", "off"];
 
 export function saveSkillsConfig(root: string, config: SkillsConfig): void {
   const p = skillsConfigPath(root);

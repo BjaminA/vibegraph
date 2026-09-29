@@ -909,6 +909,25 @@ function registerTools(server: McpServer, ctx: VibegraphMcpContext): void {
   );
 
   server.registerTool(
+    "vibegraph_direction",
+    {
+      description:
+        "Generic coding direction, deterministic and on demand: omit `skill` for the shipped skills (enabled here " +
+        "or not, and which threads each applies to); name one for its rules, each with its WHY and the check it is " +
+        "bound to. Advice, never a gate. Call it when a rule headline or a check finding names a skill and you need " +
+        "the reason before changing the code. Read-only; no model.",
+      inputSchema: {
+        skill: z.string().regex(/^[a-z][a-z0-9-]{0,40}$/).optional().describe("A skill name, e.g. repetition-cost."),
+      },
+    },
+    async ({ skill }) => {
+      const r = ctx.direction(skill ?? null);
+      if (r.error) return { content: [{ type: "text", text: r.error }], isError: true };
+      return { content: [{ type: "text", text: r.text }] };
+    },
+  );
+
+  server.registerTool(
     "vibegraph_investigation",
     {
       description:

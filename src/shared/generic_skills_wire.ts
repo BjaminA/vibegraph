@@ -8,6 +8,10 @@ export interface SkillsConfig {
   version: "1.0";
   enabled: string[];
   enabledBy?: Record<string, { source: "human"; id?: string; at: string }>;
+  /** 2026-09-29 — what the Claude Code hooks send for the enabled skills:
+   *  rule headlines once per session (default), only a rule's why when its
+   *  check fires, or nothing (scripts/cli/direction.mjs). */
+  hooks?: "headlines" | "on-violation" | "off";
 }
 
 /** One shipped skill as the Skills panel lists it — never the body (the

@@ -169,7 +169,7 @@ import { setModelTiers } from "./src/server/run/synth_args";
 // thread skill under the same budget.
 import {
   loadGenericSkills, readSkillsConfig, saveSkillsConfig, sanitiseSkillsConfig, selectGenericSkills,
-  renderGenericSkillsBlock, packetTaskFacts, catalogueOf, auditOf, describeAudit,
+  renderGenericSkillsBlock, packetTaskFacts, catalogueOf, auditOf, describeAudit, describeGenericSkill,
   type GenericSkill, type SkillsConfig,
 } from "./src/server/generic_skills";
 import { mergeRelinked, ParseGenerations } from "./src/server/relink";
@@ -7448,6 +7448,17 @@ const mcpContext: VibegraphMcpContext = {
     if (!before.length && !statedCheckSnapshot().length) return null;
     await settleDerived();
     return formatEditCheck(diffEditChecks(before as EditCheckRow[], statedCheckSnapshot()));
+  },
+  // 2026-09-29 - generic direction on demand (the same files the hooks read).
+  direction: (skill) => {
+    if (skill) {
+      const s = GENERIC_SKILLS.find((x) => x.name === skill);
+      return s ? { text: describeGenericSkill(s) } : { text: "", error: `No skill named ${skill}; one of: ${GENERIC_SKILLS.map((x) => x.name).join(", ")}.` };
+    }
+    const profile = isDirectory ? (() => { try { return liveStackProfile(); } catch { return null; } })() : null;
+    const rows = catalogueOf(GENERIC_SKILLS, profile).map((c) =>
+      `- ${c.name} [${skillsConfig.enabled.includes(c.name) ? "enabled" : "off"}; ${c.evidence}] ${c.of ? `applies to ${c.fires} of ${c.of} threads` : "breadth unmeasured"} — ${c.description}`);
+    return { text: `${rows.join("\n")}\nName one for its rules and their why. Enabling is the person's: the Skills panel or \`vibegraph-knowledge direction enable <skill>\`.` };
   },
   // 2026-09-29 - the investigation board, read-only for an agent.
   investigation: (name) => {
