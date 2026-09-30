@@ -11,6 +11,9 @@ import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } 
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+// These tests act as a PERSON at the command line; a Claude Code terminal sets CLAUDECODE,
+// which makes the CLI refuse a person's steps (scripts/cli/actor.mjs) — so it is cleared here.
+delete process.env.CLAUDECODE;
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 let tmp, proj;

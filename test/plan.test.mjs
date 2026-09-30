@@ -23,6 +23,9 @@ import { planToolEdit, planToolText } from "../src/server/plan_server.ts";
 import { runPlan } from "../scripts/cli/plan.mjs";
 import { runHook } from "../scripts/cli/hooks.mjs";
 import { exportKnowledge } from "../scripts/export_knowledge.mjs";
+// These tests act as a PERSON at the command line; a Claude Code terminal sets CLAUDECODE,
+// which makes the CLI refuse a person's steps (scripts/cli/actor.mjs) — so it is cleared here.
+delete process.env.CLAUDECODE;
 
 const FIXTURE = "test/fixtures/plan/plan_demo";
 let tmp, cache;

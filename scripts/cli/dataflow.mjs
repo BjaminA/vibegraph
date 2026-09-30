@@ -4,6 +4,7 @@
 // else 0 â€” so a CI job can gate on it; the report always states its limits.
 import { resolve } from "node:path";
 import { loadEnvelope } from "../quality_check.mjs";
+import { pipelineHere } from "./pipeline.mjs";
 import { cachedDataflow } from "../dataflow_cache.mjs";
 import { formatDataflowMd } from "../../src/server/dataflow.ts";
 
@@ -13,7 +14,7 @@ export const DATAFLOW_USAGE = `dataflow [<root>] [--json]     untrusted input â†
 export function runDataflow(args) {
   const json = args.includes("--json");
   const root = resolve(args.find((a) => !a.startsWith("--")) ?? ".");
-  const { envelope } = loadEnvelope(root, null, {});
+  const { envelope } = loadEnvelope(root, null, pipelineHere(root), { cache: true });
   const report = cachedDataflow(envelope, root);
   const high = report.findings.filter((f) => f.severity === "high").length;
   return { exitCode: high ? 1 : 0, text: json ? `${JSON.stringify(report, null, 2)}\n` : formatDataflowMd(report) };

@@ -27,6 +27,9 @@ import { loadPlan } from "../src/server/plan_store.ts";
 import { softwareToolText } from "../src/server/software_server.ts";
 import { checkConstraint } from "../src/server/constraint_grammar.ts";
 import { buildQualityFacts } from "../src/server/quality/facts.ts";
+// These tests act as a PERSON at the command line; a Claude Code terminal sets CLAUDECODE,
+// which makes the CLI refuse a person's steps (scripts/cli/actor.mjs) — so it is cleared here.
+delete process.env.CLAUDECODE;
 
 const FIXTURE = "test/fixtures/software/sw_demo";
 let tmp, cache;
@@ -125,7 +128,7 @@ test("a hooked session gets a ratified spec once, with this code's calls — and
   assert.match(first, /## Software: ledgerbox \(LedgerBox\) — db; a ratified spec cited from its own docs/);
   assert.match(first, /This code calls it: .*get_blob \(read blob\) at app\.py:15/);
   assert.match(first, /s1 Call wait_ready before get_blob \(why: a blob is readable only once it is READY\)/);
-  assert.match(first, /s3 Retry a failed write with backoff .*\[inferred\]/);
+  assert.match(first, /s3 Retry a failed write with backoff .*\[not in the docs\]/);
   assert.doesNotMatch(ctx(runHook("prompt", { session_id: "r", prompt: "and load_safely in app.py" }, { absRoot: root, pipeline: {} })), /## Software:/, "once per session");
 });
 

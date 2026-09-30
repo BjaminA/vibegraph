@@ -3875,6 +3875,20 @@ async function handleResolveExternalCall(
 // ── Edit handlers (Stage 2) ───────────────────────────────────────────────────
 
 function handleEditOpen(nodeId: string, ws: WebSocket, filePath?: string): void {
+  // A module-seeded thread (a script of top-level statements) seeds on the
+  // pseudo node "module", which no IR node carries — the tooltip opened
+  // "Node not found". The module IS the whole file, as getNodeSource and the
+  // MCP replace_node already agree.
+  const moduleFile = filePath ?? (isDirectory ? undefined : resolvedPyFile);
+  if ((nodeId === "module" || nodeId === "") && moduleFile) {
+    try {
+      const source = fs.readFileSync(resolveProjectPath(moduleFile), "utf-8");
+      ws.send(JSON.stringify({ type: "edit-node-source", payload: { nodeId, source } }));
+    } catch (e: any) {
+      ws.send(JSON.stringify({ type: "edit-node-source", payload: { nodeId, source: "", error: `Read failed: ${e.message}` } }));
+    }
+    return;
+  }
   const node = findNode(nodeId, filePath);
   if (!node) {
     ws.send(JSON.stringify({ type: "edit-node-source", payload: { nodeId, source: "", error: "Node not found" } }));
@@ -3901,6 +3915,12 @@ async function handleEditSave(nodeId: string, newSource: string, ws: WebSocket, 
   const targetFile = filePath ?? (isDirectory ? null : resolvedPyFile);
   if (!targetFile) {
     ws.send(JSON.stringify({ type: "edit-node-saved", payload: { nodeId, success: false, error: "No target file" } }));
+    return;
+  }
+  if (nodeId === "module" || nodeId === "") {
+    const whole = resolveProjectPath(targetFile);
+    const result = await rewriteAndValidate([whole, "replace_module_body"], newSource, whole);
+    ws.send(JSON.stringify({ type: "edit-node-saved", payload: { nodeId, success: result.success, error: result.message } }));
     return;
   }
   const node = findNode(nodeId, filePath);
@@ -4928,6 +4948,10 @@ function runBlockCore(
   filePath?: string,
 ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
   return new Promise((resolve) => {
+    if (nodeId === "module" || nodeId === "") {
+      resolve({ stdout: "", stderr: "A module seed is the whole file: run-block runs one node, not a script. Use a trace run on the thread instead.", exitCode: 1 });
+      return;
+    }
     let node = findNode(nodeId, filePath);
     if (!node) {
       resolve({ stdout: "", stderr: "Node not found", exitCode: 1 });

@@ -25,15 +25,17 @@ export function ratifySpec(root: string, tool: string, now: Date = new Date()): 
   return saved.error ? { error: saved.error } : { message: `ratified ${tool}` };
 }
 
-export function specIntoPlan(root: string, tool: string, params: Record<string, string> = {}): { error?: string; message?: string } {
+export function specIntoPlan(root: string, tool: string, params: Record<string, string> = {}, by: "human" | "agent" = "human"): { error?: string; message?: string } {
   const spec = loadSpec(root, tool);
   if (!spec) return { error: `no spec for ${tool}` };
   if (spec.status !== "ratified") return { error: `${tool} is a draft — ratify it first` };
   const plan = loadPlan(root);
   if (!plan) return { error: "no plan yet — start one with its objective" };
-  const ops = specToPlanOps(spec, params, { tools: new Set(plan.stack.map((t) => t.tool)), sources: new Set(plan.policies.map((p) => p.source).filter((x): x is string => !!x)) });
-  if (!ops.length) return { message: `${tool} and its rules are already in the plan` };
-  const r = applyPlanOps(plan, ops, "human");
+  let ops = specToPlanOps(spec, params, { tools: new Set(plan.stack.map((t) => t.tool)), policies: plan.policies });
+  if (!ops.length) return { message: `${tool} and its rules are already in the plan, up to date` };
+  // A model may not set a status; its update to an agreed rule makes it proposed anyway.
+  if (by === "agent") ops = ops.map((o) => (o.op === "update" ? { ...o, fields: Object.fromEntries(Object.entries(o.fields).filter(([k]) => k !== "status")) } : o));
+  const r = applyPlanOps(plan, ops, by);
   if (r.error || !r.plan) return { error: r.error };
   const s = savePlan(root, r.plan);
   return s.error ? { error: s.error } : { message: `plan rev ${r.plan.revision}: ${r.changes.join("; ")} — all proposed` };

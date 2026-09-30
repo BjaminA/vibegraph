@@ -14,22 +14,38 @@ import type { StackRole } from "./stack_taxonomy.ts";
 export type SoftwareStatus = "draft" | "ratified";
 export type OperationKind = "read" | "write" | "call" | "subscribe" | "admin";
 
+// 2026-09-30 (second pass, from a real spec's edit): a spec is a REFERENCE
+// for someone else's tool, so the tool decides how much there is to know —
+// the discipline moved from what a spec STORES to what a session is SENT:
+// up to 30 rules stored, at most 8 marked `core`, and only core headlines go
+// to a hooked session (the rest on demand). A rule stays one line; its WHY
+// may run longer, because the reason is what carries a rule to a case it did
+// not foresee.
 export const SOFTWARE_CAPS = {
   operations: 40,
   states: 10,
   permissions: 12,
-  rules: 15,
+  rules: 30,
+  core: 8,
+  unknowns: 15,
   packages: 12,
   line: 200,
+  why: 400,
   definition: 300,
   cite: 300,
   /** a quote must be long enough to mean something */
   citeMin: 12,
   sources: 12,
+  changes: 20,
 } as const;
 
-/** `cite` is a verbatim quote from a source; null = INFERRED (not in the docs). */
-interface Cited { cite: string | null }
+/** Who put an item here. Absent = the drafting model (quoted, or INFERRED
+ *  when `cite` is null); `human` = a person stated or changed it; `agent` = a
+ *  model edited it after drafting (e.g. a Claude session, from its terminal). */
+export type SpecItemBy = "human" | "agent";
+
+/** `cite` is a verbatim quote from a source; null = not in the docs. */
+interface Cited { cite: string | null; by?: SpecItemBy }
 
 export interface SoftwareOperation extends Cited {
   name: string;
@@ -39,17 +55,26 @@ export interface SoftwareOperation extends Cited {
   note?: string;
 }
 
-export interface SoftwareState extends Cited { of: string; values: string[] }
+/** `sequence`: states a thing moves through (DRAFT → READY); `choice`: options
+ *  to pick one of (map | array | text | blob). Absent = sequence. */
+export interface SoftwareState extends Cited { of: string; values: string[]; kind?: "sequence" | "choice" }
 export interface SoftwarePermission extends Cited { name: string; for?: string }
 
 export interface SoftwareRule extends Cited {
   id: string;
   text: string;
   why: string;
+  /** one of the few rules a hooked session is always told (at most 8) */
+  core?: boolean;
   /** the checkable half, in the constraint grammar; `{name}` placeholders are
    *  filled with the project's own names when the rule enters a plan */
   check?: Record<string, unknown> | null;
 }
+
+/** A question the documents do NOT answer — so nobody assumes the answer. */
+export interface SoftwareUnknown { id: string; question: string; mattersFor?: string; by?: SpecItemBy }
+
+export interface SpecChange { at: string; by: SpecItemBy; change: string }
 
 export interface SoftwareSource {
   /** the URL or file it was read from */
@@ -72,8 +97,12 @@ export interface SoftwareSpec {
   states: SoftwareState[];
   permissions: SoftwarePermission[];
   rules: SoftwareRule[];
+  /** questions the docs leave open (optional; absent = none recorded) */
+  unknowns?: SoftwareUnknown[];
   sources: SoftwareSource[];
   status: SoftwareStatus;
+  /** edits after drafting, newest last */
+  changes?: SpecChange[];
   draftedBy?: string;
   draftedAt?: string;
   ratifiedAt?: string;

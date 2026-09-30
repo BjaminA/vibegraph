@@ -139,7 +139,15 @@ Stated explicitly so you can make your own call:
 - **A software spec is only as right as its documents.** The citation gate
   proves each item quotes the docs, not that the model read them correctly;
   items marked INFERRED are not in the docs at all. Ratify a spec only after
-  reading it.
+  reading it. Once ratified, its text reaches hooked sessions, so a
+  malicious page's hidden instructions would too; use documents you trust.
+- **A session cannot approve its own proposals — as a speed bump.** When
+  Claude Code runs a `vibegraph-knowledge` command it sets `CLAUDECODE=1`, and
+  the steps that are a person's are refused: agreeing, promoting, ratifying,
+  setting the objective, taking the hooks out. What else it runs is recorded
+  as the model's. A session could strip the variable deliberately, so this
+  stops accidents and casual shortcuts, not a determined agent; the real
+  boundary is still what permissions you run Claude with.
 - **`dataflow` is a lead, not an audit.** It follows untrusted input to a
   shell, SQL text or eval BY NAME: a value passed through a container, a
   callback, a class attribute or a database round trip (second-order input)

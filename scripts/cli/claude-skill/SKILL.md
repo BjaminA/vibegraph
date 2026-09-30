@@ -75,7 +75,12 @@ enforces it. `vibegraph-knowledge constraints list` shows what is stated.
 - **Building on a specific tool** (a platform SDK, a database, an API):
   `vibegraph-knowledge software add <tool> --from <its docs url or file>`
   drafts a spec from its documents — every item quoting them — which the user
-  ratifies; after that, plans, hooks and checks build with it in mind.
+  ratifies; after that, plans, hooks and checks build with it in mind. To
+  change one, use `software edit` / `software rule …` / `software unknown …`
+  (quotes re-checked) — never the JSON by hand.
+- **Some steps are the user's, not yours:** agreeing, promoting, ratifying,
+  setting the objective, removing the hooks. The CLI refuses them when you run
+  it; tell the user the command and let them run it.
 - **Before finishing:** `vibegraph-knowledge check --uncommitted` — exit 0
   every rule passed; 1 a rule is VIOLATED (the offender is named as
   `file:node`); 2 a rule could not be verified, which is **not** a pass.

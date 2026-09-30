@@ -15,6 +15,9 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { formatCheckReport, runConstraintChecks } from "../scripts/cli/check.mjs";
+// These tests act as a PERSON at the command line; a Claude Code terminal sets CLAUDECODE,
+// which makes the CLI refuse a person's steps (scripts/cli/actor.mjs) — so it is cleared here.
+delete process.env.CLAUDECODE;
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const FLEET = join(ROOT, "examples", "fleet-telemetry");

@@ -62,8 +62,8 @@ use WSL2.
 cd /path/to/your/project
 vibegraph-knowledge init --hooks --skill     # four hooks (per user, never committed) + the skills
 vibegraph-knowledge export                   # .vibegraph/knowledge/: the map, one contract per thread, the rules
-vibegraph-knowledge constraints add --kind invariant --files telemetry/ \
-  --text "Operators are paged only through alerts.notify after should_notify's dedup — a flapping sensor once paged forty times a minute." \
+vibegraph-knowledge constraints add --kind invariant --files telemetry/ $ref
+  --text "Operators are paged only through alerts.notify after should_notify's dedup — a flapping sensor once paged forty times a minute." $ref
   --check '{"rule":"calls-through","target":"notify","through":"should_notify"}'
 ```
 
@@ -233,11 +233,16 @@ platform SDK, a database or an API. It turns them into a small spec,
 - what the tool is;
 - how to recognise it in code (its packages and API names);
 - its **operations**, and what each reads or writes;
-- the **states** its things move through;
+- the **states** its things move through, or the **options** to choose
+  between;
 - the **permissions** it needs;
-- its **rules**, each with the reason it exists.
+- its **rules**, each with the reason it exists. Up to 30 are kept, and a
+  hooked session is always sent the 8 marked **core**;
+- the **unknowns**: questions the docs don't answer, sent to sessions as "do
+  not assume".
 
-Every item quotes the documents it came from.
+Every item quotes the documents it came from, or says it doesn't: INFERRED
+means the drafting model's own; STATED means yours.
 
 - **The citation gate.** One model call drafts the spec. A quote that isn't
   in the documents gets its item dropped. An item with no quote is kept but
@@ -264,7 +269,16 @@ vibegraph-knowledge software show synapse       # every item beside its quote; I
 vibegraph-knowledge software ratify synapse     # quotes re-checked, then used everywhere
 vibegraph-knowledge software plan synapse --param wait_ready=waitForReady
 vibegraph-knowledge plan draft --from docs/brief.md   # the architecture, drafted with the spec in mind
+vibegraph-knowledge software rule add synapse --text "…" --why "…" --core   # your own knowledge, marked STATED
+vibegraph-knowledge software unknown add synapse --question "Is $ref supported?"
+vibegraph-knowledge software edit synapse       # the whole spec in $EDITOR; every quote re-checked on save
 ```
+
+**Some steps are yours alone:** agreeing, promoting, ratifying, setting the
+objective, and taking the hooks out. When Claude Code runs these commands
+itself (it marks them with `CLAUDECODE=1`), they're refused and the message
+says where to do them: your own terminal, or the Plan panel. Everything else
+it runs is recorded as Claude's.
 
 ### The Agent Manager
 
@@ -356,23 +370,24 @@ CLI) and says so; everything else is deterministic.
 
 | Command | What it does | What it writes | Tokens |
 |---|---|---|---|
-| `check [--uncommitted \| --git <range>]` | Every stated rule's check: PASS / VIOLATED (names the call) / UNVERIFIABLE; exit 0 / 1 / 2 | nothing | — |
-| `constraints list \| add \| remove \| ratify` | The stated rules, their reasons, scopes and checks | `.vibegraph/constraints.json` | — |
-| `seeds list \| add \| remove` | Entry points discovery cannot see | `.vibegraph/manual_seeds.json` | — |
-| `skills list \| ratify \| reaffirm \| auto-reaffirm` | Per-thread skills: approve, re-stamp a still-correct stale one | `.vibegraph/thread-skills/` | — |
-| `skills draft <entry>… \| --missing` | Drafts per-thread guidance through the grounding gates (reads the thread's lessons) | `.vibegraph/thread-skills/` | **yes** |
-| `direction [<skill>]` / `enable \| disable <skill>` / `hooks headlines \| on-violation \| off` | The generic coding skills: where they apply, one skill in full, whether the hooks send them | `.vibegraph/skills.json` | — |
+| `check [--uncommitted $ref| --git <range>]` | Every stated rule's check: PASS / VIOLATED (names the call) / UNVERIFIABLE; exit 0 / 1 / 2 | nothing | — |
+| `constraints list $ref| add $ref| remove $ref| ratify` | The stated rules, their reasons, scopes and checks | `.vibegraph/constraints.json` | — |
+| `seeds list $ref| add $ref| remove` | Entry points discovery cannot see | `.vibegraph/manual_seeds.json` | — |
+| `skills list $ref| ratify $ref| reaffirm $ref| auto-reaffirm` | Per-thread skills: approve, re-stamp a still-correct stale one | `.vibegraph/thread-skills/` | — |
+| `skills draft <entry>… $ref| --missing` | Drafts per-thread guidance through the grounding gates (reads the thread's lessons) | `.vibegraph/thread-skills/` | **yes** |
+| `direction [<skill>]` / `enable $ref| disable <skill>` / `hooks headlines $ref| on-violation $ref| off` | The generic coding skills: where they apply, one skill in full, whether the hooks send them | `.vibegraph/skills.json` | — |
 | `lessons list` | Rules sessions broke and put right, with the fix | nothing | — |
 | `plan init "<objective>"` / `show` / `check` | A hypothetical plan: start it, read it, measure the code against it (realised / drifted / not built) | `.vibegraph/plan.json` (init) | — |
 | `plan edit '<op>'` / `agree` / `drop` / `close` / `reopen` | Change the plan by small operations, each one a changelog line; `--as agent` records a proposal | `.vibegraph/plan.json` | — |
 | `plan promote <rule>` | Copy a planned rule into the stated rules, where it is checked and may block | `.vibegraph/constraints.json`, `plan.json` | — |
-| `plan draft --from <url\|file>…` | Draft plan items from documents and the ratified software specs; a quote not in them drops the item; all proposed | `.vibegraph/plan.json` | **yes** |
-| `software add <tool> --from <url\|file>…` | Draft a spec for a tool from its own documents, behind the citation gate; saved as a draft | `.vibegraph/software/` | **yes** |
+| `plan draft --from <url$ref|file>…` | Draft plan items from documents and the ratified software specs; a quote not in them drops the item; all proposed | `.vibegraph/plan.json` | **yes** |
+| `software add <tool> --from <url$ref|file>…` | Draft a spec for a tool from its own documents, behind the citation gate; saved as a draft | `.vibegraph/software/` | **yes** |
 | `software list` / `show <tool> [--usage]` / `ratify <tool>` / `remove <tool>` | The specs; one with every quote and where the code calls it; accept one (quotes re-checked) | `.vibegraph/software/` | — |
+| `software edit <tool>` / `rule add\|update\|remove <tool>` / `unknown add\|remove <tool>` | Change a spec: every quote re-checked, your items marked STATED; your edit keeps it ratified, a model's sends it back to draft | `.vibegraph/software/` | — |
 | `software plan <tool> [--param name=value]` | Put a ratified spec's tool and rules into the plan, proposed, with the project's names filled in | `.vibegraph/plan.json` | — |
-| `architecture --propose \| --modify "<text>"` | Deployment / trust groups and a start-here path, every item citing what it saw; stored pending | `.vibegraph/architecture.json` | **yes** |
-| `architecture --ratify \| --reject` | Makes the pending proposal stated / drops it | `.vibegraph/architecture.json` | — |
-| `classify [--dry-run \| --apply]` | The role of tools no table knows; `--apply` stores each as a model-stated policy | `.vibegraph/constraints.json` | **yes** |
+| `architecture --propose $ref| --modify "<text>"` | Deployment / trust groups and a start-here path, every item citing what it saw; stored pending | `.vibegraph/architecture.json` | **yes** |
+| `architecture --ratify $ref| --reject` | Makes the pending proposal stated / drops it | `.vibegraph/architecture.json` | — |
+| `classify [--dry-run $ref| --apply]` | The role of tools no table knows; `--apply` stores each as a model-stated policy | `.vibegraph/constraints.json` | **yes** |
 | `--version` / `--help` | The version / every command and option | nothing | — |
 
 ### Every file VibeGraph makes

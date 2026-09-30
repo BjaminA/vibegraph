@@ -27,6 +27,8 @@ import { DIRECTION_USAGE, runDirection } from "./direction.mjs";
 import { DATAFLOW_USAGE, runDataflow } from "./dataflow.mjs";
 import { PLAN_USAGE, runPlan } from "./plan.mjs";
 import { runPlanDraft } from "./plan_draft.mjs";
+import { isAgentRun, personOnlyStep, PERSONS_STEP } from "./actor.mjs";
+import { pipelineFor, pipelineHere } from "./pipeline.mjs";
 import { SOFTWARE_USAGE, runSoftware } from "./software.mjs";
 import { BRIEF_USAGE, runBrief } from "./brief.mjs";
 import { formatClassifyReport, runClassify } from "./classify.mjs";
@@ -137,11 +139,6 @@ function projectRoot(positional) {
   const abs = resolve(positional ?? ".");
   if (!existsSync(abs) || !statSync(abs).isDirectory()) throw new Error(`${abs} is not a directory`);
   return abs;
-}
-
-function pipelineFor(loc, absRoot) {
-  const py = resolvePython(loc, { log: (m) => process.stderr.write(`  ${m}\n`) });
-  return { scriptsDir: loc.scriptsDir, pythonBin: py.bin, pythonEnv: py.env, cwd: absRoot, python: py };
 }
 
 function cmdExport(args) {
@@ -514,6 +511,9 @@ export function main(argv) {
   const [command, ...rest] = argv;
   if (!command || command === "--help" || command === "-h" || command === "help") { process.stdout.write(USAGE); return 0; }
   if (command === "--version" || command === "-v" || command === "version") { process.stdout.write(`${toolLabel(locate())}\n`); return 0; }
+  // 2026-09-30 — the steps that are a person's, refused when Claude Code runs them (actor.mjs).
+  const personsStep = isAgentRun() ? personOnlyStep(command, rest) : null;
+  if (personsStep) return fail(`refused: \`${personsStep}\` — ${PERSONS_STEP}.`, 1);
   if (command === "view") return cmdView(rest);
   if (command === "export") return cmdExport(rest);
   if (command === "check") return cmdCheck(rest);

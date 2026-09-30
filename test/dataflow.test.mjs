@@ -18,6 +18,9 @@ import { formatContractBlock } from "../src/server/thread_contract.ts";
 import { runDataflow } from "../scripts/cli/dataflow.mjs";
 import { exportKnowledge } from "../scripts/export_knowledge.mjs";
 import { runHook } from "../scripts/cli/hooks.mjs";
+// These tests act as a PERSON at the command line; a Claude Code terminal sets CLAUDECODE,
+// which makes the CLI refuse a person's steps (scripts/cli/actor.mjs) — so it is cleared here.
+delete process.env.CLAUDECODE;
 
 const ROOT = "test/fixtures/dataflow/taint_demo";
 let env, report, cache;

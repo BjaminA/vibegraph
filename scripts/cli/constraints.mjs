@@ -21,6 +21,7 @@ import {
 } from "../../src/server/constraint_store.ts";
 import { describeCheck, isConstraintCheck } from "../../src/server/constraint_grammar.ts";
 import { describeRun1Check, isRun1Check } from "../../src/server/quality/verbs/index.ts";
+import { isAgentRun } from "./actor.mjs";
 
 export const CONSTRAINTS_USAGE = `constraints list|add|remove|ratify [...]   the stated rules (.vibegraph/constraints.json); zero tokens
       list [<root>] [--json]
@@ -87,8 +88,11 @@ export function runConstraints({ root, sub, id, values }) {
     if (!v.ok) return { lines, messages: [`refused: ${v.error}`], exitCode: 2 };
     const twin = findDuplicate(loadConstraints(root), v.value.text);
     if (twin) return { lines, messages: [`refused: it restates ${twin.id} ("${twin.text.slice(0, 80)}") — edit or remove that one instead`], exitCode: 1 };
-    const c = addConstraint(root, v.value, "human");
-    lines.push(`stated ${c.id} (human):`, formatConstraint(c));
+    // Run by Claude Code (actor.mjs): the rule is the model's, labelled so,
+    // until a person ratifies it — the same label an MCP-stated rule carries.
+    const source = isAgentRun() ? "agent" : "human";
+    const c = addConstraint(root, v.value, source);
+    lines.push(`stated ${c.id} (${source}${source === "agent" ? " — a person ratifies it with `constraints ratify`" : ""}):`, formatConstraint(c));
     return { lines, messages, exitCode: 0 };
   }
   if (sub === "remove") {

@@ -16,6 +16,9 @@ import { fitContract, restOfContract } from "../scripts/cli/contract_fit.mjs";
 import { runSkills } from "../scripts/cli/skills.mjs";
 import { keywordTerms } from "../src/server/thread_keywords.ts";
 import { applyHooks, hookCommand, HOOK_MARKER } from "../scripts/cli/init.mjs";
+// These tests act as a PERSON at the command line; a Claude Code terminal sets CLAUDECODE,
+// which makes the CLI refuse a person's steps (scripts/cli/actor.mjs) — so it is cleared here.
+delete process.env.CLAUDECODE;
 
 let base, root;
 const DIRECT_NOTIFY = "\n\nfrom telemetry.alerts import notify\n\n\ndef page_direct(e):\n    notify(e)\n";

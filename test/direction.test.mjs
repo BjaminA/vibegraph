@@ -14,6 +14,9 @@ import { join } from "node:path";
 import { runHook } from "../scripts/cli/hooks.mjs";
 import { runDirection, applicability, shippedSkills } from "../scripts/cli/direction.mjs";
 import { loadEnvelope } from "../scripts/quality_check.mjs";
+// These tests act as a PERSON at the command line; a Claude Code terminal sets CLAUDECODE,
+// which makes the CLI refuse a person's steps (scripts/cli/actor.mjs) — so it is cleared here.
+delete process.env.CLAUDECODE;
 
 let base, root;
 before(() => {

@@ -22,6 +22,9 @@ import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildPackage, PYTHON_SCRIPTS, APP_PYTHON_SCRIPTS } from "../scripts/cli/build.mjs";
 import { exportKnowledge } from "../scripts/export_knowledge.mjs";
+// These tests act as a PERSON at the command line; a Claude Code terminal sets CLAUDECODE,
+// which makes the CLI refuse a person's steps (scripts/cli/actor.mjs) — so it is cleared here.
+delete process.env.CLAUDECODE;
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const PKG = join(ROOT, "packages", "knowledge");
@@ -225,3 +228,23 @@ test("init --skill --user installs the skill for every project and touches no pr
 });
 
 after(() => rmSync(tmp, { recursive: true, force: true }));
+
+// 2026-09-30 — reported from a real install: `plan check` crashed with
+// "scripts/parse_cst.py not found" while `plan show` worked. Four commands
+// parsed with an EMPTY pipeline, which falls back to the checkout's layout; in
+// the repo it exists, in the package it does not — so only the tarball can
+// catch it. Each command that parses is run here from the package.
+test("from the package: every command that parses the project finds the package's own parsers", () => {
+  const proj = join(tmp, "parses");
+  cpSync(join(ROOT, "examples", "fleet-telemetry"), proj, { recursive: true, filter: (p) => !p.includes("__pycache__") });
+  const env = { ...process.env, VIBEGRAPH_PYDEPS: join(ROOT, ".pydeps"), VIBEGRAPH_KNOWLEDGE_HOME: join(tmp, "home"), VG_CACHE_DIR: join(tmp, "parses-cache"), NODE_NO_WARNINGS: "1" };
+  delete env.VG_PYTHON; delete env.PYTHONPATH; delete env.CLAUDECODE;
+  const vgk = (...args) => spawnSync(process.execPath, [cli, ...args], { cwd: proj, encoding: "utf-8", env });
+  assert.equal(vgk("plan", "init", "Operators are paged on region changes").status, 0);
+  for (const args of [["plan", "check"], ["dataflow"], ["direction"]]) {
+    const r = vgk(...args);
+    assert.doesNotMatch(`${r.stdout}${r.stderr}`, /parse_cst\.py|not found|ENOENT|Error:/, `${args.join(" ")}: ${r.stderr.slice(0, 400)}`);
+    assert.ok(r.status === 0 || (args[0] === "dataflow" && r.status === 1), `${args.join(" ")} exited ${r.status}: ${r.stderr.slice(0, 400)}`);
+  }
+  assert.match(vgk("plan", "check").stdout, /## Plan vs code/);
+});

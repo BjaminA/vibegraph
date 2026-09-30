@@ -312,6 +312,10 @@
         "module": {
           "type": "string"
         },
+        "reexport": {
+          "type": "boolean",
+          "description": "2026-09-30, field-additive: a RE-EXPORT (`export { a as b } from \"./m\"`, `export * from \"./m\"` → names [\"*\"], `export * as ns from` → [\"* as ns\"]). It binds no local name; the linker follows names through it to where they are written."
+        },
         "names": {
           "type": "array",
           "items": {

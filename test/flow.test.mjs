@@ -268,6 +268,21 @@ test("a script another file names is an entry point even with no shebang and no 
   assert.ok(t.nodes.some((n) => n.kind === "external" && n.label === "fetch"), t.nodes.map((n) => n.label).join(" | "));
 });
 
+test("a SOURCE file named in a string is run only when the naming is an execution (a data module read by path is not a command)", () => {
+  const data = { language: "jsts", nodes: [{ id: "module/TREE.assign", type: "assignment", name: "TREE", parentId: null }] };
+  const caller = (n) => ({ language: "jsts", nodes: [{ id: "module/f.fn", type: "function_def", name: "f", parentId: null }, { ...n, parentId: "module/f.fn", line: 2 }] });
+  const ids = (files) => discoverProject(files, []).map((e) => e.id);
+  // Reported 2026-09-30: decision-tree.ts (an `export const`) became a one-node "run as a command" thread.
+  assert.deepEqual(ids({ "lib/decision-tree.ts": data, "a.ts": caller({ id: "module/f.fn/readFileSync.call", type: "call", funcName: "fs.readFileSync", args: ['"lib/decision-tree.ts"'] }) }), [], "read by path");
+  assert.deepEqual(ids({ "lib/decision-tree.ts": data, "a.test.ts": caller({ id: "module/f.fn/mock.call", type: "call", funcName: "vi.mock", args: ['"lib/decision-tree.ts"'] }) }), [], "mocked");
+  assert.deepEqual(ids({ "lib/decision-tree.ts": data, "a.ts": caller({ id: "module/f.fn/P.assign", type: "assignment", name: "P", preview: '"lib/decision-tree.ts"', literals: ["lib/decision-tree.ts"] }) }), [], "a path constant");
+  // Run-shaped: a spawn, an interpreter word beside the path, a shebang on the target, a shell script.
+  assert.deepEqual(ids({ "lib/job.ts": data, "a.ts": caller({ id: "module/f.fn/execFile.call", type: "call", funcName: "execFile", args: ['"lib/job.ts"'] }) }), ["lib/job.ts:module"]);
+  assert.deepEqual(ids({ "lib/job.ts": data, "a.sh": { language: "bash", nodes: [{ id: "module/tsx.call", type: "call", funcName: "tsx", args: ['"lib/job.ts"'], parentId: null }] } }), ["lib/job.ts:module"]);
+  assert.deepEqual(ids({ "lib/job.ts": { ...data, shebang: "#!/usr/bin/env tsx" }, "a.ts": caller({ id: "module/f.fn/P.assign", type: "assignment", name: "P", preview: '"lib/job.ts"', literals: ["lib/job.ts"] }) }), ["lib/job.ts:module"]);
+  assert.deepEqual(ids({ "ops/x.sh": { language: "bash", nodes: [{ id: "module/echo.call", type: "call", funcName: "echo", args: [], parentId: null }] }, "a.ts": caller({ id: "module/f.fn/P.assign", type: "assignment", name: "P", preview: '"ops/x.sh"', literals: ["ops/x.sh"] }) }), ["ops/x.sh:module"], "a shell script named anywhere is still run (CommandStream)");
+});
+
 test("an MCP tool registered with an inline handler is an entry point, and a client calling it by name crosses to it", () => {
   const ep = byId["mcp/server.ts:list_orders"];
   assert.ok(ep, Object.keys(byId).join(", "));

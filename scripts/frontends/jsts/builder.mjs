@@ -246,6 +246,12 @@ export class JstsGraphBuilder {
         // M-FLOW.5 — `export default X;` (a separate statement after the
         // definition, the other common spelling) names the file's default
         // export; the function it names is marked once the walk is done.
+        // 2026-09-30 — a RE-EXPORT (`export { x } from "./y"`, `export * from
+        // "./y"`): a barrel file's whole job. It emitted no node, so the linker
+        // could not follow `import { x } from "./lib"` through lib/index.ts to
+        // where x is written, and every thread through a barrel stopped there.
+        const source = n.childForFieldName("source") ?? n.namedChildren.find((c) => c.type === "string");
+        if (source) return this.visitReexport(n, parentId, source);
         const isDefault = n.children.some((c) => c.type === "default");
         for (const c of n.namedChildren) {
           if (STATEMENT_TYPES.has(c.type)) this.visit(c, parentId);
@@ -277,6 +283,29 @@ export class JstsGraphBuilder {
         // nothing here is a call.
         return;
     }
+  }
+
+  /** `export { a, b as c } from "./m"` → names ["a", "b as c"]; `export * from
+   *  "./m"` → ["*"]; `export * as ns from "./m"` → ["* as ns"]. An
+   *  import_from node marked `reexport`: the file does load the module, and the
+   *  linker follows the names through it. */
+  visitReexport(n, parentId, source) {
+    const module = this.text(source).replace(/^["']|["']$/g, "");
+    const names = [];
+    const clause = n.namedChildren.find((c) => c.type === "export_clause");
+    if (clause) {
+      for (const spec of clause.namedChildren) {
+        if (spec.type !== "export_specifier") continue;
+        const ids = spec.namedChildren.map((x) => this.text(x));
+        names.push(ids.length === 2 ? `${ids[0]} as ${ids[1]}` : ids[0]);
+      }
+    } else {
+      const ns = n.namedChildren.find((c) => c.type === "namespace_export");
+      const id = ns?.namedChildren[0];
+      names.push(id ? `* as ${this.text(id)}` : "*");
+    }
+    const id = this.makeId(parentId, `${this.safeName(module)}.import_from`);
+    this.emit({ id, type: "import_from", parentId: parentId ?? null, ...this.pos(n), module, names, reexport: true }, parentId, n);
   }
 
   visitImport(n, parentId) {

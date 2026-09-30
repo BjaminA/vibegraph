@@ -11,12 +11,15 @@ import { resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { spawnClassifier } from "./classify.mjs";
 import { loadEnvelope } from "../quality_check.mjs";
+import { pipelineHere } from "./pipeline.mjs";
 import { listSpecs, loadSpec, saveSpec, removeSpec, saveSource, isSafeTool } from "../../src/server/software_store.ts";
 import { buildSpecPrompt, parseSpecReply, gateSpec, htmlToText } from "../../src/server/software_draft.ts";
 import { ratifySpec, specIntoPlan } from "../../src/server/software_server.ts";
 import { formatSpecMd, specUsage } from "../../src/server/software_apply.ts";
+import { runSoftwareEdit, SOFTWARE_EDIT_HELP } from "./software_edit.mjs";
+import { isAgentRun } from "./actor.mjs";
 
-export const SOFTWARE_USAGE = `software add <tool> --from <url|file>… | list | show <tool> | ratify <tool> | plan <tool> | remove <tool>
+export const SOFTWARE_USAGE = `software add <tool> --from <url|file>… | list | show <tool> | edit <tool> | rule … | unknown … | ratify <tool> | plan <tool> | remove <tool>
                                   [--root <dir>] [--json]   a spec for a tool the project builds on, cited from its own docs
                                   (.vibegraph/software/); \`add\` SPENDS TOKENS and fetches the --from URLs (--dry-run: neither)`;
 
@@ -29,7 +32,9 @@ const HELP = `usage: vibegraph-knowledge ${SOFTWARE_USAGE}
   show <tool> [--usage] [--json]   the spec with every quote; --usage adds where the code calls it
   ratify <tool>      re-check every quote against the saved sources, then mark it ratified (a person's step)
   plan <tool> [--param name=value …]   put the tool and its rules into the plan (all proposed); a rule's
-                     {placeholders} are the project's own names, filled from --param
+                     {placeholders} are the project's own names, filled from --param; run again after a spec
+                     edit and the planned rules that changed are updated (back to proposed)
+${SOFTWARE_EDIT_HELP}
   remove <tool>`;
 
 const MAX_BYTES = 5 * 1024 * 1024;
@@ -62,12 +67,22 @@ export async function runSoftware(args) {
       root: { type: "string" }, json: { type: "boolean" }, from: { type: "string", multiple: true }, hint: { type: "string" },
       model: { type: "string" }, "dry-run": { type: "boolean" }, reply: { type: "string" }, usage: { type: "boolean" },
       param: { type: "string", multiple: true },
+      id: { type: "string" }, text: { type: "string" }, why: { type: "string" }, check: { type: "string" },
+      core: { type: "boolean" }, "not-core": { type: "boolean" }, cite: { type: "string" },
+      question: { type: "string" }, matters: { type: "string" },
     } });
   } catch (e) { return { exitCode: 2, text: `${e.message}\n\n${HELP}\n` }; }
-  const [sub, tool] = parsed.positionals;
+  const [sub, second, third] = parsed.positionals;
   const root = resolve(parsed.values.root ?? ".");
   const done = (text, exitCode = 0) => ({ exitCode, text: text.endsWith("\n") ? text : `${text}\n` });
   if (!sub || sub === "help") return done(HELP, sub ? 0 : 2);
+  // `rule add <tool>` / `unknown remove <tool>`: the action comes before the tool.
+  const tool = sub === "rule" || sub === "unknown" ? third : second;
+  if (sub === "edit" || sub === "rule" || sub === "unknown") {
+    const spec = isSafeTool(tool) ? loadSpec(root, tool) : null;
+    if (!spec) return done(`no spec for ${tool ?? "(give the tool)"} (vibegraph-knowledge software list)`, 1);
+    return runSoftwareEdit({ root, spec, action: sub, sub: second, values: parsed.values, done });
+  }
   if (sub === "list") {
     const specs = listSpecs(root);
     if (parsed.values.json) return done(JSON.stringify(specs, null, 2));
@@ -114,7 +129,7 @@ export async function runSoftware(args) {
   if (sub === "show") {
     if (parsed.values.json) return done(JSON.stringify(spec, null, 2));
     let usage;
-    if (parsed.values.usage) usage = specUsage(spec, loadEnvelope(root, null, {}, { cache: true }).envelope.files);
+    if (parsed.values.usage) usage = specUsage(spec, loadEnvelope(root, null, pipelineHere(root), { cache: true }).envelope.files);
     return done(formatSpecMd(spec, usage));
   }
   if (sub === "ratify") {
@@ -131,7 +146,7 @@ export async function runSoftware(args) {
       if (!m) return done(`--param wants name=value (got ${kv})`, 2);
       params[m[1]] = m[2];
     }
-    const r = specIntoPlan(root, tool, params);
+    const r = specIntoPlan(root, tool, params, isAgentRun() ? "agent" : "human");
     return r.error ? done(`refused: ${r.error}`, 1) : done(`${r.message}; agree each in the Plan panel or with \`plan agree\``);
   }
   return done(`unknown software subcommand: ${sub}\n\n${HELP}`, 2);

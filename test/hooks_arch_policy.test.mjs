@@ -18,6 +18,9 @@ import { runConstraintChecks } from "../scripts/cli/check.mjs";
 import { archPlacement } from "../scripts/cli/arch_context.mjs";
 import { derivedPolicyClauses, moduleFileOf } from "../src/server/policy_check.ts";
 import { loadEnvelope } from "../scripts/quality_check.mjs";
+// These tests act as a PERSON at the command line; a Claude Code terminal sets CLAUDECODE,
+// which makes the CLI refuse a person's steps (scripts/cli/actor.mjs) — so it is cleared here.
+delete process.env.CLAUDECODE;
 
 let base, root;
 const EP = "telemetry/alerts.py:evaluate";

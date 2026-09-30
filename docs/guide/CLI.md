@@ -58,23 +58,24 @@ CLI) and says so; everything else is deterministic.
 
 | Command | What it does | What it writes | Tokens |
 |---|---|---|---|
-| `check [--uncommitted \| --git <range>]` | Every stated rule's check: PASS / VIOLATED (names the call) / UNVERIFIABLE; exit 0 / 1 / 2 | nothing | — |
-| `constraints list \| add \| remove \| ratify` | The stated rules, their reasons, scopes and checks | `.vibegraph/constraints.json` | — |
-| `seeds list \| add \| remove` | Entry points discovery cannot see | `.vibegraph/manual_seeds.json` | — |
-| `skills list \| ratify \| reaffirm \| auto-reaffirm` | Per-thread skills: approve, re-stamp a still-correct stale one | `.vibegraph/thread-skills/` | — |
-| `skills draft <entry>… \| --missing` | Drafts per-thread guidance through the grounding gates (reads the thread's lessons) | `.vibegraph/thread-skills/` | **yes** |
-| `direction [<skill>]` / `enable \| disable <skill>` / `hooks headlines \| on-violation \| off` | The generic coding skills: where they apply, one skill in full, whether the hooks send them | `.vibegraph/skills.json` | — |
+| `check [--uncommitted $ref| --git <range>]` | Every stated rule's check: PASS / VIOLATED (names the call) / UNVERIFIABLE; exit 0 / 1 / 2 | nothing | — |
+| `constraints list $ref| add $ref| remove $ref| ratify` | The stated rules, their reasons, scopes and checks | `.vibegraph/constraints.json` | — |
+| `seeds list $ref| add $ref| remove` | Entry points discovery cannot see | `.vibegraph/manual_seeds.json` | — |
+| `skills list $ref| ratify $ref| reaffirm $ref| auto-reaffirm` | Per-thread skills: approve, re-stamp a still-correct stale one | `.vibegraph/thread-skills/` | — |
+| `skills draft <entry>… $ref| --missing` | Drafts per-thread guidance through the grounding gates (reads the thread's lessons) | `.vibegraph/thread-skills/` | **yes** |
+| `direction [<skill>]` / `enable $ref| disable <skill>` / `hooks headlines $ref| on-violation $ref| off` | The generic coding skills: where they apply, one skill in full, whether the hooks send them | `.vibegraph/skills.json` | — |
 | `lessons list` | Rules sessions broke and put right, with the fix | nothing | — |
 | `plan init "<objective>"` / `show` / `check` | A hypothetical plan: start it, read it, measure the code against it (realised / drifted / not built) | `.vibegraph/plan.json` (init) | — |
 | `plan edit '<op>'` / `agree` / `drop` / `close` / `reopen` | Change the plan by small operations, each one a changelog line; `--as agent` records a proposal | `.vibegraph/plan.json` | — |
 | `plan promote <rule>` | Copy a planned rule into the stated rules, where it is checked and may block | `.vibegraph/constraints.json`, `plan.json` | — |
-| `plan draft --from <url\|file>…` | Draft plan items from documents and the ratified software specs; a quote not in them drops the item; all proposed | `.vibegraph/plan.json` | **yes** |
-| `software add <tool> --from <url\|file>…` | Draft a spec for a tool from its own documents, behind the citation gate; saved as a draft | `.vibegraph/software/` | **yes** |
+| `plan draft --from <url$ref|file>…` | Draft plan items from documents and the ratified software specs; a quote not in them drops the item; all proposed | `.vibegraph/plan.json` | **yes** |
+| `software add <tool> --from <url$ref|file>…` | Draft a spec for a tool from its own documents, behind the citation gate; saved as a draft | `.vibegraph/software/` | **yes** |
 | `software list` / `show <tool> [--usage]` / `ratify <tool>` / `remove <tool>` | The specs; one with every quote and where the code calls it; accept one (quotes re-checked) | `.vibegraph/software/` | — |
+| `software edit <tool>` / `rule add\|update\|remove <tool>` / `unknown add\|remove <tool>` | Change a spec: every quote re-checked, your items marked STATED; your edit keeps it ratified, a model's sends it back to draft | `.vibegraph/software/` | — |
 | `software plan <tool> [--param name=value]` | Put a ratified spec's tool and rules into the plan, proposed, with the project's names filled in | `.vibegraph/plan.json` | — |
-| `architecture --propose \| --modify "<text>"` | Deployment / trust groups and a start-here path, every item citing what it saw; stored pending | `.vibegraph/architecture.json` | **yes** |
-| `architecture --ratify \| --reject` | Makes the pending proposal stated / drops it | `.vibegraph/architecture.json` | — |
-| `classify [--dry-run \| --apply]` | The role of tools no table knows; `--apply` stores each as a model-stated policy | `.vibegraph/constraints.json` | **yes** |
+| `architecture --propose $ref| --modify "<text>"` | Deployment / trust groups and a start-here path, every item citing what it saw; stored pending | `.vibegraph/architecture.json` | **yes** |
+| `architecture --ratify $ref| --reject` | Makes the pending proposal stated / drops it | `.vibegraph/architecture.json` | — |
+| `classify [--dry-run $ref| --apply]` | The role of tools no table knows; `--apply` stores each as a model-stated policy | `.vibegraph/constraints.json` | **yes** |
 | `--version` / `--help` | The version / every command and option | nothing | — |
 
 ### Every file VibeGraph makes
@@ -161,7 +162,7 @@ names and re-check the rules after every edit; `CLAUDE.md` points it at
 Then add what only your team knows:
 
 ```bash
-vibegraph-knowledge constraints add --kind invariant --all \
+vibegraph-knowledge constraints add --kind invariant --all $ref
   --text "Every outbound HTTP call goes through lib/http_client.py: it routes via the egress proxy and attaches the service token."
 vibegraph-knowledge export        # re-export whenever the rules or the code change
 ```
@@ -516,6 +517,67 @@ names each function that reads a blob without waiting.
 
 What it cannot do: the gate proves an item quotes the documents, not that the
 model understood them. Ratify only after reading `show`.
+
+**What a spec holds, and how much of it a session gets.** A spec is a
+reference for someone else's tool, so it may hold up to 30 rules. Each rule
+is one line, and its *why* may run to 400 characters. Up to 8 rules are
+marked **core**. A hooked session is sent only the core rules (or the first 8
+when none are marked) and is told how many more are in the full spec. The
+spec also holds:
+
+- **states**, each either a *sequence* (DRAFT → READY) or a *choice* (map |
+  array | text | blob);
+- **unknowns**: questions the documents don't answer, such as a schema
+  version or whether `$ref` works. Sessions are sent them as "the docs do NOT
+  say — do not assume".
+
+The citation gate also drops a rule's **check** when its target isn't one of
+the tool's own operations. A check that proves less than its rule claims
+gives a false pass, which is worse than no check.
+
+**Editing a spec.** Don't edit the JSON by hand; these re-check it:
+
+```bash
+vibegraph-knowledge software edit synapse                    # the whole spec in $EDITOR
+vibegraph-knowledge software rule add synapse --text "…" --why "…" [--core] [--check '<json>'] [--cite "exact quote"]
+vibegraph-knowledge software rule update synapse --id s6 --why "…"      # --core / --not-core / --check null / --cite null
+vibegraph-knowledge software rule remove synapse --id s15
+vibegraph-knowledge software unknown add synapse --question "Is $ref supported?" --matters "splitting schemas"
+```
+
+Every edit is validated and **every quote is re-checked against the saved
+documents**. If anything fails, nothing is written, and `edit` keeps your
+copy for another try.
+
+- **Marked as yours.** Items you add or change are marked `by: human` and
+  read as **STATED by a person**, never as the drafting model's INFERRED.
+- **Status.** Your edit keeps a ratified spec ratified. An edit made from
+  Claude Code (below) sends it back to draft.
+- **A record.** Each edit is one line under "Edits since drafting".
+- **The plan follows.** Run `software plan synapse` again after an edit: a
+  planned rule whose source rule changed is updated and goes back to
+  **proposed**, because you agreed to the old words. A check you filled in
+  with `--param` earlier is kept.
+
+**Steps that are yours** (when Claude Code runs a command, it sets
+`CLAUDECODE=1`, and these are refused with where to do them instead):
+
+- `plan init`, `plan agree`, `plan close`, `plan reopen`, `plan promote`;
+- `software ratify`, `software remove`;
+- `constraints ratify`, `constraints remove`;
+- `skills ratify`, `skills reaffirm`, `skills auto-reaffirm`;
+- `architecture --ratify`, `architecture --reject`;
+- `init --remove-hooks`, `init --remove-skill`.
+
+Everything else Claude runs is recorded as **Claude's**:
+
+- plan edits are proposals, and a new objective becomes an open question;
+- `constraints add` is agent-stated;
+- a spec edit sends the spec back to draft.
+
+This is a strong speed bump, not a lock: Claude could strip the variable on
+purpose. A command you type in Claude Code's own `!` shell carries the mark
+too, so do your own steps in a normal terminal or the Plan panel.
 
 ### `constraints` — the rules the code cannot show
 

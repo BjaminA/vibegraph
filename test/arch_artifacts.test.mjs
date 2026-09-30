@@ -21,6 +21,9 @@ import { toArchify } from "../src/server/arch_archify.ts";
 import { renderArchHtml, archHtmlData } from "../src/server/arch_html.ts";
 import { canonicalRemote } from "../scripts/arch_artifacts.mjs";
 import { buildProposePrompt } from "../src/server/arch_propose.ts";
+// These tests act as a PERSON at the command line; a Claude Code terminal sets CLAUDECODE,
+// which makes the CLI refuse a person's steps (scripts/cli/actor.mjs) — so it is cleared here.
+delete process.env.CLAUDECODE;
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const STUB = join(ROOT, "test/fixtures/arch/fake_claude_arch.mjs");

@@ -3,6 +3,7 @@
 // as a page, and how it enters a plan. Pure — specs and IR in, text out.
 
 import type { SoftwareSpec, SoftwareRule } from "../shared/software_types.ts";
+import { SOFTWARE_CAPS } from "../shared/software_types.ts";
 import type { PlanOp } from "./plan_ops.ts";
 
 interface FileIr { nodes?: Array<{ type: string; module?: string; names?: string[]; funcName?: string; callTarget?: string; line?: number }> }
@@ -49,14 +50,31 @@ export function specsForFiles(specs: SoftwareSpec[], files: Record<string, FileI
   return specs.filter((s) => { const u = specUsage(s, files, reached); return u.imports.length > 0 || u.calls.length > 0; });
 }
 
-const q = (c: string | null) => (c ? `"${c.length > 90 ? `${c.slice(0, 87)}…` : c}"` : "INFERRED — not in its docs");
+/** Where an item came from, said the same way everywhere. */
+const q = (c: string | null, by?: string) =>
+  c ? `"${c.length > 90 ? `${c.slice(0, 87)}…` : c}"${by === "human" ? " (edited by a person)" : by === "agent" ? " (edited by a model after drafting)" : ""}`
+  : by === "human" ? "STATED by a person — not in the docs"
+  : by === "agent" ? "added by a model after drafting — not in the docs"
+  : "INFERRED — not in its docs";
+const tag = (c: string | null, by?: string) => (c ? "" : by === "human" ? " [stated by a person]" : " [not in the docs]");
+const stateText = (s: { values: string[]; kind?: string }) => s.values.join(s.kind === "choice" ? " | " : " → ");
+
+/** The rules a session is always told: the ones marked core, or — when none
+ *  is — the first few. The rest are on demand. */
+export function coreRules(spec: SoftwareSpec): { core: SoftwareRule[]; rest: number } {
+  const marked = spec.rules.filter((r) => r.core);
+  const core = marked.length ? marked : spec.rules.slice(0, SOFTWARE_CAPS.core);
+  return { core, rest: spec.rules.length - core.length };
+}
 
 /** The compact form a hooked session receives, once per session per spec. */
 export function specHeadlines(spec: SoftwareSpec, calls: OperationCall[] = []): string {
   const lines = [`## Software: ${spec.tool}${spec.vendor ? ` (${spec.vendor})` : ""} — ${spec.role}; a ratified spec cited from its own docs`, spec.definition];
   if (calls.length) lines.push(`This code calls it: ${calls.slice(0, 8).map((c) => `${c.operation} (${c.does}${c.on ? ` ${c.on}` : ""}) at ${c.file}${c.line ? `:${c.line}` : ""}`).join("; ")}${calls.length > 8 ? `; +${calls.length - 8} more` : ""}.`);
-  if (spec.states.length) lines.push(`States: ${spec.states.map((s) => `${s.of}: ${s.values.join(" → ")}`).join("; ")}.`);
-  if (spec.rules.length) lines.push(`Its rules: ${spec.rules.map((r) => `${r.id} ${r.text} (why: ${r.why})${r.cite ? "" : " [inferred]"}`).join("; ")}.`);
+  if (spec.states.length) lines.push(`States and options: ${spec.states.map((s) => `${s.of}: ${stateText(s)}`).join("; ")}.`);
+  const { core, rest } = coreRules(spec);
+  if (core.length) lines.push(`Its core rules: ${core.map((r) => `${r.id} ${r.text} (why: ${r.why})${tag(r.cite, r.by)}`).join("; ")}.${rest ? ` (+${rest} more rule${rest === 1 ? "" : "s"} in the full spec.)` : ""}`);
+  if (spec.unknowns?.length) lines.push(`The docs do NOT say — do not assume: ${spec.unknowns.map((u) => `${u.id} ${u.question}${u.mattersFor ? ` (matters for ${u.mattersFor})` : ""}`).join("; ")}.`);
   if (spec.permissions.length) lines.push(`Permissions: ${spec.permissions.map((p) => p.name).join(", ")}.`);
   lines.push(`Full spec with every quote: \`vibegraph-knowledge software show ${spec.tool}\` (or the vibegraph_software tool).`);
   return lines.join("\n");
@@ -65,13 +83,23 @@ export function specHeadlines(spec: SoftwareSpec, calls: OperationCall[] = []): 
 /** The page: every item beside the quote it came from. */
 export function formatSpecMd(spec: SoftwareSpec, usage?: { imports: string[]; calls: OperationCall[] }): string {
   const out = [`# ${spec.tool}${spec.vendor ? ` — ${spec.vendor}` : ""}`, "",
-    `> Software spec, **${spec.status.toUpperCase()}**${spec.ratifiedAt ? ` ${spec.ratifiedAt.slice(0, 10)}` : ""}. Every item quotes the documents it came from; INFERRED items are the drafting model's own and were not in them.`, "",
+    `> Software spec, **${spec.status.toUpperCase()}**${spec.ratifiedAt ? ` ${spec.ratifiedAt.slice(0, 10)}` : ""}. Every item quotes the documents it came from, or says it does not: INFERRED = the drafting model's own; STATED = a person's.`, "",
     `**Role:** ${spec.role}. ${spec.definition} — ${q(spec.definitionCite)}`, "",
     `**Recognised by:** ${[...spec.identity.packages.map((p) => `\`${p}\``), ...spec.identity.calls.slice(0, 12).map((c) => `\`${c}()\``)].join(", ") || "(nothing — it will not be recognised in code)"}`, ""];
-  if (spec.operations.length) { out.push("## Operations", ""); for (const o of spec.operations) out.push(`- \`${o.name}\` — ${o.does}${o.on ? ` · ${o.on}` : ""}${o.note ? ` · ${o.note}` : ""} — ${q(o.cite)}`); out.push(""); }
-  if (spec.states.length) { out.push("## States", ""); for (const s of spec.states) out.push(`- ${s.of}: ${s.values.join(" → ")} — ${q(s.cite)}`); out.push(""); }
-  if (spec.permissions.length) { out.push("## Permissions", ""); for (const p of spec.permissions) out.push(`- \`${p.name}\`${p.for ? ` for ${p.for}` : ""} — ${q(p.cite)}`); out.push(""); }
-  if (spec.rules.length) { out.push("## Rules", ""); for (const r of spec.rules) out.push(`- **${r.id}** ${r.text} — *why:* ${r.why} — ${q(r.cite)}${r.check ? ` — check: \`${JSON.stringify(r.check)}\`` : ""}`); out.push(""); }
+  if (spec.operations.length) { out.push("## Operations", ""); for (const o of spec.operations) out.push(`- \`${o.name}\` — ${o.does}${o.on ? ` · ${o.on}` : ""}${o.note ? ` · ${o.note}` : ""} — ${q(o.cite, o.by)}`); out.push(""); }
+  if (spec.states.length) { out.push("## States and options", ""); for (const s of spec.states) out.push(`- ${s.of} (${s.kind === "choice" ? "choose one" : "in order"}): ${stateText(s)} — ${q(s.cite, s.by)}`); out.push(""); }
+  if (spec.permissions.length) { out.push("## Permissions", ""); for (const p of spec.permissions) out.push(`- \`${p.name}\`${p.for ? ` for ${p.for}` : ""} — ${q(p.cite, p.by)}`); out.push(""); }
+  if (spec.rules.length) {
+    const { rest } = coreRules(spec);
+    out.push("## Rules", "", `**Core** rules are what a hooked session is always told${rest ? `; the other ${rest} are here on demand` : ""}.`, "");
+    for (const r of spec.rules) out.push(`- **${r.id}**${r.core ? " *(core)*" : ""} ${r.text} — *why:* ${r.why} — ${q(r.cite, r.by)}${r.check ? ` — check: \`${JSON.stringify(r.check)}\`` : ""}`);
+    out.push("");
+  }
+  if (spec.unknowns?.length) {
+    out.push("## What the docs do not say", "", "Open questions — nobody should assume the answer.", "");
+    for (const u of spec.unknowns) out.push(`- **${u.id}** ${u.question}${u.mattersFor ? ` — matters for: ${u.mattersFor}` : ""}${u.by === "human" ? " (a person's)" : ""}`);
+    out.push("");
+  }
   if (usage) {
     out.push("## In this code", "", usage.imports.length ? `Imported in ${usage.imports.join(", ")}.` : "Not imported anywhere.", "");
     for (const c of usage.calls.slice(0, 30)) out.push(`- \`${c.call}\` → ${c.operation} (${c.does}) at ${c.file}${c.line ? `:${c.line}` : ""}`);
@@ -80,6 +108,9 @@ export function formatSpecMd(spec: SoftwareSpec, usage?: { imports: string[]; ca
   out.push("## Sources", "", ...spec.sources.map((s) => `- ${s.ref} (sha256 ${s.sha256.slice(0, 12)}, read ${s.fetched.slice(0, 10)})`), "");
   if (spec.gate && (spec.gate.dropped.length || spec.gate.inferred.length)) {
     out.push("## What the citation gate did", "", ...spec.gate.dropped.map((d) => `- dropped: ${d}`), ...spec.gate.inferred.map((d) => `- inferred: ${d}`), "");
+  }
+  if (spec.changes?.length) {
+    out.push("## Edits since drafting", "", ...spec.changes.map((c) => `- ${c.at.slice(0, 10)} (${c.by}): ${c.change}`), "");
   }
   return out.join("\n");
 }
@@ -97,21 +128,40 @@ export function fillCheck(check: Record<string, unknown>, params: Record<string,
  *  as planned rules — each cited, all PROPOSED (a person agrees to each). A
  *  rule whose check still needs the project's names keeps them in its text
  *  and carries no check until they are given (`--param name=value`). */
-export function specToPlanOps(spec: SoftwareSpec, params: Record<string, string> = {}, have: { tools: Set<string>; sources: Set<string> } = { tools: new Set(), sources: new Set() }): PlanOp[] {
+interface PlannedRuleLike { id: string; source?: string; text: string; why: string; check?: Record<string, unknown>; groundedIn?: string | null; status: string }
+
+export function specToPlanOps(
+  spec: SoftwareSpec, params: Record<string, string> = {},
+  have: { tools: Set<string>; policies: PlannedRuleLike[] } = { tools: new Set(), policies: [] },
+): PlanOp[] {
   const ops: PlanOp[] = [];
   if (!have.tools.has(spec.tool)) {
     ops.push({ op: "add", section: "stack", item: { tool: spec.tool, role: spec.role, why: spec.definition.slice(0, 160), groundedIn: spec.definitionCite, status: "proposed" } });
   }
+  const bySource = new Map(have.policies.filter((p) => p.source).map((p) => [p.source!, p]));
   for (const r of spec.rules as SoftwareRule[]) {
     const source = `${spec.tool} ${r.id}`;
-    if (have.sources.has(source)) continue;
     const filled = r.check ? fillCheck(r.check, params) : null;
-    const missing = filled ? placeholdersOf(filled) : [];
+    const was = bySource.get(source);
+    // A check the plan already carries, filled with the project's names on an
+    // earlier run, is kept when this run was not given them again.
+    const kept = was?.check && r.check && filled && placeholdersOf(filled).length ? was.check : undefined;
+    const missing = filled && !kept ? placeholdersOf(filled) : [];
     const text = `${r.text}${missing.length ? ` (check needs: ${missing.join(", ")})` : ""}`.slice(0, 240);
-    ops.push({ op: "add", section: "policies", item: {
-      text, why: r.why.slice(0, 240), ...(filled && !missing.length ? { check: filled } : {}),
-      groundedIn: r.cite, source, status: "proposed",
-    } });
+    const why = r.why.slice(0, 240);
+    const check = kept ?? (filled && !missing.length ? filled : undefined);
+    if (!was) {
+      ops.push({ op: "add", section: "policies", item: { text, why, ...(check ? { check } : {}), groundedIn: r.cite, source, status: "proposed" } });
+      continue;
+    }
+    // The spec's rule changed since it entered the plan: bring the planned
+    // rule up to date, back to PROPOSED — the person agreed to the old words.
+    // A promoted rule lives in constraints.json now, and a dropped one stays dropped.
+    if (was.status === "promoted" || was.status === "dropped") continue;
+    // A check the person filled in the plan is kept unless the spec now gives one.
+    const nextCheck = check ?? (r.check ? was.check : undefined);
+    const same = was.text === text && was.why === why && JSON.stringify(was.check ?? null) === JSON.stringify(nextCheck ?? null) && (was.groundedIn ?? null) === r.cite;
+    if (!same) ops.push({ op: "update", section: "policies", id: was.id, fields: { text, why, check: nextCheck, groundedIn: r.cite, status: "proposed" } });
   }
   return ops;
 }

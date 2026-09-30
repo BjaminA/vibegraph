@@ -54,23 +54,46 @@ export function validateSpec(x: unknown): string | null {
     if (o.note !== undefined && !line(o.note)) return `operation ${o.name}: note must be one line`;
     if (!citeOk(o.cite)) return `operation ${o.name}: cite must be a quote (${SOFTWARE_CAPS.citeMin}–${SOFTWARE_CAPS.cite} chars) or null`;
   }
+  const byOk = (x: unknown) => x === undefined || x === "human" || x === "agent";
+  for (const o of s.operations) if (!byOk(o.by)) return `operation ${o.name}: by must be human|agent`;
   for (const st of s.states) {
     if (!line(st?.of, 80) || !Array.isArray(st.values) || !st.values.length || !st.values.every((v: unknown) => line(v, 40))) return "a state needs `of` and its values";
+    if (st.kind !== undefined && st.kind !== "sequence" && st.kind !== "choice") return `states of ${st.of}: kind must be sequence|choice`;
     if (!citeOk(st.cite)) return `states of ${st.of}: cite must be a quote or null`;
+    if (!byOk(st.by)) return `states of ${st.of}: by must be human|agent`;
   }
   for (const p of s.permissions) {
     if (!line(p?.name, 80)) return "a permission needs a name";
     if (!citeOk(p.cite)) return `permission ${p.name}: cite must be a quote or null`;
+    if (!byOk(p.by)) return `permission ${p.name}: by must be human|agent`;
   }
   const ids = new Set<string>();
+  let core = 0;
   for (const r of s.rules) {
     if (!r || !/^[a-z]\w{0,8}$/.test(String(r.id))) return "a rule needs a short id (s1, s2…)";
     if (ids.has(r.id)) return `duplicate rule ${r.id}`;
     ids.add(r.id);
-    if (!line(r.text) || !line(r.why)) return `rule ${r.id}: text and why are required, one line each`;
+    if (!line(r.text)) return `rule ${r.id}: text is required, one line (≤ ${SOFTWARE_CAPS.line})`;
+    if (!line(r.why, SOFTWARE_CAPS.why)) return `rule ${r.id}: why is required (≤ ${SOFTWARE_CAPS.why})`;
     if (!citeOk(r.cite)) return `rule ${r.id}: cite must be a quote or null`;
     if (r.check !== undefined && r.check !== null && (typeof r.check !== "object" || typeof r.check.rule !== "string")) return `rule ${r.id}: check must be a constraint-grammar clause or null`;
+    if (r.core !== undefined && typeof r.core !== "boolean") return `rule ${r.id}: core must be true or false`;
+    if (!byOk(r.by)) return `rule ${r.id}: by must be human|agent`;
+    if (r.core) core++;
   }
+  if (core > SOFTWARE_CAPS.core) return `${core} core rules, over the cap of ${SOFTWARE_CAPS.core} — core rules are what every session is told; keep them the few that matter most`;
+  if (s.unknowns !== undefined) {
+    if (!Array.isArray(s.unknowns) || s.unknowns.length > SOFTWARE_CAPS.unknowns) return `unknowns: at most ${SOFTWARE_CAPS.unknowns}`;
+    const uids = new Set<string>();
+    for (const u of s.unknowns) {
+      if (!u || !/^[a-z]\w{0,8}$/.test(String(u.id)) || uids.has(u.id)) return "an unknown needs a short, unique id (u1, u2…)";
+      uids.add(u.id);
+      if (!line(u.question, SOFTWARE_CAPS.why)) return `unknown ${u.id}: the question is required (≤ ${SOFTWARE_CAPS.why})`;
+      if (u.mattersFor !== undefined && !line(u.mattersFor)) return `unknown ${u.id}: mattersFor must be one line`;
+      if (!byOk(u.by)) return `unknown ${u.id}: by must be human|agent`;
+    }
+  }
+  if (s.changes !== undefined && (!Array.isArray(s.changes) || s.changes.length > SOFTWARE_CAPS.changes)) return `changes: at most ${SOFTWARE_CAPS.changes}`;
   for (const src of s.sources) {
     if (!line(src?.ref, 500) || !/^[0-9a-f]{64}$/.test(String(src.sha256)) || !line(src.saved, 200)) return "a source needs ref, sha256 and saved";
   }

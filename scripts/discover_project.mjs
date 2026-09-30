@@ -34,6 +34,25 @@ function topLevelMain(ir) {
   return called ? mainFn : null;
 }
 
+// 2026-09-30 — naming a file is not running it. A SHELL script named in a
+// string is how a shell script is run (`CommandStream("accounts/x.sh")`), so
+// that stays evidence. A SOURCE file (.ts/.js/.py/…) named in a string is far
+// more often READ — `readFileSync(".../decision-tree.ts")`, a test's
+// `vi.mock` path, a docs build — and a real project had its data module (a
+// decision tree) reported as a command-run thread of one node. A source file
+// is RUN only when it says it is (a `#!` line) or the naming is an execution:
+// a process-spawning call, or an interpreter word beside the path.
+const SHELL_TARGET = /\.(sh|bash)$|(^|\/)[^./]+$/;
+const RUN_CALLEE = /(^|\.)(spawn|spawnSync|exec|execSync|execFile|execFileSync|fork|execa|execaSync|execaNode|system|popen|Popen|run|call|check_call|check_output|runScript)$/;
+const INTERPRETER = /(^|[\s"'`[(,])(node|nodejs|tsx|ts-node|deno|bun|python3?|pypy3?|ruby|perl|cargo)(?=[\s"'`,)\]]|$)/;
+function executes(n) {
+  const callee = n.funcName ?? n.callTarget ?? "";
+  if (typeof callee === "string" && RUN_CALLEE.test(callee)) return true;
+  // A shell `node "$DIR/x.mjs"` is a call whose CALLEE is the interpreter.
+  const text = [callee, ...(n.args ?? []), n.preview ?? "", ...(n.literals ?? [])].join(" ");
+  return INTERPRETER.test(text);
+}
+
 function executesAtTop(ir) {
   return (ir.nodes ?? []).some((n) => (n.parentId === null || n.parentId === undefined)
     && !["function_def", "class_def", "import", "import_from"].includes(n.type));
@@ -55,6 +74,10 @@ export function discoverProject(files, entryPoints) {
         // makes no entry here (an entry is a claim the file is run).
         if (matches.length !== 1 || matches[0] === file) continue;
         const target = matches[0];
+        // A shell script's job is running programs: `MJS="${DIR}/ingest.mjs"`
+        // then `"$NODE" "$MJS"` names the file in one node and runs it in
+        // another, so inside a shell file the naming is the evidence.
+        if (!SHELL_TARGET.test(target) && !files[target]?.shebang && ir.language !== "bash" && !executes(n)) continue;
         if (!invokedFrom.has(target)) invokedFrom.set(target, []);
         const list = invokedFrom.get(target);
         if (list.length < 8) list.push({ file, nodeId: n.id, literal });

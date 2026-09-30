@@ -23,6 +23,9 @@ import { archModelForEnvelope } from "../src/server/arch_envelope.ts";
 import { readInfraManifests } from "../src/server/infra_manifests.ts";
 import { buildProposePrompt, docExcerpts, parseProposal } from "../src/server/arch_propose.ts";
 import { applyArchStore, emptyStore, loadArchStore, saveArchStore, ratifyProposal, rejectProposal } from "../src/server/arch_store.ts";
+// These tests act as a PERSON at the command line; a Claude Code terminal sets CLAUDECODE,
+// which makes the CLI refuse a person's steps (scripts/cli/actor.mjs) — so it is cleared here.
+delete process.env.CLAUDECODE;
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const NEXT = join(ROOT, "test/fixtures/webstack/next_demo");

@@ -28,6 +28,7 @@ import { dirname, join, resolve } from "node:path";
 import { locate } from "./paths.mjs";
 import { cacheDirFor } from "../envelope_cache.mjs";
 import { loadEnvelope } from "../quality_check.mjs";
+import { pipelineHere } from "./pipeline.mjs";
 import { loadGenericSkills, readSkillsConfig, saveSkillsConfig, HOOK_MODES, skillHeadlines as headlines, describeGenericSkill as describeSkill } from "../../src/server/generic_skills.ts";
 import { evaluatePredicate } from "../../src/server/quality/predicate.ts";
 import { deriveStackProfile } from "../../src/server/quality/profile.ts";
@@ -156,7 +157,7 @@ export function runDirection(args) {
   const absRoot = resolve(a ?? ".");
   if (!existsSync(absRoot)) return { exitCode: 1, text: `no skill or directory named ${a}\n${DIRECTION_USAGE}\n` };
   const { config } = readSkillsConfig(absRoot);
-  const { envelope } = loadEnvelope(absRoot, null, {});
+  const { envelope } = loadEnvelope(absRoot, null, pipelineHere(absRoot), { cache: true });
   const applies = applicability(envelope, absRoot, shippedSkills());
   const n = envelope.threads.filter((t) => t.entryPointId).length;
   const lines = shippedSkills().map((s) =>

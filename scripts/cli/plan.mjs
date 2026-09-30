@@ -8,6 +8,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { loadEnvelope } from "../quality_check.mjs";
+import { pipelineHere } from "./pipeline.mjs";
 import { buildStackIndex } from "../../src/server/stack.ts";
 import { loadPlan, savePlan } from "../../src/server/plan_store.ts";
 import { applyPlanOps, parsePlanOp } from "../../src/server/plan_ops.ts";
@@ -15,6 +16,7 @@ import { formatPlanMd } from "../../src/server/plan_render.ts";
 import { reconcilePlan } from "../../src/server/plan_reconcile.ts";
 import { promotePolicy } from "../../src/server/plan_promote.ts";
 import { PLAN_SECTIONS } from "../../src/shared/plan_types.ts";
+import { isAgentRun } from "./actor.mjs";
 
 export const PLAN_USAGE = `plan init "<objective>" | show | check | edit '<op>' | agree|drop <section> <id> | promote <rule id> | close|reopen
                                   [--root <dir>] [--json] [--as agent]   the HYPOTHETICAL project (.vibegraph/plan.json): objective,
@@ -47,7 +49,8 @@ export function runPlan(args) {
   } catch (e) { return { exitCode: 2, text: `${e.message}\n\n${HELP}\n` }; }
   const [sub, ...rest] = parsed.positionals;
   const root = resolve(parsed.values.root ?? ".");
-  const by = parsed.values.as === "agent" ? "agent" : "human";
+  // Claude Code running this is a model, whatever it asks for (actor.mjs).
+  const by = parsed.values.as === "agent" || isAgentRun() ? "agent" : "human";
   const done = (text, exitCode = 0) => ({ exitCode, text: text.endsWith("\n") ? text : `${text}\n` });
   const apply = (ops) => {
     const r = applyPlanOps(loadPlan(root), ops, by);
@@ -67,7 +70,7 @@ export function runPlan(args) {
   if (!plan) return done("no plan yet — start one: vibegraph-knowledge plan init \"<objective>\"", 1);
   if (sub === "show") return done(parsed.values.json ? JSON.stringify(plan, null, 2) : formatPlanMd(plan));
   if (sub === "check") {
-    const { envelope } = loadEnvelope(root, null, {}, { cache: true });
+    const { envelope } = loadEnvelope(root, null, pipelineHere(root), { cache: true });
     const rec = reconcilePlan(plan, envelope, buildStackIndex(envelope, root), root);
     return done(parsed.values.json ? JSON.stringify(rec, null, 2) : formatPlanMd(plan, rec));
   }
