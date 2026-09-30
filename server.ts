@@ -91,6 +91,7 @@ import { draftInsertion } from "./src/server/compose_draft";
 import { validateSystemPlan, loadSystemPlan, persistSystemPlan } from "./src/server/system_plan";
 import { planMtime } from "./src/server/plan_store";
 import { handlePlanMessage, planToolText, planToolEdit } from "./src/server/plan_server";
+import { handleSoftwareMessage, softwareToolText } from "./src/server/software_server";
 import { draftSystemPlan } from "./src/server/system_draft";
 import { validateChangeset, changesetConsentScope, CHECK_MODULE, CHECK_FN_ID } from "./src/server/changeset";
 import { draftChangeset } from "./src/server/changeset_draft";
@@ -7512,6 +7513,7 @@ const mcpContext: VibegraphMcpContext = {
   dataflow: () => (isDirectory ? { text: formatDataflowMd(liveDataflow()) } : { text: "", error: "the data-flow report needs a project directory" }),
   plan: () => (isDirectory ? { text: planToolText(analyzedRoot(), planEnv(), latestStack) } : { text: "", error: "a plan needs a project directory" }),
   planEdit: (ops) => (isDirectory ? planToolEdit(analyzedRoot(), ops) : { text: "", error: "a plan needs a project directory" }),
+  software: (tool) => (isDirectory ? softwareToolText(analyzedRoot(), tool, relativeProjectFiles() as any) : { text: "", error: "software specs need a project directory" }),
   // 2026-09-29 - generic direction on demand (the same files the hooks read).
   direction: (skill) => {
     if (skill) {
@@ -8093,6 +8095,14 @@ function setupWebSocket() {
           else if (msg.type === "hooked-run-start") { const r = startHookedRun(msg.payload?.task, hookedRunDeps()); if (!r.ok) reply(r.error); }
           else if (msg.type === "hooked-run-stop") { if (!stopHookedRun(analyzedRoot())) reply("no run is running"); }
           else decideHookedRun(msg.payload?.accept === true, hookedRunDeps()).then((r) => { if (!r.ok) reply(r.error); }, (e) => reply(String(e?.message ?? e)));
+        } else if (msg.type === "software-list" || msg.type === "software-ratify" || msg.type === "software-plan") {
+          // 2026-09-30 — software specs from the Plan panel (src/server/software_server.ts); a person.
+          if (!isDirectory) ws.send(JSON.stringify({ type: "software-state", payload: { specs: [], error: "software specs need a project directory" } }));
+          else {
+            const r = handleSoftwareMessage(analyzedRoot(), msg);
+            ws.send(JSON.stringify({ type: "software-state", payload: r.reply }));
+            if (r.changed) broadcastProjectUpdate();
+          }
         } else if (msg.type === "plan-get" || msg.type === "plan-op" || msg.type === "plan-promote") {
           // 2026-09-30 — the Plan panel (src/server/plan_server.ts); the sender is a person.
           if (!isDirectory) ws.send(JSON.stringify({ type: "plan-state", payload: { plan: null, reconcile: null, error: "a plan needs a project directory" } }));

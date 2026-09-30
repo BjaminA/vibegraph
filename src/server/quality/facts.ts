@@ -9,7 +9,7 @@
 // so `contractOptsFor` is the shared builder. The other two are left as
 // they are; a follow-up may point them here.
 
-import type { ReferenceFact, UnresolvedFact } from "../constraint_grammar.ts";
+import type { ReferenceFact, UnresolvedFact, ExternalCallFact } from "../constraint_grammar.ts";
 import { flattenArgKeys, type CallSiteFact } from "../payload_check.ts";
 import { computeThreadContract, type ThreadContract, type ContractInputThread } from "../thread_contract.ts";
 import { buildStackIndex, contractStackForFile, type StackIndex } from "../stack.ts";
@@ -113,6 +113,7 @@ export function buildQualityFacts(input: FactsInput): QualityFacts {
   // ── the grammar's four fields, as server.ts builds them ──
   const references: ReferenceFact[] = [];
   const unresolved: UnresolvedFact[] = [];
+  const externalCalls: ExternalCallFact[] = [];
   const definedNames = new Set<string>();
   const nodesByFile = new Map<string, FactNode[]>();
   const referenceTargets = new Map<string, { toFile: string | null; toNodeId: string }>();
@@ -143,6 +144,13 @@ export function buildQualityFacts(input: FactsInput): QualityFacts {
       if (typeof callee === "string" && callee) {
         callSites.push({ file, nodeId: n.id, callee, resolvedName: resolvedName.get(n.id) ?? null, keys: flattenArgKeys(n.argKeys) });
       }
+      // 2026-09-30 — every call the linker did not resolve into the project,
+      // statements that ARE a call included (return f(), x = f()): the call
+      // sites a check on an EXTERNAL API ("ledgerbox.get_blob", "*.get_blob")
+      // reads. A separate list, so the verbs that read `unresolved` see
+      // exactly what they saw before.
+      const ext = n.type === "call" ? n.funcName : n.callTarget;
+      if (typeof ext === "string" && ext && !resolved.has(n.id)) externalCalls.push({ file, label: ext, nodeId: n.id });
       if (n.type !== "call" || resolved.has(n.id)) continue;
       const label = typeof n.funcName === "string" ? n.funcName : "";
       if (label) unresolved.push({ file, label });
@@ -182,6 +190,7 @@ export function buildQualityFacts(input: FactsInput): QualityFacts {
     importsByFile: Object.fromEntries(Object.entries(stack.byFile ?? {}).map(([f, tools]) => [f, [...(tools as string[])]])),
     definedNames: [...definedNames],
     unresolved,
+    externalCalls,
     callSites,
     commit,
     ...(input.entryPointId ? { entryPointId: input.entryPointId } : {}),

@@ -18,13 +18,16 @@ import { PLAN_SECTIONS } from "../../src/shared/plan_types.ts";
 
 export const PLAN_USAGE = `plan init "<objective>" | show | check | edit '<op>' | agree|drop <section> <id> | promote <rule id> | close|reopen
                                   [--root <dir>] [--json] [--as agent]   the HYPOTHETICAL project (.vibegraph/plan.json): objective,
-                                  processes, stack, data boundaries, primary threads, planned rules, open questions; zero tokens.
+                                  processes, stack, data boundaries, primary threads, planned rules, open questions; zero tokens
+                                  (except \`plan draft --from <docs>\`, which SPENDS TOKENS: items drafted from documents, each quoted).
                                   \`check\` compares it with the code (realised / drifted / not built); planned rules are advice
                                   until \`promote\` copies one into constraints.json`;
 
 const HELP = `usage: vibegraph-knowledge ${PLAN_USAGE}
 
   init "<objective>"          start a plan (one line: what it is for)
+  draft --from <url|file> …   SPENDS TOKENS: a model drafts items from the documents and every ratified software
+                              spec; a quote not in them drops the item; all land proposed (--dry-run, --reply)
   show [--json]               the plan, objective first
   check [--json]              the plan against the code: each item realised / drifted / not built
   edit '<op>' | --file <f>    apply one op (JSON) or a JSON array of them; sections: ${PLAN_SECTIONS.join(", ")}

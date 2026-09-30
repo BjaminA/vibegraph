@@ -14,7 +14,7 @@ import { DraftingCompass, X, Check, Trash2, ArrowUpRight, ExternalLink } from "l
 import type { Plan, PlanFinding, PlanSection, PlanVerdict } from "../shared/plan_types";
 import { planItemId } from "../shared/plan_types";
 import { belowToolbar, heightBelowToolbar } from "./TopToolbar";
-import { usePlanState, sendPlanOp, promotePlanRule } from "./usePlanState";
+import { usePlanState, sendPlanOp, promotePlanRule, useSoftwareState, sendSoftware } from "./usePlanState";
 
 const small: React.CSSProperties = { fontSize: "var(--fs-11)", color: "var(--text-muted)", lineHeight: 1.5 };
 const btn: React.CSSProperties = {
@@ -70,6 +70,12 @@ function Item({ section, it, finding }: { section: PlanSection; it: any; finding
         {finding && <Chip text={finding.verdict} tone={VERDICT_TONE[finding.verdict]} title={finding.detail} />}
       </div>
       {sub && <div style={small}>{sub}</div>}
+      {(it.source || it.groundedIn !== undefined) && (
+        <div data-plan-grounded={it.groundedIn === null ? "inferred" : "quoted"} style={{ ...small, fontStyle: "italic" }}>
+          {it.source ? `from ${it.source} · ` : ""}
+          {it.groundedIn === null ? "inferred — not in the documents" : it.groundedIn ? `“${it.groundedIn.length > 120 ? `${it.groundedIn.slice(0, 117)}…` : it.groundedIn}”` : ""}
+        </div>
+      )}
       {section === "threads" && (
         <div data-plan-chain style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-11)", color: "var(--text-secondary)", opacity: 0.8 }}>
           {it.primary.join("  →  ")}
@@ -128,6 +134,53 @@ function Section({ plan, section, findings }: { plan: Plan; section: PlanSection
       {items.map((it) => {
         const id = planItemId(section, it);
         return <Item key={id} section={section} it={it} finding={findings.find((f) => f.section === section && f.id === id)} />;
+      })}
+    </div>
+  );
+}
+
+/** Software specs: what each tool is, from its own docs, and its standing. */
+function SoftwareSection({ hasPlan }: { hasPlan: boolean }) {
+  const { specs, error, message } = useSoftwareState();
+  return (
+    <div data-software-section style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      <div style={{ fontSize: "var(--fs-12)", color: "var(--text-secondary)" }}>Software specs</div>
+      {!specs.length && (
+        <div style={small}>None yet. A spec is drawn from a tool's own documents (every item quotes them) and ratified by you; then the plan, the hooks and the checks build with it in mind. On the command line: <code>vibegraph-knowledge software add &lt;tool&gt; --from &lt;docs url or file&gt;</code> (one model call).</div>
+      )}
+      {error && <div style={{ ...small, color: "var(--accent-error)" }}>{error}</div>}
+      {message && !error && <div style={small}>{message}</div>}
+      {specs.map((s) => {
+        const inferred = s.gate?.inferred.length ?? 0;
+        const dropped = s.gate?.dropped.length ?? 0;
+        return (
+          <div key={s.tool} data-software-spec={s.tool} data-software-status={s.status}
+            style={{ borderLeft: `2px ${s.status === "draft" ? "dashed" : "solid"} var(--proposed-border)`, padding: "4px 0 4px 8px", display: "flex", flexDirection: "column", gap: 4 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+              <span style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-12)" }}>{s.tool}</span>
+              <Chip text={s.status === "draft" ? "DRAFT" : "ratified"} tone={s.status === "draft" ? "var(--proposed-border)" : "var(--text-secondary)"} dashed={s.status === "draft"} />
+              <Chip text={s.role} tone="var(--text-muted)" />
+              {inferred > 0 && <Chip text={`${inferred} inferred`} tone="var(--accent-warning)" title="items the drafting model added that are not in the docs" />}
+              {dropped > 0 && <Chip text={`${dropped} dropped`} tone="var(--text-muted)" title={s.gate!.dropped.join("\n")} />}
+            </div>
+            <div style={small}>{s.definition}</div>
+            <div style={small}>{s.operations.length} operations · {s.rules.length} rules · {s.permissions.length} permissions · from {s.sources.map((x) => x.ref).join(", ")}</div>
+            <div style={{ display: "flex", gap: 8 }}>
+              {s.status === "draft" && (
+                <button data-software-ratify style={btn} onClick={() => sendSoftware("software-ratify", s.tool)}
+                  title="Re-check every quote against the saved docs, then accept it — used by the stack, the plan and the hooks from then on">
+                  <Check size={12} strokeWidth={1.5} /> Ratify
+                </button>
+              )}
+              {s.status === "ratified" && hasPlan && (
+                <button data-software-plan style={btn} onClick={() => sendSoftware("software-plan", s.tool)}
+                  title="Add the tool to the planned stack and its rules as planned rules — all proposed">
+                  <ArrowUpRight size={12} strokeWidth={1.5} /> Add to plan
+                </button>
+              )}
+            </div>
+          </div>
+        );
       })}
     </div>
   );
@@ -194,6 +247,7 @@ export function PlanPanel({ open, onClose }: { open: boolean; onClose: () => voi
           </div>
         </>
       )}
+      <SoftwareSection hasPlan={!!plan} />
     </div>
   );
 }

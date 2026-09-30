@@ -77,8 +77,9 @@ These are real, enforced mechanisms — not intentions:
   says.
 - **No telemetry.** VibeGraph itself sends nothing anywhere. The only
   outbound traffic is the `claude` CLI (below), the one-time download of
-  libcst from PyPI (or npm, when run with `npx`), and a local Ollama
-  endpoint if you route a model tier to one.
+  libcst from PyPI (or npm, when run with `npx`), a local Ollama
+  endpoint if you route a model tier to one, and — only when you pass one —
+  the documentation URL given to `software add` / `plan draft --from`.
 
 ## Dependencies (audited 2026-09-29)
 
@@ -113,7 +114,9 @@ Stated explicitly so you can make your own call:
   local and spend no tokens. Anything that starts a Claude session sends
   what that session reads: the chat, the Agent Manager (hooked or
   orchestrated), skill drafting, README generation, Scope, architecture
-  proposals, `classify`, drafted example inputs. A Claude Code session you
+  proposals, `classify`, drafted example inputs, `software add` and
+  `plan draft` (these two send the documents you hand them, and the plan, to
+  the model). A Claude Code session you
   run yourself with the hooks sends what it reads, as it would without them.
   Route a tier to a local Ollama model to keep that work on your machine.
 - **The Agent Manager's Claude Code run is not sandboxed.** It runs
@@ -128,6 +131,15 @@ Stated explicitly so you can make your own call:
   project, the agent acts without per-call confirmation.
 - **No secrets scanning.** If your source contains credentials, they are
   part of what gets sent to the model.
+- **Two commands fetch a URL.** `software add --from https://…` and
+  `plan draft --from https://…` download the page you name (30 s timeout,
+  5 MB cap) to draft from it; nothing else in VibeGraph makes a network call
+  of its own, and neither fetches anything you did not name. The text is kept
+  under `.vibegraph/software/sources/` so its quotes can be re-checked.
+- **A software spec is only as right as its documents.** The citation gate
+  proves each item quotes the docs, not that the model read them correctly;
+  items marked INFERRED are not in the docs at all. Ratify a spec only after
+  reading it.
 - **`dataflow` is a lead, not an audit.** It follows untrusted input to a
   shell, SQL text or eval BY NAME: a value passed through a container, a
   callback, a class attribute or a database round trip (second-order input)

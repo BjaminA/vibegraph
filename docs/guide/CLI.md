@@ -68,6 +68,10 @@ CLI) and says so; everything else is deterministic.
 | `plan init "<objective>"` / `show` / `check` | A hypothetical plan: start it, read it, measure the code against it (realised / drifted / not built) | `.vibegraph/plan.json` (init) | — |
 | `plan edit '<op>'` / `agree` / `drop` / `close` / `reopen` | Change the plan by small operations, each one a changelog line; `--as agent` records a proposal | `.vibegraph/plan.json` | — |
 | `plan promote <rule>` | Copy a planned rule into the stated rules, where it is checked and may block | `.vibegraph/constraints.json`, `plan.json` | — |
+| `plan draft --from <url\|file>…` | Draft plan items from documents and the ratified software specs; a quote not in them drops the item; all proposed | `.vibegraph/plan.json` | **yes** |
+| `software add <tool> --from <url\|file>…` | Draft a spec for a tool from its own documents, behind the citation gate; saved as a draft | `.vibegraph/software/` | **yes** |
+| `software list` / `show <tool> [--usage]` / `ratify <tool>` / `remove <tool>` | The specs; one with every quote and where the code calls it; accept one (quotes re-checked) | `.vibegraph/software/` | — |
+| `software plan <tool> [--param name=value]` | Put a ratified spec's tool and rules into the plan, proposed, with the project's names filled in | `.vibegraph/plan.json` | — |
 | `architecture --propose \| --modify "<text>"` | Deployment / trust groups and a start-here path, every item citing what it saw; stored pending | `.vibegraph/architecture.json` | **yes** |
 | `architecture --ratify \| --reject` | Makes the pending proposal stated / drops it | `.vibegraph/architecture.json` | — |
 | `classify [--dry-run \| --apply]` | The role of tools no table knows; `--apply` stores each as a model-stated policy | `.vibegraph/constraints.json` | **yes** |
@@ -93,6 +97,7 @@ intend to build — it will change, and it is never mixed into the rest.
 | `flows.md` | derived | end-to-end chains, page → component → call → script, with a reverse index | everything a change touches downstream |
 | `security.md` | derived | untrusted input reaching a shell, SQL text or eval, each with its path, and what the pass cannot see | a security review; before exposing an entry point |
 | `design.md` | planned | when a plan exists: the hypothetical design, objective first, every item's status and its verdict against the code | keep work on the objective; see what is not built yet |
+| `software/<tool>.md` | stated | each ratified software spec: operations, states, permissions, rules, every item beside its quote, and where this code calls it (drafts withheld, named) | build with the tool's own rules in mind |
 | `reachability.md` | derived | the functions no entry point reaches, each with why | before calling anything dead |
 | `configuration.md` | derived | the environment variables the code reads, on which threads, and which are declared nowhere | before deploying |
 | `system_spec.md` | derived + stated | the tools the project is built on, by role; the modules that wrap them; policies about them | use the existing tools and wrappers |
@@ -124,6 +129,7 @@ intend to build — it will change, and it is never mixed into the rest.
 | `thread-skills/` | drafted → ratified | per-thread skills with their freshness stamp | `skills`, the app, MCP |
 | `skills.json` | stated | which generic skills are on, and what the hooks send | `direction`, the app |
 | `plan.json` | planned | the hypothetical plan: objective, processes, stack, boundaries, primary threads, rules, questions, changelog (replaces `system-plan.json`, which is read and converted) | `plan`, the Plan panel, MCP (proposals) |
+| `software/<tool>.json`, `software/sources/` | drafted → ratified | software specs, and the document text their quotes are checked against | `software`, the Plan panel (ratify) |
 | `investigations/` | stated | investigation boards: pins, the question, notes | the app |
 | `observations.json` | observed | trace-run results per call site | the app's Trace / Observe |
 | `models.json` | stated | which model — or local Ollama — runs which kind of work | the app's Models panel |
@@ -431,6 +437,73 @@ Where the plan shows up:
   architecture map.
 - **The greenfield flow's architecture** is the plan's agreed processes. An
   old `.vibegraph/system-plan.json` is read, and converted on the next save.
+
+### `software` — a spec for the tool you build on, from its own documents
+
+```bash
+vibegraph-knowledge software add <tool> --from <url|file> [--from …] [--hint "…"] [--model m] [--dry-run | --reply <file>]
+vibegraph-knowledge software list | show <tool> [--usage] [--json] | ratify <tool> | remove <tool>
+vibegraph-knowledge software plan <tool> [--param name=value …]
+vibegraph-knowledge plan draft --from <url|file> … [--dry-run | --reply <file>]
+```
+
+`software add` reads the documents you name. It fetches a URL (HTML becomes
+text) or reads a file, and keeps the text under
+`.vibegraph/software/sources/`. It then asks a model, in **one call that
+spends tokens**, for `.vibegraph/software/<tool>.json`:
+
+- **definition:** what the tool is;
+- **identity:** the packages and API names that mean it in code;
+- **operations:** each one's name, what it does (read / write / call /
+  subscribe / admin) and what it acts on;
+- **states**, **permissions**, and **rules** (text + why), where a rule may
+  carry a check.
+
+Every item carries `cite`, a verbatim quote from the documents.
+
+The **citation gate** decides what the draft may keep:
+
+- A quote that is not in the documents, after normalising whitespace, case
+  and punctuation, **drops** its item.
+- An item with no quote is kept and labelled **INFERRED**.
+- The report lists both, and so does `show`.
+
+`--dry-run` prints the prompt and spends nothing. `--reply` uses a saved
+model reply.
+
+A spec is a **draft** until `software ratify`, which re-checks every quote
+against the saved text (a hand-edited quote is refused). A draft is used
+nowhere. A ratified spec is used in these places:
+
+- **The stack index:** the spec's packages get the spec's role (provenance
+  `software:<tool>`) wherever no table knows them.
+- **The hooks:** once per session, when a prompt's threads reach the tool or
+  the open plan names it, with the calls this code makes into it (`This
+  code calls it: get_blob (read blob) at app.py:15`).
+- **The plan:** `software plan <tool>` adds the tool to the planned stack
+  and its rules as planned rules. Each is proposed, quotes its source, and
+  records `source: "<tool> s1"`. A check's `{placeholders}` are the project's
+  own names, filled from `--param`. A rule still missing one says which
+  names it needs, and carries no check until it has them.
+- **Plan drafting:** `plan draft --from <docs>` (**spends tokens**) sends
+  the objective, the plan so far, every ratified spec and the documents to a
+  model. Its items pass the same gate (quotes may come from the documents or
+  a spec's sources) and land proposed.
+- **The export:** `software/<tool>.md`, with drafts withheld and named.
+- **MCP:** `vibegraph_software`.
+
+**Checks on a tool's API.** A check's target may name an external call:
+
+- `lib.fn` matches exactly that call.
+- `*.fn` matches that method on any receiver.
+- A bare name still means a function of the project's own, exactly as
+  before, so no existing rule changes.
+
+For example, `{"rule":"calls-through","target":"*.get_blob","through":"wait_ready"}`
+names each function that reads a blob without waiting.
+
+What it cannot do: the gate proves an item quotes the documents, not that the
+model understood them. Ratify only after reading `show`.
 
 ### `constraints` — the rules the code cannot show
 

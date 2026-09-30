@@ -51,6 +51,8 @@ import { formatDataflowMd } from "../src/server/dataflow.ts";
 import { loadPlan } from "../src/server/plan_store.ts";
 import { formatPlanMd } from "../src/server/plan_render.ts";
 import { reconcilePlan } from "../src/server/plan_reconcile.ts";
+import { listSpecs } from "../src/server/software_store.ts";
+import { formatSpecMd, specUsage } from "../src/server/software_apply.ts";
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const README_HEAD = "# What VibeGraph derived from this codebase";
@@ -267,6 +269,10 @@ export function exportKnowledge({ root, out, task, envelope: envelopePath, commi
   const design = loadPlan(absRoot);
   const designRec = design ? reconcilePlan(design, env, stack, absRoot) : null;
   if (design) write("design.md", formatPlanMd(design, designRec));
+  // 2026-09-30 — SOFTWARE SPECS: each ratified one, every item beside its
+  // quote and where this code calls it; drafts are withheld and named.
+  const specs = listSpecs(absRoot);
+  for (const s of specs.filter((x) => x.status === "ratified")) write(`software/${s.tool.replace(/[@/]/g, "_")}.md`, formatSpecMd(s, specUsage(s, env.files)));
   // 2026-09-29 — INVESTIGATIONS a person saved on the board: each rendered as
   // its handoff (question, pins across threads, notes, code read now).
   const investigations = listInvestigations(absRoot)
@@ -460,6 +466,10 @@ export function exportKnowledge({ root, out, task, envelope: envelopePath, commi
     ...(design ? [
       "",
       `**The design plan:** \`design.md\` — a HYPOTHETICAL design (revision ${design.revision}${design.closed ? ", closed" : ""}), not the code: its objective, planned processes, stack, data boundaries, primary threads and rules, and how the code measures up (${Object.entries(designRec.counts).map(([k, n]) => `${n} ${k}`).join(", ") || "nothing to compare"}). Planned rules are advice until promoted into constraints.json.`,
+    ] : []),
+    ...(specs.length ? [
+      "",
+      `**Software specs:** ${specs.filter((s) => s.status === "ratified").map((s) => `\`software/${s.tool.replace(/[@/]/g, "_")}.md\``).join(", ") || "none ratified"} — the tools this project builds on, from their own docs: operations, states, permissions and rules, each item beside its quote (INFERRED = not in the docs), and where this code calls them.${specs.some((s) => s.status === "draft") ? ` Withheld as unreviewed drafts: ${specs.filter((s) => s.status === "draft").map((s) => s.tool).join(", ")}.` : ""}`,
     ] : []),
     ...(investigations.length ? [
       "",

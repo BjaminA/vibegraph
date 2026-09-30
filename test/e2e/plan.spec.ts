@@ -69,6 +69,44 @@ test.describe("the hypothetical plan", () => {
     await expect(page.locator("[data-thread-view]")).toHaveAttribute("data-seed-id", /post_readings/, { timeout: 10_000 });
   });
 
+  test("software specs in the panel: a draft is ratified (quotes re-checked), then put into the plan", async ({ page }) => {
+    // A small DRAFT spec for the fixture's database, with the text it quotes.
+    const dir = join(VG, "software");
+    mkdirSync(join(dir, "sources"), { recursive: true });
+    const source = "SQLite is a self-contained, serverless SQL database engine.\nCall commit() after a write or the change is lost when the connection closes.\n";
+    const { createHash } = await import("node:crypto");
+    writeFileSync(join(dir, "sources", "sqlite3-doc.txt"), source);
+    writeFileSync(join(dir, "sqlite3.json"), JSON.stringify({
+      version: "1", tool: "sqlite3", role: "db", definition: "A self-contained, serverless SQL database engine.",
+      definitionCite: "SQLite is a self-contained, serverless SQL database engine",
+      identity: { packages: ["sqlite3"], calls: ["commit"] },
+      operations: [{ name: "commit", does: "write", on: "transaction", cite: "Call commit() after a write" }],
+      states: [], permissions: [],
+      rules: [{ id: "s1", text: "Commit after a write", why: "the change is lost when the connection closes", cite: "or the change is lost when the connection closes", check: null }],
+      sources: [{ ref: "sqlite-docs.txt", sha256: createHash("sha256").update(source).digest("hex"), fetched: "2026-09-30T00:00:00.000Z", saved: "sources/sqlite3-doc.txt" }],
+      status: "draft", gate: { dropped: [], inferred: [] },
+    }, null, 2));
+    try {
+      await boot(page);
+      await page.click("[data-plan-toggle]");
+      const spec = page.locator('[data-software-spec="sqlite3"]');
+      await expect(spec).toHaveAttribute("data-software-status", "draft", { timeout: 10_000 });
+      await expect(spec.locator("[data-software-plan]")).toHaveCount(0, { timeout: 1_000 });
+      await spec.locator("[data-software-ratify]").click();
+      await expect(spec).toHaveAttribute("data-software-status", "ratified");
+      await spec.locator("[data-software-plan]").click();
+      await expect(page.locator("[data-plan-panel]")).toContainText("Commit after a write", { timeout: 10_000 });
+      const plan = JSON.parse(readFileSync(PLAN, "utf-8"));
+      const rule = plan.policies.find((p: { source?: string }) => p.source === "sqlite3 s1");
+      expect(rule).toMatchObject({ status: "proposed", groundedIn: "or the change is lost when the connection closes" });
+      await page.mouse.move(2, 2);
+      await page.screenshot({ path: join(REVIEW, "4-software.png") });
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+      writeFileSync(PLAN, original);
+    }
+  });
+
   test("the map: the plan as dashed ghosts, alone and over the real map", async ({ page }) => {
     await boot(page);
     const system = page.locator('[data-toolbar-group="views"]').getByRole("button", { name: "System", exact: true });

@@ -72,6 +72,14 @@ export interface UnresolvedFact {
   label: string;
 }
 
+/** 2026-09-30 — a call the linker did not resolve into the project, with
+ *  where it is written: what a check on an EXTERNAL API reads. */
+export interface ExternalCallFact {
+  file: string;
+  label: string;
+  nodeId: string;
+}
+
 export interface CheckFacts {
   references: ReferenceFact[];
   /** file -> the tool names imported there (the stack index's view). */
@@ -85,6 +93,12 @@ export interface CheckFacts {
    *  Optional: a builder that does not supply it makes that verb
    *  unverifiable, never a pass. */
   callSites?: CallSiteFact[];
+  /** 2026-09-30 — external call sites. A target spelled with a receiver
+   *  (`ledgerbox.get_blob`: exactly that call) or as `*.get_blob` (that method
+   *  on any receiver) is a call into ANOTHER library, found here; a bare name
+   *  stays a project function, exactly as before. Optional: a builder without
+   *  it makes such a target unverifiable, never a pass. */
+  externalCalls?: ExternalCallFact[];
 }
 
 export interface CheckResult {
@@ -95,8 +109,28 @@ export interface CheckResult {
 }
 
 /** Which function each call to `target` is written in, with its file. */
+/** Does this target name an external API call? (`lib.fn` or `*.fn`) */
+export function isExternalTarget(target: string): boolean {
+  return target.startsWith("*.") || (target.includes(".") && !target.includes("/"));
+}
+
+function externalMatches(target: string, label: string): boolean {
+  if (target.startsWith("*.")) {
+    const m = target.slice(2);
+    return label === m || label.endsWith(`.${m}`);
+  }
+  return label === target;
+}
+
 function callersOf(facts: CheckFacts, target: string): Array<{ fn: string; file: string; nodeId: string }> {
   const out: Array<{ fn: string; file: string; nodeId: string }> = [];
+  if (isExternalTarget(target)) {
+    for (const c of facts.externalCalls ?? []) {
+      if (!externalMatches(target, c.label)) continue;
+      const fn = enclosingFunction(c.nodeId);
+      if (fn) out.push({ fn, file: c.file, nodeId: c.nodeId });
+    }
+  }
   for (const r of facts.references) {
     if (r.toName !== target) continue;
     const fn = enclosingFunction(r.fromNodeId);
@@ -190,6 +224,8 @@ export function enclosingFunction(nodeId: string): string | null {
  *  caveat every verdict carries. A label that mentions the name is a
  *  candidate; anything else is noise we say we did not follow. */
 function hiddenCandidates(facts: CheckFacts, target: string): UnresolvedFact[] {
+  // An external target COUNTS its calls (callersOf); none of them is hidden.
+  if (isExternalTarget(target)) return [];
   return facts.unresolved.filter((u) => u.label === target || u.label.endsWith(`.${target}`));
 }
 
@@ -199,7 +235,14 @@ function checkCallersOnly(
 ): CheckResult {
   const { target } = check;
   const known = new Set(facts.definedNames);
-  const calls = facts.references.filter((r) => r.toName === target);
+  const calls: ReferenceFact[] = [
+    ...facts.references.filter((r) => r.toName === target),
+    // An external API target (`lib.fn`, `*.fn`) counts its own call sites.
+    ...(isExternalTarget(target)
+      ? (facts.externalCalls ?? []).filter((c) => externalMatches(target, c.label))
+        .map((c) => ({ fromFile: c.file, fromNodeId: c.nodeId, toFile: null, toName: target }))
+      : []),
+  ];
   const hidden = hiddenCandidates(facts, target);
 
   if (!known.has(target) && calls.length === 0) {

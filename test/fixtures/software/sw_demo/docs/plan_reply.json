@@ -1,0 +1,10 @@
+[
+  { "op": "add", "section": "processes", "item": { "id": "store-api", "kind": "backend", "label": "Store API", "serves": "stores readings", "at": "api/",
+    "cite": "Use put_blob to store a binary payload under a key" } },
+  { "op": "add", "section": "boundaries", "item": { "from": "store-api", "to": "ledgerbox", "protocol": "put_blob / get_blob", "carries": ["key", "payload"],
+    "cite": "get_blob returns the payload for a key" } },
+  { "op": "add", "section": "threads", "item": { "id": "POST /readings", "entry": "route", "process": "store-api", "serves": "stores readings",
+    "primary": ["validate", "b1:put_blob"], "cite": null } },
+  { "op": "add", "section": "policies", "item": { "text": "Shard ledgers by region", "why": "throughput", "cite": "LedgerBox shards by region automatically" } },
+  { "op": "add", "section": "open", "item": { "text": "Do readings need an append_entry audit trail?" } }
+]

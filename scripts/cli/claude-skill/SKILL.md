@@ -72,6 +72,10 @@ enforces it. `vibegraph-knowledge constraints list` shows what is stated.
   data boundaries, primary threads, rules — kept apart from the code and
   checked against it with `plan check`. You propose (`vibegraph_plan_edit`);
   the user agrees. `/vibegraph-plan` has the details.
+- **Building on a specific tool** (a platform SDK, a database, an API):
+  `vibegraph-knowledge software add <tool> --from <its docs url or file>`
+  drafts a spec from its documents — every item quoting them — which the user
+  ratifies; after that, plans, hooks and checks build with it in mind.
 - **Before finishing:** `vibegraph-knowledge check --uncommitted` — exit 0
   every rule passed; 1 a rule is VIOLATED (the offender is named as
   `file:node`); 2 a rule could not be verified, which is **not** a pass.

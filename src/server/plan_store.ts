@@ -84,6 +84,8 @@ export function validateItem(section: PlanSection, raw: unknown): string | null 
     return line(o.text) ? null : `text must be one line of at most ${PLAN_CAPS.line} characters`;
   }
   const statuses = section === "policies" ? POLICY_STATUSES : STATUSES;
+  if (o.groundedIn !== undefined && o.groundedIn !== null && !(str(o.groundedIn) && o.groundedIn.length <= 400)) return "groundedIn must be a quote (≤ 400) or null";
+  if (section === "policies" && o.source !== undefined && !line(o.source, 80)) return "source must be short (e.g. synapse s1)";
   if (!statuses.includes(o.status)) return `status must be one of ${statuses.join("|")}`;
   const id = planItemId(section, o);
   if (!ID_RE.test(id)) return `${section === "stack" ? "tool" : "id"} must be a short name (letters, digits, space . : / - _ < > { })`;

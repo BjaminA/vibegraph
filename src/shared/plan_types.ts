@@ -68,6 +68,8 @@ export interface PlanTool {
   tool: string;
   role: StackRole;
   why?: string;
+  /** a verified quote from the documents it came from; null = inferred */
+  groundedIn?: string | null;
   status: PlanStatus;
 }
 
@@ -79,6 +81,7 @@ export interface PlanThread {
   serves: string;
   /** primary steps only; `b1:insert` names the boundary the step crosses */
   primary: string[];
+  groundedIn?: string | null;
   status: PlanStatus;
 }
 
@@ -90,6 +93,10 @@ export interface PlanPolicy {
   check?: Record<string, unknown>;
   /** path prefixes it is about; absent = the whole project */
   files?: string[];
+  /** a verified quote from the documents it came from; null = inferred */
+  groundedIn?: string | null;
+  /** the software spec rule it came from ("synapse s1") */
+  source?: string;
   status: PlanPolicyStatus;
   /** set when promoted: the constraints.json id it became */
   constraintId?: string;

@@ -52,6 +52,19 @@ vibegraph-knowledge plan init "Operators see every pump's wear forecast within a
 vibegraph-knowledge plan check
 ```
 
+**`software`** crystallises the documents of a tool you build on — a platform
+SDK, a database, an API — into `.vibegraph/software/<tool>.json`: its
+operations, states, permissions and rules, every item quoting the docs (a
+quote not in them drops the item; no quote is labelled INFERRED). You ratify
+it; then the stack, the plan (`software plan`, `plan draft --from`), the hooks
+and the checks build with it in mind — a rule can check the tool's own API
+(`*.get_blob`).
+
+```bash
+vibegraph-knowledge software add synapse --from https://volt4.ai/en/concepts/synapse   # one model call
+vibegraph-knowledge software ratify synapse
+```
+
 **`view`** starts the web app — the architecture map, threads traced across
 files and languages, running code to a node, editing through a chokepoint
 that refuses changes outside the node, rules, skills and agents. The walkthrough

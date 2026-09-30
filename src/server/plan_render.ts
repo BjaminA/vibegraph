@@ -14,6 +14,9 @@ function verdictOf(rec: PlanReconcile | null | undefined, section: PlanSection, 
   return rec?.findings.find((f) => f.section === section && f.id === id);
 }
 
+/** Where an item came from: a verified quote from the documents, or INFERRED. */
+const src = (it: { groundedIn?: string | null }) =>
+  it.groundedIn === undefined ? "" : it.groundedIn === null ? " _(inferred — not in the documents)_" : ` _(from the docs: “${it.groundedIn.length > 100 ? `${it.groundedIn.slice(0, 97)}…` : it.groundedIn}”)_`;
 const v = (f?: PlanFinding) => (f ? ` — **${f.verdict}**${f.detail ? `: ${f.detail}` : ""}` : "");
 
 /** The page. `rec` (plan vs code) is optional: without it, no verdicts. */
@@ -27,13 +30,13 @@ export function formatPlanMd(plan: Plan, rec?: PlanReconcile | null): string {
   const procs = live(plan.processes);
   if (procs.length) {
     out.push("## Processes", "");
-    for (const p of procs) out.push(`- **${p.id}** (${p.kind}, ${mark(p.status)})${p.label !== p.id ? ` — ${p.label}` : ""}${p.serves ? `; serves: ${p.serves}` : ""}${p.at ? `; code at \`${p.at}\`` : ""}${v(verdictOf(rec, "processes", p.id))}`);
+    for (const p of procs) out.push(`- **${p.id}** (${p.kind}, ${mark(p.status)})${p.label !== p.id ? ` — ${p.label}` : ""}${p.serves ? `; serves: ${p.serves}` : ""}${p.at ? `; code at \`${p.at}\`` : ""}${src(p)}${v(verdictOf(rec, "processes", p.id))}`);
     out.push("");
   }
   const tools = live(plan.stack);
   if (tools.length) {
     out.push("## Stack", "");
-    for (const t of tools) out.push(`- **${t.tool}** as ${t.role} (${mark(t.status)})${t.why ? ` — ${t.why}` : ""}${v(verdictOf(rec, "stack", t.tool))}`);
+    for (const t of tools) out.push(`- **${t.tool}** as ${t.role} (${mark(t.status)})${t.why ? ` — ${t.why}` : ""}${src(t)}${v(verdictOf(rec, "stack", t.tool))}`);
     out.push("");
   }
   const bounds = live(plan.boundaries);
@@ -42,7 +45,7 @@ export function formatPlanMd(plan: Plan, rec?: PlanReconcile | null): string {
     out.push("## Data boundaries", "");
     for (const b of bounds) {
       const outside = [b.from, b.to].filter((x) => !known.has(x));
-      out.push(`- **${b.id}** ${b.from} → ${b.to}${b.protocol ? ` over ${b.protocol}` : ""}${b.carries?.length ? `, carrying ${b.carries.map((k) => `\`${k}\``).join(", ")}` : ""} (${mark(b.status)})${outside.length ? ` — ${outside.join(", ")} not in the plan (existing code?)` : ""}${v(verdictOf(rec, "boundaries", b.id))}`);
+      out.push(`- **${b.id}** ${b.from} → ${b.to}${b.protocol ? ` over ${b.protocol}` : ""}${b.carries?.length ? `, carrying ${b.carries.map((k) => `\`${k}\``).join(", ")}` : ""} (${mark(b.status)})${outside.length ? ` — ${outside.join(", ")} not in the plan (existing code?)` : ""}${src(b)}${v(verdictOf(rec, "boundaries", b.id))}`);
     }
     out.push("");
   }
@@ -50,7 +53,7 @@ export function formatPlanMd(plan: Plan, rec?: PlanReconcile | null): string {
   if (threads.length) {
     out.push("## Threads (primary steps only)", "");
     for (const t of threads) {
-      out.push(`- **${t.id}** — ${t.entry}${t.process ? ` in ${t.process}` : ""} (${mark(t.status)}); serves: ${t.serves}${v(verdictOf(rec, "threads", t.id))}`);
+      out.push(`- **${t.id}** — ${t.entry}${t.process ? ` in ${t.process}` : ""} (${mark(t.status)}); serves: ${t.serves}${src(t)}${v(verdictOf(rec, "threads", t.id))}`);
       out.push(`  ${t.primary.join(" → ")}`);
     }
     out.push("");
@@ -58,7 +61,7 @@ export function formatPlanMd(plan: Plan, rec?: PlanReconcile | null): string {
   const pols = live(plan.policies);
   if (pols.length) {
     out.push("## Planned rules (advice until promoted)", "");
-    for (const p of pols) out.push(`- **${p.id}** (${mark(p.status)}${p.constraintId ? ` as ${p.constraintId}` : ""}) ${p.text} — *why:* ${p.why}${p.check ? ` — checked: \`${JSON.stringify(p.check)}\`` : ""}${v(verdictOf(rec, "policies", p.id))}`);
+    for (const p of pols) out.push(`- **${p.id}** (${mark(p.status)}${p.constraintId ? ` as ${p.constraintId}` : ""}) ${p.text} — *why:* ${p.why}${p.source ? ` — from ${p.source}` : ""}${p.check ? ` — checked: \`${JSON.stringify(p.check)}\`` : ""}${src(p)}${v(verdictOf(rec, "policies", p.id))}`);
     out.push("");
   }
   if (plan.open.length) {

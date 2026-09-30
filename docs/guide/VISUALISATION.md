@@ -311,6 +311,21 @@ plan: an architecture you accept becomes agreed processes and boundaries.
 The command line has all of this too (`vibegraph-knowledge plan …`, see
 [CLI.md](CLI.md)).
 
+**Software specs** sit at the foot of the Plan panel: one per tool the
+project builds on (a platform SDK, a database, an API), drawn from the tool's
+own documents with every item quoting them.
+
+- A **DRAFT** shows how many of its items are **inferred** (not in the docs)
+  and how many the citation gate dropped. **Ratify** re-checks every quote
+  against the saved documents, then puts the spec to use.
+- A ratified spec's **Add to plan** puts the tool into the planned stack and
+  its rules into the planned rules, all proposed and each quoting its source.
+- From then on, a hooked Claude session gets the spec whenever its work
+  touches the tool.
+- Drafting a spec spends tokens and may fetch a URL, so it is done on the
+  command line: `vibegraph-knowledge software add <tool> --from <docs url or
+  file>`.
+
 ## 9. Agents
 
 The **Agent Manager** (toolbar) opens on **Claude Code + hooks**, the

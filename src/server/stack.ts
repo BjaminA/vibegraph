@@ -21,6 +21,7 @@ import { languageForPath } from "../shared/languages.ts";
 // M-CMD.2 — a stated stack-policy may carry a `role` for a tool no table
 // knows. No cycle: constraint_store's value imports never reach this file.
 import { loadConstraints, type ConstraintSource } from "./constraint_store.ts";
+import { ratifiedSpecs } from "./software_store.ts";
 import {
   BASH_BUILTINS, CONFIG_TOOLS, JSTS_GLOBAL_TOOLS, ROLE_ORDER, RUST_TOOLS,
   classifyTool, isRustStd, isSafeToolName, jstsPackageName, pythonToolName,
@@ -507,6 +508,13 @@ export function buildStackIndex(env: StackEnvelopeLike, projectRoot?: string): S
       const have = statedRoles.get(tool);
       if (have && SOURCE_RANK[have.source] <= SOURCE_RANK[c.source]) continue;
       statedRoles.set(tool, { role, id: c.id, source: c.source });
+    }
+    // 2026-09-30 — a RATIFIED software spec (.vibegraph/software/) names the
+    // packages that mean its tool and the role its docs give it: a person
+    // ratified it, so it states the role as a person would — after any stack
+    // policy that already names the package.
+    for (const spec of ratifiedSpecs(projectRoot)) {
+      for (const pkg of spec.identity.packages) if (!statedRoles.has(pkg)) statedRoles.set(pkg, { role: spec.role, id: `software:${spec.tool}`, source: "human" });
     }
   }
   const withStated = (tool: string, role: StackRole): { role: StackRole; statedBy?: string; statedSource?: ConstraintSource } => {

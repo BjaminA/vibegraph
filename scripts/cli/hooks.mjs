@@ -47,6 +47,7 @@ import { verbMayGate } from "../../src/server/quality/standings.ts";
 import { archForPrompt } from "./arch_context.mjs";
 import { orientation } from "./orientation.mjs";
 import { planForPrompt } from "./plan_context.mjs";
+import { softwareForPrompt } from "./software_context.mjs";
 import { directionForPrompt, directionForFindings } from "./direction.mjs";
 import { untrustedBaseline, newUntrustedNote } from "../dataflow_cache.mjs";
 import { languageForFile, shouldSkipDir } from "../../src/server/languages.ts";
@@ -74,7 +75,7 @@ function writeSession(path, state) {
 }
 /** What the session's context holds. A compaction or /clear empties it. */
 function resetDelivery(state) {
-  for (const k of ["contracts", "partialContracts", "rules", "injectedSkills", "globalRulesSent", "parseNote", "oriented", "planRev"]) delete state[k];
+  for (const k of ["contracts", "partialContracts", "rules", "injectedSkills", "globalRulesSent", "parseNote", "oriented", "planRev", "software"]) delete state[k];
 }
 
 // ── the inline cap ─────────────────────────────────────────────────────
@@ -185,6 +186,7 @@ function onPrompt(input, { absRoot, loaded, state, constraints }) {
     const docOf = (file, id) => (env.files[file]?.nodes ?? []).find((n) => n.id === id)?.docstring ?? null;
     weak = matchKeywords(prompt, buildKeywordIndex(env.threads, docOf), { limit: 2 });
   }
+  let routedForSoftware = [];
   const matches = strong.length ? strong : weak.map((w) => ({ entryPointId: w.entryPointId, qualifiedName: w.qualifiedName, matchedOn: [], score: w.score, weakTerms: w.terms }));
 
   if (matches.length) {
@@ -207,6 +209,7 @@ function onPrompt(input, { absRoot, loaded, state, constraints }) {
     const injected = new Map(Object.entries(state.injectedSkills ?? {}));
     const deferred = [];
     const routedEps = applied.routed.map((r) => r.entryPointId);
+    routedForSoftware = routedEps;
     const archFor = archForPrompt(absRoot, env, routedEps, state, constraints);
     const dirFor = directionForPrompt(absRoot, env, routedEps, state);
     for (const r of applied.routed) {
@@ -281,6 +284,8 @@ function onPrompt(input, { absRoot, loaded, state, constraints }) {
     }
     state.globalRulesSent = true;
   }
+  const softwareBlock = softwareForPrompt(absRoot, env, routedForSoftware, state);
+  if (softwareBlock) out.push(softwareBlock);
   state.stopBlocks = 0;
   if (!out.length) return null;
   return { json: { hookSpecificOutput: { hookEventName: "UserPromptSubmit", additionalContext: capped(`${HEADER}\n\n${out.join("\n\n")}`) } } };

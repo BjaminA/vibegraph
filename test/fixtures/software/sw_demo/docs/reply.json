@@ -1,0 +1,31 @@
+Here is the spec.
+
+```json
+{
+  "tool": "ledgerbox",
+  "vendor": "LedgerBox",
+  "role": "db",
+  "definition": "A replicated key-value ledger that keeps every write as an immutable entry.",
+  "definitionCite": "LedgerBox is a replicated key-value ledger that keeps every write as an immutable entry",
+  "identity": { "packages": ["ledgerbox"], "calls": ["put_blob", "get_blob", "append_entry"] },
+  "operations": [
+    { "name": "put_blob", "does": "write", "on": "blob", "cite": "Use put_blob to store a binary payload under a key" },
+    { "name": "get_blob", "does": "read", "on": "blob", "cite": "get_blob returns the payload for a key" },
+    { "name": "append_entry", "does": "write", "on": "ledger entry", "cite": "append_entry writes an entry to the ledger" },
+    { "name": "delete_entry", "does": "admin", "on": "ledger entry", "cite": "delete_entry removes an entry permanently" }
+  ],
+  "states": [ { "of": "blob", "values": ["DRAFT", "ANNOUNCED", "READY"], "cite": "Blob states are DRAFT, ANNOUNCED and READY" } ],
+  "permissions": [
+    { "name": "ledger:read", "for": "reads", "cite": "Clients need the ledger:read permission to read" },
+    { "name": "ledger:write", "for": "writes", "cite": "and ledger:write to write" }
+  ],
+  "rules": [
+    { "id": "s1", "text": "Call wait_ready before get_blob", "why": "a blob is readable only once it is READY",
+      "cite": "Always call wait_ready before calling get_blob", "check": { "rule": "calls-through", "target": "*.get_blob", "through": "{wait_ready}" } },
+    { "id": "s2", "text": "Never write an empty payload", "why": "empty payloads are never stored, so the write silently does nothing",
+      "cite": "Empty payloads are never written to the store", "check": null },
+    { "id": "s3", "text": "Retry a failed write with backoff", "why": "replication can lag", "cite": null, "check": null },
+    { "id": "s4", "text": "Sign every entry", "why": "the ledger verifies writers", "cite": "Entries must be signed by the writer", "check": null }
+  ]
+}
+```

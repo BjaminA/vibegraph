@@ -945,6 +945,24 @@ function registerTools(server: McpServer, ctx: VibegraphMcpContext): void {
   );
 
   server.registerTool(
+    "vibegraph_software",
+    {
+      description:
+        "Software specs for the tools this project builds on (.vibegraph/software/): omit `tool` for the list; name " +
+        "one for its definition, operations (what each reads or writes), states, permissions and rules with their " +
+        "reasons — every item beside the quote from the tool's own docs it came from (INFERRED = not in the docs) — " +
+        "and where this code calls it. Rely on a RATIFIED spec only; a draft is unreviewed. A person drafts one with " +
+        "`vibegraph-knowledge software add`. Read-only, deterministic, no model.",
+      inputSchema: { tool: z.string().optional().describe("the tool's name, as `software list` shows it") },
+    },
+    async ({ tool }) => {
+      const r = ctx.software(tool ?? null);
+      if (r.error) return { content: [{ type: "text", text: r.error }], isError: true };
+      return { content: [{ type: "text", text: r.text }] };
+    },
+  );
+
+  server.registerTool(
     "vibegraph_plan_edit",
     {
       description:

@@ -34,6 +34,10 @@ every item PROPOSED until a person agrees.
   objective it `serves`; if nothing does, it does not belong.
 - Never agree, promote or close: the person does (`plan agree`, `plan
   promote`, the Plan panel).
+- Building on a specific tool? Its ratified spec (`vibegraph-knowledge
+  software show <tool>`) holds its operations, states and rules, each quoted
+  from its docs; `software plan <tool>` puts its rules into the plan. With no
+  spec, ask the user to run `software add <tool> --from <docs>`.
 - While building, `vibegraph-knowledge plan check` shows each item realised,
   drifted or not built. Report drift; propose a plan change rather than
   quietly building something else. A planned rule is advice until promoted.

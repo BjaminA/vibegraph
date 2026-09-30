@@ -26,6 +26,32 @@ export function usePlanState(): PlanState {
   return state;
 }
 
+// ── software specs (2026-09-30): listed, ratified, put into the plan ──
+
+import type { SoftwareSpec } from "../shared/software_types";
+
+export interface SoftwareState { specs: SoftwareSpec[]; error?: string; message?: string }
+
+export function useSoftwareState(): SoftwareState {
+  const [state, setState] = useState<SoftwareState>({ specs: [] });
+  useEffect(() => {
+    const ask = () => bridge.postMessage({ type: "software-list" } as never);
+    const handler = (msg: ExtensionMessage) => {
+      const t = (msg as { type: string }).type;
+      if (t === "software-state") setState((msg as unknown as { payload: SoftwareState }).payload);
+      else if (t === "project-update") ask();
+    };
+    bridge.onMessage(handler);
+    ask();
+    return () => bridge.removeListener(handler);
+  }, []);
+  return state;
+}
+
+export function sendSoftware(type: "software-ratify" | "software-plan", tool: string): void {
+  bridge.postMessage({ type, payload: { tool } } as never);
+}
+
 /** A person's edit from the panel: agree, drop, close, reopen, promote. */
 export function sendPlanOp(op: Record<string, unknown>): void {
   bridge.postMessage({ type: "plan-op", payload: { ops: [op] } } as never);

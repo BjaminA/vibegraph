@@ -26,6 +26,8 @@ import { LESSONS_USAGE, runLessons } from "./lessons.mjs";
 import { DIRECTION_USAGE, runDirection } from "./direction.mjs";
 import { DATAFLOW_USAGE, runDataflow } from "./dataflow.mjs";
 import { PLAN_USAGE, runPlan } from "./plan.mjs";
+import { runPlanDraft } from "./plan_draft.mjs";
+import { SOFTWARE_USAGE, runSoftware } from "./software.mjs";
 import { BRIEF_USAGE, runBrief } from "./brief.mjs";
 import { formatClassifyReport, runClassify } from "./classify.mjs";
 import { runArchitecture } from "./architecture.mjs";
@@ -65,6 +67,7 @@ usage:
   ${PACKAGE_NAME} ${DIRECTION_USAGE}
   ${PACKAGE_NAME} ${DATAFLOW_USAGE}
   ${PACKAGE_NAME} ${PLAN_USAGE}
+  ${PACKAGE_NAME} ${SOFTWARE_USAGE}
   ${PACKAGE_NAME} init [<root>] [--print]        point Claude at the folder: one marked block in CLAUDE.md
                                                (replaced on re-run, never duplicated) and the gitignore
                                                line for .vibegraph/knowledge/. --print shows the block only.
@@ -526,8 +529,10 @@ export function main(argv) {
   if (command === "lessons") return cmdLessons(rest);
   if (command === "brief") return cmdBrief(rest);
   if (command === "dataflow") { const r = runDataflow(rest); process.stdout.write(r.text); return r.exitCode; }
+  if (command === "plan" && rest[0] === "draft") return runPlanDraft(rest.slice(1)).then((r) => { (r.exitCode === 0 ? process.stdout : process.stderr).write(r.text); return r.exitCode; });
   if (command === "plan") { const r = runPlan(rest); (r.exitCode === 0 ? process.stdout : process.stderr).write(r.text); return r.exitCode; }
   if (command === "direction") { const r = runDirection(rest); process.stdout.write(r.text); return r.exitCode; }
+  if (command === "software") return runSoftware(rest).then((r) => { (r.exitCode === 0 ? process.stdout : process.stderr).write(r.text); return r.exitCode; });
   return fail(`unknown command: ${command}\n\n${USAGE}`);
 }
 
