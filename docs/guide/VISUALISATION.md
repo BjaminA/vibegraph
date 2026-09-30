@@ -293,6 +293,13 @@ plan is kept small on purpose (hard caps on every section), and every process
 and thread must say which part of the objective it serves. **Close the plan**
 when it is done: it stays on disk and stops being sent to sessions.
 
+The objective is yours alone. If Claude proposes a different one, it
+appears under **Open questions** as "Proposed objective: …" with an **Adopt**
+button. An item whose "serves" shares no word with the objective carries a
+dashed **serves the objective?** chip. That's a word-match guess, so check
+it rather than trust it. While the plan is open, every prompt in a hooked
+Claude session carries the objective in one line, so it stays in sight.
+
 ![The Plan panel: objective, statuses, verdicts, Agree / Drop / Promote](../screenshots/16-plan-panel.png)
 
 On the **architecture map**, a **Real · Plan · Overlay** switch (top right)

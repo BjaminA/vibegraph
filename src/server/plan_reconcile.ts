@@ -169,5 +169,29 @@ export function reconcilePlan(plan: Plan, env: EnvLike, stack: StackIndex, root:
 
   const counts: Partial<Record<PlanVerdict, number>> = {};
   for (const f of findings) counts[f.verdict] = (counts[f.verdict] ?? 0) + 1;
-  return { revision: plan.revision, findings, counts, limits: PLAN_RECONCILE_LIMITS };
+  return { revision: plan.revision, findings, counts, limits: PLAN_RECONCILE_LIMITS, offObjective: offObjective(plan) };
+}
+
+// ── staying on the objective: a word-match guess, said as one ────────────
+
+const STOP = new Set(["the", "and", "for", "with", "that", "this", "from", "into", "onto", "each", "every", "all", "any", "are", "was", "were", "has", "have", "its", "their", "our", "your", "them", "they", "can", "will", "should", "must", "within", "about", "over", "under", "when", "than", "then", "one", "per", "via", "not", "but", "also", "more", "less", "who", "what", "which", "how", "see", "get", "use", "make"]);
+const stem = (w: string) => w.replace(/(ing|ed|es|s)$/, "");
+export function objectiveWords(text: string): Set<string> {
+  return new Set((text.toLowerCase().match(/[a-z0-9]+/g) ?? []).filter((w) => w.length >= 3 && !STOP.has(w)).map(stem).filter((w) => w.length >= 3));
+}
+
+/** Processes and threads whose `serves` shares no meaningful word with the
+ *  objective. A GUESS: words are not meaning ("latency" serves "within a
+ *  minute" and shares nothing), so it is a prompt to look, never a verdict. */
+export function offObjective(plan: Plan): Array<{ section: "processes" | "threads"; id: string; serves: string }> {
+  const obj = objectiveWords(plan.objective);
+  if (!obj.size) return [];
+  const out: Array<{ section: "processes" | "threads"; id: string; serves: string }> = [];
+  const look = (section: "processes" | "threads", id: string, serves: string | null) => {
+    if (!serves) return;
+    if (![...objectiveWords(serves)].some((w) => obj.has(w))) out.push({ section, id, serves });
+  };
+  for (const p of plan.processes) if (p.status !== "dropped") look("processes", p.id, p.serves);
+  for (const t of plan.threads) if (t.status !== "dropped") look("threads", t.id, t.serves);
+  return out;
 }

@@ -63,7 +63,9 @@ export function applyPlanOps(prior: Plan | null, ops: PlanOp[], by: PlanActor, n
   let plan: Plan;
   let rest = ops;
   if (prior) plan = structuredClone(prior);
-  else if (first.op === "set-objective") {
+  else if (first.op === "set-objective" && by === "agent") {
+    return { error: "a person starts a plan with its objective (plan init, or the Plan panel) — the objective is what everything else is measured against", changes: [] };
+  } else if (first.op === "set-objective") {
     // A new plan begins with its objective, and the changelog says so.
     plan = emptyPlan(first.text);
     changes.push(describe(first));
@@ -84,6 +86,15 @@ export function applyPlanOps(prior: Plan | null, ops: PlanOp[], by: PlanActor, n
 function applyOne(plan: Plan, op: PlanOp, by: PlanActor, changes: string[]): string | null {
   if (op.op === "set-objective") {
     if (plan.objective === op.text) return null;
+    // The objective is what every item is measured against, so it is a
+    // person's to change. An agent's new objective is recorded as an open
+    // question carrying its wording, for the person to take or drop.
+    if (by === "agent") {
+      const id = nextId(plan, "open");
+      plan.open.push({ id, text: `Proposed objective: ${op.text}` });
+      changes.push(`proposed a new objective as ${id} (only a person changes it)`);
+      return null;
+    }
     plan.objective = op.text;
     changes.push(describe(op));
     return null;

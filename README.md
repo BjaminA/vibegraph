@@ -189,7 +189,8 @@ A plan is kept apart from the real knowledge and treated differently:
 - **Claude proposes; you agree.** Everything Claude adds arrives
   **proposed**, and Claude editing something you agreed sends it back to
   proposed. Only you agree, drop, close the plan, or **promote** a planned
-  rule into `constraints.json`.
+  rule into `constraints.json`. The **objective** is yours alone: if Claude
+  proposes a new one, it waits as an open question, which you can **Adopt**.
 - **Drawn as a ghost.** On the architecture map it appears dashed, alone
   (**Plan**) or over the real map showing only what the code lacks yet
   (**Overlay**).
@@ -199,9 +200,14 @@ A plan is kept apart from the real knowledge and treated differently:
   panel) marks each item **realised**, **drifted** (with how) or **not
   built**, with no tokens spent. The plan becomes a spec the code is checked
   against, not a document that goes stale.
+- **Kept on the objective.** A process or thread whose `serves` shares no
+  word with the objective is flagged "serves the objective?". This is a
+  word-match guess and says so, never a verdict.
 
-A hooked Claude Code session receives the plan once per session, and after
-that only what changed.
+A hooked Claude Code session receives the full plan once per session, and
+after that only what changed. Every other prompt gets a single line with the
+objective and what's waiting on you (about 60 tokens), so the objective never
+scrolls out of sight.
 
 ![The Plan panel: the objective, each item's status and its verdict against the code, Agree / Drop / Promote](docs/screenshots/16-plan-panel.png)
 

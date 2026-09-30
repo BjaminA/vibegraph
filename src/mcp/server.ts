@@ -969,7 +969,8 @@ function registerTools(server: McpServer, ctx: VibegraphMcpContext): void {
         "PROPOSE changes to the hypothetical plan. `ops` is a list of small operations: " +
         '{"op":"add","section":"threads","item":{"id":"POST /readings","entry":"route","serves":"…","primary":["validate","b1:insert"]}}, ' +
         '{"op":"update","section":"processes","id":"api","fields":{"at":"api/"}}, {"op":"drop","section":"stack","id":"redis"}, ' +
-        '{"op":"set-objective","text":"…"}. Sections: processes, boundaries, stack, threads (primary steps only), ' +
+        '{"op":"set-objective","text":"…"} (the objective is the person\'s: yours is recorded as an open question for them to adopt). ' +
+        "Sections: processes, boundaries, stack, threads (primary steps only), " +
         "policies (text + why, optional constraint-grammar check), open (questions). Everything you add is PROPOSED; " +
         "changing an agreed item makes it proposed again; you cannot agree, close or promote — a person does. The plan " +
         "has hard size caps (it is refused, not trimmed, when it outgrows them): keep it minimal and on its objective.",

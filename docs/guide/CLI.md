@@ -406,6 +406,10 @@ It is treated differently from the real knowledge:
   - `--as agent` (what the MCP tool `vibegraph_plan_edit` does) adds items as
     **proposed**, puts an agreed item it edits back to proposed, and cannot
     agree, close or promote.
+  - **The objective is a person's.** An agent cannot start a plan, and an
+    agent's `set-objective` is recorded as an open question, `Proposed
+    objective: …`. A person adopts it with `set-objective` (the Plan panel's
+    **Adopt** does that and drops the question).
 - **Planned rules are advice.** `plan check` runs their checks through the
   same checkers as `check`, but they block nothing. `plan promote` copies one
   into `.vibegraph/constraints.json` as a human-stated rule, with its reason
@@ -428,10 +432,18 @@ Matching is by name and path, and every report says what it cannot see: the
 order of steps, payload keys, the hop between two processes. It exits 0,
 because a plan never fails a run.
 
+It also lists **possibly off the objective**: any process or thread whose
+`serves` shares no meaningful word with the objective. Trailing "s", "ed" and
+"ing" are ignored, and common words don't count. It's a word-match guess and
+says so ("latency" can serve "within a minute" and share nothing), so it's a
+prompt to look, never a verdict.
+
 Where the plan shows up:
 
 - **Hooked Claude Code sessions** receive the compact plan once per session,
-  then only what changed. Nothing is sent while the plan is closed.
+  then only what changed. Every other prompt gets one line, about 60 tokens:
+  `Plan objective (rev 7; 3 items proposed, 1 open question): … — keep this
+  work on it.` Nothing is sent while the plan is closed.
 - **The export** writes it as `design.md`.
 - **The app** has a Plan panel, and **Plan** / **Overlay** views on the
   architecture map.

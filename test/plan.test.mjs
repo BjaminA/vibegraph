@@ -66,6 +66,29 @@ test("an agent proposes; a person agrees — and an agreement an agent edits is 
   assert.deepEqual(edited.plan.changelog.map((c) => c.rev), [1, 2, 3, 4]);
 });
 
+test("the objective is a person's: an agent's new objective waits as a question; an agent cannot start a plan", () => {
+  assert.match(applyPlanOps(null, [{ op: "set-objective", text: "Something else" }], "agent").error, /a person starts a plan with its objective/);
+  const plan = start();
+  const r = applyPlanOps(plan, [{ op: "set-objective", text: "Operators see every pump's wear forecast within five seconds" }], "agent");
+  assert.equal(r.plan.objective, plan.objective, "unchanged");
+  assert.deepEqual(r.plan.open, [{ id: "q1", text: "Proposed objective: Operators see every pump's wear forecast within five seconds" }]);
+  assert.match(r.changes[0], /proposed a new objective as q1 \(only a person changes it\)/);
+  // The person adopts it: the objective changes and the question goes, together.
+  const adopted = applyPlanOps(r.plan, [{ op: "set-objective", text: "Operators see every pump's wear forecast within five seconds" }, { op: "drop", section: "open", id: "q1" }], "human").plan;
+  assert.equal(adopted.objective, "Operators see every pump's wear forecast within five seconds");
+  assert.equal(adopted.open.length, 0);
+});
+
+test("staying on the objective: an item whose `serves` shares no word with it is flagged, as a guess", () => {
+  const env = buildPolyglotEnvelope(FIXTURE, { skipSystem: true }).envelope;
+  const plan = loadPlan(FIXTURE);
+  assert.deepEqual(reconcilePlan(plan, env, buildStackIndex(env, FIXTURE), FIXTURE).offObjective, [], "every fixture item names part of the objective");
+  const drifted = applyPlanOps(plan, [{ op: "add", section: "threads", item: { id: "GET /invoices", entry: "route", serves: "billing reports for finance", primary: ["render_invoice"] } }], "agent").plan;
+  const rec = reconcilePlan(drifted, env, buildStackIndex(env, FIXTURE), FIXTURE);
+  assert.deepEqual(rec.offObjective, [{ section: "threads", id: "GET /invoices", serves: "billing reports for finance" }]);
+  assert.match(formatPlanMd(drifted, rec), /## Possibly off the objective \(a word-match guess\)[\s\S]*Words are not meaning/);
+});
+
 test("the old system-plan.json is read, and replaced by plan.json on the next save (its extra sections kept)", () => {
   const root = join(tmp, "legacy");
   mkdirSync(join(root, ".vibegraph"), { recursive: true });
@@ -145,7 +168,9 @@ test("a hooked session gets the plan once, then only what changed — never whil
   assert.match(first, /## Plan in progress \(rev 3\) — HYPOTHETICAL/);
   assert.match(first, /Objective: Operators see every pump's wear forecast/);
   assert.match(first, /Thread POST \/readings: validate → b1:insert → insert_reading/);
-  assert.doesNotMatch(ctx(hook("and the dashboard, what about it?")), /Plan in progress|The plan changed/, "once per session");
+  const second = ctx(hook("and the dashboard, what about it?"));
+  assert.doesNotMatch(second, /Plan in progress|The plan changed/, "the full plan once per session");
+  assert.match(second, /Plan objective \(rev 3; 6 items proposed, 1 open question\): Operators see every pump's wear forecast within a minute of a reading — keep this work on it\./, "the objective on every prompt, in one line");
   runPlan(["drop", "stack", "redis", "--root", root]);
   const changed = ctx(hook("ok, next step for the dashboard please"));
   assert.match(changed, /## The plan changed \(rev 3 → 4\)/);

@@ -14,7 +14,10 @@ import { DraftingCompass, X, Check, Trash2, ArrowUpRight, ExternalLink } from "l
 import type { Plan, PlanFinding, PlanSection, PlanVerdict } from "../shared/plan_types";
 import { planItemId } from "../shared/plan_types";
 import { belowToolbar, heightBelowToolbar } from "./TopToolbar";
-import { usePlanState, sendPlanOp, promotePlanRule, useSoftwareState, sendSoftware } from "./usePlanState";
+import { usePlanState, sendPlanOp, sendPlanOps, promotePlanRule, useSoftwareState, sendSoftware } from "./usePlanState";
+
+/** How an agent's proposed objective is spelled as an open question (plan_ops.ts). */
+const PROPOSED_OBJECTIVE = "Proposed objective:";
 
 const small: React.CSSProperties = { fontSize: "var(--fs-11)", color: "var(--text-muted)", lineHeight: 1.5 };
 const btn: React.CSSProperties = {
@@ -57,7 +60,7 @@ function describe(section: PlanSection, it: any): { name: string; sub: string } 
   }
 }
 
-function Item({ section, it, finding }: { section: PlanSection; it: any; finding?: PlanFinding }) {
+function Item({ section, it, finding, off }: { section: PlanSection; it: any; finding?: PlanFinding; off?: boolean }) {
   const { name, sub } = describe(section, it);
   const id = planItemId(section, it);
   const statusTone = it.status === "agreed" || it.status === "promoted" ? "var(--text-secondary)" : "var(--proposed-border)";
@@ -68,6 +71,8 @@ function Item({ section, it, finding }: { section: PlanSection; it: any; finding
         <span style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-12)", color: "var(--text-primary)" }}>{name}</span>
         <Chip text={it.status === "proposed" ? "PROPOSED" : it.status === "promoted" ? `promoted · ${it.constraintId}` : it.status} tone={statusTone} dashed={it.status === "proposed"} />
         {finding && <Chip text={finding.verdict} tone={VERDICT_TONE[finding.verdict]} title={finding.detail} />}
+        {off && <span data-plan-off-objective><Chip text="serves the objective?" tone="var(--accent-warning)" dashed
+          title="What it serves shares no word with the objective — a word-match guess, not a verdict. Say how it serves the objective, or drop it." /></span>}
       </div>
       {sub && <div style={small}>{sub}</div>}
       {(it.source || it.groundedIn !== undefined) && (
@@ -110,7 +115,7 @@ function Item({ section, it, finding }: { section: PlanSection; it: any; finding
   );
 }
 
-function Section({ plan, section, findings }: { plan: Plan; section: PlanSection; findings: PlanFinding[] }) {
+function Section({ plan, section, findings, off }: { plan: Plan; section: PlanSection; findings: PlanFinding[]; off: Set<string> }) {
   const items = (plan[section] as any[]).filter((i) => i.status !== "dropped");
   if (!items.length) return null;
   if (section === "open") {
@@ -120,6 +125,13 @@ function Section({ plan, section, findings }: { plan: Plan; section: PlanSection
         {items.map((q) => (
           <div key={q.id} style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <span style={{ ...small, color: "var(--text-primary)", flex: 1 }}>{q.id} {q.text}</span>
+            {/* Claude may propose a new objective; only a person adopts it. */}
+            {q.text.startsWith(PROPOSED_OBJECTIVE) && (
+              <button data-plan-adopt-objective style={btn} title="Make this the plan's objective"
+                onClick={() => sendPlanOps([{ op: "set-objective", text: q.text.slice(PROPOSED_OBJECTIVE.length).trim() }, { op: "drop", section: "open", id: q.id }])}>
+                <ArrowUpRight size={12} strokeWidth={1.5} /> Adopt
+              </button>
+            )}
             <button style={btn} onClick={() => sendPlanOp({ op: "drop", section: "open", id: q.id })} title="Answered — remove the question">
               <Check size={12} strokeWidth={1.5} /> Answered
             </button>
@@ -133,7 +145,7 @@ function Section({ plan, section, findings }: { plan: Plan; section: PlanSection
       <div style={{ fontSize: "var(--fs-12)", color: "var(--text-secondary)" }}>{SECTION_TITLE[section]}</div>
       {items.map((it) => {
         const id = planItemId(section, it);
-        return <Item key={id} section={section} it={it} finding={findings.find((f) => f.section === section && f.id === id)} />;
+        return <Item key={id} section={section} it={it} finding={findings.find((f) => f.section === section && f.id === id)} off={off.has(`${section}:${id}`)} />;
       })}
     </div>
   );
@@ -191,6 +203,7 @@ export function PlanPanel({ open, onClose }: { open: boolean; onClose: () => voi
   const [objective, setObjective] = useState("");
   if (!open) return null;
   const findings = reconcile?.findings ?? [];
+  const offSet = new Set((reconcile?.offObjective ?? []).map((o) => `${o.section}:${o.id}`));
   return (
     <div data-plan-panel style={{
       position: "absolute", top: belowToolbar(16), right: 16, width: 480, boxSizing: "border-box",
@@ -232,7 +245,7 @@ export function PlanPanel({ open, onClose }: { open: boolean; onClose: () => voi
               <span style={small}>plan vs code — hover for what it cannot see</span>
             </div>
           )}
-          {(["processes", "stack", "boundaries", "threads", "policies", "open"] as PlanSection[]).map((s) => <Section key={s} plan={plan} section={s} findings={findings} />)}
+          {(["processes", "stack", "boundaries", "threads", "policies", "open"] as PlanSection[]).map((s) => <Section key={s} plan={plan} section={s} findings={findings} off={offSet} />)}
           {plan.changelog.length > 0 && (
             <div data-plan-changelog style={{ display: "flex", flexDirection: "column", gap: 4 }}>
               <div style={{ fontSize: "var(--fs-12)", color: "var(--text-secondary)" }}>Recent changes</div>

@@ -69,6 +69,11 @@ export function formatPlanMd(plan: Plan, rec?: PlanReconcile | null): string {
     for (const q of plan.open) out.push(`- **${q.id}** ${q.text}`);
     out.push("");
   }
+  if (rec?.offObjective?.length) {
+    out.push("## Possibly off the objective (a word-match guess)", "",
+      "These say they serve something that shares no word with the objective. Words are not meaning — check each one, and drop it or say how it serves the objective.", "",
+      ...rec.offObjective.map((o) => `- ${o.section} **${o.id}** — serves: "${o.serves}"`), "");
+  }
   if (rec) {
     const counts = Object.entries(rec.counts).map(([k, n]) => `${n} ${k}`).join(", ");
     out.push("## Plan vs code", "", counts ? `${counts}.` : "Nothing to compare yet.", "", ...rec.limits.map((l) => `- ${l}`), "");

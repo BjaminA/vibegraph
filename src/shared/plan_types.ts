@@ -158,6 +158,9 @@ export interface PlanReconcile {
   findings: PlanFinding[];
   counts: Partial<Record<PlanVerdict, number>>;
   limits: string[];
+  /** processes and threads whose `serves` shares no meaningful word with the
+   *  objective — a word-match GUESS, said as one, never a verdict */
+  offObjective?: Array<{ section: PlanSection; id: string; serves: string }>;
 }
 
 export type { SystemPlan };

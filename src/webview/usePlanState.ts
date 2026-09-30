@@ -56,6 +56,10 @@ export function sendSoftware(type: "software-ratify" | "software-plan", tool: st
 export function sendPlanOp(op: Record<string, unknown>): void {
   bridge.postMessage({ type: "plan-op", payload: { ops: [op] } } as never);
 }
+/** Several ops applied together, or not at all. */
+export function sendPlanOps(ops: Array<Record<string, unknown>>): void {
+  bridge.postMessage({ type: "plan-op", payload: { ops } } as never);
+}
 export function promotePlanRule(id: string): void {
   bridge.postMessage({ type: "plan-promote", payload: { id } } as never);
 }

@@ -81,7 +81,8 @@ export function validateItem(section: PlanSection, raw: unknown): string | null 
   const o = raw as Record<string, any>;
   if (section === "open") {
     if (!str(o.id) || !ID_RE.test(o.id)) return "id must be a short name";
-    return line(o.text) ? null : `text must be one line of at most ${PLAN_CAPS.line} characters`;
+    // Room for "Proposed objective: <an objective>" (an agent's new objective waits here).
+    return line(o.text, PLAN_CAPS.objective + 40) ? null : `text must be one line of at most ${PLAN_CAPS.objective + 40} characters`;
   }
   const statuses = section === "policies" ? POLICY_STATUSES : STATUSES;
   if (o.groundedIn !== undefined && o.groundedIn !== null && !(str(o.groundedIn) && o.groundedIn.length <= 400)) return "groundedIn must be a quote (≤ 400) or null";
