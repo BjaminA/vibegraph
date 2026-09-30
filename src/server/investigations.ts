@@ -105,9 +105,10 @@ function enclosingFunction(nodes: ReadonlyArray<HandoffNode>, node: HandoffNode)
 /** The pin's code: a definition's own span (capped), else the call with a
  *  few lines around it, the pinned lines marked. */
 function excerpt(lines: string[], node: HandoffNode): { from: number; to: number; text: string } {
-  const isDef = node.type === "function_def" || node.type === "class_def";
+  const isDef = node.type === "function_def" || node.type === "class_def" || node.type === "module";
   const start = isDef ? (node.decoratorLine ?? node.line!) : Math.max(1, node.line! - CONTEXT_LINES);
-  const end0 = isDef ? (node.endLine ?? node.line!) : Math.min(lines.length, (node.endLine ?? node.line!) + CONTEXT_LINES);
+  const end0 = node.type === "module" ? lines.length
+    : isDef ? (node.endLine ?? node.line!) : Math.min(lines.length, (node.endLine ?? node.line!) + CONTEXT_LINES);
   const end = Math.min(end0, start + SPAN_CAP - 1, lines.length);
   const width = String(end).length;
   const out: string[] = [];
@@ -136,7 +137,9 @@ export function renderHandoff(input: HandoffInput): string {
   const cache = new Map<string, string[] | null>();
   inv.pins.forEach((p, i) => {
     const nodes = input.files[p.file]?.nodes ?? [];
-    const node = nodes.find((n) => n.id === p.irNodeId);
+    // "module" is a script-seeded thread's seed — the whole file, which no IR
+    // node carries; it must not read as "the code moved".
+    const node = p.irNodeId === "module" ? { id: "module", type: "module", line: 1 } as HandoffNode : nodes.find((n) => n.id === p.irNodeId);
     out.push("", `## ${i + 1}. \`${p.label}\` — ${p.file}${node?.line ? `:${node.line}` : ""}`, "");
     const from = p.entryPointId ? `pinned on the thread \`${p.entryPointId}\`${input.threadLabel?.(p.entryPointId) ? ` (${input.threadLabel(p.entryPointId)})` : ""}` : "pinned outside a thread";
     const fn = node ? enclosingFunction(nodes, node) : null;

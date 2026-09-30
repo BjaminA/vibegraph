@@ -2597,6 +2597,7 @@ function nodesById(nodes: any[] | undefined): Map<string, any> | null {
 }
 
 function findNode(nodeId: string, filePath?: string): any | null {
+  if (nodeId === "module" || nodeId === "") return moduleNode(filePath);
   if (isDirectory) {
     if (filePath) {
       // M8.3.3: webview / MCP clients pass relative paths; resolve to
@@ -2614,6 +2615,21 @@ function findNode(nodeId: string, filePath?: string): any | null {
   }
   if (!lastParse) return null;
   return lastParse.nodes.find((n: any) => n.id === nodeId) || null;
+}
+
+// "module" is the pseudo node a script-seeded thread starts from (M-FLOW R2):
+// the statements that run when the file does. No IR node carries the id, so
+// every lookup used to answer "Node not found" for it. It IS the whole file,
+// so it is answered as one — built here, never stored in the IR. Without a
+// file (directory mode) there is no telling WHICH module, so null.
+function moduleNode(filePath?: string): any | null {
+  const file = filePath ?? (isDirectory ? undefined : resolvedPyFile);
+  if (!file) return null;
+  const abs = resolveProjectPath(file);
+  if (isDirectory && !projectParse[abs]) return null;
+  let lines = 1;
+  try { lines = fs.readFileSync(abs, "utf-8").split("\n").length; } catch { return null; }
+  return { id: "module", type: "module", name: path.basename(abs), line: 1, endLine: lines, parentId: null, synthetic: true };
 }
 
 function findNodeFile(nodeId: string): string | null {
@@ -2771,6 +2787,28 @@ async function rewriteAndValidate(
 
 // M7 wave 1 — extracted body so both the WS handler and the MCP
 // `vibegraph_compose_insert` tool can drive the same pipeline.
+// The op a compose anchor selects, shared by the dry run and the write so they
+// cannot disagree. The "module" anchor is the whole file (a script-seeded
+// thread's seed): replacing it replaces the file, inserting after it appends,
+// and "before the module" has no place to go.
+function composeArgv(
+  mode: "replace" | "insert_before" | "insert_after" | "append_end",
+  anchorNodeId: string,
+  targetFile: string,
+): { argv: string[] } | { error: string } {
+  const node = findNode(anchorNodeId, targetFile);
+  if (!node) return { error: `Node not found: ${anchorNodeId}` };
+  if (node.type === "module") {
+    if (mode === "replace") return { argv: [targetFile, "replace_module_body"] };
+    if (mode === "insert_before") return { error: `"module" is the whole file: nothing comes before it. Anchor on its first statement instead.` };
+    return { argv: [targetFile, "append_end"] };
+  }
+  const opArg = mode === "replace" ? "replace_node"
+    : mode === "insert_before" ? "insert_before"
+    : "insert_after";
+  return { argv: [targetFile, opArg, anchorNodeId] };
+}
+
 async function composeInsertCore(
   mode: "replace" | "insert_before" | "insert_after" | "append_end",
   anchorNodeId: string | null,
@@ -2787,13 +2825,9 @@ async function composeInsertCore(
   if (!anchorNodeId) {
     return rewriteAndValidate([targetFile, "append_end"], source, targetFile);
   }
-  const node = findNode(anchorNodeId, targetFile);
-  if (!node) return { success: false, message: `Node not found: ${anchorNodeId}` };
-
-  const opArg = mode === "replace" ? "replace_node"
-    : mode === "insert_before" ? "insert_before"
-    : "insert_after";
-  return rewriteAndValidate([targetFile, opArg, anchorNodeId], source, targetFile);
+  const op = composeArgv(mode, anchorNodeId, targetFile);
+  if ("error" in op) return { success: false, message: op.error };
+  return rewriteAndValidate(op.argv, source, targetFile);
 }
 
 async function handleComposeInsert(
@@ -2852,12 +2886,9 @@ async function composeProposeCore(
   if (mode === "append_end" || !anchorNodeId) {
     argv = [targetFile, "append_end"];
   } else {
-    const node = findNode(anchorNodeId, targetFile);
-    if (!node) return { ...base, error: `Node not found: ${anchorNodeId}` };
-    const opArg = mode === "replace" ? "replace_node"
-      : mode === "insert_before" ? "insert_before"
-      : "insert_after";
-    argv = [targetFile, opArg, anchorNodeId];
+    const op = composeArgv(mode, anchorNodeId, targetFile);
+    if ("error" in op) return { ...base, error: op.error };
+    argv = op.argv;
   }
 
   const dry = await _dryRunRewrite(argv, source);
@@ -3875,20 +3906,8 @@ async function handleResolveExternalCall(
 // ── Edit handlers (Stage 2) ───────────────────────────────────────────────────
 
 function handleEditOpen(nodeId: string, ws: WebSocket, filePath?: string): void {
-  // A module-seeded thread (a script of top-level statements) seeds on the
-  // pseudo node "module", which no IR node carries — the tooltip opened
-  // "Node not found". The module IS the whole file, as getNodeSource and the
-  // MCP replace_node already agree.
-  const moduleFile = filePath ?? (isDirectory ? undefined : resolvedPyFile);
-  if ((nodeId === "module" || nodeId === "") && moduleFile) {
-    try {
-      const source = fs.readFileSync(resolveProjectPath(moduleFile), "utf-8");
-      ws.send(JSON.stringify({ type: "edit-node-source", payload: { nodeId, source } }));
-    } catch (e: any) {
-      ws.send(JSON.stringify({ type: "edit-node-source", payload: { nodeId, source: "", error: `Read failed: ${e.message}` } }));
-    }
-    return;
-  }
+  // A script-seeded thread's seed is "module": findNode answers it as the
+  // whole file (moduleNode), so the slice below is the file.
   const node = findNode(nodeId, filePath);
   if (!node) {
     ws.send(JSON.stringify({ type: "edit-node-source", payload: { nodeId, source: "", error: "Node not found" } }));
@@ -4223,7 +4242,8 @@ async function handlePlaceIntent(
   const targetFile = resolveProjectPath(filePath);
   const fileData = isDirectory ? projectParse[targetFile] : lastParse;
   const fileNodes: any[] = fileData?.nodes ?? [];
-  const node = fileNodes.find((n: any) => n.id === targetIrNodeId);
+  // findNode, not a local find: a script seed's "module" is the whole file.
+  const node = findNode(targetIrNodeId, filePath);
   if (!node) { none("Selected node not found in the current file."); return; }
 
   const fn = _enclosingFunctionNode(node, fileNodes);
@@ -4345,6 +4365,7 @@ async function executeToolCall(
     case "rename_symbol": {
       // Scope-aware rename: takes a node_id (the def site) + new name.
       // Replaces the legacy whole-file regex behaviour.
+      if (isModule) return { success: false, message: `"module" is the whole file, not a definition: rename_symbol takes the def site of the name (e.g. module/foo.fn).` };
       const node = findNode(input.nodeId as string, tFile);
       if (!node) return { success: false, message: `Node not found: ${input.nodeId}` };
       return rewriteAndValidate(
@@ -5388,6 +5409,7 @@ function runThreadToNodeCore(
     if (!_VG_IDENT.test(exprN)) return fail("value-ambiguous", `non-trivial value expr: ${exprN}`);
     const node = findNode(nodeId, filePath);
     if (!node) return fail("harness-error", `Node not found: ${nodeId}`);
+    if (node.type === "module") return fail("unsupported-target", "a module seed is the whole script: run-to-here stops at a node inside a function. A trace run on the thread runs the script.");
     const file = findNodeFile(nodeId) ?? filePath ?? resolvedPyFile;
 
     // SM3 FLOOR — authoritative server-side side-effect scan. Re-derives
@@ -5606,6 +5628,7 @@ const _RUN_IDENT = /^[A-Za-z_]\w*$/;
 
 function resolveRunTarget(nodeId: string, filePath?: string): RunTargetResolution {
   const decline = (outcome: string, reason: string): RunTargetResolution => ({ ok: false, outcome, reason });
+  if (nodeId === "module") return decline("unsupported-target", "a module seed is the whole script: run-to-here stops at a node inside a function. A trace run on the thread runs the script.");
 
   // Locate the file's IR node list with the SAME resolution findNode uses.
   let nodes: any[] | null = null;
@@ -5677,6 +5700,7 @@ function resolveEnclosingFn(
   filePath?: string,
 ): { ok: true; entryFn: string } | { ok: false; outcome: string; reason: string } {
   const decline = (outcome: string, reason: string) => ({ ok: false as const, outcome, reason });
+  if (nodeId === "module") return decline("unsupported-target", "a module seed is the whole script, not a call site: a trace run on the thread observes every call the script makes.");
   let nodes: any[] | null = null;
   if (isDirectory) {
     if (filePath) nodes = projectParse[resolveProjectPath(filePath)]?.nodes ?? null;
@@ -5733,6 +5757,7 @@ function runObserveDynamicTarget(
     if (!_VG_IDENT.test(receiver)) return fail("value-ambiguous", `unsafe receiver expression: ${receiver}`);
     const node = findNode(nodeId, filePath);
     if (!node) return fail("harness-error", `Node not found: ${nodeId}`);
+    if (node.type === "module") return fail("unsupported-target", "a module seed is the whole script, not a call site: Observe reports what one receiver was. A trace run on the thread observes every call the script makes.");
     const file = findNodeFile(nodeId) ?? filePath ?? resolvedPyFile;
     // An arg-needing enclosing function is an honest needs-inputs decline —
     // the verdict run-to-here gives (handleRunThreadToNode) — not a

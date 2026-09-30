@@ -214,7 +214,9 @@ export function ThreadNodeTooltip(props: ThreadNodeTooltipProps) {
   // capture_probe exists precisely to grab a return's value, and a pure-
   // expression return (no call step to run from — the live Standardizer.apply)
   // is only runnable HERE. planRunToNode already vets it structurally.
-  const canRun = (!isTerminal || kind === "return") && !!irNodeId && !!file && runnable !== false && caps.run;
+  // A script-seeded thread's seed ("module") is the whole script: nothing to
+  // run TO — the thread's trace button runs it.
+  const canRun = (!isTerminal || kind === "return") && !!irNodeId && irNodeId !== "module" && !!file && runnable !== false && caps.run;
   const [running, setRunning] = useState(false);
   const [runResult, setRunResult] = useState<ThreadRunResult | null>(null);
   // SM2.d — synthesized-args proposal awaiting the user's confirm. When set

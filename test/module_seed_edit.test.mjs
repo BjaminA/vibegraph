@@ -78,6 +78,47 @@ test("saving the module seed rewrites the whole file through the chokepoint", as
   assert.match(fs.readFileSync(path.join(tmpDir, "job.py"), "utf-8"), /print\(len\(sys\.argv\)\)/);
 });
 
+// ── the same answer through every other door (findNode knows "module" now) ──
+let sessionId = null;
+let rpcId = 1;
+async function rpc(method, params) {
+  const res = await fetch(`http://localhost:${PORT}/mcp`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json, text/event-stream", ...(sessionId ? { "mcp-session-id": sessionId } : {}) },
+    body: JSON.stringify({ jsonrpc: "2.0", id: rpcId++, method, params }),
+  });
+  if (!sessionId) sessionId = res.headers.get("mcp-session-id");
+  const lines = (await res.text()).split("\n").filter((l) => l.startsWith("data: "));
+  return JSON.parse(lines[lines.length - 1].slice(6));
+}
+async function tool(name, args) {
+  if (rpcId === 1) {
+    await rpc("initialize", { protocolVersion: "2025-03-26", capabilities: {}, clientInfo: { name: "module-seed-test", version: "0" } });
+    await fetch(`http://localhost:${PORT}/mcp`, { method: "POST", headers: { "Content-Type": "application/json", Accept: "application/json, text/event-stream", "mcp-session-id": sessionId }, body: JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" }) });
+  }
+  const r = await rpc("tools/call", { name, arguments: args });
+  return r.result?.content?.[0]?.text ?? JSON.stringify(r);
+}
+
+test("compose on the module: after appends, before says there is no before", async () => {
+  const after = await tool("vibegraph_compose_insert", { mode: "after", anchorNodeId: "module", source: "print('done')\n", filePath: "job.py" });
+  assert.doesNotMatch(after, /Node not found/, after);
+  assert.match(fs.readFileSync(path.join(tmpDir, "job.py"), "utf-8"), /print\("done"\)|print\('done'\)\s*$/);
+  const before = await tool("vibegraph_compose_insert", { mode: "before", anchorNodeId: "module", source: "x = 1\n", filePath: "job.py" });
+  assert.match(before, /nothing comes before it/);
+});
+
+test("rename, run-to-here and Observe on the module refuse with the reason, not a not-found", async () => {
+  const rename = await tool("vibegraph_rewrite_node", { nodeId: "module", op: "rename_symbol", payload: { newName: "x" }, filePath: "job.py" });
+  assert.match(rename, /whole file, not a definition/);
+  const run = await tool("vibegraph_run_thread_to_node", { nodeId: "module", filePath: "job.py" });
+  assert.match(run, /unsupported-target/);
+  assert.match(run, /whole script/);
+  assert.doesNotMatch(run, /not found/i);
+  const observe = await tool("vibegraph_observe_dynamic_target", { nodeId: "module", receiver: "sys", filePath: "job.py" });
+  assert.match(observe, /whole script, not a call site/);
+});
+
 test("a real missing node still says so", async () => {
   const reply = waitFor("edit-node-source");
   send("edit-node-open", { nodeId: "module/nope.fn", filePath: "lib.py" });
