@@ -45,10 +45,11 @@ export function ArchNode({ data, selected }: { data: { node: ArchNodeRecord; dim
         width: 240,
         background: "var(--bg-node)",
         border: `1px solid color-mix(in oklab, ${a} ${hover || selected ? 75 : 45}%, transparent)`,
-        borderStyle: n.source === "proposed" ? "dashed" : "solid",
+        borderStyle: n.source === "proposed" || n.source === "planned" ? "dashed" : "solid",
         borderRadius: n.kind === "tool" ? 8 : 14,
         padding: "12px 16px",
-        opacity: data.dim ? 0.25 : quiet ? 0.85 : 1,
+        // A planned box is a ghost: it is not in the code.
+        opacity: data.dim ? 0.25 : n.source === "planned" ? 0.72 : quiet ? 0.85 : 1,
         outline: data.lit ? "2px solid var(--accent-thread)" : undefined,
         transform: hover ? "translateY(-2px)" : "none",
         transition: "transform var(--motion-hover-dur) var(--motion-hover-ease), border-color var(--motion-hover-dur) var(--motion-hover-ease)",

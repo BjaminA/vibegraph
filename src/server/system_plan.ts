@@ -3,7 +3,7 @@
 // A SystemPlan is a LABELLED PLAN (Claude's or a fixture's architecture
 // proposal), NEVER honest IR. It rides the project envelope as a SIBLING of
 // the honest `system` tier; the webview composes the two only at render.
-// Acceptance persists it to <projectRoot>/.vibegraph/system-plan.json so the
+// Acceptance persists it to <projectRoot>/.vibegraph/plan.json (it was system-plan.json) so the
 // ratified plan survives reloads and Stage 4's builder agents can consume it.
 //
 // Validation is hand-rolled (validate-at-boundary hard rule): WS payloads and
@@ -14,15 +14,16 @@
 // node's type-stripping, so no runtime resolution) — no .ts extension needed.
 // Imported by server.ts (esbuild) and run directly by test:system-plan.
 
-import * as fs from "fs";
 import * as path from "path";
 import type { SystemPlan, PlannedSubsystem, PlannedSystemEdge, SubsystemKind } from "../shared/protocol";
+import { loadPlan, savePlan, toSystemPlan, fromSystemPlan, PLAN_FILE } from "./plan_store.ts";
 
 const SUBSYSTEM_KINDS: SubsystemKind[] = [
   "frontend", "backend", "db", "cache", "external_http", "library",
 ];
 
-export const PLAN_RELPATH = path.join(".vibegraph", "system-plan.json");
+// The file the architecture plan lives in (plan.json since 2026-09-30).
+export const PLAN_RELPATH = PLAN_FILE;
 
 // Validate an untrusted value as a SystemPlan. Returns null when valid, else
 // a human-readable reason (the honest decline surfaces it verbatim).
@@ -84,35 +85,17 @@ function validatePlannedEdge(raw: unknown): string | null {
   return null;
 }
 
-// Load a previously-ratified plan from <root>/.vibegraph/system-plan.json.
-// Missing file → null (no plan). Invalid file → null + warn (an on-disk plan
-// that fails validation is IGNORED, never half-loaded — the honest choice).
+// 2026-09-30 — the SystemPlan now LIVES in .vibegraph/plan.json (the plan
+// mode's file, plan_store.ts): its subsystems are the plan's processes and its
+// edges the plan's process→process boundaries. These two functions keep the
+// greenfield flow's API unchanged over that file; an old system-plan.json is
+// read and converted, and removed on the next save.
 export function loadSystemPlan(root: string): SystemPlan | null {
-  const file = path.join(root, PLAN_RELPATH);
-  let raw: string;
-  try {
-    raw = fs.readFileSync(file, "utf-8");
-  } catch {
-    return null; // no plan persisted
-  }
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch (err: any) {
-    console.warn(`  [SystemPlan] ${file} is not valid JSON — ignoring: ${err.message}`);
-    return null;
-  }
-  const invalid = validateSystemPlan(parsed);
-  if (invalid) {
-    console.warn(`  [SystemPlan] ${file} failed validation — ignoring: ${invalid}`);
-    return null;
-  }
-  return parsed as SystemPlan;
+  return toSystemPlan(loadPlan(root));
 }
 
-// Persist a ratified plan. Validates first (never write an invalid artifact),
-// stamps ratifiedAt, writes atomically-enough for a single consumer (tmp +
-// rename). Returns the stamped plan or an error.
+// Persist a ratified plan: validate, stamp ratifiedAt, fold it into plan.json
+// (keeping the plan's threads, stack, rules and questions), one revision.
 export function persistSystemPlan(
   root: string,
   plan: unknown,
@@ -120,14 +103,13 @@ export function persistSystemPlan(
   const invalid = validateSystemPlan(plan);
   if (invalid) return { error: invalid };
   const stamped: SystemPlan = { ...(plan as SystemPlan), ratifiedAt: new Date().toISOString() };
-  const file = path.join(root, PLAN_RELPATH);
-  try {
-    fs.mkdirSync(path.dirname(file), { recursive: true });
-    const tmp = `${file}.tmp`;
-    fs.writeFileSync(tmp, JSON.stringify(stamped, null, 2) + "\n", "utf-8");
-    fs.renameSync(tmp, file);
-  } catch (err: any) {
-    return { error: `could not persist plan: ${err.message}` };
-  }
-  return { plan: stamped, path: file };
+  const merged = fromSystemPlan(stamped, loadPlan(root));
+  merged.revision += 1;
+  merged.changelog = [...merged.changelog, {
+    rev: merged.revision, at: stamped.ratifiedAt!, by: "human" as const,
+    change: `accepted the architecture (${stamped.subsystems.length} subsystems, ${stamped.edges.length} edges)`,
+  }].slice(-30);
+  const saved = savePlan(root, merged);
+  if (saved.error) return { error: saved.error };
+  return { plan: stamped, path: saved.path };
 }

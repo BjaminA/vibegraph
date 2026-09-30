@@ -32,7 +32,8 @@ import { join } from "node:path";
 const FIXTURE = process.env.VG_FIXTURE ?? "";
 const IS_BLANK = FIXTURE.includes("greenfield_blank");
 const VG_DIR = join(process.cwd(), FIXTURE, ".vibegraph");
-const PLAN_PATH = join(VG_DIR, "system-plan.json");
+// plan.json since 2026-09-30 (the SystemPlan is a view over the plan).
+const PLAN_PATH = join(VG_DIR, "plan.json");
 const SHOT_DIR = "reviews/m-plan-v7-3b";
 
 const DESCRIPTION = "a flask API with a sqlite store and a redis cache";
@@ -94,7 +95,7 @@ test.describe("PLAN-v7 3b — greenfield describe → all-ghost architecture →
     expect(persisted.drafted).toBe(true);
     expect(persisted.description).toBe(DESCRIPTION);
     expect(typeof persisted.ratifiedAt).toBe("string");
-    expect(persisted.subsystems.find((s: any) => s.id === "cache").groundedIn).toBe(null);
+    expect(persisted.processes.find((s: any) => s.id === "cache").groundedIn).toBe(null);
 
     await expect(page.locator("[data-system-plan-bar]")).toHaveCount(0, { timeout: 10_000 });
     await expect(page.locator("[data-planned-subsystem]")).toHaveCount(3, { timeout: 10_000 });

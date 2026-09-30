@@ -927,6 +927,44 @@ function registerTools(server: McpServer, ctx: VibegraphMcpContext): void {
   );
 
   server.registerTool(
+    "vibegraph_plan",
+    {
+      description:
+        "The HYPOTHETICAL plan for this project (.vibegraph/plan.json), when one exists: the objective first, then " +
+        "planned processes, stack, data boundaries, primary threads, planned rules and open questions — each marked " +
+        "PROPOSED or agreed — and how the code measures up (realised / drifted / not built; planned rules checked as " +
+        "advice). A plan is not the code: it will change, and nothing in it is true until the code says so. Keep work " +
+        "on the objective. Read-only, deterministic, no model.",
+      inputSchema: {},
+    },
+    async () => {
+      const r = ctx.plan();
+      if (r.error) return { content: [{ type: "text", text: r.error }], isError: true };
+      return { content: [{ type: "text", text: r.text }] };
+    },
+  );
+
+  server.registerTool(
+    "vibegraph_plan_edit",
+    {
+      description:
+        "PROPOSE changes to the hypothetical plan. `ops` is a list of small operations: " +
+        '{"op":"add","section":"threads","item":{"id":"POST /readings","entry":"route","serves":"…","primary":["validate","b1:insert"]}}, ' +
+        '{"op":"update","section":"processes","id":"api","fields":{"at":"api/"}}, {"op":"drop","section":"stack","id":"redis"}, ' +
+        '{"op":"set-objective","text":"…"}. Sections: processes, boundaries, stack, threads (primary steps only), ' +
+        "policies (text + why, optional constraint-grammar check), open (questions). Everything you add is PROPOSED; " +
+        "changing an agreed item makes it proposed again; you cannot agree, close or promote — a person does. The plan " +
+        "has hard size caps (it is refused, not trimmed, when it outgrows them): keep it minimal and on its objective.",
+      inputSchema: { ops: z.array(z.record(z.string(), z.unknown())).describe("the operations, applied together or not at all") },
+    },
+    async ({ ops }) => {
+      const r = ctx.planEdit(ops);
+      if (r.error) return { content: [{ type: "text", text: r.error }], isError: true };
+      return { content: [{ type: "text", text: r.text }] };
+    },
+  );
+
+  server.registerTool(
     "vibegraph_direction",
     {
       description:

@@ -26,6 +26,9 @@ import { ArchTraceBar, useArchTrace } from "./ArchTrace";
 import { ArchInspector, ArchLegend, ArchLensBar, ArchProposalBar, type MapLens } from "./ArchPanel";
 import { configModel } from "./arch_config";
 import { journeysModel } from "./arch_journeys";
+import { planModel, overlayModel, ghostPlannedEdges, type PlanView } from "./arch_plan";
+import { PlanViewToggle } from "./PlanViewToggle";
+import { usePlanState } from "../usePlanState";
 import { ArchProposingCard } from "./ArchProposingCard";
 import type { ArchModelRecord, ArchNodeRecord, ArchEdgeRecord, ArchGroupRecord } from "../../shared/protocol";
 
@@ -170,7 +173,18 @@ export function SystemView({
   }, []);
   const [archSelected, setArchSelected] = useState<{ node: ArchNodeRecord } | { edge: ArchEdgeRecord } | { group: ArchGroupRecord } | null>(null);
 
+  // 2026-09-30 — the hypothetical plan: Real / Plan / Overlay (arch_plan.ts).
+  const planState = usePlanState();
+  const [planViewRaw, setPlanView] = useState<PlanView>("real");
+  const planView: PlanView = planState.plan ? planViewRaw : "real";
   const base = useMemo((): { nodes: Node[]; edges: Edge[]; hiddenTools?: string[]; hiddenClusters?: string[] } => {
+    if (mode === "map" && !focusEntryPointId && planView !== "real" && planState.plan) {
+      // Every edge kept (the Payloads lens), so a boundary between two planned
+      // processes is drawn as well as a call into a planned tool.
+      const model = planView === "plan" || !architecture ? planModel(planState.plan, planState.reconcile) : overlayModel(architecture, planState.plan, planState.reconcile);
+      const laid = buildArchLayout(model, "payloads", { keepPlannedTools: true });
+      return { ...laid, edges: ghostPlannedEdges(laid.edges, model) };
+    }
     if (mode === "map" && !focusEntryPointId) {
       // 2026-09-29 — the Journeys lens draws pages and the links between
       // them through the Flows pipeline; it needs no architecture model.
@@ -198,7 +212,7 @@ export function SystemView({
     // the whole view then.
     if (system || plan) return buildSystemLayout(system ?? { subsystems: [], edges: [] }, plan, cardHeights ?? undefined);
     return { nodes: [], edges: [] };
-  }, [mode, system, plan, threads, entryPoints, crossings, focusEntryPointId, architecture, lens, cardHeights, insight]);
+  }, [mode, system, plan, threads, entryPoints, crossings, focusEntryPointId, architecture, lens, cardHeights, insight, planView, planState]);
 
   // Inject the drill-down callback into each node's data (react-flow custom
   // nodes receive only `data`): subsystem endpoint rows AND thread nodes both
@@ -350,6 +364,7 @@ export function SystemView({
       </button>
       {mode === "map" && <ArchLensBar lens={lens} onLens={(l) => { setLens(l); setArchSelected(null); }} onStory={trace.beats.length ? trace.actions.story : undefined} />}
       {mode === "map" && architecture && <ArchLegend model={architecture} hiddenTools={base.hiddenTools ?? []} hiddenClusters={base.hiddenClusters ?? []} lens={lens === "config" ? "tools" : lens === "journeys" ? "flows" : lens} fold={!!archSelected} />}
+      {mode === "map" && planState.plan && <PlanViewToggle view={planView} onView={setPlanView} revision={planState.plan.revision} />}
       {mode === "map" && <ArchTraceBar mode={trace.mode} beats={trace.beats} labelOf={labelOf} actions={trace.actions} />}
       {mode === "map" && architecture && (
         <ArchProposalBar model={architecture} state={archPropose ?? { busy: false, error: null }} onAction={onArchAction} />
@@ -408,7 +423,7 @@ export function SystemView({
         // thread layouts occupy different coordinate spaces). PLAN-v7
         // Stage 3: the ghost count joins the key so a plan arriving /
         // clearing also re-fits — ghosts land in view, not off-canvas.
-        key={`${mode}:${mode === "map" ? lens : ""}:${plan ? plan.subsystems.length : 0}`}
+        key={`${mode}:${mode === "map" ? `${lens}:${planView}` : ""}:${plan ? plan.subsystems.length : 0}`}
         nodes={nodes}
         edges={edges}
         nodeTypes={nodeTypes}

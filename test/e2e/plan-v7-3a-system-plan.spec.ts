@@ -33,7 +33,8 @@ import { join } from "node:path";
 
 const FIXTURE = process.env.VG_FIXTURE ?? "";
 const IS_FLASK = FIXTURE.includes("flask_demo");
-const PLAN_PATH = join(process.cwd(), FIXTURE, ".vibegraph", "system-plan.json");
+// plan.json since 2026-09-30 (the SystemPlan is a view over the plan).
+const PLAN_PATH = join(process.cwd(), FIXTURE, ".vibegraph", "plan.json");
 const SHOT_DIR = "reviews/m-plan-v7-3a";
 
 // Canned proposal: `backend` collides with the honest tier (solid wins → no

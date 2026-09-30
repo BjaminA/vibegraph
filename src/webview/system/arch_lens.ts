@@ -52,7 +52,7 @@ export interface LensSelection {
   hierarchy: ArchHierarchy;
 }
 
-export function lensSelection(full: ArchModelRecord, lens: ArchLens, opts: { collapseTools?: boolean } = {}): LensSelection {
+export function lensSelection(full: ArchModelRecord, lens: ArchLens, opts: { collapseTools?: boolean; keepPlannedTools?: boolean } = {}): LensSelection {
   const collapse = opts.collapseTools !== false && COLLAPSING_LENSES.includes(lens);
   const bird = lens === "birdseye" ? birdseyeModel(full) : null;
   const { model, hiddenTools } = bird ?? (collapse ? collapseTools(full) : { model: full, hiddenTools: [] as string[] });
@@ -61,8 +61,10 @@ export function lensSelection(full: ArchModelRecord, lens: ArchLens, opts: { col
   const hierarchy = resolveHierarchy(model);
   const crosses = (e: ArchEdgeRecord) => hierarchy.chainOf(e.from).join(">") !== hierarchy.chainOf(e.to).join(">");
   const edges = model.edges.filter((e) => lensKeepsEdge(lens, e, crosses) && keptIds.has(e.from) && keptIds.has(e.to));
-  // A tool no kept edge reaches is dropped; processes always stay.
+  // A tool no kept edge reaches is dropped; processes always stay. A PLANNED
+  // tool stays when asked (the plan views): a plan can name a tool before it
+  // names the boundary that reaches it, and hiding it would lose the plan.
   const touched = new Set(edges.flatMap((e) => [e.from, e.to]));
-  const nodes = kept.filter((n) => n.kind === "cluster" || n.kind === "hub" || touched.has(n.id));
+  const nodes = kept.filter((n) => n.kind === "cluster" || n.kind === "hub" || touched.has(n.id) || (opts.keepPlannedTools && n.source === "planned"));
   return { model, nodes, edges, hiddenTools, hiddenClusters: bird?.hiddenClusters ?? [], hierarchy };
 }

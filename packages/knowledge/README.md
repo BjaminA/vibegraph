@@ -38,6 +38,20 @@ arguments) by name into shell strings, SQL query text and eval, and names the
 path; it also lands in each thread contract and in `security.md`. It is
 name-based and says so: no findings is not a clean bill.
 
+**`plan`** designs what does not exist yet, as a HYPOTHETICAL plan kept apart
+from the code (`.vibegraph/plan.json`): an objective, planned processes,
+stack, data boundaries, primary threads and rules, small by force (capped
+sections, refused rather than trimmed). Claude proposes (MCP
+`vibegraph_plan_edit`, the hooks send it the plan); you agree, drop, or
+promote a planned rule into the real, checked ones. `plan check` measures the
+code against it — realised, drifted or not built — so the plan stays a spec,
+not a stale document.
+
+```bash
+vibegraph-knowledge plan init "Operators see every pump's wear forecast within a minute"
+vibegraph-knowledge plan check
+```
+
 **`view`** starts the web app — the architecture map, threads traced across
 files and languages, running code to a node, editing through a chokepoint
 that refuses changes outside the node, rules, skills and agents. The walkthrough

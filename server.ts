@@ -89,6 +89,8 @@ import { LOCAL_CHAT_MODEL_ID } from "./src/shared/chat_models";
 import { arraylikeParams, arraylikeDeclineReason } from "./src/server/run/arg_shape";
 import { draftInsertion } from "./src/server/compose_draft";
 import { validateSystemPlan, loadSystemPlan, persistSystemPlan } from "./src/server/system_plan";
+import { planMtime } from "./src/server/plan_store";
+import { handlePlanMessage, planToolText, planToolEdit } from "./src/server/plan_server";
 import { draftSystemPlan } from "./src/server/system_draft";
 import { validateChangeset, changesetConsentScope, CHECK_MODULE, CHECK_FN_ID } from "./src/server/changeset";
 import { draftChangeset } from "./src/server/changeset_draft";
@@ -429,7 +431,7 @@ let latestMissingDeps: { module: string; files: string[] }[] = [];
 // PLAN-v7 Stage 3 — the ratified architecture PLAN, when one exists. A
 // LABELLED PLAN (never honest IR): rides the envelope as a SIBLING of
 // `system`, composed with it only at render. Loaded from
-// <projectRoot>/.vibegraph/system-plan.json, mtime-cached so an
+// <projectRoot>/.vibegraph/plan.json (system-plan.json before 2026-09-30), mtime-cached so an
 // externally-written (or deleted) plan is picked up on the next envelope
 // build instead of being frozen at boot; set directly by
 // system-plan-accept.
@@ -1947,6 +1949,10 @@ async function orchestratorReview(run: WorkRun, packet: RunPacket, evidence: Pac
 // 2026-09-29 — the untrusted-input report (src/server/dataflow.ts), computed
 // on first use after each derived pass: every pass replaces latestThreads, so
 // its identity is the memo key.
+// 2026-09-30 — what the plan is compared against (src/server/plan_reconcile.ts).
+function planEnv() {
+  return { files: relativeProjectFiles() as any, entryPoints: latestEntryPoints as any[], threads: latestThreads as any[] };
+}
 let dataflowMemo: { threads: unknown; report: DataflowReport } | null = null;
 function liveDataflow(): DataflowReport {
   if (dataflowMemo?.threads === latestThreads) return dataflowMemo.report;
@@ -2950,7 +2956,7 @@ function getSystemPlan(): import("./src/shared/protocol").SystemPlan | null {
   // seen; 0 = file absent.
   let mtime = 0;
   try {
-    mtime = fs.statSync(path.join(analyzedRoot(), ".vibegraph", "system-plan.json")).mtimeMs;
+    mtime = planMtime(analyzedRoot());
   } catch { /* absent */ }
   if (mtime !== systemPlanMtime) {
     systemPlanMtime = mtime;
@@ -7504,6 +7510,8 @@ const mcpContext: VibegraphMcpContext = {
   },
   // 2026-09-29 - untrusted input → dangerous sinks, the whole project.
   dataflow: () => (isDirectory ? { text: formatDataflowMd(liveDataflow()) } : { text: "", error: "the data-flow report needs a project directory" }),
+  plan: () => (isDirectory ? { text: planToolText(analyzedRoot(), planEnv(), latestStack) } : { text: "", error: "a plan needs a project directory" }),
+  planEdit: (ops) => (isDirectory ? planToolEdit(analyzedRoot(), ops) : { text: "", error: "a plan needs a project directory" }),
   // 2026-09-29 - generic direction on demand (the same files the hooks read).
   direction: (skill) => {
     if (skill) {
@@ -8085,6 +8093,14 @@ function setupWebSocket() {
           else if (msg.type === "hooked-run-start") { const r = startHookedRun(msg.payload?.task, hookedRunDeps()); if (!r.ok) reply(r.error); }
           else if (msg.type === "hooked-run-stop") { if (!stopHookedRun(analyzedRoot())) reply("no run is running"); }
           else decideHookedRun(msg.payload?.accept === true, hookedRunDeps()).then((r) => { if (!r.ok) reply(r.error); }, (e) => reply(String(e?.message ?? e)));
+        } else if (msg.type === "plan-get" || msg.type === "plan-op" || msg.type === "plan-promote") {
+          // 2026-09-30 — the Plan panel (src/server/plan_server.ts); the sender is a person.
+          if (!isDirectory) ws.send(JSON.stringify({ type: "plan-state", payload: { plan: null, reconcile: null, error: "a plan needs a project directory" } }));
+          else {
+            const r = handlePlanMessage(analyzedRoot(), msg, planEnv(), latestStack);
+            ws.send(JSON.stringify({ type: "plan-state", payload: r.reply }));
+            if (r.changed) broadcastProjectUpdate();
+          }
         } else if (typeof msg.type === "string" && msg.type.startsWith("investigation-")) {
           // 2026-09-29 — the investigation board (src/server/investigations.ts).
           // Reply: investigation-state { list, current?, handoff?, error? }.

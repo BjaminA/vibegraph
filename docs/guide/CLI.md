@@ -65,6 +65,9 @@ CLI) and says so; everything else is deterministic.
 | `skills draft <entry>… \| --missing` | Drafts per-thread guidance through the grounding gates (reads the thread's lessons) | `.vibegraph/thread-skills/` | **yes** |
 | `direction [<skill>]` / `enable \| disable <skill>` / `hooks headlines \| on-violation \| off` | The generic coding skills: where they apply, one skill in full, whether the hooks send them | `.vibegraph/skills.json` | — |
 | `lessons list` | Rules sessions broke and put right, with the fix | nothing | — |
+| `plan init "<objective>"` / `show` / `check` | A hypothetical plan: start it, read it, measure the code against it (realised / drifted / not built) | `.vibegraph/plan.json` (init) | — |
+| `plan edit '<op>'` / `agree` / `drop` / `close` / `reopen` | Change the plan by small operations, each one a changelog line; `--as agent` records a proposal | `.vibegraph/plan.json` | — |
+| `plan promote <rule>` | Copy a planned rule into the stated rules, where it is checked and may block | `.vibegraph/constraints.json`, `plan.json` | — |
 | `architecture --propose \| --modify "<text>"` | Deployment / trust groups and a start-here path, every item citing what it saw; stored pending | `.vibegraph/architecture.json` | **yes** |
 | `architecture --ratify \| --reject` | Makes the pending proposal stated / drops it | `.vibegraph/architecture.json` | — |
 | `classify [--dry-run \| --apply]` | The role of tools no table knows; `--apply` stores each as a model-stated policy | `.vibegraph/constraints.json` | **yes** |
@@ -76,7 +79,8 @@ All of it lives under `.vibegraph/` in **your** project (plus the `init`
 block in `CLAUDE.md`, and the hooks and skills under `.claude/`). **Derived** =
 read from the code, regenerated at will; **stated** = a person's decision
 (commit it); **proposed / drafted** = a model's, until a person ratifies it;
-**observed** = what a consented run saw.
+**observed** = what a consented run saw; **planned** = hypothetical, what we
+intend to build — it will change, and it is never mixed into the rest.
 
 **For Claude — `.vibegraph/knowledge/`** (`export`; regenerate, don't commit)
 
@@ -88,6 +92,7 @@ read from the code, regenerated at will; **stated** = a person's decision
 | `threads/INDEX.md`, `threads/<entry>.md` | derived + stated | one **contract** per thread: data in/out, what leaves the project and through which tool, round trips in loops, tests, configuration, untrusted input, neighbouring threads, the rules routed to it | what to keep true when editing that path |
 | `flows.md` | derived | end-to-end chains, page → component → call → script, with a reverse index | everything a change touches downstream |
 | `security.md` | derived | untrusted input reaching a shell, SQL text or eval, each with its path, and what the pass cannot see | a security review; before exposing an entry point |
+| `design.md` | planned | when a plan exists: the hypothetical design, objective first, every item's status and its verdict against the code | keep work on the objective; see what is not built yet |
 | `reachability.md` | derived | the functions no entry point reaches, each with why | before calling anything dead |
 | `configuration.md` | derived | the environment variables the code reads, on which threads, and which are declared nowhere | before deploying |
 | `system_spec.md` | derived + stated | the tools the project is built on, by role; the modules that wrap them; policies about them | use the existing tools and wrappers |
@@ -118,6 +123,7 @@ read from the code, regenerated at will; **stated** = a person's decision
 | `manual_seeds.json` | stated | entry points you named | `seeds`, by hand |
 | `thread-skills/` | drafted → ratified | per-thread skills with their freshness stamp | `skills`, the app, MCP |
 | `skills.json` | stated | which generic skills are on, and what the hooks send | `direction`, the app |
+| `plan.json` | planned | the hypothetical plan: objective, processes, stack, boundaries, primary threads, rules, questions, changelog (replaces `system-plan.json`, which is read and converted) | `plan`, the Plan panel, MCP (proposals) |
 | `investigations/` | stated | investigation boards: pins, the question, notes | the app |
 | `observations.json` | observed | trace-run results per call site | the app's Trace / Observe |
 | `models.json` | stated | which model — or local Ollama — runs which kind of work | the app's Models panel |
@@ -350,6 +356,81 @@ It does no secret scanning and knows no CVEs — run `npm audit` /
 `pip-audit` / `cargo audit` for dependencies.
 
 ![dataflow on the test fixture: seven unguarded flows across Python, TypeScript and bash](../screenshots/15-dataflow.png)
+
+### `plan` — a hypothetical project, kept apart from the real one
+
+```bash
+vibegraph-knowledge plan init "<objective>" [--root <dir>]
+vibegraph-knowledge plan show | check [--json]
+vibegraph-knowledge plan edit '<op>' | --file ops.json [--as agent]
+vibegraph-knowledge plan agree|drop <section> <id>
+vibegraph-knowledge plan promote <rule id>
+vibegraph-knowledge plan close | reopen
+```
+
+Designs a project or feature before it exists, in `.vibegraph/plan.json`.
+The plan holds:
+
+- the **objective**, one line;
+- **processes** (`at`: where the code will live);
+- **stack** (tools with the same roles the real stack uses);
+- **boundaries** (`from` → `to`, a protocol, `carries`: key names only);
+- **threads**, with PRIMARY steps only (`b1:insert` names the boundary a step
+  crosses);
+- **policies** (text + why, and optionally a check in the constraint
+  grammar);
+- **open** questions.
+
+Zero tokens.
+
+It is treated differently from the real knowledge:
+
+- **Small by force.** At most 12 processes, 16 boundaries, 12 tools, 7
+  threads of at most 8 steps, 10 rules and 10 questions, each a line. A plan
+  that outgrows the caps is refused with the reason, never trimmed. Every
+  process and thread says which part of the objective it `serves`.
+- **Changed by small operations.** Each operation is one changelog line and
+  bumps the revision; a batch applies whole or not at all.
+  - `{"op":"add","section":…,"item":{…}}`
+  - `{"op":"update","section":…,"id":…,"fields":{…}}`
+  - `{"op":"drop",…}`, `{"op":"agree",…}`
+  - `{"op":"set-objective","text":…}`, `close`, `reopen`
+- **Claude proposes; a person agrees.** Whoever runs this command is a
+  person.
+  - `--as agent` (what the MCP tool `vibegraph_plan_edit` does) adds items as
+    **proposed**, puts an agreed item it edits back to proposed, and cannot
+    agree, close or promote.
+- **Planned rules are advice.** `plan check` runs their checks through the
+  same checkers as `check`, but they block nothing. `plan promote` copies one
+  into `.vibegraph/constraints.json` as a human-stated rule, with its reason
+  in the text. From then on `check` and the hooks enforce it.
+
+`plan check` measures the code against the plan. Every live item gets a
+verdict, with the reason:
+
+- **realised**: the code has it.
+- **drifted**: the code has something different. For example, "planned as
+  db; the code reads it as cache", "not found on its thread: publish", or
+  "sqlite3 is used, but not from forecaster's files".
+- **not-built**: nothing in the code yet.
+- **unanchored**: a process with no `at` and no directory of its name.
+- **unverified**: a process-to-process hop whose two ends both exist.
+- **pass / violated / unverifiable / prose**: a planned rule's check, as
+  advice.
+
+Matching is by name and path, and every report says what it cannot see: the
+order of steps, payload keys, the hop between two processes. It exits 0,
+because a plan never fails a run.
+
+Where the plan shows up:
+
+- **Hooked Claude Code sessions** receive the compact plan once per session,
+  then only what changed. Nothing is sent while the plan is closed.
+- **The export** writes it as `design.md`.
+- **The app** has a Plan panel, and **Plan** / **Overlay** views on the
+  architecture map.
+- **The greenfield flow's architecture** is the plan's agreed processes. An
+  old `.vibegraph/system-plan.json` is read, and converted on the next save.
 
 ### `constraints` — the rules the code cannot show
 

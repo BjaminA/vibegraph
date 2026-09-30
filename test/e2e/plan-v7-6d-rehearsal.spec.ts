@@ -75,7 +75,7 @@ test.describe("PLAN-v7 6d — full live pipeline (real claude)", () => {
     // ── 2. RATIFY the architecture ────────────────────────────────────────
     await page.click("[data-system-plan-accept]");
     await expect(planBar).toHaveCount(0, { timeout: 15_000 });
-    await expect.poll(() => existsSync(join(ROOT, ".vibegraph", "system-plan.json")), { timeout: 15_000 }).toBe(true);
+    await expect.poll(() => existsSync(join(ROOT, ".vibegraph", "plan.json")), { timeout: 15_000 }).toBe(true);
 
     // ── 3. DRAFT + RATIFY the roadmap ─────────────────────────────────────
     const panel = page.locator("[data-roadmap-panel]");

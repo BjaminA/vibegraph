@@ -668,7 +668,11 @@ export interface CrossingIndexRecord {
 // .vibegraph/architecture.json), `proposed` (a model's, grounded or not).
 // Wire shape here so the System view and the server read one record.
 
-export type ArchSource = "derived" | "stated" | "proposed";
+export type ArchSource = "derived" | "stated" | "proposed"
+  // 2026-09-30 — GUI only: a HYPOTHETICAL item from .vibegraph/plan.json,
+  // drawn as a ghost (src/webview/system/arch_plan.ts). The derived model never
+  // emits it, so arch_model.schema.json does not list it.
+  | "planned";
 
 /** Where an element comes from in the code: a file, and the IR node that is
  *  also the address an edit is sent to. */

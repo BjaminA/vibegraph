@@ -56,6 +56,9 @@ interface Props {
   /** 2026-09-29 — the investigation board (InvestigationPanel). */
   investigateOpen?: boolean;
   onToggleInvestigate?: () => void;
+  /** 2026-09-30 — the hypothetical plan (PlanPanel). */
+  planOpen?: boolean;
+  onTogglePlan?: () => void;
   // M-SKILLS.2 — the Skills panel: generic direction, enabled per project.
   // Directory mode only (the enable file lives under the project).
   skillsOpen: boolean;
@@ -197,7 +200,7 @@ export function TopToolbar({
   describeAvailable, describeOpen, describing, onToggleDescribe,
   buildAvailable, buildOpen, building, onToggleBuild,
   onToggleFilters, onToggleModels, stackOpen, stackAvailable, onToggleStack,
-  investigateOpen, onToggleInvestigate,
+  investigateOpen, onToggleInvestigate, planOpen, onTogglePlan,
   skillsOpen, skillsAvailable, onToggleSkills,
   workRunOpen, workRunAvailable, onToggleWorkRun,
   onToggleAnalysis, onToggleCode, onToggleThread,
@@ -441,6 +444,16 @@ export function TopToolbar({
         >
           <ClipboardList size={16} strokeWidth={1.5} />
           Investigate
+        </ToolButton>
+      )}
+      {/* 2026-09-30 — the hypothetical plan: objective, planned processes,
+          stack, boundaries, threads and rules, and how the code measures up. */}
+      {stackAvailable && onTogglePlan && (
+        <ToolButton data-plan-toggle active={!!planOpen} onClick={onTogglePlan}
+          title="Plan — a hypothetical design (objective, processes, stack, data boundaries, primary threads, rules) and how the code measures up; not the code"
+          accent="var(--accent-thread)">
+          <DraftingCompass size={16} strokeWidth={1.5} />
+          Plan
         </ToolButton>
       )}
       {/* M-SKILLS.2 — generic direction: the prose half of each quality

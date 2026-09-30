@@ -32,7 +32,7 @@ protocol it was read from. You can use it two ways, and they share one
 ## Contents
 
 - [Get started](#get-started) — install, the hooks, the visualisation
-- [What you get](#what-you-get) — the map, threads, code, investigations, agents, rules, security, direction
+- [What you get](#what-you-get) — the map, threads, code, investigations, planning, agents, rules, security, direction
 - [Commands and files](#commands-and-files) — every command, every file it writes
 - [What it is](#what-it-is) · [Languages](#languages) · [Examples](#try-it--worked-examples) · [Development](#development) · [Limits](#limits-worth-knowing)
 
@@ -171,6 +171,53 @@ over MCP.
 
 ![Two pins from the ingest route, a question and a note](docs/screenshots/09-investigation.png)
 
+### Planning: a hypothetical project beside the real one
+
+Design a project or a feature before it exists. You and Claude write the
+plan together in `.vibegraph/plan.json`. It holds:
+
+- the **objective**, in one line;
+- planned **processes**, **stack**, **data boundaries**, **primary threads**
+  and **rules**;
+- **open questions**.
+
+A plan is kept apart from the real knowledge and treated differently:
+
+- **Kept small.** Hard caps on every section are enforced: a plan that
+  outgrows them is refused, not trimmed. Every process and thread must say
+  which part of the objective it serves.
+- **Claude proposes; you agree.** Everything Claude adds arrives
+  **proposed**, and Claude editing something you agreed sends it back to
+  proposed. Only you agree, drop, close the plan, or **promote** a planned
+  rule into `constraints.json`.
+- **Drawn as a ghost.** On the architecture map it appears dashed, alone
+  (**Plan**) or over the real map showing only what the code lacks yet
+  (**Overlay**).
+- **Rules are advice.** A planned rule is checked against the code but
+  blocks nothing until you promote it.
+- **Measured against the code.** As code lands, `plan check` (and the Plan
+  panel) marks each item **realised**, **drifted** (with how) or **not
+  built**, with no tokens spent. The plan becomes a spec the code is checked
+  against, not a document that goes stale.
+
+A hooked Claude Code session receives the plan once per session, and after
+that only what changed.
+
+![The Plan panel: the objective, each item's status and its verdict against the code, Agree / Drop / Promote](docs/screenshots/16-plan-panel.png)
+
+| Plan: the hypothetical project alone | Overlay: the real map, plus what is not built yet |
+|---|---|
+| ![Plan view](docs/screenshots/17-plan-map.png) | ![Overlay view](docs/screenshots/18-plan-overlay.png) |
+
+```bash
+vibegraph-knowledge plan init "Operators see every pump's wear forecast within a minute of a reading"
+# …ask Claude to propose the processes, stack, boundaries and primary threads…
+vibegraph-knowledge plan show                 # the plan, objective first
+vibegraph-knowledge plan agree threads "POST /readings"
+vibegraph-knowledge plan check                # realised / drifted / not built
+vibegraph-knowledge plan promote p1           # a planned rule becomes a real, checked one
+```
+
 ### The Agent Manager
 
 The Agent Manager opens on **Claude Code + hooks**, the arrangement measured
@@ -268,6 +315,9 @@ CLI) and says so; everything else is deterministic.
 | `skills draft <entry>… \| --missing` | Drafts per-thread guidance through the grounding gates (reads the thread's lessons) | `.vibegraph/thread-skills/` | **yes** |
 | `direction [<skill>]` / `enable \| disable <skill>` / `hooks headlines \| on-violation \| off` | The generic coding skills: where they apply, one skill in full, whether the hooks send them | `.vibegraph/skills.json` | — |
 | `lessons list` | Rules sessions broke and put right, with the fix | nothing | — |
+| `plan init "<objective>"` / `show` / `check` | A hypothetical plan: start it, read it, measure the code against it (realised / drifted / not built) | `.vibegraph/plan.json` (init) | — |
+| `plan edit '<op>'` / `agree` / `drop` / `close` / `reopen` | Change the plan by small operations, each one a changelog line; `--as agent` records a proposal | `.vibegraph/plan.json` | — |
+| `plan promote <rule>` | Copy a planned rule into the stated rules, where it is checked and may block | `.vibegraph/constraints.json`, `plan.json` | — |
 | `architecture --propose \| --modify "<text>"` | Deployment / trust groups and a start-here path, every item citing what it saw; stored pending | `.vibegraph/architecture.json` | **yes** |
 | `architecture --ratify \| --reject` | Makes the pending proposal stated / drops it | `.vibegraph/architecture.json` | — |
 | `classify [--dry-run \| --apply]` | The role of tools no table knows; `--apply` stores each as a model-stated policy | `.vibegraph/constraints.json` | **yes** |
@@ -279,7 +329,8 @@ All of it lives under `.vibegraph/` in **your** project (plus the `init`
 block in `CLAUDE.md`, and the hooks and skills under `.claude/`). **Derived** =
 read from the code, regenerated at will; **stated** = a person's decision
 (commit it); **proposed / drafted** = a model's, until a person ratifies it;
-**observed** = what a consented run saw.
+**observed** = what a consented run saw; **planned** = hypothetical, what we
+intend to build — it will change, and it is never mixed into the rest.
 
 **For Claude — `.vibegraph/knowledge/`** (`export`; regenerate, don't commit)
 
@@ -291,6 +342,7 @@ read from the code, regenerated at will; **stated** = a person's decision
 | `threads/INDEX.md`, `threads/<entry>.md` | derived + stated | one **contract** per thread: data in/out, what leaves the project and through which tool, round trips in loops, tests, configuration, untrusted input, neighbouring threads, the rules routed to it | what to keep true when editing that path |
 | `flows.md` | derived | end-to-end chains, page → component → call → script, with a reverse index | everything a change touches downstream |
 | `security.md` | derived | untrusted input reaching a shell, SQL text or eval, each with its path, and what the pass cannot see | a security review; before exposing an entry point |
+| `design.md` | planned | when a plan exists: the hypothetical design, objective first, every item's status and its verdict against the code | keep work on the objective; see what is not built yet |
 | `reachability.md` | derived | the functions no entry point reaches, each with why | before calling anything dead |
 | `configuration.md` | derived | the environment variables the code reads, on which threads, and which are declared nowhere | before deploying |
 | `system_spec.md` | derived + stated | the tools the project is built on, by role; the modules that wrap them; policies about them | use the existing tools and wrappers |
@@ -311,6 +363,7 @@ read from the code, regenerated at will; **stated** = a person's decision
 | `manual_seeds.json` | stated | entry points you named | `seeds`, by hand |
 | `thread-skills/` | drafted → ratified | per-thread skills with their freshness stamp | `skills`, the app, MCP |
 | `skills.json` | stated | which generic skills are on, and what the hooks send | `direction`, the app |
+| `plan.json` | planned | the hypothetical plan: objective, processes, stack, boundaries, primary threads, rules, questions, changelog (replaces `system-plan.json`, which is read and converted) | `plan`, the Plan panel, MCP (proposals) |
 | `investigations/` | stated | investigation boards: pins, the question, notes | the app |
 | `observations.json` | observed | trace-run results per call site | the app's Trace / Observe |
 | `models.json` | stated | which model — or local Ollama — runs which kind of work | the app's Models panel |

@@ -379,6 +379,10 @@ export interface VibegraphMcpContext {
   editCheckText(before: unknown[]): Promise<string | null>;
   /** 2026-09-29 - untrusted input reaching shell / SQL text / eval (src/server/dataflow.ts). */
   dataflow(): { text: string; error?: string };
+  /** 2026-09-30 - the HYPOTHETICAL plan (.vibegraph/plan.json) and how the code measures up; and a model's
+   *  edits to it, which are always proposals (src/server/plan_server.ts). */
+  plan(): { text: string; error?: string };
+  planEdit(ops: unknown): { text: string; error?: string };
   /** 2026-09-29 - generic direction on demand: the list, or one skill's rules with why and binding. */
   direction(skill: string | null): { text: string; error?: string };
   /** 2026-09-29 - a saved investigation rendered as its handoff, or the list (src/server/investigations.ts). */

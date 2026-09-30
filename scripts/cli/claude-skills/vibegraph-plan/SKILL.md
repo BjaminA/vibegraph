@@ -1,35 +1,41 @@
 ---
 name: vibegraph-plan
-description: Plan a change in a project VibeGraph has analysed (a .vibegraph/ folder, or the vibegraph-knowledge hooks are installed) — which threads own the task, in what order to touch them, which stated rules and tools constrain it, and what closing bar a review will hold it to. Use before a multi-file feature, a refactor, or any change whose blast radius is unclear.
+description: Plan work in a project VibeGraph knows (a .vibegraph/ folder, or its hooks are installed) — map a change onto the threads that own it, or design a new project or feature as a HYPOTHETICAL plan (objective, processes, stack, data boundaries, primary threads, rules) kept apart from the code and checked against it as it is built. Use before a multi-file change, a new feature, or a greenfield design.
 ---
 
 # Planning with VibeGraph
 
-The hooks have already given you the contracts, rules and skills of the
-threads your prompt named. This skill is for what they do not do: map a task
-that is not yet pinned to code. Every command is deterministic, spends no
-tokens, and is run as `vibegraph-knowledge …` (or `npx --yes vibegraph-knowledge@latest …`).
+Deterministic, no tokens: `vibegraph-knowledge …` (or `npx --yes vibegraph-knowledge@latest …`).
 
-1. **Map the task.** `vibegraph-knowledge export --task "<the task, naming the
-   files or functions you expect it to touch>"`, then read
-   `.vibegraph/knowledge/plan.md`: the owning threads, dependencies first, each
-   packet's files, its escalation surface (what lies outside the plan) and its
-   closing bar. If it says the task names no code, find the names in
-   `threads/INDEX.md` and run it again — do not plan from an empty plan.
-2. **Read the owners, not the whole tree.** `vibegraph-knowledge brief <entry
-   id>` gives one thread's contract and the verbatim source of its primary
-   functions. The contract's "Leaves the project through", "Round trips inside loops" and
-   "Cross-thread" lines are the blast radius.
-3. **Respect what is stated.** `constraints.md` (rules, with reasons) and
-   `system_spec.md` (the stack: build with the tools already there; a stack
-   policy says which are forbidden or preferred). Plan around a rule; if the
-   task needs one broken, say so to the user before starting.
-4. **Place it.** `architecture.md` says which process and deploy group each
-   thread runs in; a change that crosses a group crosses a trust or deploy
-   boundary — plan both sides. `flows.md` shows hops between languages.
-5. **Plan the proof.** `vibegraph-knowledge affected <files>` lists the tests
-   that reach the files you will change; the contract's "Tested by" line says
-   how directly. A packet no test reaches needs a test in the plan.
+## A change to existing code
 
-Never conclude code is unused or safe to delete from its absence in these
-files: `vibegraph-knowledge coverage <file>` first.
+1. `vibegraph-knowledge export --task "<task, naming files or functions>"`,
+   then read `.vibegraph/knowledge/plan.md`: the owning threads, dependencies
+   first, each packet's files and closing bar. If it says the task names no
+   code, find names in `threads/INDEX.md` and run it again.
+2. `vibegraph-knowledge brief <entry id>` per owner. Its "Leaves the project
+   through", "Round trips inside loops" and "Cross-thread" lines are the
+   blast radius.
+3. Keep `constraints.md` and `system_spec.md` true; `architecture.md` says
+   which deploy group each thread runs in. `vibegraph-knowledge affected
+   <files>` names the tests to run.
+
+## A design: the hypothetical plan
+
+A plan (`.vibegraph/plan.json`) is NOT the code: small on purpose (capped),
+every item PROPOSED until a person agrees.
+
+- Read it: `vibegraph-knowledge plan show` (the hooks also send it).
+- Propose with the `vibegraph_plan_edit` MCP tool, or
+  `vibegraph-knowledge plan edit --as agent '<op>'`. Sections: processes
+  (`at` = where the code will live), stack, boundaries (`carries` = key
+  names), threads (PRIMARY steps only), policies (text + why + optional
+  check), open (questions). Each process and thread says which part of the
+  objective it `serves`; if nothing does, it does not belong.
+- Never agree, promote or close: the person does (`plan agree`, `plan
+  promote`, the Plan panel).
+- While building, `vibegraph-knowledge plan check` shows each item realised,
+  drifted or not built. Report drift; propose a plan change rather than
+  quietly building something else. A planned rule is advice until promoted.
+
+Never conclude code is unused from silence: `vibegraph-knowledge coverage <file>`.

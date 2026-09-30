@@ -158,7 +158,7 @@ export function edgeLabel(e: ArchEdgeRecord): string {
 
 export interface ArchLayout { nodes: Node[]; edges: Edge[]; hiddenTools: string[]; hiddenClusters?: string[] }
 
-export function buildArchLayout(full: ArchModelRecord, lens: ArchLens, opts: { collapseTools?: boolean } = {}): ArchLayout {
+export function buildArchLayout(full: ArchModelRecord, lens: ArchLens, opts: { collapseTools?: boolean; keepPlannedTools?: boolean } = {}): ArchLayout {
   const sel = lensSelection(full, lens, opts);
   const { model, hiddenTools, hiddenClusters, hierarchy } = sel;
   const nodesKept = sel.nodes;

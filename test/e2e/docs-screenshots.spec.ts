@@ -139,6 +139,29 @@ test.describe("docs screenshots — journeys", () => {
   });
 });
 
+test.describe("docs screenshots — the plan", () => {
+  test.skip(!SHOTS || !FIX.includes("plan_demo"), "VG_DOCS_SHOTS=1 VG_FIXTURE=test/fixtures/plan/plan_demo");
+  test.setTimeout(120_000);
+  test("the Plan panel, and the plan on the map", async ({ page }) => {
+    await boot(page);
+    await page.click("[data-plan-toggle]");
+    await expect(page.locator("[data-plan-counts]")).toBeVisible({ timeout: 15_000 });
+    await page.mouse.move(2, 2);
+    await page.waitForTimeout(500);
+    await shot(page, "16-plan-panel.png");
+    await page.click("[data-plan-toggle]");
+    await openMap(page, "overview");
+    await page.locator('[data-plan-view="plan"]').click();
+    await page.mouse.move(2, 2);
+    await page.waitForTimeout(1200);
+    await shot(page, "17-plan-map.png");
+    await page.locator('[data-plan-view="overlay"]').click();
+    await page.mouse.move(2, 2);
+    await page.waitForTimeout(1200);
+    await shot(page, "18-plan-overlay.png");
+  });
+});
+
 test.describe("docs screenshots — Agent Manager", () => {
   test.skip(!SHOTS || !FIX.includes("hooked_demo"), "VG_DOCS_SHOTS=1 VG_FIXTURE=test/fixtures/hooked_run/hooked_demo (+ the stub claude)");
   test.setTimeout(120_000);

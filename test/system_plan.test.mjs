@@ -3,7 +3,8 @@
 // validate: shape-pins the plan (version / non-empty description / kind enum /
 //   unique ids / groundedIn string|null) and produces honest reasons.
 // persist: refuses invalid plans, stamps ratifiedAt, writes
-//   .vibegraph/system-plan.json under the given root.
+//   .vibegraph/plan.json under the given root (system-plan.json before
+//   2026-09-30; the SystemPlan is now a view over the plan — test:plan).
 // load: missing → null; corrupt JSON or invalid shape → null + ignored
 //   (never half-loaded); valid → the plan.
 //

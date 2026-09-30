@@ -36,6 +36,7 @@ import { ModelTiersPanel } from "./ModelTiersPanel";
 // M-STACK.3 — what the project is built on, and the policies stated about it.
 import { StackPanel } from "./StackPanel";
 import { InvestigationPanel } from "./InvestigationPanel";
+import { PlanPanel } from "./PlanPanel";
 // M-SKILLS.2 — generic direction skills, enabled per project.
 import { SkillsPanel } from "./SkillsPanel";
 import type { SkillsConfigPayload } from "../shared/generic_skills_wire";
@@ -287,6 +288,7 @@ function Graph() {
   const [observations, setObservations] = useState<import("../shared/protocol").ObservationStoreRecord | null>(null);
   const [stackOpen, setStackOpen] = useState(false);
   const [investigateOpen, setInvestigateOpen] = useState(false);
+  const [planOpen, setPlanOpen] = useState(false);
   const openInvestigation = useCallback(() => setInvestigateOpen(true), []);
   // M-ZOOM - the thread the reader zoomed OUT of, highlighted on arrival.
   const [zoomFocusEntry, setZoomFocusEntry] = useState<string | null>(null);
@@ -1376,6 +1378,8 @@ function Graph() {
         onToggleStack={() => { setStackOpen((v) => !v); setModelsOpen(false); }}
         investigateOpen={investigateOpen}
         onToggleInvestigate={() => { setInvestigateOpen((v) => !v); setStackOpen(false); }}
+        planOpen={planOpen}
+        onTogglePlan={() => { setPlanOpen((v) => !v); setInvestigateOpen(false); setStackOpen(false); }}
         onToggleFilters={() => { setFiltersOpen((v) => !v); setAnalysisOpen(false); }}
         onToggleAnalysis={() => { setAnalysisOpen((v) => !v); setFiltersOpen(false); }}
         onToggleCode={handleToggleCode}
@@ -1878,6 +1882,8 @@ function Graph() {
       {isDirectoryMode && (
         <InvestigationPanel open={investigateOpen} onOpen={openInvestigation} onClose={() => setInvestigateOpen(false)} />
       )}
+      {/* 2026-09-30 — the hypothetical plan (.vibegraph/plan.json). */}
+      {isDirectoryMode && <PlanPanel open={planOpen} onClose={() => setPlanOpen(false)} />}
 
       {/* ── M-AGENT2 — the Agent Manager run board ── */}
       <WorkRunPanel

@@ -67,6 +67,11 @@ enforces it. `vibegraph-knowledge constraints list` shows what is stated.
   `/vibegraph-review` say which knowledge file and command to open (installed
   by `init --skill`). `vibegraph-knowledge dataflow` lists where untrusted
   input reaches a shell, SQL text or eval.
+- **Designing something new:** `vibegraph-knowledge plan init "<objective>"`
+  starts a HYPOTHETICAL plan (`.vibegraph/plan.json`) — processes, stack,
+  data boundaries, primary threads, rules — kept apart from the code and
+  checked against it with `plan check`. You propose (`vibegraph_plan_edit`);
+  the user agrees. `/vibegraph-plan` has the details.
 - **Before finishing:** `vibegraph-knowledge check --uncommitted` — exit 0
   every rule passed; 1 a rule is VIOLATED (the offender is named as
   `file:node`); 2 a rule could not be verified, which is **not** a pass.

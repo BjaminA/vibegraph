@@ -266,7 +266,52 @@ Work on a clean git tree and review with `git diff`.
 All of this is what the node commands export for a plain Claude session —
 see [CLI.md](CLI.md).
 
-## 8. Agents
+## 8. Planning — a hypothetical project beside the real one
+
+**Plan** (toolbar, the drafting-compass icon) opens the plan: a design for
+something that does not exist yet, kept in `.vibegraph/plan.json` and never
+mixed into what VibeGraph derives from the code. With no plan yet, write the
+objective in one line and **Start the plan**. Then ask Claude — the chat, or a
+Claude Code session with the hooks — to propose processes, a stack, data
+boundaries, primary threads and rules. Its proposals arrive in the panel
+marked **PROPOSED**; you **Agree** or **Drop** each one. Claude cannot agree
+to anything, and an agreed item it changes goes back to proposed.
+
+The panel shows, for every item:
+
+- **its status:** PROPOSED, agreed, or promoted;
+- **its verdict against the code**, recomputed each time the code changes:
+  - **realised**: the code has it;
+  - **drifted**: the code has something different, and the panel says what;
+  - **not built**: nothing yet;
+  - **unanchored**: give the process an `at` path so it can be checked.
+
+Planned threads show their primary chain. A realised one has a **Thread**
+button that opens the real thread it matched. A planned rule is checked as
+advice and blocks nothing until you **Promote** it into the stated rules. The
+plan is kept small on purpose (hard caps on every section), and every process
+and thread must say which part of the objective it serves. **Close the plan**
+when it is done: it stays on disk and stops being sent to sessions.
+
+![The Plan panel: objective, statuses, verdicts, Agree / Drop / Promote](../screenshots/16-plan-panel.png)
+
+On the **architecture map**, a **Real · Plan · Overlay** switch (top right)
+appears while a plan exists:
+
+- **Plan** draws the plan alone, as dashed "planned" boxes.
+- **Overlay** draws the real map plus the planned items the code does not
+  have yet. A realised item is not drawn twice.
+
+| Plan | Overlay |
+|---|---|
+| ![The plan alone, dashed](../screenshots/17-plan-map.png) | ![The real map plus what is not built yet](../screenshots/18-plan-overlay.png) |
+
+The greenfield flow (describe → architecture → roadmap) writes into the same
+plan: an architecture you accept becomes agreed processes and boundaries.
+The command line has all of this too (`vibegraph-knowledge plan …`, see
+[CLI.md](CLI.md)).
+
+## 9. Agents
 
 The **Agent Manager** (toolbar) opens on **Claude Code + hooks**, the
 arrangement the head-to-heads proved: one Claude Code session with
@@ -312,7 +357,7 @@ unchanged — it turns a task into work on threads:
 **Models** (toolbar) sets which model does which kind of work — including a
 local Ollama model for routine work.
 
-## 9. Driving it from your own Claude Code session
+## 10. Driving it from your own Claude Code session
 
 The same tools the chat uses are served over MCP:
 
@@ -324,7 +369,7 @@ Then, in that session: *"trace the thread for `ingest_route`"*, *"what
 is the blast radius of changing `normalize`?"*, *"state a constraint that…"*,
 *"plan the work to…"*. Edits it makes go through the chokepoint too.
 
-## 10. A good first session on your own code
+## 11. A good first session on your own code
 
 1. `vibegraph-knowledge view your-project`, open the map, switch to **Bird's-eye**.
 2. **Propose groups**, read what it cites, **Ratify** or **Modify**.

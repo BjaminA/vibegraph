@@ -1,0 +1,38 @@
+{
+  "version": "1",
+  "revision": 3,
+  "objective": "Operators see every pump's wear forecast within a minute of a reading",
+  "processes": [
+    { "id": "api", "kind": "backend", "label": "Ingest API", "serves": "within a minute of a reading", "at": "api/", "status": "agreed" },
+    { "id": "forecaster", "kind": "backend", "label": "Forecaster", "serves": "wear forecast", "at": "worker/", "status": "agreed" },
+    { "id": "dashboard", "kind": "frontend", "label": "Dashboard", "serves": "operators see", "at": "web/", "status": "proposed" }
+  ],
+  "stack": [
+    { "tool": "flask", "role": "web-framework", "why": "the team knows it", "status": "agreed" },
+    { "tool": "sqlite3", "role": "db", "status": "agreed" },
+    { "tool": "postgres", "role": "db", "why": "several writers later", "status": "proposed" },
+    { "tool": "redis", "role": "cache", "status": "proposed" }
+  ],
+  "boundaries": [
+    { "id": "b1", "from": "api", "to": "sqlite3", "protocol": "SQL", "carries": ["pump_id", "reading"], "status": "agreed" },
+    { "id": "b2", "from": "forecaster", "to": "sqlite3", "protocol": "SQL", "status": "agreed" },
+    { "id": "b3", "from": "dashboard", "to": "api", "protocol": "HTTP", "status": "proposed" }
+  ],
+  "threads": [
+    { "id": "POST /readings", "entry": "route", "process": "api", "serves": "within a minute of a reading", "primary": ["validate", "b1:insert", "insert_reading"], "status": "agreed" },
+    { "id": "forecast_all", "entry": "cli", "process": "forecaster", "serves": "wear forecast", "primary": ["insert_reading", "publish_forecast"], "status": "agreed" },
+    { "id": "GET /forecasts", "entry": "route", "process": "api", "serves": "operators see", "primary": ["read_forecasts"], "status": "proposed" }
+  ],
+  "policies": [
+    { "id": "p1", "text": "Only the API writes readings", "why": "one place validates units", "check": { "rule": "callers-only", "target": "insert_reading", "files": ["api/app.py"] }, "files": ["api/", "worker/"], "status": "agreed" },
+    { "id": "p2", "text": "A forecast names the model version that made it", "why": "operators must know which model to distrust", "status": "proposed" }
+  ],
+  "open": [
+    { "id": "q1", "text": "Batch forecasts per minute, or one per reading?" }
+  ],
+  "changelog": [
+    { "rev": 1, "at": "2026-09-30T09:00:00.000Z", "by": "human", "change": "objective: \"Operators see every pump's wear forecast within a minute of a reading\"" },
+    { "rev": 2, "at": "2026-09-30T09:05:00.000Z", "by": "agent", "change": "add processes api" },
+    { "rev": 3, "at": "2026-09-30T09:06:00.000Z", "by": "human", "change": "agree processes api" }
+  ]
+}

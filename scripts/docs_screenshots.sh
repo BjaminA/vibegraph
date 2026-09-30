@@ -23,6 +23,7 @@ copy examples/fleet-telemetry fx
 copy test/fixtures/journeys/journeys_demo jx
 copy test/fixtures/hooked_run/hooked_demo hx
 copy test/fixtures/dataflow/taint_demo dx
+copy test/fixtures/plan/plan_demo px
 
 shots() { # <fixture dir> <port> [extra env...]
   local fix="$1" port="$2"; shift 2
@@ -32,6 +33,7 @@ shots() { # <fixture dir> <port> [extra env...]
 
 shots "$TMP/fx/fleet-telemetry" 4310
 shots "$TMP/jx/journeys_demo" 4311
+shots "$TMP/px/plan_demo" 4314
 shots "$TMP/hx/hooked_demo" 4312 VG_AGENT_ENGINE=hooked \
   VG_CLAUDE_BIN="node $ROOT/test/fixtures/hooked_run/fake_claude_hooked.mjs"
 
