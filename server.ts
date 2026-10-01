@@ -89,7 +89,9 @@ import { LOCAL_CHAT_MODEL_ID } from "./src/shared/chat_models";
 import { arraylikeParams, arraylikeDeclineReason } from "./src/server/run/arg_shape";
 import { draftInsertion } from "./src/server/compose_draft";
 import { validateSystemPlan, loadSystemPlan, persistSystemPlan } from "./src/server/system_plan";
-import { planMtime } from "./src/server/plan_store";
+import { planMtime, loadPlan } from "./src/server/plan_store";
+import { reconcilePlan } from "./src/server/plan_reconcile";
+import { seedArchFromPlan } from "./src/server/plan_arch_seed";
 import { handlePlanMessage, planToolText, planToolEdit } from "./src/server/plan_server";
 import { handleSoftwareMessage, softwareToolText } from "./src/server/software_server";
 import { draftSystemPlan } from "./src/server/system_draft";
@@ -380,6 +382,22 @@ function archDecide(decision: "ratify" | "reject"): { ok: boolean; error?: strin
   broadcastProjectUpdate();
   refreshArchDocs();
   return { ok: true };
+}
+
+/** 2026-10-01 — groups read off the plan, stored as a PENDING proposal
+ *  (src/server/plan_arch_seed.ts; zero tokens). Decided by archDecide. */
+function archSeedFromPlan(force: boolean): { ok: boolean; error?: string; lines?: string[] } {
+  if (!isDirectory || !latestArchDerived) return { ok: false, error: "the architecture layer needs a project directory and a derived map" };
+  const plan = loadPlan(inputPath);
+  if (!plan) return { ok: false, error: "no plan (.vibegraph/plan.json) to seed from" };
+  const rec = reconcilePlan(plan, planEnv() as any, latestStack, inputPath);
+  const r = seedArchFromPlan(plan, rec, latestArchDerived, loadArchStore(inputPath), { force, project: path.basename(inputPath) });
+  if (r.error || !r.store) return { ok: false, error: r.error };
+  saveArchStore(inputPath, r.store);
+  reapplyArchStore();
+  broadcastProjectUpdate();
+  refreshArchDocs();
+  return { ok: true, lines: r.lines };
 }
 
 function rebuildStack(relFiles: typeof projectParse): void {
@@ -8171,6 +8189,9 @@ function setupWebSocket() {
             files: relativeProjectFiles() as any,
             threadLabel: (ep: string) => (latestEntryPoints as any[]).find((e) => e.id === ep)?.label ?? null,
           }) }));
+        } else if (msg.type === "arch-seed-plan") {
+          // 2026-10-01 — a PROPOSAL read off the plan; the person decides it with ratify / reject.
+          ws.send(JSON.stringify({ type: "arch-proposal", payload: { action: "seed-plan", ...archSeedFromPlan(msg.payload?.force === true) } }));
         } else if (msg.type === "arch-propose" || msg.type === "arch-ratify" || msg.type === "arch-reject") {
           // M-ARCH.4 — propose spends tokens and stores a PENDING proposal;
           // ratify / reject are the human's. Reply: arch-proposal.

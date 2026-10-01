@@ -103,7 +103,7 @@ interface Props {
   architecture?: ArchModelRecord | null;
   /** M-ARCH.4 — the proposal round trip, and the three actions. */
   archPropose?: { busy: boolean; error: string | null; working?: "propose" | "revise" | null };
-  onArchAction?: (action: "propose" | "ratify" | "reject", guidance?: string) => void;
+  onArchAction?: (action: "propose" | "ratify" | "reject" | "seed-plan", guidance?: string) => void;
 }
 
 /** Fit padding: the top clears the toolbar band and the mode / lens bar that
@@ -177,13 +177,23 @@ export function SystemView({
   const planState = usePlanState();
   const [planViewRaw, setPlanView] = useState<PlanView>("real");
   const planView: PlanView = planState.plan ? planViewRaw : "real";
+  // Which boxes show their planned threads (the "N threads" chip toggles it).
+  const [planOpen, setPlanOpen] = useState<ReadonlySet<string>>(new Set());
+  const onTogglePlanFlows = React.useCallback((id: string) => {
+    setPlanOpen((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  }, []);
+  const planMapModel = useMemo(() => {
+    if (mode !== "map" || focusEntryPointId || planView === "real" || !planState.plan) return null;
+    return planView === "plan" || !architecture
+      ? planModel(planState.plan, planState.reconcile, { expanded: planOpen })
+      : overlayModel(architecture, planState.plan, planState.reconcile, { expanded: planOpen });
+  }, [mode, focusEntryPointId, planView, planState, architecture, planOpen]);
   const base = useMemo((): { nodes: Node[]; edges: Edge[]; hiddenTools?: string[]; hiddenClusters?: string[] } => {
-    if (mode === "map" && !focusEntryPointId && planView !== "real" && planState.plan) {
+    if (planMapModel) {
       // Every edge kept (the Payloads lens), so a boundary between two planned
       // processes is drawn as well as a call into a planned tool.
-      const model = planView === "plan" || !architecture ? planModel(planState.plan, planState.reconcile) : overlayModel(architecture, planState.plan, planState.reconcile);
-      const laid = buildArchLayout(model, "payloads", { keepPlannedTools: true });
-      return { ...laid, edges: ghostPlannedEdges(laid.edges, model) };
+      const laid = buildArchLayout(planMapModel, "payloads", { keepPlannedTools: true });
+      return { ...laid, edges: ghostPlannedEdges(laid.edges, planMapModel) };
     }
     if (mode === "map" && !focusEntryPointId) {
       // 2026-09-29 — the Journeys lens draws pages and the links between
@@ -212,7 +222,7 @@ export function SystemView({
     // the whole view then.
     if (system || plan) return buildSystemLayout(system ?? { subsystems: [], edges: [] }, plan, cardHeights ?? undefined);
     return { nodes: [], edges: [] };
-  }, [mode, system, plan, threads, entryPoints, crossings, focusEntryPointId, architecture, lens, cardHeights, insight, planView, planState]);
+  }, [mode, system, plan, threads, entryPoints, crossings, focusEntryPointId, architecture, lens, cardHeights, insight, planMapModel]);
 
   // Inject the drill-down callback into each node's data (react-flow custom
   // nodes receive only `data`): subsystem endpoint rows AND thread nodes both
@@ -220,8 +230,8 @@ export function SystemView({
   const trace = useArchTrace(mode === "map" ? architecture : null, base);
   const decorated = mode === "map" ? trace.decorate(base.nodes, base.edges) : base;
   const nodes = useMemo(
-    () => decorated.nodes.map((n) => ({ ...n, data: { ...n.data, onOpenThread, stack } })),
-    [decorated.nodes, onOpenThread, stack],
+    () => decorated.nodes.map((n) => ({ ...n, data: { ...n.data, onOpenThread, stack, onTogglePlanFlows } })),
+    [decorated.nodes, onOpenThread, stack, onTogglePlanFlows],
   );
   const edges = decorated.edges;
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -364,7 +374,8 @@ export function SystemView({
       </button>
       {mode === "map" && <ArchLensBar lens={lens} onLens={(l) => { setLens(l); setArchSelected(null); }} onStory={trace.beats.length ? trace.actions.story : undefined} />}
       {mode === "map" && architecture && <ArchLegend model={architecture} hiddenTools={base.hiddenTools ?? []} hiddenClusters={base.hiddenClusters ?? []} lens={lens === "config" ? "tools" : lens === "journeys" ? "flows" : lens} fold={!!archSelected} />}
-      {mode === "map" && planState.plan && <PlanViewToggle view={planView} onView={setPlanView} revision={planState.plan.revision} />}
+      {mode === "map" && planState.plan && <PlanViewToggle view={planView} onView={setPlanView} revision={planState.plan.revision} unplaced={planMapModel?.planUnplaced ?? null}
+        onSeed={architecture && !architecture.proposal && onArchAction ? () => onArchAction("seed-plan") : undefined} />}
       {mode === "map" && <ArchTraceBar mode={trace.mode} beats={trace.beats} labelOf={labelOf} actions={trace.actions} />}
       {mode === "map" && architecture && (
         <ArchProposalBar model={architecture} state={archPropose ?? { busy: false, error: null }} onAction={onArchAction} />

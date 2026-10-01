@@ -666,8 +666,19 @@ reasons*.
 vibegraph-knowledge architecture [<root>] [--out <dir>] [--archify]
 vibegraph-knowledge architecture [<root>] --propose            # spends tokens
 vibegraph-knowledge architecture [<root>] --modify "<what should change>"   # spends tokens
+vibegraph-knowledge architecture [<root>] --seed-plan [--force] # zero tokens: groups read off the plan
 vibegraph-knowledge architecture [<root>] --ratify | --reject
 ```
+
+`--seed-plan` proposes the same kind of groups without a model, read off
+`.vibegraph/plan.json`: one `process` group per planned process the code has
+realised (placed on its real box), and two `trust` zones — the project, and
+the services the plan names (tools with a db / cache / queue / model-api /
+http-client / cloud / platform role, processes of kind db / cache /
+external_http). What is not built yet has no box to wrap and is listed as not
+seeded, with the reason. It is stored pending like a model's draft and
+decided with `--ratify` / `--reject`; the GUI's **Seed groups** button (on the
+Plan / Overlay switch) does the same.
 
 Without a flag: writes `architecture.md`, `architecture.vibegraph.json`,
 `architecture.html` and `architecture.json` into

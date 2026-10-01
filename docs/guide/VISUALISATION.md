@@ -306,8 +306,25 @@ On the **architecture map**, a **Real · Plan · Overlay** switch (top right)
 appears while a plan exists:
 
 - **Plan** draws the plan alone, as dashed "planned" boxes.
-- **Overlay** draws the real map plus the planned items the code does not
-  have yet. A realised item is not drawn twice.
+- **Overlay** draws the real map with the plan on it. A realised item is its
+  real box, chipped **planned ✓**; only what the code does not have yet is a
+  dashed box. Nothing is drawn twice, and nothing is left out.
+
+What the plan says is on the map too, not only its boxes:
+
+- A process card's **N threads** chip opens its planned threads as dashed
+  step chains, coloured by plan check (realised / drifted / not built); a
+  step plan check did not find is struck through.
+- **N rules** and **N open** chips sit on the process, tool or boundary a
+  rule or question is `about` (a rule without `about` lands on the one
+  process whose files it names).
+- A boundary reads `SQL · 3 keys` — the keys on hover — and is drawn in the
+  warning colour when it crosses two stated **trust zones**.
+- What has no place on the map (project-wide rules and questions, a boundary
+  whose end is not drawn) is listed under the switch, never dropped.
+- **Seed groups** proposes deployment and trust groups for
+  `.vibegraph/architecture.json`, read off the plan — no model, no tokens,
+  pending until you ratify it.
 
 | Plan | Overlay |
 |---|---|

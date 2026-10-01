@@ -129,10 +129,13 @@ test.describe("the hypothetical plan", () => {
     await page.screenshot({ path: join(REVIEW, "2-map-plan.png") });
 
     await toggle.locator('[data-plan-view="overlay"]').click();
-    // Only what the code does not have yet: dashboard (not built), postgres
-    // (drifted), redis (not built). The realised api, forecaster, flask and
-    // sqlite3 are the real boxes beside them.
-    await expect(page.locator('[data-arch-source="planned"]')).toHaveCount(3, { timeout: 10_000 });
+    // What the code does not have yet: dashboard (not built), postgres
+    // (drifted), redis (not built). The realised api, forecaster and sqlite3
+    // are their real boxes, chipped "planned ✓". flask is realised too, but
+    // the real map draws no box for a web framework, so it is its own card,
+    // chipped "planned ✓" (2026-10-01: it used to be drawn NOWHERE).
+    await expect(page.locator('[data-arch-source="planned"]')).toHaveCount(4, { timeout: 10_000 });
+    await expect(page.locator('[data-arch-id="plan:tool:flask"] [data-arch-plan-chip="planned"]')).toHaveText("planned ✓");
     await expect(page.locator('[data-arch-id="plan:api"]')).toHaveCount(0);
     expect(await page.locator('[data-arch-source="derived"]').count()).toBeGreaterThan(0);
     await page.mouse.move(2, 2);

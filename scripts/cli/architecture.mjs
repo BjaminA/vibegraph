@@ -24,6 +24,9 @@ import { archModelForEnvelope } from "../../src/server/arch_envelope.ts";
 import { applyArchStore, loadArchStore, ratifyProposal, rejectProposal, saveArchStore, proposalGate } from "../../src/server/arch_store.ts";
 import { buildProposePrompt, docExcerpts, parseProposal } from "../../src/server/arch_propose.ts";
 import { readInfraManifests } from "../../src/server/infra_manifests.ts";
+import { loadPlan } from "../../src/server/plan_store.ts";
+import { reconcilePlan } from "../../src/server/plan_reconcile.ts";
+import { seedArchFromPlan } from "../../src/server/plan_arch_seed.ts";
 import { spawnClassifier } from "./classify.mjs";
 import { repositoryFor, writeArchArtifacts } from "../arch_artifacts.mjs";
 import { deriveThreadCalls } from "../../src/webview/system/threadInteraction.ts";
@@ -76,6 +79,15 @@ export function runArchitecture({ root, out, envelope, pipeline, commit, tool, a
     if (p.narrative) lines.push(`  ${p.narrative}`);
     for (const r of p.refused) lines.push(`  refused ${r.item}: ${r.reason}`);
     lines.push("decide it: --ratify makes it stated, --reject drops it");
+  } else if (action === "seed-plan") {
+    // 2026-10-01 — groups read off the plan, as a PENDING proposal (zero tokens).
+    const plan = loadPlan(absRoot);
+    if (!plan) return { lines, messages: [...messages, "no plan (.vibegraph/plan.json) to seed from"], exitCode: 1 };
+    const rec = reconcilePlan(plan, envl, stack, absRoot);
+    const r = seedArchFromPlan(plan, rec, derived, loadArchStore(absRoot), { force, project: basename(absRoot) });
+    if (r.error) return { lines, messages: [...messages, r.error], exitCode: 1 };
+    saveArchStore(absRoot, r.store);
+    lines.push(...r.lines);
   } else if (action === "ratify" || action === "reject") {
     const store = loadArchStore(absRoot);
     if (!store.proposal) {

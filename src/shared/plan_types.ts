@@ -100,9 +100,12 @@ export interface PlanPolicy {
   status: PlanPolicyStatus;
   /** set when promoted: the constraints.json id it became */
   constraintId?: string;
+  /** 2026-10-01 — the planned item it concerns (a process, thread, boundary
+   *  or tool id): where the map shows it. Absent = the whole project. */
+  about?: string;
 }
 
-export interface PlanQuestion { id: string; text: string }
+export interface PlanQuestion { id: string; text: string; /** as PlanPolicy.about */ about?: string }
 
 export interface PlanChange { rev: number; at: string; by: PlanActor; change: string }
 
@@ -151,6 +154,11 @@ export interface PlanFinding {
   detail: string;
   /** a real entry point the planned thread matched, to open it */
   entryPointId?: string;
+  /** a drifted thread: the primary steps not found on it (the map marks them) */
+  missing?: string[];
+  /** a realised process: the entry points in its files (≤ 50) — how the map
+   *  finds the real box the planned process became */
+  entryPoints?: string[];
 }
 
 export interface PlanReconcile {

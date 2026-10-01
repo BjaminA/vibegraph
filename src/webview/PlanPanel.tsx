@@ -11,9 +11,10 @@
 
 import React, { useState } from "react";
 import { DraftingCompass, X, Check, Trash2, ArrowUpRight, ExternalLink } from "lucide-react";
-import type { Plan, PlanFinding, PlanSection, PlanVerdict } from "../shared/plan_types";
+import type { Plan, PlanFinding, PlanSection } from "../shared/plan_types";
 import { planItemId } from "../shared/plan_types";
 import { belowToolbar, heightBelowToolbar } from "./TopToolbar";
+import { VERDICT_TONE, verdictTone } from "./planTone";
 import { usePlanState, sendPlanOp, sendPlanOps, promotePlanRule, useSoftwareState, sendSoftware } from "./usePlanState";
 
 /** How an agent's proposed objective is spelled as an open question (plan_ops.ts). */
@@ -29,12 +30,6 @@ const field: React.CSSProperties = {
   border: "1px solid var(--border-edge)", borderRadius: 4, padding: 8, fontFamily: "var(--font-ui)", fontSize: "var(--fs-12)", resize: "vertical",
 };
 
-const VERDICT_TONE: Record<PlanVerdict, string> = {
-  realised: "var(--accent-thread)", pass: "var(--accent-thread)",
-  drifted: "var(--accent-warning)", unverifiable: "var(--accent-warning)", unverified: "var(--text-muted)",
-  "not-built": "var(--text-muted)", unanchored: "var(--text-muted)", prose: "var(--text-muted)",
-  violated: "var(--accent-error)",
-};
 
 function Chip({ text, tone, title, dashed }: { text: string; tone: string; title?: string; dashed?: boolean }) {
   return (
@@ -241,7 +236,7 @@ export function PlanPanel({ open, onClose }: { open: boolean; onClose: () => voi
           </div>
           {reconcile && (
             <div data-plan-counts style={{ display: "flex", gap: 8, flexWrap: "wrap" }} title={reconcile.limits.join("\n")}>
-              {Object.entries(reconcile.counts).map(([k, n]) => <Chip key={k} text={`${n} ${k}`} tone={VERDICT_TONE[k as PlanVerdict] ?? "var(--text-muted)"} />)}
+              {Object.entries(reconcile.counts).map(([k, n]) => <Chip key={k} text={`${n} ${k}`} tone={verdictTone(k)} />)}
               <span style={small}>plan vs code — hover for what it cannot see</span>
             </div>
           )}

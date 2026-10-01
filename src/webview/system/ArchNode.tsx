@@ -6,10 +6,12 @@
 import React, { useState } from "react";
 import { Handle, Position } from "@xyflow/react";
 import { Split, Monitor } from "lucide-react";
-import type { ArchNodeRecord } from "../../shared/protocol";
+import type { ArchNodeRecord, PlanFlowRecord } from "../../shared/protocol";
 import { archVisual } from "./arch_visual";
+import { planChipTexts } from "./archLayout";
+import { verdictTone } from "../planTone";
 
-export function ArchNode({ data, selected }: { data: { node: ArchNodeRecord; dim?: boolean; lit?: boolean }; selected?: boolean }) {
+export function ArchNode({ data, selected }: { data: { node: ArchNodeRecord; dim?: boolean; lit?: boolean; onTogglePlanFlows?: (id: string) => void }; selected?: boolean }) {
   const n = data.node;
   const visual = archVisual(n.category);
   // A dispatcher is the scripts family's accent with its own glyph: the one
@@ -29,6 +31,15 @@ export function ArchNode({ data, selected }: { data: { node: ArchNodeRecord; dim
   if (n.members?.length && n.category !== "config") chips.push({ text: `${n.members.length} tools`, title: `one box for ${n.members.length} tools of this kind; the Tools lens draws each`, tone: "var(--text-muted)" });
   if (n.wrappedBy?.length) chips.push({ text: `via ${n.wrappedBy[0]}${n.wrappedBy.length > 1 ? ` +${n.wrappedBy.length - 1}` : ""}`, title: `wrapped by the project funnel(s) ${n.wrappedBy.join(", ")}`, tone: "var(--text-muted)" });
   const internal = n.internalHops ? Object.entries(n.internalHops).map(([k, v]) => `${v} ${k}`).join(", ") : "";
+  // The plan's chips — texts from archLayout's planChipTexts, so the card's
+  // measured height and the drawn chips never disagree.
+  const planTexts = planChipTexts(n);
+  const planChips: { kind: string; text: string; title: string; tone: string; onClick?: () => void }[] = [];
+  let k = 0;
+  if (n.plannedAs) planChips.push({ kind: "planned", text: planTexts[k++], tone: verdictTone(n.plannedAs.verdict), title: `the plan's ${n.plannedAs.label} (${n.plannedAs.id}) — ${n.plannedAs.verdict}: this box is where the code realises it` });
+  if (n.planFlows?.length) planChips.push({ kind: "threads", text: planTexts[k++], tone: "var(--accent-thread)", title: `${n.planFlowsOpen ? "hide" : "show"} the planned threads: ${n.planFlows.map((f) => `${f.id} (${f.verdict})`).join(", ")}`, onClick: data.onTogglePlanFlows ? () => data.onTogglePlanFlows!(n.id) : undefined });
+  if (n.planRules?.length) planChips.push({ kind: "rules", text: planTexts[k++], tone: "var(--accent-config)", title: n.planRules.join("\n") });
+  if (n.planQuestions?.length) planChips.push({ kind: "open", text: planTexts[k++], tone: "var(--accent-warning)", title: n.planQuestions.join("\n") });
 
   return (
     <div
@@ -78,7 +89,7 @@ export function ArchNode({ data, selected }: { data: { node: ArchNodeRecord; dim
           }} title={n.sublabel}>{n.sublabel}</div>
         </div>
       </div>
-      {(chips.length > 0 || internal) && (
+      {(chips.length > 0 || internal || planChips.length > 0) && (
         <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginTop: 8 }}>
           {chips.map((c) => (
             <span key={c.text} data-arch-chip={c.text} title={c.title} style={{
@@ -96,8 +107,53 @@ export function ArchNode({ data, selected }: { data: { node: ArchNodeRecord; dim
               maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
             }}>{`internal: ${internal}`}</span>
           )}
+          {planChips.map((c) => (
+            <span
+              key={c.text} data-arch-plan-chip={c.kind} title={c.title}
+              role={c.onClick ? "button" : undefined} tabIndex={c.onClick ? 0 : undefined}
+              aria-expanded={c.kind === "threads" ? !!n.planFlowsOpen : undefined}
+              onClick={c.onClick ? (e) => { e.stopPropagation(); c.onClick!(); } : undefined}
+              onKeyDown={c.onClick ? (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); e.stopPropagation(); c.onClick!(); } } : undefined}
+              style={{
+                fontFamily: "var(--font-mono)", fontSize: "var(--fs-11)", color: c.tone,
+                border: `1px ${c.kind === "planned" ? "solid" : "dashed"} color-mix(in oklab, ${c.tone} 45%, transparent)`, borderRadius: 4, padding: "0 4px",
+                cursor: c.onClick ? "pointer" : "default", whiteSpace: "nowrap",
+              }}
+            >{c.text}</span>
+          ))}
         </div>
       )}
+      {n.planFlowsOpen && n.planFlows?.length ? <PlanFlows flows={n.planFlows} /> : null}
+    </div>
+  );
+}
+
+/** A box's planned threads, open: each a title line (id + verdict) and its
+ *  primary steps as a dashed chain; a step plan-check did not find is struck
+ *  through. Heights match archLayout's planFlowsHeight (8 + 38 a thread). */
+function PlanFlows({ flows }: { flows: PlanFlowRecord[] }) {
+  return (
+    <div data-arch-plan-flows style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 4 }}>
+      {flows.map((f) => {
+        const tone = verdictTone(f.verdict);
+        return (
+          <div key={f.id} data-arch-plan-flow={f.id} data-verdict={f.verdict} title={`${f.id} — ${f.verdict}${f.steps.some((s) => s.missing) ? `; not found: ${f.steps.filter((s) => s.missing).map((s) => s.text).join(", ")}` : ""}`}
+            style={{ height: 34, borderLeft: `2px dashed ${tone}`, paddingLeft: 8, boxSizing: "border-box" }}>
+            <div style={{ display: "flex", gap: 8, fontFamily: "var(--font-ui)", fontSize: "var(--fs-11)", lineHeight: "17px", whiteSpace: "nowrap", overflow: "hidden" }}>
+              <span style={{ color: "var(--text-primary)", overflow: "hidden", textOverflow: "ellipsis" }}>{f.id}</span>
+              <span style={{ color: tone, flexShrink: 0 }}>{f.verdict}</span>
+            </div>
+            <div style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-11)", lineHeight: "17px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", color: "var(--text-muted)" }}>
+              {f.steps.map((s, i) => (
+                <React.Fragment key={i}>
+                  {i > 0 && <span style={{ color: tone }}>{" ⇢ "}</span>}
+                  <span data-missing={s.missing ? "true" : undefined} style={{ textDecoration: s.missing ? "line-through" : undefined, color: s.missing ? "var(--accent-warning)" : undefined }}>{s.text}</span>
+                </React.Fragment>
+              ))}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }

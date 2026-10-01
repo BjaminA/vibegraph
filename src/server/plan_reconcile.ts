@@ -70,7 +70,7 @@ export function reconcilePlan(plan: Plan, env: EnvLike, stack: StackIndex, root:
     else if (!m.files.length) add({ section: "processes", id: p.id, verdict: "not-built", detail: `no parsed file ${m.how}` });
     else {
       const eps = env.entryPoints.filter((e) => m.files.some((f) => e.id.startsWith(`${f}:`)));
-      add({ section: "processes", id: p.id, verdict: "realised", detail: `${m.files.length} file(s) ${m.how}${eps.length ? `, ${eps.length} entry point(s)` : ", no entry point yet"}` });
+      add({ section: "processes", id: p.id, verdict: "realised", detail: `${m.files.length} file(s) ${m.how}${eps.length ? `, ${eps.length} entry point(s)` : ", no entry point yet"}`, ...(eps.length ? { entryPoints: eps.slice(0, 50).map((e) => e.id) } : {}) });
     }
   }
 
@@ -155,7 +155,7 @@ export function reconcilePlan(plan: Plan, env: EnvLike, stack: StackIndex, root:
       if (!name || !(qualified.has(name) || labels.some((l) => l.includes(name)))) missing.push(step);
     }
     add(missing.length
-      ? { section: "threads", id: t.id, verdict: "drifted", detail: `entry point ${ep.id} exists; not found on its thread: ${missing.join(", ")}`, entryPointId: ep.id }
+      ? { section: "threads", id: t.id, verdict: "drifted", detail: `entry point ${ep.id} exists; not found on its thread: ${missing.join(", ")}`, entryPointId: ep.id, missing }
       : { section: "threads", id: t.id, verdict: "realised", detail: `entry point ${ep.id}; every primary step found`, entryPointId: ep.id });
   }
 

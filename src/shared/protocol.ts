@@ -731,6 +731,24 @@ export interface ArchNodeRecord {
   /** hub: the scripts its own file names and runs, grouped by directory
    *  relative to it — the allow-list, read from its command hops. */
   dispatches?: Array<{ dir: string; scripts: Array<{ entryPointId: string; file: string }> }>;
+  /** GUI ONLY (src/webview/system/arch_plan.ts — the server never sends
+   *  these): the PLAN drawn onto a box. Its planned threads as step chains
+   *  with their plan-check verdicts, shown when `planFlowsOpen`; the planned
+   *  rules and open questions `about` it; and, on a REAL box, the planned
+   *  item it realises. */
+  planFlows?: PlanFlowRecord[];
+  planFlowsOpen?: boolean;
+  planRules?: string[];
+  planQuestions?: string[];
+  plannedAs?: { id: string; label: string; verdict: string };
+}
+
+/** GUI ONLY — one planned thread on the map. */
+export interface PlanFlowRecord {
+  id: string;
+  verdict: string;
+  steps: Array<{ text: string; missing: boolean }>;
+  entryPointId?: string;
 }
 
 /** M-ARCH.3 — one shape read at one end of an edge. */
@@ -774,6 +792,13 @@ export interface ArchEdgeRecord {
   payloadSummary?: string;
   /** layout only (an edge into a collapsed category box): the model edge ids it merges. */
   members?: string[];
+  /** GUI ONLY (arch_plan.ts): a planned boundary's keys, rules and questions
+   *  `about` it, and the stated trust zones it crosses ("app → external"). */
+  planBoundary?: string;
+  planCarries?: string[];
+  planRules?: string[];
+  planQuestions?: string[];
+  crossesTrust?: string;
 }
 
 export interface ArchGroupRecord {

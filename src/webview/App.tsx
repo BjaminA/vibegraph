@@ -279,9 +279,10 @@ function Graph() {
   // `working` says a MODEL is drafting (propose / revise) — what the map animates;
   // ratify and reject are local writes and only set `busy`.
   const [archPropose, setArchPropose] = useState<{ busy: boolean; error: string | null; working?: "propose" | "revise" | null }>({ busy: false, error: null, working: null });
-  const handleArchAction = useCallback((action: "propose" | "ratify" | "reject", guidance?: string) => {
+  const handleArchAction = useCallback((action: "propose" | "ratify" | "reject" | "seed-plan", guidance?: string) => {
     setArchPropose({ busy: true, error: null, working: action === "propose" ? (guidance ? "revise" : "propose") : null });
     if (action === "propose") bridge.postMessage({ type: "arch-propose", payload: guidance ? { guidance } : {} });
+    else if (action === "seed-plan") bridge.postMessage({ type: "arch-seed-plan", payload: {} });
     else bridge.postMessage({ type: action === "ratify" ? "arch-ratify" : "arch-reject" });
   }, [bridge]);
   // PLAN-M-RUNTIME phase 3 — the trace overlay, when a run has produced one.

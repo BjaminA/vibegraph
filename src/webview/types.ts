@@ -205,7 +205,7 @@ export type ExtensionMessage =
   // plan as pendingSystemPlan (a SIBLING overlay, never merged into the
   // honest system tier); !ok surfaces the validation reason.
   | { type: "system-proposal"; payload: { ok: boolean; plan?: SystemPlan; error?: string } }
-  | { type: "arch-proposal"; payload: { action: "propose" | "ratify" | "reject"; ok: boolean; error?: string; groups?: number; names?: number; refused?: number } }
+  | { type: "arch-proposal"; payload: { action: "propose" | "ratify" | "reject" | "seed-plan"; ok: boolean; lines?: string[]; error?: string; groups?: number; names?: number; refused?: number } }
   // PLAN-v7 Stage 4 — reply to changeset-propose: the changeset echoed back
   // with its verification floor (parse + sandboxed behavioural check). The
   // gate enables acceptance only when floor.ok.
@@ -383,6 +383,8 @@ export type WebviewMessage =
   | { type: "arch-propose"; payload?: { guidance?: string } }
   | { type: "arch-ratify"; payload?: Record<string, never> }
   | { type: "arch-reject"; payload?: Record<string, never> }
+  // 2026-10-01 — a zero-token proposal read off the plan (src/server/plan_arch_seed.ts).
+  | { type: "arch-seed-plan"; payload?: { force?: boolean } }
   // PLAN-v7 Stage 4 — submit a build increment for the dry verification
   // floor (4a: canned; 4b: builder-drafted). Nothing is written. 6b: an
   // optional effectConsentToken (server-minted at decline, scope-bound to

@@ -53,7 +53,16 @@ export const CARD_W = 274;
 export function cardHeight(n: ArchNodeRecord): number {
   const rows = chipRows(n);
   // Each wrapped row adds a chip line (17px) and the 4px gap.
-  return rows ? 82 + (rows - 1) * 22 : 54;
+  const base = rows ? 82 + (rows - 1) * 22 : 54;
+  return base + planFlowsHeight(n);
+}
+
+/** The open planned-threads block ArchNode draws under the chips (2026-10-01):
+ *  an 8px gap, then per thread a title line and a steps line (17px each) and
+ *  a 4px gap. Kept in step with ArchNode's PlanFlows. */
+export const PLAN_FLOW_ROW = 38;
+export function planFlowsHeight(n: ArchNodeRecord): number {
+  return n.planFlowsOpen && n.planFlows?.length ? 8 + n.planFlows.length * PLAN_FLOW_ROW : 0;
 }
 
 /** The chip texts ArchNode draws, in its order (kept in step with it). */
@@ -66,6 +75,17 @@ function chipTexts(n: ArchNodeRecord): string[] {
   if (n.members?.length && n.category !== "config") out.push(`${n.members.length} tools`);
   if (n.wrappedBy?.length) out.push(`via ${n.wrappedBy[0]}${n.wrappedBy.length > 1 ? ` +${n.wrappedBy.length - 1}` : ""}`);
   if (n.internalHops) out.push(`internal: ${Object.entries(n.internalHops).map(([k, v]) => `${v} ${k}`).join(", ")}`);
+  out.push(...planChipTexts(n));
+  return out;
+}
+
+/** The plan's chips (arch_plan.ts), in ArchNode's order. */
+export function planChipTexts(n: ArchNodeRecord): string[] {
+  const out: string[] = [];
+  if (n.plannedAs) out.push(n.plannedAs.verdict === "realised" ? "planned ✓" : `planned · ${n.plannedAs.verdict}`);
+  if (n.planFlows?.length) out.push(`${n.planFlows.length} thread${n.planFlows.length === 1 ? "" : "s"}`);
+  if (n.planRules?.length) out.push(`${n.planRules.length} rule${n.planRules.length === 1 ? "" : "s"}`);
+  if (n.planQuestions?.length) out.push(`${n.planQuestions.length} open`);
   return out;
 }
 

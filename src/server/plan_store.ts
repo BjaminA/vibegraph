@@ -73,12 +73,24 @@ export function validatePlan(x: unknown): string | null {
   for (const t of p.threads as PlanThread[]) {
     if (t.process && !procs.has(t.process)) return `threads ${t.id}: process "${t.process}" is not planned`;
   }
+  // `about` places a rule or a question on the map: it must name something
+  // the plan holds, or it would be drawn nowhere.
+  const known = new Set([
+    ...procs, ...(p.threads as PlanThread[]).map((x) => x.id),
+    ...(p.boundaries as PlanBoundary[]).map((x) => x.id), ...(p.stack as PlanTool[]).map((x) => x.tool),
+  ]);
+  for (const [s, items] of [["policies", p.policies], ["open", p.open]] as const) {
+    for (const it of items as Array<{ id: string; about?: string }>) {
+      if (it.about !== undefined && !known.has(it.about)) return `${s} ${it.id}: about "${it.about}" names no planned process, thread, boundary or tool`;
+    }
+  }
   return null;
 }
 
 export function validateItem(section: PlanSection, raw: unknown): string | null {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return "must be an object";
   const o = raw as Record<string, any>;
+  if ((section === "open" || section === "policies") && o.about !== undefined && !line(o.about, 80)) return "about must name a planned item (a process, thread, boundary or tool id)";
   if (section === "open") {
     if (!str(o.id) || !ID_RE.test(o.id)) return "id must be a short name";
     // Room for "Proposed objective: <an objective>" (an agent's new objective waits here).
