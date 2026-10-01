@@ -11,6 +11,7 @@ import type { Plan, PlanPolicy } from "../shared/plan_types.ts";
 import { PLAN_CAPS } from "../shared/plan_types.ts";
 import { addConstraint, findDuplicate, loadConstraints, validateConstraintInput } from "./constraint_store.ts";
 import { savePlan } from "./plan_store.ts";
+import { singleTestFileList } from "../shared/path_match.ts";
 
 export function constraintInputFor(p: PlanPolicy): unknown {
   return {
@@ -40,5 +41,15 @@ export function promotePolicy(root: string, plan: Plan, id: string | undefined, 
   next.changelog = [...next.changelog, { rev: next.revision, at: now.toISOString(), by: "human" as const, change: `promoted policies ${id} to ${c.id}` }].slice(-PLAN_CAPS.changelog);
   const saved = savePlan(root, next);
   if (saved.error) return { error: `${c.id} was stated, but the plan could not record it: ${saved.error}` };
-  return { plan: next, message: `promoted ${id} → ${c.id} (human-stated in .vibegraph/constraints.json${p.check ? "; its check now runs in `check` and the hooks, and may block" : "; prose only — no check"})` };
+  const warn = narrowAllowList(p.check, c.id);
+  return { plan: next, message: `promoted ${id} → ${c.id} (human-stated in .vibegraph/constraints.json${p.check ? "; its check now runs in `check` and the hooks, and may block" : "; prose only — no check"})${warn ? `\nwarning: ${warn}` : ""}` };
+}
+
+/** 2026-10-01 — an allow-list that is ONE test file is almost always narrower
+ *  than the rule means: the first legitimate new module breaks it. Said at
+ *  promotion, with the forms that do not go stale. */
+export function narrowAllowList(check: unknown, id = "<id>"): string | null {
+  const c = check as { rule?: string; files?: string[] } | undefined;
+  if (!c || (c.rule !== "import-only" && c.rule !== "callers-only") || !singleTestFileList(c.files)) return null;
+  return `the check's allow-list is a single test file (${c.files![0]}) — likely too narrow: the next legitimate module that needs it will read as a violation. Allow a folder or glob (\`"files": ["src/transport/**"]\`) and the tests (\`"allowTests": true\`); change it with \`vibegraph-knowledge constraint edit ${id} --check '<json>'\`.`;
 }

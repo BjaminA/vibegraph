@@ -1198,7 +1198,46 @@ export async function buildFromSource(source, moduleId, dialect = "ts") {
     const nl = source.indexOf("\n");
     ir.shebang = (nl === -1 ? source : source.slice(0, nl)).trim();
   }
+  const signals = programSignals(tree.rootNode, (n) => b.text(n));
+  if (signals.length) ir.programSignals = signals;
   return { builder: b, ir, dropped: b.dropped };
+}
+
+const BODY_TYPES = new Set(["function_declaration", "generator_function_declaration", "class_declaration", "abstract_class_declaration", "method_definition", "arrow_function", "function_expression", "function", "generator_function", "interface_declaration", "type_alias_declaration"]);
+
+/** 2026-10-01 — what a file DOES when it is loaded that says it is a PROGRAM,
+ *  not a library: an `await` at the top level, a `.listen(…)` call, a read of
+ *  `process.argv`. Only code that runs at load counts — no function or class
+ *  body is entered (a callback passed at the top level, `app.listen(3000, () =>
+ *  …)`, is still the top-level call). Stamped on the IR root only when found,
+ *  so every other file is byte-identical. discover_jsts seeds on it. */
+export function programSignals(root, text) {
+  const found = new Set();
+  const calledAtTop = new Set();
+  const walk = (n, top) => {
+    if (!n || BODY_TYPES.has(n.type)) return;
+    // An await INSIDE a called function is that function's business; only a
+    // top-level await makes the file itself asynchronous at load.
+    if (top && n.type === "await_expression") found.add("await");
+    if (top && n.type === "for_in_statement" && /^for\s+await\b/.test(text(n))) found.add("await");
+    if (n.type === "call_expression") {
+      const f = n.childForFieldName("function");
+      if (f?.type === "member_expression" && text(f.childForFieldName("property") ?? f) === "listen") found.add("listen");
+      if (top && f?.type === "identifier") calledAtTop.add(text(f));
+    }
+    if (n.type === "member_expression" && /^process\s*\.\s*argv$/.test(text(n))) found.add("argv");
+    for (const c of n.namedChildren) walk(c, top);
+  };
+  for (const c of root.namedChildren) walk(c, true);
+  // `async function main() { …process.argv… }  main();` — a top-level function
+  // the file CALLS at load runs at load: its body is read too (one hop).
+  for (const c of root.namedChildren) {
+    const fn = c.type === "export_statement" ? c.namedChildren.find((x) => x.type === "function_declaration") : c;
+    if (fn?.type !== "function_declaration") continue;
+    const name = fn.childForFieldName("name");
+    if (name && calledAtTop.has(text(name))) for (const k of fn.childForFieldName("body")?.namedChildren ?? []) walk(k, false);
+  }
+  return [...found].sort();
 }
 
 export async function parseFile(filePath, moduleId) {

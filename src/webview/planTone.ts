@@ -7,6 +7,7 @@ export const VERDICT_TONE: Record<PlanVerdict, string> = {
   drifted: "var(--accent-warning)", unverifiable: "var(--accent-warning)", unverified: "var(--text-muted)",
   "not-built": "var(--text-muted)", unanchored: "var(--text-muted)", prose: "var(--text-muted)",
   violated: "var(--accent-error)",
+  orphaned: "var(--accent-warning)",
 };
 
 export const verdictTone = (v: string | undefined): string => (v && (VERDICT_TONE as Record<string, string>)[v]) || "var(--text-muted)";

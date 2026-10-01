@@ -148,13 +148,17 @@ function nextEntryPoints(rel, ir, topLevelFns) {
 function scriptEntryPoint(rel, ir, nodes, topLevelFns) {
   if (typeof ir.shebang !== "string" || !ir.shebang) return null;
   const interp = ir.shebang.replace(/^#!\s*/, "").split(/\s+/).filter((w) => !w.startsWith("-") && w !== "env").pop()?.split("/").pop() ?? "node";
+  return seededEntry(rel, ir, nodes, topLevelFns, interp, ir.shebang);
+}
+
+function seededEntry(rel, ir, nodes, topLevelFns, interp, why) {
   const mainFn = topLevelFns.find((n) => n.name === "main");
   const calledAtTop = !!mainFn && nodes.some((n) => (n.type === "call" && n.funcName === "main" || n.type === "assignment" && n.callTarget === "main") && (n.parentId === null || nodes.find((p) => p.id === n.parentId)?.parentId === null && nodes.find((p) => p.id === n.parentId)?.type !== "function_def"));
   if (mainFn && calledAtTop) {
     return {
       id: `${rel}:main`, kind: "cli", file: rel, irNodeId: mainFn.id,
       qualifiedName: `${ir.modulePath ?? rel}:main`, label: rel.split("/").pop(),
-      summary: firstLine(mainFn.docstring) ?? `${ir.shebang} — main() entry`,
+      summary: firstLine(mainFn.docstring) ?? `${why} — main() entry`,
       framework: interp, metadata: { seed: "main" },
     };
   }
@@ -163,7 +167,7 @@ function scriptEntryPoint(rel, ir, nodes, topLevelFns) {
   return {
     id: `${rel}:module`, kind: "cli", file: rel, irNodeId: "module",
     qualifiedName: `${ir.modulePath ?? rel}:module`, label: rel.split("/").pop(),
-    summary: `${ir.shebang} — a script whose body is its main (no main function)`,
+    summary: `${why} — a script whose body is its main (no main function)`,
     framework: interp, metadata: { seed: "module" },
   };
 }

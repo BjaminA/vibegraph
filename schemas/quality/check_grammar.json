@@ -20,9 +20,10 @@
         "rule": { "const": "callers-only" },
         "target": { "type": "string", "minLength": 1 },
         "files": { "$ref": "#/$defs/NonEmptyStrings" },
-        "functions": { "$ref": "#/$defs/NonEmptyStrings" }
+        "functions": { "$ref": "#/$defs/NonEmptyStrings" },
+        "allowTests": { "type": "boolean", "description": "2026-10-01: every test file is also an allowed place (src/shared/path_match.ts isTestFile). A files entry may be a folder (trailing /) or a glob." }
       },
-      "anyOf": [{ "required": ["files"] }, { "required": ["functions"] }]
+      "anyOf": [{ "required": ["files"] }, { "required": ["functions"] }, { "required": ["allowTests"] }]
     },
     "ImportOnly": {
       "type": "object",
@@ -31,7 +32,8 @@
       "properties": {
         "rule": { "const": "import-only" },
         "tool": { "type": "string", "minLength": 1 },
-        "files": { "$ref": "#/$defs/NonEmptyStrings" }
+        "files": { "$ref": "#/$defs/NonEmptyStrings" },
+        "allowTests": { "type": "boolean", "description": "2026-10-01: every test file may import it too. A files entry may be a folder (trailing /) or a glob." }
       }
     },
     "CallsThrough": {

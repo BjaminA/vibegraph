@@ -46,7 +46,7 @@ import { affectedTests } from "../../src/shared/test_reach.ts";
 import { verbMayGate } from "../../src/server/quality/standings.ts";
 import { archForPrompt } from "./arch_context.mjs";
 import { orientation } from "./orientation.mjs";
-import { planForPrompt } from "./plan_context.mjs";
+import { planForPrompt, plannedThreadsForPrompt } from "./plan_context.mjs";
 import { softwareForPrompt } from "./software_context.mjs";
 import { directionForPrompt, directionForFindings } from "./direction.mjs";
 import { untrustedBaseline, newUntrustedNote } from "../dataflow_cache.mjs";
@@ -75,7 +75,7 @@ function writeSession(path, state) {
 }
 /** What the session's context holds. A compaction or /clear empties it. */
 function resetDelivery(state) {
-  for (const k of ["contracts", "partialContracts", "rules", "injectedSkills", "globalRulesSent", "parseNote", "oriented", "planRev", "software"]) delete state[k];
+  for (const k of ["contracts", "partialContracts", "rules", "injectedSkills", "globalRulesSent", "parseNote", "oriented", "planRev", "software", "plannedThreadsSent"]) delete state[k];
 }
 
 // ── the inline cap ─────────────────────────────────────────────────────
@@ -111,15 +111,45 @@ export function findingsOf(checkResult) {
   return out;
 }
 
+/** At most this many offender lines per check; the rest are counted. */
+export const OFFENDERS_PER_CHECK = 5;
+
 /** One block per rule: its stated text (with the reason people wrote), then
- *  each check that failed and where. */
-function renderFindings(list, textById) {
+ *  each check that failed and where — one line per distinct offender (two
+ *  clauses naming the same call are one line), at most OFFENDERS_PER_CHECK a
+ *  check, the reason once per check rather than once per offender. */
+export function renderFindings(list, textById) {
   const byId = new Map();
   for (const f of list) { if (!byId.has(f.id)) byId.set(f.id, []); byId.get(f.id).push(f); }
-  return [...byId].map(([id, fs]) => [
-    `- [${id}] ${textById.get(id) ?? fs[0].described}`,
-    ...fs.map((f) => `  check: ${f.described} → ${f.verdict.toUpperCase()}${f.offender ? ` at ${f.offender}` : ""}\n    ${f.reason}`),
-  ].join("\n")).join("\n");
+  return [...byId].map(([id, fs]) => {
+    const byCheck = new Map();
+    for (const f of fs) {
+      const k = `${f.described}|${f.verdict}`;
+      if (!byCheck.has(k)) byCheck.set(k, { f, at: new Set() });
+      if (f.offender) byCheck.get(k).at.add(f.offender);
+    }
+    const lines = [`- [${id}] ${textById.get(id) ?? fs[0].described}`];
+    for (const { f, at } of byCheck.values()) {
+      const all = [...at];
+      const shown = all.slice(0, OFFENDERS_PER_CHECK);
+      lines.push(`  check: ${f.described} → ${f.verdict.toUpperCase()}${shown.length ? ` at ${shown.join(", ")}${all.length > shown.length ? ` (+${all.length - shown.length} more)` : ""}` : ""}\n    ${f.reason}`);
+    }
+    return lines.join("\n");
+  }).join("\n");
+}
+
+/** When a block is on a rule that may not fit the change: the exact command
+ *  to PROPOSE a re-scope (a person accepts it) — never an edit of .vibegraph/. */
+export function rescopeHint(list) {
+  const ids = [...new Set(list.map((f) => f.id))];
+  return `If the rule itself is too narrow for a legitimate change, do not edit .vibegraph/ — propose a re-scope for a person to accept: \`vibegraph-knowledge constraint propose ${ids[0]} --check '<the check as JSON>' --why "<why the change is legitimate>"\` (\`vibegraph-knowledge constraint show ${ids[0]}\` prints the current one).`;
+}
+
+/** "[c3] 2 offenders, [c5] 1" — what was already there, in one line. */
+function countLine(list) {
+  const by = new Map();
+  for (const f of list) { if (!by.has(f.id)) by.set(f.id, new Set()); by.get(f.id).add(f.offender ?? "-"); }
+  return [...by].map(([id, s]) => `[${id}] ${s.size} offender${s.size === 1 ? "" : "s"}`).join(", ");
 }
 
 function check(absRoot, loaded) {
@@ -180,9 +210,13 @@ function onPrompt(input, { absRoot, loaded, state, constraints }) {
   const prompt = String(input.prompt ?? "");
   const long = prompt.trim().length >= MIN_PROMPT_CHARS;
   const strong = long ? matchQuestion(prompt, buildRemitIndex(env.threads), { limit: 3 }) : [];
-  // No code-shaped token: the code's own words, labelled a guess.
+  // Greenfield: a planned thread the code does not have yet (plan_context.mjs).
+  const planned = long ? plannedThreadsForPrompt(absRoot, env, prompt, state) : { block: null, ids: [] };
+  if (planned.block) { out.push(planned.block); room -= planned.block.length; }
+  // No code-shaped token: the code's own words, labelled a guess — unless the
+  // prompt is about planned work, which a guess at existing code would mislead.
   let weak = [];
-  if (long && !strong.length) {
+  if (long && !strong.length && !planned.ids.length) {
     const docOf = (file, id) => (env.files[file]?.nodes ?? []).find((n) => n.id === id)?.docstring ?? null;
     weak = matchKeywords(prompt, buildKeywordIndex(env.threads, docOf), { limit: 2 });
   }
@@ -272,7 +306,7 @@ function onPrompt(input, { absRoot, loaded, state, constraints }) {
     state.partialContracts = partial;
     state.rules = [...sentRules];
     state.injectedSkills = Object.fromEntries(injected);
-  } else if (!state.globalRulesSent) {
+  } else if (!state.globalRulesSent && !planned.ids.length) {
     // No match at all: the project-wide rules, once. (The no-code arm of the
     // crystal drill routed itself from the constraints file; this puts the
     // global half of it in front of the session.)
@@ -327,7 +361,14 @@ function newFindings(absRoot, loaded, state, textById, sessionId) {
     note = "VibeGraph recorded the current findings as this session's baseline; only findings after this point are reported.";
   }
   const base = new Set(state.baseline);
-  return { fresh: now.filter((f) => !base.has(f.key)), note };
+  // What the PREVIOUS check saw (the baseline, at first): a finding absent
+  // from it is one THIS edit introduced. One already reported at an earlier
+  // edit is not this edit's doing, so it is not repeated as a block — the
+  // Stop hook still holds the turn to every finding the session introduced.
+  const before = new Set(state.lastKeys ?? state.baseline);
+  state.lastKeys = now.map((f) => f.key);
+  const fresh = now.filter((f) => !base.has(f.key));
+  return { fresh, introduced: fresh.filter((f) => !before.has(f.key)), earlier: fresh.filter((f) => before.has(f.key)), note };
 }
 
 /** A cheap stamp of every source file (path, size, mtime): whether a Bash
@@ -383,17 +424,20 @@ function afterEdit(rel, input, { absRoot, loaded, state, constraints }) {
   }
   const partial = files.filter((f) => loaded.partialParses?.[f]);
   if (partial.length) notes.push(`${partial.join(", ")} was read only partly (${loaded.partialParses[partial[0]]}); rules are checked on the rest of it.`);
-  const { fresh, note } = newFindings(absRoot, loaded, state, textById, input.session_id);
+  const { introduced, earlier, note } = newFindings(absRoot, loaded, state, textById, input.session_id);
   if (note) notes.push(note);
-  const why = directionForFindings(absRoot, fresh, state);
+  const why = directionForFindings(absRoot, introduced, state);
   if (why) notes.push(why);
   const untrusted = newUntrustedNote(loaded.envelope, absRoot, state);
   if (untrusted) notes.push(untrusted);
-  const gating = fresh.filter((f) => f.gates);
-  const advisory = fresh.filter((f) => !f.gates);
+  const gating = introduced.filter((f) => f.gates);
+  const advisory = introduced.filter((f) => !f.gates);
   if (advisory.length) {
-    notes.push(`New since the session began (not blocking — ${advisory.some((f) => f.verdict === "violated") ? "a violation of a rule whose check is advisory until calibrated, or " : ""}a rule the IR could not settle):\n${renderFindings(advisory, textById)}`);
+    notes.push(`This edit introduced (not blocking — ${advisory.some((f) => f.verdict === "violated") ? "a violation of a rule whose check is advisory until calibrated, or " : ""}a rule the IR could not settle):\n${renderFindings(advisory, textById)}`);
   }
+  // Already violated before this edit (by an earlier edit this session): one
+  // line, never a block here — the end of the turn re-checks them.
+  if (earlier.length) notes.push(`Already violated before this edit (not repeated; the end of the turn re-checks them): ${countLine(earlier)}.`);
   if (files.length) {
     const what = files.length === 1 ? files[0] : `the ${files.length} changed source files`;
     const tests = affectedTests(loaded.envelope.threads, loaded.envelope.entryPoints, files);
@@ -404,7 +448,7 @@ function afterEdit(rel, input, { absRoot, loaded, state, constraints }) {
   if (!gating.length) return { json: { hookSpecificOutput: { hookEventName: "PostToolUse", additionalContext: capped(`${HEADER}\n${notes.join("\n\n")}`) } } };
   remember(state, gating);
   return {
-    block: capped(`${HEADER}\nThis edit breaks a stated rule. Fix it before going on — the rule and its reason come from the people who run this code:\n${renderFindings(gating, textById)}\n\n${notes.join("\n\n")}`),
+    block: capped(`${HEADER}\nThis edit introduced a break of a stated rule. Fix it before going on — the rule and its reason come from the people who run this code:\n${renderFindings(gating, textById)}\n${rescopeHint(gating)}\n\n${notes.join("\n\n")}`),
   };
 }
 
@@ -421,7 +465,7 @@ function onStop(input, { absRoot, loaded, state, constraints }) {
   }
   remember(state, gating);
   const why = directionForFindings(absRoot, gating, state);
-  const body = `${renderFindings(gating, textById)}${why ? `\n\n${why}` : ""}`;
+  const body = `${renderFindings(gating, textById)}\n${rescopeHint(gating)}${why ? `\n\n${why}` : ""}`;
   // At most twice per prompt, and never when Claude is already continuing
   // because of this hook: past that it is said to the person, not looped.
   state.stopBlocks = (state.stopBlocks ?? 0) + 1;

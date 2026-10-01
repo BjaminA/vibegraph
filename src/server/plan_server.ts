@@ -9,7 +9,8 @@
 
 import type { Plan, PlanReconcile } from "../shared/plan_types.ts";
 import type { StackIndex } from "./stack.ts";
-import { loadPlan, savePlan } from "./plan_store.ts";
+import { loadPlan, savePlan, demoteOrphanedPromotions } from "./plan_store.ts";
+import { loadConstraints } from "./constraint_store.ts";
 import { applyPlanOps, parsePlanOp, type PlanOp } from "./plan_ops.ts";
 import { formatPlanMd } from "./plan_render.ts";
 import { reconcilePlan } from "./plan_reconcile.ts";
@@ -19,6 +20,8 @@ export interface PlanEnv { files: Record<string, any>; entryPoints: any[]; threa
 export interface PlanReply { plan: Plan | null; reconcile: PlanReconcile | null; error?: string; message?: string }
 
 function stateOf(root: string, env: PlanEnv | null, stack: StackIndex | null, extra: Partial<PlanReply> = {}): PlanReply {
+  // A rule promoted into a constraint that has since gone is demoted first.
+  demoteOrphanedPromotions(root, new Set(loadConstraints(root).map((c) => c.id)));
   const plan = loadPlan(root);
   let reconcile: PlanReconcile | null = null;
   if (plan && env && stack) {

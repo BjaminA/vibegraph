@@ -32,6 +32,7 @@ import { discover as discoverJsts } from "./frontends/jsts/discover_jsts.mjs";
 import { discover as discoverCpp } from "./frontends/cpp/discover_cpp.mjs";
 import { discover as discoverRust } from "./frontends/rust/discover_rust.mjs";
 import { discoverProject } from "./discover_project.mjs";
+import { readPackageManifests } from "./package_entries.mjs";
 
 /** The Node frontends' link and discover steps, called directly. */
 const IN_PROCESS = {
@@ -238,9 +239,11 @@ export function buildPolyglotEnvelope(root = POLYGLOT_DIR, opts = {}) {
   //     literal is run, whatever its own file says. After the per-language
   //     step so a richer discovered row is never displaced.
   {
+    // 2026-10-01 — and what each package.json runs (bin, scripts).
+    const manifests = readPackageManifests(root);
     const found = inProcess
-      ? discoverProject(files, entryPoints)
-      : run(discoverProjectCommand(SCRIPTS), { input: JSON.stringify({ files, entryPoints }), cwd: stepCwd, pipeline }).entryPoints ?? [];
+      ? discoverProject(files, entryPoints, manifests)
+      : run(discoverProjectCommand(SCRIPTS), { input: JSON.stringify({ files, entryPoints, manifests }), cwd: stepCwd, pipeline }).entryPoints ?? [];
     for (const e of found) if (!entryPoints.some((x) => x.id === e.id)) entryPoints.push(e);
   }
 

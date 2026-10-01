@@ -23,6 +23,7 @@ import { hookInputFromWindows } from "./winpath.mjs";
 import { applyHooks, applyInit, ALL_SKILLS, applySkills, hookCommand, windowsHookCommand, POINTER, skillsFromList } from "./init.mjs";
 import { spawnSync } from "node:child_process";
 import { HOOK_EVENTS, runHook } from "./hooks.mjs";
+import { doctorReport, hookRunPayload, recordFired } from "./hook_tools.mjs";
 import { LESSONS_USAGE, runLessons } from "./lessons.mjs";
 import { DIRECTION_USAGE, runDirection } from "./direction.mjs";
 import { DATAFLOW_USAGE, runDataflow } from "./dataflow.mjs";
@@ -83,6 +84,13 @@ usage:
                            running on Windows against this WSL project (\\\\wsl.localhost\\…); they also run from
                            inside WSL. Run init from WSL with an installed CLI (not npx).
       --remove-hooks       take exactly those hooks out again
+  ${PACKAGE_NAME} hook install [--target posix|wsl] [--remove] [<root>]   the same hooks without the CLAUDE.md
+                                               block; --target wsl = the --windows form above
+  ${PACKAGE_NAME} hook run <event> [<root>] [--file <path> | --command "<sh>"] [--prompt "<text>"] [--session <id>]
+                                               fire a hook by hand: the stdin JSON is built for you, the
+                                               exit codes are the hook's (0 · 2 blocked). Events: ${HOOK_EVENTS.join(", ")}
+  ${PACKAGE_NAME} doctor [<root>]                are the hooks installed, runnable from this side, and have
+                                               they fired since installed? exit 0 · 1 a warning
       --skill              also install the Claude Code skills into .claude/skills/: /vibegraph (set up and
                            use this) and the task skills /vibegraph-plan, -debug, -security, -review (which
                            knowledge file and command to open for that task; ~100 tokens each until used);
@@ -248,6 +256,31 @@ function cmdCoverage(args) {
   return 0;
 }
 
+/** Install (or remove) the four hooks; shared by `init --hooks` and
+ *  `hook install`. target "wsl" writes the wsl.exe form a Windows-side
+ *  Claude Code can run against this WSL project. */
+function installHooks(loc, absRoot, { remove = false, windows = false } = {}) {
+  let h;
+  try {
+    let env = {};
+    if (!remove) {
+      // Pin the interpreter verified NOW, by absolute path.
+      const py = resolvePython(loc, { log: (m) => process.stderr.write(`  ${m}\n`) });
+      const exe = spawnSync(py.bin, ["-c", "import sys; print(sys.executable)"], { encoding: "utf-8" }).stdout.trim() || py.bin;
+      // `how` is "as installed", "VIBEGRAPH_PYDEPS=<dir>" or the directory itself.
+      const deps = py.how === "as installed" ? null
+        : py.how.startsWith("VIBEGRAPH_PYDEPS=") ? py.how.slice("VIBEGRAPH_PYDEPS=".length) : py.how;
+      env = { VG_PYTHON: exe, ...(deps ? { VIBEGRAPH_PYDEPS: deps } : {}) };
+    }
+    const version = packageVersion(loc);
+    h = applyHooks({ root: absRoot, remove, command: (root, event) => windows
+      ? windowsHookCommand(root, event, env)
+      : hookCommand(root, event, env, process.argv, process.execPath, process.execArgv, version) });
+  } catch (e) { return fail(e.message); }
+  process.stdout.write(`${h.path}: hooks ${h.state}${h.state === "removed" ? "" : ` (prompt → routed contracts, rules and skills; post-edit and stop → every stated rule re-checked, a new violation blocks). Claude Code reads hooks when a session starts: they apply from the NEXT session (review them with /hooks; \`${PACKAGE_NAME} doctor\` says whether they have fired).${windows ? "" : " A Claude Code running on Windows against this WSL folder cannot run these: use \`hook install --target wsl\`."}`}\n`);
+  return 0;
+}
+
 function cmdInit(args) {
   let parsed;
   try {
@@ -284,27 +317,8 @@ function cmdInit(args) {
   let absRoot;
   try { absRoot = projectRoot(parsed.positionals[0]); } catch (e) { return fail(e.message); }
   if (parsed.values.hooks || parsed.values["remove-hooks"]) {
-    let h;
-    try {
-      const remove = parsed.values["remove-hooks"] === true;
-      let env = {};
-      if (!remove) {
-        // Pin the interpreter verified NOW, by absolute path.
-        const py = resolvePython(loc, { log: (m) => process.stderr.write(`  ${m}\n`) });
-        const exe = spawnSync(py.bin, ["-c", "import sys; print(sys.executable)"], { encoding: "utf-8" }).stdout.trim() || py.bin;
-        // `how` is "as installed", "VIBEGRAPH_PYDEPS=<dir>" or the directory itself.
-        const deps = py.how === "as installed" ? null
-          : py.how.startsWith("VIBEGRAPH_PYDEPS=") ? py.how.slice("VIBEGRAPH_PYDEPS=".length) : py.how;
-        env = { VG_PYTHON: exe, ...(deps ? { VIBEGRAPH_PYDEPS: deps } : {}) };
-      }
-      const version = packageVersion(loc);
-      const windows = parsed.values.windows === true;
-      h = applyHooks({ root: absRoot, remove, command: (root, event) => windows
-        ? windowsHookCommand(root, event, env)
-        : hookCommand(root, event, env, process.argv, process.execPath, process.execArgv, version) });
-    } catch (e) { return fail(e.message); }
-    process.stdout.write(`${h.path}: hooks ${h.state}${h.state === "removed" ? "" : " (prompt → routed contracts, rules and skills; post-edit and stop → every stated rule re-checked, a new violation blocks). Claude Code reads hooks when a session starts: they apply from the NEXT session (review them with /hooks)."}\n`);
-    if (parsed.values["remove-hooks"]) return 0;
+    const code = installHooks(loc, absRoot, { remove: parsed.values["remove-hooks"] === true, windows: parsed.values.windows === true });
+    if (code !== 0 || parsed.values["remove-hooks"]) return code;
   }
   const r = applyInit({ root: absRoot, print: parsed.values.print === true });
   if (r.claudeMd === "printed") { process.stdout.write(POINTER + "\n"); return 0; }
@@ -399,7 +413,7 @@ function report(r) {
 function cmdConstraints(argsIn) {
   // `list --json` is a flag; `add --json '<object>'` takes a value. Read the
   // flag off before parsing, so one option name means one thing to parseArgs.
-  const listJson = argsIn[0] === "list" && argsIn.includes("--json");
+  const listJson = (argsIn[0] === "list" || argsIn[0] === "show") && argsIn.includes("--json");
   const args = listJson ? argsIn.filter((a) => a !== "--json") : argsIn;
   let parsed;
   try {
@@ -408,11 +422,12 @@ function cmdConstraints(argsIn) {
       options: {
         kind: { type: "string" }, text: { type: "string" }, note: { type: "string" }, check: { type: "string" }, policy: { type: "string" },
         json: { type: "string" }, all: { type: "boolean" }, threads: { type: "string" }, files: { type: "string" }, tools: { type: "string" },
+        checks: { type: "string" }, why: { type: "string" }, as: { type: "string" },
       },
     });
   } catch (e) { return fail(`${e.message}\n\n${USAGE}`); }
   const { sub, args: rest, root } = subAndRoot(parsed.positionals);
-  const values = { ...parsed.values, ...(listJson ? { json: true } : {}) };
+  const values = { ...parsed.values, ...(listJson ? { json: true } : {}), pid: rest[1] };
   return report(runConstraints({ root, sub, id: rest[0], values }));
 }
 
@@ -444,27 +459,55 @@ async function cmdSkills(args) {
   return report(await runSkills({ root, sub, targets: rest, values: parsed.values, envelope: parsed.values.envelope, pipeline }));
 }
 
-/** `hook <event>` — run by Claude Code (installed by `init --hooks`), never by
- *  hand. Reads the hook payload on stdin. Exit 0 with JSON on stdout, or exit
- *  2 with the reason on stderr (the form Claude Code shows to Claude). */
+/** `hook <event>` — run by Claude Code (installed by `init --hooks`). Reads
+ *  the hook payload on stdin. Exit 0 with JSON on stdout, or exit 2 with the
+ *  reason on stderr (the form Claude Code shows to Claude).
+ *  `hook install [--target posix|wsl] [<root>]` installs them;
+ *  `hook run <event> [--file f | --command c | --prompt t] [<root>]` builds the
+ *  payload itself and runs the same code, same exit codes — for testing a hook
+ *  by hand without hand-rolling JSON. A manual run is not recorded as a fire. */
 function cmdHook(args) {
   let parsed;
-  try { parsed = parseArgs({ args, allowPositionals: true, options: { root: { type: "string" }, "vg-hook": { type: "boolean" } } }); }
-  catch (e) { return fail(`${e.message}\n\n${USAGE}`); }
-  const event = parsed.positionals[0];
-  if (!HOOK_EVENTS.includes(event)) return fail(`hook event must be one of: ${HOOK_EVENTS.join(", ")}`);
+  try {
+    parsed = parseArgs({ args, allowPositionals: true, options: {
+      root: { type: "string" }, "vg-hook": { type: "boolean" }, target: { type: "string" }, remove: { type: "boolean" },
+      file: { type: "string" }, prompt: { type: "string" }, tool: { type: "string" }, command: { type: "string" }, session: { type: "string" },
+    } });
+  } catch (e) { return fail(`${e.message}\n\n${USAGE}`); }
+  const sub = parsed.positionals[0];
+  if (sub === "install") {
+    const target = parsed.values.target ?? "posix";
+    if (!["posix", "wsl"].includes(target)) return fail("--target must be posix (Claude Code runs where this project is) or wsl (Claude Code runs on Windows against this WSL project)");
+    let absRoot;
+    try { absRoot = projectRoot(parsed.positionals[1]); } catch (e) { return fail(e.message); }
+    return installHooks(locate(), absRoot, { windows: target === "wsl", remove: parsed.values.remove === true });
+  }
+  const manual = sub === "run";
+  const event = manual ? parsed.positionals[1] : sub;
+  if (!HOOK_EVENTS.includes(event)) return fail(`hook event must be one of: ${HOOK_EVENTS.join(", ")} (or: hook install | hook run <event>)`);
   let input = {};
-  // A UTF-8 byte-order mark (PowerShell adds one when it pipes text) is not JSON.
-  try { input = JSON.parse(readFileSync(0, "utf-8").replace(/^﻿/, "") || "{}"); } catch { input = {}; }
-  // A Windows-side Claude Code (init --hooks --windows) sends Windows paths,
-  // and its hook command spells our own paths `//x` to get them past Git Bash.
-  input = hookInputFromWindows(input);
-  for (const k of ["VG_PYTHON", "VIBEGRAPH_PYDEPS"]) if (process.env[k]?.startsWith("//")) process.env[k] = process.env[k].slice(1);
-  if (parsed.values.root?.startsWith("//")) parsed.values.root = parsed.values.root.slice(1);
+  if (manual) {
+    let r;
+    try { r = projectRoot(parsed.values.root ?? parsed.positionals[2]); } catch (e) { return fail(e.message); }
+    if (event === "post-edit" && !parsed.values.file && !parsed.values.command) return fail("hook run post-edit needs --file <path> (an Edit/Write) or --command \"<shell>\" (a Bash edit)");
+    if (event === "prompt" && parsed.values.prompt === undefined) return fail("hook run prompt needs --prompt \"<text>\"");
+    const file = parsed.values.file ? resolve(r, parsed.values.file) : undefined;
+    input = hookRunPayload(event, { absRoot: r, file, prompt: parsed.values.prompt, tool: parsed.values.tool, command: parsed.values.command, session: parsed.values.session });
+    parsed.values.root = r;
+  } else {
+    // A UTF-8 byte-order mark (PowerShell adds one when it pipes text) is not JSON.
+    try { input = JSON.parse(readFileSync(0, "utf-8").replace(/^\uFEFF/, "") || "{}"); } catch { input = {}; }
+    // A Windows-side Claude Code (init --hooks --windows) sends Windows paths,
+    // and its hook command spells our own paths `//x` to get them past Git Bash.
+    input = hookInputFromWindows(input);
+    for (const k of ["VG_PYTHON", "VIBEGRAPH_PYDEPS"]) if (process.env[k]?.startsWith("//")) process.env[k] = process.env[k].slice(1);
+    if (parsed.values.root?.startsWith("//")) parsed.values.root = parsed.values.root.slice(1);
+  }
   const silent = (msg) => { process.stdout.write(JSON.stringify({ systemMessage: msg })); return 0; };
   let absRoot;
   try { absRoot = projectRoot(parsed.values.root ?? process.env.CLAUDE_PROJECT_DIR ?? input.cwd); }
   catch (e) { return silent(`VibeGraph ${event} hook: ${e.message}`); }
+  if (!manual) recordFired(absRoot, event, input.session_id);
   let pipeline;
   try { pipeline = pipelineFor(locate(), absRoot); } catch (e) { return silent(`VibeGraph ${event} hook could not start the parser: ${e.message}`); }
   const t0 = Date.now();
@@ -483,6 +526,16 @@ function cmdHook(args) {
   if (r?.block) { process.stderr.write(`${r.block}\n`); return 2; }
   if (r?.json) process.stdout.write(JSON.stringify(r.json));
   return 0;
+}
+
+/** `doctor [<root>]` — are the hooks installed, runnable from here, and have
+ *  they fired since they were installed? Exit 0 fine · 1 a warning. */
+function cmdDoctor(args) {
+  let absRoot;
+  try { absRoot = projectRoot(args.find((a) => !a.startsWith("-"))); } catch (e) { return fail(e.message); }
+  const r = doctorReport(absRoot);
+  for (const [level, text] of r.lines) process.stdout.write(`${level === "ok" ? "ok  " : level === "info" ? "--  " : "!!  "}${text}\n`);
+  return r.ok ? 0 : 1;
 }
 
 function cmdBrief(args) {
@@ -536,12 +589,13 @@ export function main(argv) {
   if (command === "init") return cmdInit(rest);
   if (command === "classify") return cmdClassify(rest);
   if (command === "architecture") return cmdArchitecture(rest);
-  if (command === "constraints") return cmdConstraints(rest);
-  if (command === "seeds") return cmdSeeds(rest);
+  if (command === "constraints" || command === "constraint") return cmdConstraints(rest);
+  if (command === "seeds" || command === "seed") return cmdSeeds(rest);
   if (command === "skills") return cmdSkills(rest);
   if (command === "affected") return cmdAffected(rest);
   if (command === "coverage") return cmdCoverage(rest);
   if (command === "hook") return cmdHook(rest);
+  if (command === "doctor") return cmdDoctor(rest);
   if (command === "lessons") return cmdLessons(rest);
   if (command === "brief") return cmdBrief(rest);
   if (command === "dataflow") { const r = runDataflow(rest); process.stdout.write(r.text); return r.exitCode; }

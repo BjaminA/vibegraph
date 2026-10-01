@@ -10,6 +10,52 @@
 // promoted.
 import { loadPlan } from "../../src/server/plan_store.ts";
 import { compactPlan } from "../../src/server/plan_render.ts";
+import { matchThreadEntry, words } from "../../src/server/plan_thread_match.ts";
+
+/** 2026-10-01 — GREENFIELD routing: a prompt that names a planned thread the
+ *  code does not have yet gets THAT thread's plan — what it serves, where it
+ *  will live, its primary steps with the boundaries they cross, the rules and
+ *  open questions about it — instead of a keyword guess at existing code.
+ *  Matched on the thread's id in the prompt, or two distinctive words shared
+ *  with its id, `serves` and steps. Once per thread per session. Returns
+ *  { block, ids } (block null when nothing matched). */
+export function plannedThreadsForPrompt(absRoot, env, prompt, state) {
+  let plan;
+  try { plan = loadPlan(absRoot); } catch { return { block: null, ids: [] }; }
+  if (!plan || plan.closed) return { block: null, ids: [] };
+  const text = String(prompt).toLowerCase();
+  const said = new Set(words(prompt));
+  const unbuilt = plan.threads.filter((t) => t.status !== "dropped" && !matchThreadEntry(t, env.entryPoints).ep);
+  const scored = unbuilt.map((t) => {
+    const own = new Set([...words(t.id), ...words(t.serves ?? ""), ...t.primary.flatMap((s) => words(s.split(":").pop() ?? s))]);
+    const shared = [...own].filter((w) => said.has(w));
+    return { t, score: (text.includes(t.id.toLowerCase()) ? 10 : 0) + shared.length };
+  }).filter((x) => x.score >= 2).sort((a, b) => b.score - a.score).slice(0, 2);
+  const ids = scored.map((x) => x.t.id);
+  const fresh = scored.filter((x) => !(state.plannedThreadsSent ?? []).includes(x.t.id));
+  if (!fresh.length) return { block: null, ids };
+  state.plannedThreadsSent = [...new Set([...(state.plannedThreadsSent ?? []), ...fresh.map((x) => x.t.id)])];
+  const blocks = fresh.map(({ t }) => {
+    const proc = t.process ? plan.processes.find((p) => p.id === t.process) : null;
+    const step = (s) => {
+      const b = plan.boundaries.find((x) => x.id === s.split(":")[0]);
+      return b ? `${s} [${b.from} → ${b.to}${b.protocol ? ` over ${b.protocol}` : ""}${b.carries?.length ? `, carries ${b.carries.join(", ")}` : ""}]` : s;
+    };
+    const near = new Set([t.id, ...(t.process ? [t.process] : [])]);
+    const rules = plan.policies.filter((p) => p.status !== "dropped" && p.about && near.has(p.about));
+    const open = plan.open.filter((q) => q.about && near.has(q.about));
+    return [
+      `### Planned thread "${t.id}" — NOT BUILT YET (from .vibegraph/plan.json: a plan, not code)`,
+      `serves: ${t.serves}`,
+      `entry: ${t.entry}${proc ? `; process ${proc.label}${proc.at ? ` (code to live at ${proc.at})` : ""}` : ""}`,
+      `primary steps: ${t.primary.map(step).join(" → ")}`,
+      ...(rules.length ? [`planned rules about it: ${rules.map((p) => `${p.id} ${p.text} — why: ${p.why}`).join("; ")}`] : []),
+      ...(open.length ? [`open questions it depends on: ${open.map((q) => `${q.id} ${q.text}`).join("; ")}`] : []),
+      `When it is built, set its \`entryPoint\` (plan edit) so plan check follows it.`,
+    ].join("\n");
+  });
+  return { block: blocks.join("\n\n"), ids };
+}
 
 /** The one line: the objective, and what is waiting on the person. */
 export function objectiveReminder(plan) {

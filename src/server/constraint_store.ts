@@ -23,6 +23,7 @@ import { ROLE_LABEL, STACK_ROLES, isSafeToolName, type StackRole } from "../shar
 import { isConstraintCheck, type ConstraintCheck } from "./constraint_grammar.ts";
 // Quality layer — the five Run 1 verbs, validated by their own operand checks.
 import { isRun1Check, type Run1Check } from "./quality/verbs/index.ts";
+import { demoteOrphanedPromotions } from "./plan_store.ts";
 export type AnyConstraintCheck = ConstraintCheck | Run1Check;
 
 export type Constraint = ConstraintRecord;
@@ -191,7 +192,16 @@ export function loadConstraints(root: string): Constraint[] {
       const v = validateConstraintInput(c);
       if (!v.ok || typeof c.id !== "string") continue; // a mangled entry is dropped, never half-loaded
       const source: ConstraintSource = c.source === "orchestrator" || c.source === "agent" ? c.source : "human";
-      out.push({ id: c.id, ...v.value, source, createdAt: typeof c.createdAt === "string" ? c.createdAt : "" });
+      // The rule's history and its open proposals (constraint_edit.ts) ride
+      // along; a malformed entry in either is dropped, the rule is not.
+      const objs = (x: unknown) => (Array.isArray(x) ? x.filter((y) => y && typeof y === "object") : []);
+      const changes = objs(c.changes).filter((y: any) => typeof y.at === "string" && typeof y.field === "string");
+      const proposals = objs(c.proposals).filter((y: any) => typeof y.id === "string" && y.patch && typeof y.patch === "object" && typeof y.why === "string");
+      out.push({
+        id: c.id, ...v.value, source, createdAt: typeof c.createdAt === "string" ? c.createdAt : "",
+        ...(changes.length ? { changes: changes as Constraint["changes"] } : {}),
+        ...(proposals.length ? { proposals: proposals as Constraint["proposals"] } : {}),
+      });
     }
     return out;
   } catch {
@@ -225,11 +235,17 @@ export function addConstraint(
 }
 
 export function removeConstraint(root: string, id: string): boolean {
+  return removeConstraintAndDemote(root, id).removed;
+}
+
+/** Remove a constraint; a planned rule that was promoted into it is a planned
+ *  rule again (plan_store.demoteOrphanedPromotions) — `demoted` names them. */
+export function removeConstraintAndDemote(root: string, id: string): { removed: boolean; demoted: string[] } {
   const list = loadConstraints(root);
   const next = list.filter((c) => c.id !== id);
-  if (next.length === list.length) return false;
+  if (next.length === list.length) return { removed: false, demoted: [] };
   saveConstraints(root, next);
-  return true;
+  return { removed: true, demoted: demoteOrphanedPromotions(root, new Set(next.map((c) => c.id))) };
 }
 
 /** H2H #2 finding (2026-09-07): the brief RESTATED the five human

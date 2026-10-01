@@ -10,7 +10,7 @@ import { execFileSync } from "node:child_process";
 import { appendFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fitText, INLINE_CAP, runHook } from "../scripts/cli/hooks.mjs";
+import { fitText, INLINE_CAP, runHook, renderFindings, OFFENDERS_PER_CHECK } from "../scripts/cli/hooks.mjs";
 import { readLessons, runLessons } from "../scripts/cli/lessons.mjs";
 import { fitContract, restOfContract } from "../scripts/cli/contract_fit.mjs";
 import { runSkills } from "../scripts/cli/skills.mjs";
@@ -68,6 +68,32 @@ test("post-edit: a NEW violation blocks with the rule, its reason and the offend
   const fixed = edit("b", "telemetry/ingest.py");
   assert.equal(fixed.block, undefined);
   assert.equal(hook("stop", { session_id: "b" }), null);
+});
+
+test("attribution: a violation an EARLIER edit introduced is one summary line on the next edit, not a repeated block; the turn's end still holds it", () => {
+  // Reported from a real repo (2026-10-01): every post-edit repeated every
+  // offender, even for an edit that never touched the rule.
+  hook("prompt", { session_id: "attr", prompt: "add paging to telemetry/ingest.py" });
+  appendFileSync(join(root, "telemetry/ingest.py"), DIRECT_NOTIFY);
+  const first = edit("attr", "telemetry/ingest.py");
+  assert.match(first.block, /This edit introduced a break of a stated rule/);
+  assert.match(first.block, /vibegraph-knowledge constraint propose c3 --check/, "names the command to propose a re-scope");
+  const next = edit("attr", "telemetry/normalize.py");
+  assert.equal(next.block, undefined, "this edit did not introduce it");
+  const ctx = next.json.hookSpecificOutput.additionalContext;
+  assert.match(ctx, /Already violated before this edit \(not repeated; the end of the turn re-checks them\): \[c3\] 1 offender\./);
+  assert.doesNotMatch(ctx, /page_direct/, "no offender lines repeated");
+  assert.ok(hook("stop", { session_id: "attr" }).block, "the turn may still not end on it");
+  restore("telemetry/ingest.py");
+});
+
+test("offender lines are de-duplicated and capped per check", () => {
+  const f = (offender, described = "every caller of notify is in alerts.py") => ({ id: "c9", rule: "callers-only", verdict: "violated", offender, described, reason: "r" });
+  const list = [f("a.py:x"), f("a.py:x"), ...Array.from({ length: 8 }, (_, i) => f(`b${i}.py:y`))];
+  const out = renderFindings(list, new Map([["c9", "rule text"]]));
+  assert.equal((out.match(/a\.py:x/g) ?? []).length, 1, "the same offender twice is one mention");
+  assert.match(out, /\(\+4 more\)/, `${OFFENDERS_PER_CHECK} shown, the rest counted`);
+  assert.equal((out.match(/\n    r$/gm) ?? []).length, 1, "the reason once per check");
 });
 
 test("an edit made through Bash is caught too; a Bash call that changed no code is free", () => {

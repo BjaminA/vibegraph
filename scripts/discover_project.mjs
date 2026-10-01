@@ -19,6 +19,16 @@
 // NAMED LIMIT: a target KEY (`buildBackendCommand("company", …)`) is not a
 // path; a table mapping keys to scripts is not read here (M-FLOW refusals).
 import { nodeScriptRefs, resolveScriptFiles } from "./frontends/script_refs.mjs";
+import { packageRunFiles } from "./package_entries.mjs";
+
+/** Mirrors isTestFile in src/shared/path_match.ts: this script is also run as
+ *  a plain `node` child of the server, which cannot import .ts on Node 20. */
+function isTestFile(path) {
+  const segs = path.split("/");
+  const base = segs[segs.length - 1] ?? "";
+  return segs.slice(0, -1).some((s) => s === "test" || s === "tests" || s === "__tests__")
+    || /^test_/.test(base) || /\.(test|spec)\.[A-Za-z]+$/.test(base) || /_test\.[A-Za-z]+$/.test(base);
+}
 
 function topLevelMain(ir) {
   const nodes = ir.nodes ?? [];
@@ -58,9 +68,26 @@ function executesAtTop(ir) {
     && !["function_def", "class_def", "import", "import_from"].includes(n.type));
 }
 
-export function discoverProject(files, entryPoints) {
+export function discoverProject(files, entryPoints, manifests = []) {
   const fileKeys = Object.keys(files);
   const haveEntry = new Set((entryPoints ?? []).map((e) => e.file));
+  // 2026-10-01 — what a package.json runs (scripts/package_entries.mjs): a
+  // `bin`, or a script whose runner names the file. The package's own words
+  // are the evidence, so it needs no literal elsewhere and no top-level code.
+  const pkgOut = [];
+  for (const r of packageRunFiles(manifests, fileKeys)) {
+    if (haveEntry.has(r.file) || pkgOut.some((e) => e.file === r.file)) continue;
+    const ir = files[r.file];
+    const main = topLevelMain(ir);
+    if (!main && !executesAtTop(ir)) continue; // a bin that only exports has nothing that runs
+    pkgOut.push({
+      id: `${r.file}:${main ? "main" : "module"}`, kind: "cli", file: r.file, irNodeId: main ? main.id : "module",
+      qualifiedName: `${ir.modulePath ?? r.file}:${main ? "main" : "module"}`, label: r.file.split("/").pop(),
+      summary: `run by the package: ${r.how}`, framework: r.bin ? "package-bin" : "package-script",
+      metadata: { seed: main ? "main" : "module", package: r.pkg, ...(r.bin ? { bin: r.bin } : { script: r.script }) },
+    });
+  }
+  for (const e of pkgOut) haveEntry.add(e.file);
   const invokedFrom = new Map(); // target file → [{file, nodeId, literal}]
   for (const [file, ir] of Object.entries(files)) {
     for (const n of ir.nodes ?? []) {
@@ -105,14 +132,34 @@ export function discoverProject(files, entryPoints) {
       metadata: { seed: main ? "main" : "module", invokedFrom: callers },
     });
   }
-  return out;
+  // 2026-10-01 — last, the weakest evidence: a JS/TS file that, when loaded,
+  // awaits at the top, calls `.listen(…)` or reads `process.argv` (the
+  // builder's `programSignals`) is a PROGRAM. After the package and the
+  // command rules, so a file another file runs keeps who runs it.
+  for (const e of out) haveEntry.add(e.file);
+  const progOut = [];
+  for (const [file, ir] of Object.entries(files)) {
+    const signals = ir?.programSignals ?? [];
+    if (!signals.length || haveEntry.has(file) || isTestFile(file)) continue;
+    const main = topLevelMain(ir);
+    if (!main && !executesAtTop(ir)) continue;
+    progOut.push({
+      id: `${file}:${main ? "main" : "module"}`, kind: "cli", file, irNodeId: main ? main.id : "module",
+      qualifiedName: `${ir.modulePath ?? file}:${main ? "main" : "module"}`, label: file.split("/").pop(),
+      summary: `runs when loaded: ${signals.map((s) => SIGNAL_WORDS[s] ?? s).join(", ")}${main ? " — main() entry" : ""}`,
+      framework: "node", metadata: { seed: main ? "main" : "module", signals },
+    });
+  }
+  return [...pkgOut, ...out, ...progOut];
 }
+
+const SIGNAL_WORDS = { await: "a top-level await", listen: "a .listen() call", argv: "reads process.argv" };
 
 const isMain = process.argv[1] && /discover_project\.mjs$/.test(process.argv[1]);
 if (isMain) {
   let raw = "";
   process.stdin.setEncoding("utf-8");
   for await (const chunk of process.stdin) raw += chunk;
-  const { files, entryPoints } = JSON.parse(raw);
-  process.stdout.write(JSON.stringify({ entryPoints: discoverProject(files ?? {}, entryPoints ?? []) }));
+  const { files, entryPoints, manifests } = JSON.parse(raw);
+  process.stdout.write(JSON.stringify({ entryPoints: discoverProject(files ?? {}, entryPoints ?? [], manifests ?? []) }));
 }

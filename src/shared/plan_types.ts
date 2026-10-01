@@ -67,6 +67,10 @@ export interface PlanBoundary {
 export interface PlanTool {
   tool: string;
   role: StackRole;
+  /** 2026-10-01 — the client libraries the code reaches it THROUGH: a store
+   *  (`docstore`) used via its client (`yjs`). Code that uses a `via` library
+   *  realises the tool — not "drifted, the code uses yjs". */
+  via?: string[];
   why?: string;
   /** a verified quote from the documents it came from; null = inferred */
   groundedIn?: string | null;
@@ -77,6 +81,10 @@ export interface PlanThread {
   /** how the entry point will read: "POST /readings", "cli:nightly", a function name */
   id: string;
   entry: string;
+  /** 2026-10-01 — the real entry point it is, when its human id does not read
+   *  like one: an entry-point id (`bin/provision.ts:module`) or a file path
+   *  (`bin/provision.ts`, matched to that file's one entry). Matched first. */
+  entryPoint?: string;
   process?: string;
   serves: string;
   /** primary steps only; `b1:insert` names the boundary the step crosses */
@@ -144,6 +152,7 @@ export type PlanVerdict =
   | "not-built"     // nothing in the code yet
   | "unanchored"    // the plan gives nothing to look for (add `at`)
   | "unverified"    // both ends exist; the thing between them is not checked
+  | "orphaned"      // a boundary whose end is a DROPPED process: it can never be built as written
   | "pass" | "violated" | "unverifiable"  // a planned rule's check, as ADVICE
   | "prose";        // a planned rule with no check
 
@@ -156,6 +165,10 @@ export interface PlanFinding {
   entryPointId?: string;
   /** a drifted thread: the primary steps not found on it (the map marks them) */
   missing?: string[];
+  /** a drifted thread: WHY each missing step is missing, where the IR says */
+  missingWhy?: Record<string, string>;
+  /** an unmatched thread: the closest real entry points ("did you mean …") */
+  suggestions?: string[];
   /** a realised process: the entry points in its files (≤ 50) — how the map
    *  finds the real box the planned process became */
   entryPoints?: string[];

@@ -554,6 +554,11 @@ export interface ConstraintRecord {
   //
   // `check` is kept and still honoured, so nothing already stored breaks.
   checks?: Array<import("../server/constraint_grammar.ts").ConstraintCheck | import("../server/quality/verbs/index.ts").Run1Check>;
+  // 2026-10-01 — the rule's history (who changed which field, before →
+  // after, why) and the changes an agent PROPOSED that a person has not yet
+  // decided (src/server/constraint_edit.ts).
+  changes?: import("../server/constraint_edit.ts").ConstraintChange[];
+  proposals?: import("../server/constraint_edit.ts").ConstraintProposal[];
 }
 
 // ── M-STACK (PLAN-M-STACK.md) — stack facts + stack policies ────────

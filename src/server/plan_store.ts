@@ -21,6 +21,7 @@ import type {
 } from "../shared/plan_types.ts";
 import { PLAN_CAPS, PLAN_SECTIONS, planItemId } from "../shared/plan_types.ts";
 import { STACK_ROLES } from "../shared/stack_taxonomy.ts";
+import { words } from "./plan_thread_match.ts";
 import type { SystemPlan, SubsystemKind } from "../shared/protocol";
 
 export const PLAN_FILE = path.join(".vibegraph", "plan.json");
@@ -56,7 +57,7 @@ export function validatePlan(x: unknown): string | null {
     const cap = PLAN_CAPS[s];
     // Dropped items stay for the record but do not count against the cap.
     const live = items.filter((i: any) => i?.status !== "dropped").length;
-    if (live > cap) return `${s}: ${live} items, over the cap of ${cap} — a plan this size has stopped being about its objective; drop or merge some`;
+    if (live > cap) return `${s}: ${live} items, over the cap of ${cap} — a plan this size has stopped being about its objective; drop or merge some. ${capCandidates(s, items)}`;
     const ids = new Set<string>();
     for (const [i, raw] of items.entries()) {
       const err = validateItem(s, raw);
@@ -85,6 +86,34 @@ export function validatePlan(x: unknown): string | null {
     }
   }
   return null;
+}
+
+/** 2026-10-01 — a cap refusal names what to drop or merge, not only "no":
+ *  the PROPOSED items first (nobody agreed to them yet), then the pairs whose
+ *  words overlap most (a word-match guess that two items say one thing). */
+export function capCandidates(section: PlanSection, items: unknown[]): string {
+  const live = (items as any[]).filter((i) => i?.status !== "dropped");
+  const label = (i: any) => planItemId(section, i);
+  const gist = (i: any) => String(i.text ?? i.serves ?? i.label ?? i.why ?? "").slice(0, 60);
+  const proposed = live.filter((i) => i.status === "proposed").slice(0, 5);
+  const ws = live.map((i) => new Set(words(`${label(i)} ${gist(i)} ${(i.primary ?? []).join(" ")}`)));
+  // A word most items use says nothing about two of them: shared words are
+  // weighed by how rare they are across the section (idf).
+  const df = new Map<string, number>();
+  for (const s of ws) for (const w of s) df.set(w, (df.get(w) ?? 0) + 1);
+  const weight = (w: string) => Math.log((live.length + 1) / (df.get(w) ?? 1));
+  const pairs: Array<{ a: any; b: any; shared: string[]; score: number }> = [];
+  for (let x = 0; x < live.length; x++) for (let y = x + 1; y < live.length; y++) {
+    const shared = [...ws[x]].filter((w) => ws[y].has(w)).sort((p, q) => weight(q) - weight(p));
+    const score = shared.reduce((k, w) => k + weight(w), 0);
+    if (shared.length >= 2 && score > 1) pairs.push({ a: live[x], b: live[y], shared, score });
+  }
+  pairs.sort((p, q) => q.score - p.score);
+  const parts = [
+    proposed.length ? `drop a proposed one: ${proposed.map((i) => `${label(i)}${gist(i) ? ` ("${gist(i)}")` : ""}`).join(", ")}` : "",
+    pairs.length ? `or merge: ${pairs.slice(0, 3).map((p) => `${label(p.a)} + ${label(p.b)} (both about ${p.shared.slice(0, 3).join(", ")})`).join("; ")}` : "",
+  ].filter(Boolean);
+  return parts.length ? `Candidates — ${parts.join("; ")}.` : "Every item is agreed and none overlaps: drop the one that serves the objective least.";
 }
 
 export function validateItem(section: PlanSection, raw: unknown): string | null {
@@ -119,6 +148,7 @@ export function validateItem(section: PlanSection, raw: unknown): string | null 
     case "stack":
       if (!STACK_ROLES.includes(o.role)) return `role must be one of ${STACK_ROLES.join("|")}`;
       if (o.why !== undefined && !line(o.why)) return "why must be one line";
+      if (o.via !== undefined && !(Array.isArray(o.via) && o.via.length <= 6 && o.via.every((v: unknown) => line(v, 80)))) return "via must be up to 6 client-library names (the tool is reached through them)";
       return null;
     case "threads":
       if (!line(o.entry, 40)) return "entry must say what kind of entry point it is (route, cli, script, page, tool, test…)";
@@ -127,6 +157,7 @@ export function validateItem(section: PlanSection, raw: unknown): string | null 
       if (o.primary.length > PLAN_CAPS.primarySteps) return `primary: ${o.primary.length} steps, over the cap of ${PLAN_CAPS.primarySteps} — primary steps only (what leaves the project, and the path to it)`;
       if (!o.primary.every((x: unknown) => line(x, 80))) return "each primary step must be a short name";
       if (o.process !== undefined && !str(o.process)) return "process must be a process id";
+      if (o.entryPoint !== undefined && !line(o.entryPoint, 200)) return "entryPoint must be an entry-point id (file:name) or a file path";
       return null;
     case "policies":
       if (!line(o.text, 240)) return "text must be one sentence";
@@ -184,6 +215,28 @@ export function savePlan(root: string, plan: Plan): { path?: string; error?: str
     return { error: `could not save the plan: ${e.message}` };
   }
   return { path: file };
+}
+
+/** 2026-10-01 — a planned rule PROMOTED into a constraint that no longer
+ *  exists (removed with `constraint remove`, or by hand) is a planned rule
+ *  again: back to `agreed`, its `constraintId` gone, the changelog saying why.
+ *  Never left reading "promoted as c2" with no c2. Returns the ids demoted. */
+export function demoteOrphanedPromotions(root: string, constraintIds: ReadonlySet<string>, now: Date = new Date()): string[] {
+  const plan = loadPlan(root);
+  if (!plan) return [];
+  const orphans = plan.policies.filter((p) => p.status === "promoted" && (!p.constraintId || !constraintIds.has(p.constraintId)));
+  if (!orphans.length) return [];
+  const next: Plan = structuredClone(plan);
+  next.revision += 1;
+  const at = now.toISOString();
+  for (const o of orphans) {
+    const p = next.policies.find((x) => x.id === o.id)!;
+    next.changelog.push({ rev: next.revision, at, by: "human", change: `${p.constraintId ?? "its constraint"} is gone from constraints.json — ${p.id} is a planned rule again (agreed), no longer enforced` });
+    p.status = "agreed";
+    delete p.constraintId;
+  }
+  next.changelog = next.changelog.slice(-PLAN_CAPS.changelog);
+  return savePlan(root, next).error ? [] : orphans.map((o) => o.id);
 }
 
 // ── the greenfield flow's view ───────────────────────────────────────────

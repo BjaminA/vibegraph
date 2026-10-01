@@ -38,6 +38,9 @@ CLI) and says so; everything else is deterministic.
 |---|---|---|---|
 | `init [--print]` | Points Claude Code at the knowledge folder | a marked block in `CLAUDE.md`; a line in `.gitignore` | — |
 | `init --hooks [--windows]` / `--remove-hooks` | Installs (removes) the four Claude Code hooks; `--windows` writes them as `wsl.exe` commands for a Windows-side Claude | `.claude/settings.local.json` (per user, never committed) | — |
+| `hook install [--target posix\|wsl] [--remove]` | The same hooks without the `CLAUDE.md` block; `--target wsl` = `--windows` | `.claude/settings.local.json` | — |
+| `hook run <event> --file <path>` / `--command "<sh>"` / `--prompt "<text>"` | Fires a hook by hand: builds the payload Claude Code would send; the hook's exit codes (0, or 2 blocked) | nothing (a session record under `~/.cache`) | — |
+| `doctor` | Are the hooks installed, runnable from this side, and have they fired since installed? exit 0 / 1 | nothing | — |
 | `init --skill [--user]` / `--skills plan,…` / `--remove-skill` | Installs (removes) `/vibegraph` and the four task skills | `.claude/skills/`, or `~/.claude/skills/` with `--user` | — |
 | `view [<path>] [--port n] [--open]` | Starts the visualisation until Ctrl-C | `.vibegraph/` state, as you use the app | only the app's Claude features |
 
@@ -58,24 +61,25 @@ CLI) and says so; everything else is deterministic.
 
 | Command | What it does | What it writes | Tokens |
 |---|---|---|---|
-| `check [--uncommitted $ref| --git <range>]` | Every stated rule's check: PASS / VIOLATED (names the call) / UNVERIFIABLE; exit 0 / 1 / 2 | nothing | — |
-| `constraints list $ref| add $ref| remove $ref| ratify` | The stated rules, their reasons, scopes and checks | `.vibegraph/constraints.json` | — |
-| `seeds list $ref| add $ref| remove` | Entry points discovery cannot see | `.vibegraph/manual_seeds.json` | — |
-| `skills list $ref| ratify $ref| reaffirm $ref| auto-reaffirm` | Per-thread skills: approve, re-stamp a still-correct stale one | `.vibegraph/thread-skills/` | — |
-| `skills draft <entry>… $ref| --missing` | Drafts per-thread guidance through the grounding gates (reads the thread's lessons) | `.vibegraph/thread-skills/` | **yes** |
-| `direction [<skill>]` / `enable $ref| disable <skill>` / `hooks headlines $ref| on-violation $ref| off` | The generic coding skills: where they apply, one skill in full, whether the hooks send them | `.vibegraph/skills.json` | — |
+| `check [--uncommitted \| --git <range>]` | Every stated rule's check: PASS / VIOLATED (names the call) / UNVERIFIABLE; exit 0 / 1 / 2 | nothing | — |
+| `constraints list \| add \| remove \| ratify` | The stated rules, their reasons, scopes and checks | `.vibegraph/constraints.json` | — |
+| `constraint show \| edit \| propose \| accept \| reject <id>` | A rule's history; change it in place (a person), or propose a change with `--why` (an agent, or anything run inside Claude Code) for a person to accept | `.vibegraph/constraints.json` | — |
+| `seed(s) list \| add \| remove` | Entry points discovery cannot see (most programs are found from `package.json` and `listen` / `argv` / top-level `await`) | `.vibegraph/manual_seeds.json` | — |
+| `skills list \| ratify \| reaffirm \| auto-reaffirm` | Per-thread skills: approve, re-stamp a still-correct stale one | `.vibegraph/thread-skills/` | — |
+| `skills draft <entry>… \| --missing` | Drafts per-thread guidance through the grounding gates (reads the thread's lessons) | `.vibegraph/thread-skills/` | **yes** |
+| `direction [<skill>]` / `enable \| disable <skill>` / `hooks headlines \| on-violation \| off` | The generic coding skills: where they apply, one skill in full, whether the hooks send them | `.vibegraph/skills.json` | — |
 | `lessons list` | Rules sessions broke and put right, with the fix | nothing | — |
 | `plan init "<objective>"` / `show` / `check` | A hypothetical plan: start it, read it, measure the code against it (realised / drifted / not built) | `.vibegraph/plan.json` (init) | — |
-| `plan edit '<op>'` / `agree` / `drop` / `close` / `reopen` | Change the plan by small operations, each one a changelog line; `--as agent` records a proposal | `.vibegraph/plan.json` | — |
+| `plan edit '<op>'` / `agree` / `drop` / `close` / `reopen` | Change the plan by small operations, each one a changelog line (a `rename` op carries every reference; a thread's `entryPoint`, a tool's `via`); `--as agent` records a proposal | `.vibegraph/plan.json` | — |
 | `plan promote <rule>` | Copy a planned rule into the stated rules, where it is checked and may block | `.vibegraph/constraints.json`, `plan.json` | — |
-| `plan draft --from <url$ref|file>…` | Draft plan items from documents and the ratified software specs; a quote not in them drops the item; all proposed | `.vibegraph/plan.json` | **yes** |
-| `software add <tool> --from <url$ref|file>…` | Draft a spec for a tool from its own documents, behind the citation gate; saved as a draft | `.vibegraph/software/` | **yes** |
+| `plan draft --from <url\|file>…` | Draft plan items from documents and the ratified software specs; a quote not in them drops the item; all proposed | `.vibegraph/plan.json` | **yes** |
+| `software add <tool> --from <url\|file>…` | Draft a spec for a tool from its own documents, behind the citation gate; saved as a draft | `.vibegraph/software/` | **yes** |
 | `software list` / `show <tool> [--usage]` / `ratify <tool>` / `remove <tool>` | The specs; one with every quote and where the code calls it; accept one (quotes re-checked) | `.vibegraph/software/` | — |
 | `software edit <tool>` / `rule add\|update\|remove <tool>` / `unknown add\|remove <tool>` | Change a spec: every quote re-checked, your items marked STATED; your edit keeps it ratified, a model's sends it back to draft | `.vibegraph/software/` | — |
 | `software plan <tool> [--param name=value]` | Put a ratified spec's tool and rules into the plan, proposed, with the project's names filled in | `.vibegraph/plan.json` | — |
-| `architecture --propose $ref| --modify "<text>"` | Deployment / trust groups and a start-here path, every item citing what it saw; stored pending | `.vibegraph/architecture.json` | **yes** |
-| `architecture --ratify $ref| --reject` | Makes the pending proposal stated / drops it | `.vibegraph/architecture.json` | — |
-| `classify [--dry-run $ref| --apply]` | The role of tools no table knows; `--apply` stores each as a model-stated policy | `.vibegraph/constraints.json` | **yes** |
+| `architecture --propose \| --modify "<text>"` | Deployment / trust groups and a start-here path, every item citing what it saw; stored pending | `.vibegraph/architecture.json` | **yes** |
+| `architecture --ratify \| --reject` | Makes the pending proposal stated / drops it | `.vibegraph/architecture.json` | — |
+| `classify [--dry-run \| --apply]` | The role of tools no table knows; `--apply` stores each as a model-stated policy | `.vibegraph/constraints.json` | **yes** |
 | `--version` / `--help` | The version / every command and option | nothing | — |
 
 ### Every file VibeGraph makes
@@ -215,7 +219,13 @@ never write to your code:
 ![What Claude receives with a prompt that names telemetry/alerts.py: the thread, its two routed rules with their reasons, and its contract](../screenshots/13-hook-context.png)
 
 "New" means not already there at the session's first prompt: a violation
-your tree already had is reported by `check`, never blocked on. Each run reads
+your tree already had is reported by `check`, never blocked on. And an edit is
+blocked only for what **it** introduced: a violation an earlier edit left
+behind is one summary line, not a second block (the end of the turn still
+holds the turn to it). Offenders are listed once each, at most five per check,
+with the reason once; when the rule itself looks scoped too tightly, the block
+names `constraint propose <id> --check … --why …` — a proposal a person
+accepts, never a change Claude makes to the rule. Each run reads
 the project through the envelope cache (below), so it costs about a second
 when little changed. Everything a hook hands Claude stays under Claude Code's
 10,000-character inline limit (over it, Claude Code saves the text to a file
@@ -232,6 +242,28 @@ from the **next** session (you can review them with `/hooks`). Run from
 `npx`, the hooks call `npx --yes vibegraph-knowledge@<that version>`
 (npx's own cache is not a stable path); from a global or project install,
 they call that install directly.
+
+**The hooks on their own, and checking they work.**
+
+```bash
+vibegraph-knowledge hook install [--target posix|wsl] [--remove] [<root>]
+vibegraph-knowledge hook run <event> [<root>] --file <path> | --command "<sh>" | --prompt "<text>" [--session <id>]
+vibegraph-knowledge doctor [<root>]
+```
+
+`hook install` writes the same four hooks as `init --hooks` without touching
+`CLAUDE.md`; `--target wsl` is `--windows` (a Claude Code running on Windows
+against a `\\wsl.localhost\…` project — run it from the WSL shell). `hook run`
+fires one hook by hand: it builds the JSON Claude Code would pipe in (`--file`
+for an Edit/Write, `--command` for a Bash edit, `--prompt` for a prompt), runs
+the same code, and keeps its exit codes — 0, or 2 with the block on stderr — so
+an agent or a script never hand-rolls the payload. `doctor` says whether the
+hooks are installed, whether their command can run from this side (a Linux
+path cannot run from Windows), and whether they have **fired since they were
+installed**: every real hook run leaves a one-line record under
+`~/.cache/vibegraph-knowledge` (a `hook run` does not count — it is a test).
+Exit 0, or 1 with the reason. Hooks installed mid-session apply from the next
+one; a Windows-side Claude against a WSL project needs `--target wsl`.
 
 **`--skill`** installs the Claude Code skill `/vibegraph` into
 `.claude/skills/vibegraph/SKILL.md` (with `--user`, into `~/.claude/skills/`,
@@ -265,7 +297,7 @@ longer answers.
 the last parse under `~/.cache/vibegraph-knowledge/envelopes/`, outside the
 project. Nothing changed → it is read back; files changed → only those are
 re-parsed and only the threads that walk them re-extracted; a new file, a
-tsconfig / Cargo.toml / manual-seeds change, a different Python or a new
+tsconfig / Cargo.toml / package.json / manual-seeds change, a different Python or a new
 VibeGraph version → a full rebuild. The result is the same as a full parse
 (`test:envelope-cache` compares them after every kind of edit). On a
 1,128-file project `check` went from 17 s to 3 s with nothing changed and
@@ -401,7 +433,15 @@ It is treated differently from the real knowledge:
   - `{"op":"add","section":…,"item":{…}}`
   - `{"op":"update","section":…,"id":…,"fields":{…}}`
   - `{"op":"drop",…}`, `{"op":"agree",…}`
+  - `{"op":"rename","section":…,"from":…,"to":…}` — every reference follows
+    (boundary ends, a thread's process, `b1:step` names, `about`)
   - `{"op":"set-objective","text":…}`, `close`, `reopen`
+
+  When the code exists, a thread's `entryPoint` (an entry id, or a file with
+  one entry point) says which real thread it is; it is matched on that before
+  its id or label. A stack tool's `via` names the client libraries it is
+  reached through (`{"id":"docstore","via":["@acme/docstore-client"]}`), so code
+  using them realises it and its boundaries.
 - **Claude proposes; a person agrees.** Whoever runs this command is a
   person.
   - `--as agent` (what the MCP tool `vibegraph_plan_edit` does) adds items as
@@ -414,7 +454,9 @@ It is treated differently from the real knowledge:
 - **Planned rules are advice.** `plan check` runs their checks through the
   same checkers as `check`, but they block nothing. `plan promote` copies one
   into `.vibegraph/constraints.json` as a human-stated rule, with its reason
-  in the text. From then on `check` and the hooks enforce it.
+  in the text. From then on `check` and the hooks enforce it; removing that
+  constraint later puts the planned rule back to agreed. A plan over its caps
+  is refused with the proposed items to drop and the pairs that overlap.
 
 `plan check` measures the code against the plan. Every live item gets a
 verdict, with the reason:
@@ -423,7 +465,11 @@ verdict, with the reason:
 - **drifted**: the code has something different. For example, "planned as
   db; the code reads it as cache", "not found on its thread: publish", or
   "sqlite3 is used, but not from forecaster's files".
-- **not-built**: nothing in the code yet.
+- **not-built**: nothing in the code yet. An unmatched thread lists the
+  nearest entry points (a word-match guess, said as one); a drifted thread says
+  why each step is missing (reached only through a dynamic call, defined but
+  not reached, or not defined anywhere parsed).
+- **orphaned**: a boundary whose end is a dropped process.
 - **unanchored**: a process with no `at` and no directory of its name.
 - **unverified**: a process-to-process hop whose two ends both exist.
 - **pass / violated / unverifiable / prose**: a planned rule's check, as
@@ -444,7 +490,10 @@ Where the plan shows up:
 - **Hooked Claude Code sessions** receive the compact plan once per session,
   then only what changed. Every other prompt gets one line, about 60 tokens:
   `Plan objective (rev 7; 3 items proposed, 1 open question): … — keep this
-  work on it.` Nothing is sent while the plan is closed.
+  work on it.` Nothing is sent while the plan is closed. A prompt about a
+  planned thread the code does not have yet gets that thread's plan (what it
+  serves, where its code will live, its steps and the boundaries they cross)
+  instead of a keyword guess at existing code.
 - **The export** writes it as `design.md`.
 - **The app** has a Plan panel, and **Plan** / **Overlay** views on the
   architecture map.
@@ -587,6 +636,10 @@ vibegraph-knowledge constraints add [<root>] --kind <kind> --text "<rule and its
 vibegraph-knowledge constraints add [<root>] --json '<whole constraint>'
 vibegraph-knowledge constraints remove <id> [<root>]
 vibegraph-knowledge constraints ratify <id> [<root>]
+vibegraph-knowledge constraint show <id> [--json]
+vibegraph-knowledge constraint edit <id> <changes> [--why "…"]
+vibegraph-knowledge constraint propose <id> <changes> --why "<reason>"
+vibegraph-knowledge constraint accept|reject <id> <pN>
 ```
 
 - **kind**: `payload-schema`, `proxy`, `backend-call`, `perf-lever`,
@@ -604,7 +657,10 @@ vibegraph-knowledge constraints ratify <id> [<root>]
   (every call passes those keys and never those — read from the literal
   arguments at each call site; a key hidden by a spread or a variable payload
   makes that call *unverifiable*, never violated). Targets are function names
-  or callees as written.
+  or callees as written. The `files` of `import-only` and `callers-only` take
+  an exact path, a folder (`"src/db/"`) or a glob (`"packages/*/src/**"`), and
+  `"allowTests": true` adds every test file — so a rule does not go stale when
+  a file is added beside the allowed one, or a test needs the import.
   Rules: `callers-only`, `import-only`, `calls-through`, `payload-keys`, `guards`,
   `not-in-loop`, `handles-failure`, `annotated`, `co-changes`.
 - **`--policy`** (for `stack-policy`) states a decision about a tool:
@@ -615,6 +671,16 @@ vibegraph-knowledge constraints ratify <id> [<root>]
 restates an existing one is refused as a duplicate; a malformed check is
 refused rather than stored looking enforced. `ratify` turns a rule a model
 stated (e.g. by `classify --apply`) into a human-stated one. Zero tokens.
+
+A rule changes **without being deleted** (deleting it loses its history and
+whatever a plan promoted into it). `<changes>` are `--text`, `--check
+'<clause>'` (replaces every clause), `--checks '<array>'`, `--note` or a scope
+flag; each change is validated as the whole rule. `edit` is a person's change,
+applied and recorded field by field (who, when, before → after). `propose`
+stores a change with its `--why` and applies nothing — that is what an agent
+does, and what `edit` becomes when Claude Code runs it; the rule stands as it
+was until a person runs `accept` (or `reject`). `show` prints the history and
+the open proposals.
 
 Write the **why** into the text. "Region changes page the on-call once per
 device per hour — a flapping sensor once paged forty times in a minute" is
@@ -628,8 +694,12 @@ vibegraph-knowledge seeds add <file>[:<function|Class>] [<root>] [--note "<why>"
 vibegraph-knowledge seeds remove <file>[:<function|Class>] [<root>]
 ```
 
-For code that is really an entry point but is not found as one: a helper a
-scheduler calls, a script a cron line outside the repo runs. A bare `<file>`
+`seed` is the same command. Most programs need no seed: a file a
+`package.json` `bin` or script runs (through node, tsx, ts-node, bun, deno or
+vite-node, `dist/` mapped back to the source), and a JS/TS file that awaits at
+the top level, calls `.listen()` or reads `process.argv`, are entry points
+already. Seeds are for code that is really an entry point but is not found as
+one: a helper a scheduler calls, a script a cron line outside the repo runs. A bare `<file>`
 names the file's top level. The seed is resolved against the parsed project
 before it is written, and refused if it would not become a thread. Each seed
 becomes a thread — and a contract — on the next export. Zero tokens.

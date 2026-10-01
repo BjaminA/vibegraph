@@ -407,7 +407,10 @@
         "source": "async function loadPlugins() {\n  const mod = await import(\"./plugins.js\");\n  return mod;\n}"
       }
     ],
-    "modulePath": "server.ts"
+    "modulePath": "server.ts",
+    "programSignals": [
+      "listen"
+    ]
   },
   "db.ts": {
     "version": "2.0",

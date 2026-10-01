@@ -32,11 +32,15 @@ first run installs `libcst` into `~/.cache/vibegraph-knowledge` by itself.
 3. Tell the user: **the hooks take effect in the next Claude Code session**
    (Claude Code reads hook settings when a session starts; they can also
    review them with `/hooks`). Nothing is enforced in the session that
-   installed them.
+   installed them. In the next session, `vibegraph-knowledge doctor` says
+   whether they have fired; `vibegraph-knowledge hook run prompt --prompt
+   "<text>"` (or `hook run post-edit --file <path>`) fires one by hand, the
+   payload built for you, with the hook's own exit codes.
 
 If this Claude Code runs on **Windows** and the project lives in WSL
 (`\wsl.localhost\…`), the hooks must be installed from the WSL shell with
-`--windows` (`vibegraph-knowledge init --hooks --windows`, CLI installed with
+`--windows` (`vibegraph-knowledge init --hooks --windows`, or `hook install
+--target wsl` for the hooks alone; CLI installed with
 `npm install -g`, not npx): each hook is then a `wsl.exe` command any Windows
 shell can run. Without it, hooks installed from WSL hold Linux paths a Windows
 session cannot run — run the checks by hand (`check`) instead.
@@ -59,7 +63,10 @@ vibegraph-knowledge constraints add --kind invariant --files telemetry/ \
 Add a `--check` whenever the rule can be checked, so the hooks can enforce it:
 `callers-only`, `import-only`, `calls-through`, `guards`, `not-in-loop`,
 `payload-keys` (e.g. `{"rule":"payload-keys","target":"requests.post","require":["json.region"],"forbid":["json.password"]}`),
-`handles-failure`, `annotated`, `co-changes`. A rule without a check is still
+`handles-failure`, `annotated`, `co-changes`. The `files` of `import-only` /
+`callers-only` take folders (`src/db/`) and globs (`packages/*/src/**`), and
+`"allowTests": true` lets tests through, so the rule does not go stale as files
+are added. A rule without a check is still
 delivered to every session that touches its threads, but only a reader
 enforces it. `vibegraph-knowledge constraints list` shows what is stated.
 
@@ -67,8 +74,12 @@ enforces it. `vibegraph-knowledge constraints list` shows what is stated.
 
 - **A hook blocked your edit:** it names the rule, the reason people gave, and
   the call that breaks it. Fix the code so the rule holds. Do not remove the
-  hooks, edit `.vibegraph/`, or route around the check. If the rule itself
-  looks wrong for this change, stop and ask the user.
+  hooks, edit `.vibegraph/`, or route around the check. A block is only for
+  what THIS edit introduced; earlier violations are listed once and re-checked
+  at the end of the turn. If the rule itself looks wrong or too tight for this
+  change, propose the change and ask the user to accept it:
+  `vibegraph-knowledge constraint propose <id> --check '<clause>' --why
+  "<reason>"` (stored, never applied; `constraint show <id>` shows it).
 - **For a plan, a bug, a security review or a code review**, the task skills
   `/vibegraph-plan`, `/vibegraph-debug`, `/vibegraph-security` and
   `/vibegraph-review` say which knowledge file and command to open (installed
@@ -108,8 +119,11 @@ enforces it. `vibegraph-knowledge constraints list` shows what is stated.
 
 - `vibegraph-knowledge view` — the visualisation (architecture map, threads,
   code) at http://localhost:4200.
-- `vibegraph-knowledge seeds add <file>[:<function>]` — name an entry point
-  discovery cannot see.
+- `vibegraph-knowledge seed add <file>[:<function>]` — name an entry point
+  discovery cannot see (package.json bins/scripts and files that listen, read
+  argv or await at the top level are found already).
+- `vibegraph-knowledge doctor` — are the hooks installed, runnable from here,
+  and firing?
 - `vibegraph-knowledge skills draft <entry>` — **spends tokens**: drafts
   per-thread guidance for a person to ratify (`skills ratify`).
 - `vibegraph-knowledge --help` — everything else.

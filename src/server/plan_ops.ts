@@ -21,9 +21,10 @@ export type PlanOp =
   | { op: "update"; section: PlanSection; id: string; fields: Record<string, unknown> }
   | { op: "drop"; section: PlanSection; id: string }
   | { op: "agree"; section: PlanSection; id: string }
+  | { op: "rename"; section: PlanSection; from: string; to: string }
   | { op: "close" } | { op: "reopen" };
 
-export const PLAN_OP_NAMES = ["set-objective", "add", "update", "drop", "agree", "close", "reopen"] as const;
+export const PLAN_OP_NAMES = ["set-objective", "add", "update", "drop", "agree", "rename", "close", "reopen"] as const;
 
 /** Parse an untrusted op (WS, MCP, the CLI). */
 export function parsePlanOp(x: unknown): { ok: true; op: PlanOp } | { ok: false; error: string } {
@@ -34,6 +35,11 @@ export function parsePlanOp(x: unknown): { ok: true; op: PlanOp } | { ok: false;
   if (o.op === "close" || o.op === "reopen") return { ok: true, op: { op: o.op } };
   if (!PLAN_SECTIONS.includes(o.section)) return { ok: false, error: `section must be one of ${PLAN_SECTIONS.join("|")}` };
   if (o.op === "add") return o.item && typeof o.item === "object" ? { ok: true, op: { op: "add", section: o.section, item: o.item } } : { ok: false, error: "add needs an item" };
+  if (o.op === "rename") {
+    return typeof o.from === "string" && o.from && typeof o.to === "string" && o.to
+      ? { ok: true, op: { op: "rename", section: o.section, from: o.from, to: o.to } }
+      : { ok: false, error: "rename needs from and to (the old and the new id)" };
+  }
   if (typeof o.id !== "string" || !o.id) return { ok: false, error: `${o.op} needs the item's id` };
   if (o.op === "update") return o.fields && typeof o.fields === "object" ? { ok: true, op: { op: "update", section: o.section, id: o.id, fields: o.fields } } : { ok: false, error: "update needs fields" };
   return { ok: true, op: { op: o.op, section: o.section, id: o.id } };
@@ -51,6 +57,7 @@ function nextId(plan: Plan, section: PlanSection): string {
 const describe = (op: PlanOp, id?: string) =>
   op.op === "set-objective" ? `objective: "${op.text}"`
   : op.op === "close" || op.op === "reopen" ? `${op.op}d the plan`
+  : op.op === "rename" ? `rename ${op.section} ${op.from} → ${op.to}`
   : `${op.op} ${op.section} ${id ?? (op as any).id}`;
 
 export interface ApplyResult { plan?: Plan; error?: string; changes: string[] }
@@ -106,6 +113,7 @@ function applyOne(plan: Plan, op: PlanOp, by: PlanActor, changes: string[]): str
     return null;
   }
   const list = plan[op.section] as any[];
+  if (op.op === "rename") return renameItem(plan, op, by, changes);
   if (op.op === "add") {
     const item: any = { ...op.item };
     if (op.section === "open") {
@@ -131,7 +139,7 @@ function applyOne(plan: Plan, op: PlanOp, by: PlanActor, changes: string[]): str
   if (op.op === "drop") {
     if (op.section === "open") list.splice(idx, 1);
     else {
-      if (item.status === "promoted") return "a promoted rule lives in constraints.json now — remove it there";
+      if (item.status === "promoted") return `a promoted rule lives in constraints.json now as ${item.constraintId ?? "a constraint"} — remove it with \`vibegraph-knowledge constraint remove ${item.constraintId ?? "<id>"}\``;
       item.status = "dropped";
     }
     changes.push(describe(op));
@@ -152,13 +160,45 @@ function applyOne(plan: Plan, op: PlanOp, by: PlanActor, changes: string[]): str
     if (by === "agent") return "an agent cannot set a status — it proposes; a person agrees or drops";
     if (fields.status === "promoted") return "promote a rule with `plan promote`";
   }
-  if (item.status === "promoted") return "a promoted rule lives in constraints.json now — change it there";
+  if (item.status === "promoted") return `a promoted rule lives in constraints.json now as ${item.constraintId ?? "a constraint"} — change it there: \`vibegraph-knowledge constraint ${by === "agent" ? "propose" : "edit"} ${item.constraintId ?? "<id>"} --check '<json>' --why "…"\` (\`constraint show ${item.constraintId ?? "<id>"}\` prints it)`;
   const next = { ...item, ...fields };
   // An agreement a model can quietly edit is not one.
   if (by === "agent" && item.status === "agreed") next.status = "proposed";
   const bad = validateItem(op.section, next);
   if (bad) return bad;
   list[idx] = next;
-  changes.push(`${describe(op)}${by === "agent" && item.status === "agreed" ? " (was agreed — back to proposed)" : ""}`);
+  // Say WHY an agreement went back to proposed, and which field did it.
+  const changedFields = Object.keys(fields).filter((k) => JSON.stringify(item[k]) !== JSON.stringify((next as any)[k]));
+  changes.push(`${describe(op)}${by === "agent" && item.status === "agreed" ? ` (was agreed — back to proposed: an agent changed ${changedFields.join(", ") || "it"}; a person agrees again)` : ""}`);
+  return null;
+}
+
+/** 2026-10-01 — rename an item and every reference to it: a process in the
+ *  boundaries' ends and the threads' `process`, a tool in the boundaries'
+ *  ends, a boundary in the threads' `b1:step`s, anything in the rules' and
+ *  questions' `about` — so a thread's human name can change without
+ *  re-keying the plan by hand. */
+function renameItem(plan: Plan, op: Extract<PlanOp, { op: "rename" }>, by: PlanActor, changes: string[]): string | null {
+  const list = plan[op.section] as any[];
+  const item = list.find((i) => planItemId(op.section, i) === op.from);
+  if (!item) return `no "${op.from}" in ${op.section}`;
+  if (op.from === op.to) return "the new id is the old one";
+  if (list.some((i) => planItemId(op.section, i) === op.to)) return `"${op.to}" is already in ${op.section}`;
+  if (op.section === "stack") item.tool = op.to; else item.id = op.to;
+  const bad = validateItem(op.section, item);
+  if (bad) return bad;
+  let refs = 0;
+  const swap = (v: string) => { if (v === op.from) { refs++; return op.to; } return v; };
+  if (op.section === "processes" || op.section === "stack") {
+    for (const b of plan.boundaries) { b.from = swap(b.from); b.to = swap(b.to); }
+  }
+  if (op.section === "processes") for (const t of plan.threads) if (t.process) t.process = swap(t.process);
+  if (op.section === "boundaries") {
+    for (const t of plan.threads) t.primary = t.primary.map((s) => (s.startsWith(`${op.from}:`) ? (refs++, `${op.to}:${s.slice(op.from.length + 1)}`) : s));
+  }
+  for (const x of [...plan.policies, ...plan.open] as Array<{ about?: string }>) if (x.about) x.about = swap(x.about);
+  const demoted = by === "agent" && item.status === "agreed";
+  if (demoted) item.status = "proposed";
+  changes.push(`${describe(op)}${refs ? ` (${refs} reference${refs === 1 ? "" : "s"} updated)` : ""}${demoted ? " (was agreed — back to proposed: an agent renamed it; a person agrees again)" : ""}`);
   return null;
 }

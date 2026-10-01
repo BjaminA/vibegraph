@@ -20,9 +20,10 @@ import { buildQualityFacts } from "./quality/facts.ts";
 import { checkConstraint, isConstraintCheck } from "./constraint_grammar.ts";
 import { newRegistry, isRun1Check } from "./quality/verbs/index.ts";
 import { statedScopeFiles } from "./constraint_store.ts";
+import { matchThreadEntry, suggestEntries, whyMissing } from "./plan_thread_match.ts";
 
 export const PLAN_RECONCILE_LIMITS = [
-  "matching is by name and path: a planned thread matches an entry point whose label or name reads the same; a step matches a node on that thread whose label contains it",
+  "matching is by name and path: a planned thread matches the entry point its `entryPoint` names, else one whose label or name reads like its id; a step matches a node on that thread whose label or qualified name contains it; suggestions for an unmatched thread are a word-match guess",
   "the ORDER of a thread's steps is not compared, only their presence",
   "a boundary's payload keys (`carries`) are not compared against the code",
   "a process→process boundary is `unverified` even when both ends are built: the hop between them is not followed",
@@ -35,7 +36,6 @@ interface EnvLike {
   threads: Array<{ entryPointId: string | null; nodes: any[]; filesReached?: string[] }>;
 }
 
-const norm = (s: string) => s.toLowerCase().replace(/<([^>]+)>|\{([^}]+)\}|\[([^\]]+)\]/g, (_m, a, b, c) => `:${a ?? b ?? c}`).replace(/["'`]/g, "").replace(/\s+/g, " ").trim();
 const slug = (s: string) => s.toLowerCase().replace(/[-_ ]+/g, "");
 
 function underPrefix(file: string, at: string): boolean {
@@ -77,9 +77,16 @@ export function reconcilePlan(plan: Plan, env: EnvLike, stack: StackIndex, root:
   // ── stack ──
   const realTools = stack.tools.filter((t) => t.origin !== "project");
   const toolByName = new Map(realTools.map((t) => [t.tool.toLowerCase(), t]));
+  // A planned tool's names: itself, and the client libraries it is reached
+  // through (`via`) — code using `yjs` realises a `docstore` reached via yjs.
+  const namesOf = (tool: string) => [tool, ...(plan.stack.find((x) => x.tool === tool)?.via ?? [])];
+  const realOf = (tool: string) => namesOf(tool).map((n) => toolByName.get(n.toLowerCase())).filter((r): r is NonNullable<typeof r> => !!r);
   for (const t of live(plan.stack)) {
     const real = toolByName.get(t.tool.toLowerCase());
-    if (real) {
+    const through = real ? [] : realOf(t.tool);
+    if (through.length) {
+      add({ section: "stack", id: t.tool, verdict: "realised", detail: `reached through ${through.map((r) => r.tool).join(", ")} (used in ${new Set(through.flatMap((r) => r.files)).size} file(s))` });
+    } else if (real) {
       add(real.role === t.role
         ? { section: "stack", id: t.tool, verdict: "realised", detail: `used in ${real.files.length} file(s)` }
         : { section: "stack", id: t.tool, verdict: "drifted", detail: `planned as ${t.role}; the code reads it as ${real.role}` });
@@ -94,26 +101,33 @@ export function reconcilePlan(plan: Plan, env: EnvLike, stack: StackIndex, root:
   // ── boundaries ──
   const plannedTools = new Map(plan.stack.map((t) => [t.tool, t]));
   const boundaryVerdict = new Map<string, PlanVerdict>();
+  const dropped = new Set(plan.processes.filter((p) => p.status === "dropped").map((p) => p.id));
   for (const b of live(plan.boundaries)) {
     const fromFiles = owned.get(b.from);
     const toIsProcess = plan.processes.some((p) => p.id === b.to);
     let f: PlanFinding;
-    if (toIsProcess) {
+    const gone = [b.from, b.to].filter((x) => dropped.has(x));
+    if (gone.length) {
+      // Not "not built": it never will be, as written — an end was dropped.
+      f = { section: "boundaries", id: b.id, verdict: "orphaned", detail: `${gone.join(" and ")} ${gone.length === 1 ? "was" : "were"} dropped from the plan — drop this boundary, or point it at another process` };
+    } else if (toIsProcess) {
       const toFiles = owned.get(b.to);
       const built = (x: string[] | null | undefined) => !!x && x.length > 0;
       f = built(fromFiles) && built(toFiles)
         ? { section: "boundaries", id: b.id, verdict: "unverified", detail: `${b.from} and ${b.to} are both built; the hop between them is not followed` }
         : { section: "boundaries", id: b.id, verdict: "not-built", detail: `${[b.from, b.to].filter((x) => !built(owned.get(x))).join(" and ")} not built yet` };
     } else {
-      const real = toolByName.get(b.to.toLowerCase());
-      if (!real) f = { section: "boundaries", id: b.id, verdict: "not-built", detail: `${b.to} is not used anywhere yet${plannedTools.has(b.to) ? "" : " (and it is not a planned tool)"}` };
-      else if (!fromFiles) f = { section: "boundaries", id: b.id, verdict: "unverified", detail: `${b.to} is used, but ${b.from} has no location to check it from` };
+      const reals = realOf(b.to);
+      const realFiles = [...new Set(reals.flatMap((r) => r.files))];
+      const how = reals.length && reals[0].tool.toLowerCase() !== b.to.toLowerCase() ? ` (through ${reals.map((r) => r.tool).join(", ")})` : "";
+      if (!reals.length) f = { section: "boundaries", id: b.id, verdict: "not-built", detail: `${b.to} is not used anywhere yet${plannedTools.has(b.to) ? "" : " (and it is not a planned tool)"}` };
+      else if (!fromFiles) f = { section: "boundaries", id: b.id, verdict: "unverified", detail: `${b.to}${how} is used, but ${b.from} has no location to check it from` };
       else {
         const from = new Set(fromFiles);
-        const hits = real.files.filter((x) => from.has(x));
+        const hits = realFiles.filter((x) => from.has(x));
         f = hits.length
-          ? { section: "boundaries", id: b.id, verdict: "realised", detail: `${b.from} reaches ${b.to} in ${hits.slice(0, 3).join(", ")}${hits.length > 3 ? ", …" : ""}` }
-          : { section: "boundaries", id: b.id, verdict: "drifted", detail: `${b.to} is used, but not from ${b.from}'s files (${real.files.slice(0, 3).join(", ")})` };
+          ? { section: "boundaries", id: b.id, verdict: "realised", detail: `${b.from} reaches ${b.to}${how} in ${hits.slice(0, 3).join(", ")}${hits.length > 3 ? ", …" : ""}` }
+          : { section: "boundaries", id: b.id, verdict: "drifted", detail: `${b.to}${how} is used, but not from ${b.from}'s files (${realFiles.slice(0, 3).join(", ")})` };
       }
     }
     boundaryVerdict.set(b.id, f.verdict);
@@ -122,15 +136,19 @@ export function reconcilePlan(plan: Plan, env: EnvLike, stack: StackIndex, root:
 
   // ── threads ──
   for (const t of live(plan.threads)) {
-    const want = norm(t.id);
-    const readsAs = (e: EnvLike["entryPoints"][number]) => {
-      const m = e.metadata ?? {};
-      const route = typeof m.route === "string" ? m.route : typeof m.path === "string" ? m.path : null;
-      const method = typeof m.method === "string" ? m.method : null;
-      return [e.label, e.qualifiedName, e.id, e.id.split(":").pop(), route, route && method ? `${method} ${route}` : null];
-    };
-    const ep = env.entryPoints.find((e) => readsAs(e).some((x) => x && norm(x) === want));
-    if (!ep) { add({ section: "threads", id: t.id, verdict: "not-built", detail: "no entry point reads like it yet" }); continue; }
+    // Its `entryPoint` first, else its id read as an entry point (plan_thread_match.ts).
+    const m = matchThreadEntry(t, env.entryPoints);
+    const ep = m.ep;
+    if (!ep) {
+      if (m.ambiguous) { add({ section: "threads", id: t.id, verdict: "unanchored", detail: `entryPoint ${m.named} names a file with ${m.ambiguous.length} entry points — give one: ${m.ambiguous.join(", ")}`, suggestions: m.ambiguous.slice(0, 3) }); continue; }
+      const sug = suggestEntries(t, plan, env.entryPoints);
+      add({
+        section: "threads", id: t.id, verdict: "not-built",
+        detail: `${m.named ? `entryPoint ${m.named} is no entry point the code has` : "no entry point reads like it yet"}${sug.length ? ` — did you mean ${sug.join(", ")}? (set it as the thread's \`entryPoint\`)` : ""}`,
+        ...(sug.length ? { suggestions: sug } : {}),
+      });
+      continue;
+    }
     const thread = env.threads.find((x) => x.entryPointId === ep.id);
     const labels = (thread?.nodes ?? []).map((n: any) => String(n.label ?? "").toLowerCase());
     // A step's own name forms, from its id: `module/Writer.class/write.fn` is
@@ -148,14 +166,17 @@ export function reconcilePlan(plan: Plan, env: EnvLike, stack: StackIndex, root:
       const [head, ...rest] = step.split(":");
       const b = plan.boundaries.find((x) => x.id === head);
       if (b) {
-        if (!called.has(b.to.toLowerCase()) && boundaryVerdict.get(b.id) !== "realised" && boundaryVerdict.get(b.id) !== "unverified") missing.push(step);
+        if (!namesOf(b.to).some((n) => called.has(n.toLowerCase())) && boundaryVerdict.get(b.id) !== "realised" && boundaryVerdict.get(b.id) !== "unverified") missing.push(step);
         continue;
       }
       const name = (rest.length ? rest.join(":") : head).trim().toLowerCase();
       if (!name || !(qualified.has(name) || labels.some((l) => l.includes(name)))) missing.push(step);
     }
     add(missing.length
-      ? { section: "threads", id: t.id, verdict: "drifted", detail: `entry point ${ep.id} exists; not found on its thread: ${missing.join(", ")}`, entryPointId: ep.id, missing }
+      ? (() => {
+        const missingWhy = Object.fromEntries(missing.map((s) => [s, plan.boundaries.some((b) => b.id === s.split(":")[0]) ? `the thread never calls ${plan.boundaries.find((b) => b.id === s.split(":")[0])!.to}` : whyMissing(s, thread, env.files, ep.id)]));
+        return { section: "threads" as const, id: t.id, verdict: "drifted" as const, detail: `entry point ${ep.id} exists; not found on its thread: ${missing.map((s) => `${s} (${missingWhy[s]})`).join("; ")}`, entryPointId: ep.id, missing, missingWhy };
+      })()
       : { section: "threads", id: t.id, verdict: "realised", detail: `entry point ${ep.id}; every primary step found`, entryPointId: ep.id });
   }
 

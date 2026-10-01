@@ -10,7 +10,8 @@ import { parseArgs } from "node:util";
 import { loadEnvelope } from "../quality_check.mjs";
 import { pipelineHere } from "./pipeline.mjs";
 import { buildStackIndex } from "../../src/server/stack.ts";
-import { loadPlan, savePlan } from "../../src/server/plan_store.ts";
+import { loadPlan, savePlan, demoteOrphanedPromotions } from "../../src/server/plan_store.ts";
+import { loadConstraints } from "../../src/server/constraint_store.ts";
 import { applyPlanOps, parsePlanOp } from "../../src/server/plan_ops.ts";
 import { formatPlanMd } from "../../src/server/plan_render.ts";
 import { reconcilePlan } from "../../src/server/plan_reconcile.ts";
@@ -35,6 +36,8 @@ const HELP = `usage: vibegraph-knowledge ${PLAN_USAGE}
   edit '<op>' | --file <f>    apply one op (JSON) or a JSON array of them; sections: ${PLAN_SECTIONS.join(", ")}
                                 {"op":"add","section":"threads","item":{"id":"POST /readings","entry":"route","serves":"…","primary":["validate","b1:insert"]}}
                                 {"op":"update","section":"processes","id":"api","fields":{"at":"api/"}}
+                                {"op":"update","section":"threads","id":"provision-tenant","fields":{"entryPoint":"bin/provision.ts"}}
+                                {"op":"rename","section":"threads","from":"old id","to":"new id"}   (references follow)
                                 {"op":"set-objective","text":"…"}
   agree <section> <id>        a person agrees to a proposed item
   drop <section> <id>         drop an item (kept for the record); drop an open question to close it
@@ -66,8 +69,12 @@ export function runPlan(args) {
     if (loadPlan(root)) return done("a plan already exists — `plan show`, or change its objective with set-objective", 1);
     return apply([{ op: "set-objective", text: rest[0] }]);
   }
+  // A rule promoted into a constraint that has since gone is demoted first.
+  const demoted = demoteOrphanedPromotions(root, new Set(loadConstraints(root).map((c) => c.id)));
   const plan = loadPlan(root);
   if (!plan) return done("no plan yet — start one: vibegraph-knowledge plan init \"<objective>\"", 1);
+  if (demoted.length) process.stderr.write(`note: ${demoted.join(", ")} had been promoted into constraint(s) that no longer exist — planned rules again (agreed)
+`);
   if (sub === "show") return done(parsed.values.json ? JSON.stringify(plan, null, 2) : formatPlanMd(plan));
   if (sub === "check") {
     const { envelope } = loadEnvelope(root, null, pipelineHere(root), { cache: true });

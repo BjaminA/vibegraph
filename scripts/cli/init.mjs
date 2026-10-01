@@ -46,6 +46,12 @@ export const POINTER = [
   "parsed, what reaches and tests it, what environment it reads, and",
   "whether it changed since the export. `npx vibegraph-knowledge affected",
   "--uncommitted` lists the tests to run for your changes.",
+  "",
+  "A stated rule that looks wrong or too tight is not yours to change:",
+  "`npx vibegraph-knowledge constraint propose <id> --check '<clause>' --why",
+  "\"<reason>\"` records the change for a person to accept. If VibeGraph hooks",
+  "are installed but their context never arrives, `npx vibegraph-knowledge",
+  "doctor` says why; `hook run <event> --file <path>` fires one by hand.",
   END,
 ].join("\n");
 

@@ -37,6 +37,7 @@ import { computeReachability } from "./src/server/reachability";
 import { buildProposePrompt, docExcerpts, parseProposal } from "./src/server/arch_propose";
 import { readInfraManifests, readEnvDeclarations } from "./src/server/infra_manifests";
 import { readManualSeeds } from "./src/server/manual_seeds";
+import { readPackageManifests } from "./scripts/package_entries.mjs";
 import type { ArchModelRecord } from "./src/shared/protocol";
 // M-STACK.3 — the SYSTEM SPEC: the one render of stack facts WITH the
 // policies stated about each tool. Every prompt that needs the stack
@@ -719,7 +720,9 @@ async function runDiscoverEntryPoints(files: typeof projectParse): Promise<any[]
   }
   // M-FLOW.2 — project-level discovery over the WHOLE map: a script another
   // file names by a literal is run, whatever its own file says.
-  const extra = await spawnDerived(discoverProjectCommand(path.join(PROJECT_ROOT, "scripts")), { files, entryPoints: entries },
+  // 2026-10-01 — and what each package.json runs (bin, scripts).
+  const manifests = isDirectory ? readPackageManifests(inputPath) : [];
+  const extra = await spawnDerived(discoverProjectCommand(path.join(PROJECT_ROOT, "scripts")), { files, entryPoints: entries, manifests },
     "project-level entry-point discovery");
   entries.push(...(extra?.entryPoints ?? []));
   // M-ARCH.2 — manual seeds in EVERY language (the CLI's reader); the Python

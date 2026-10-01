@@ -1,0 +1,9 @@
+{
+  "name": "program-demo",
+  "bin": { "demo": "dist/cli.js" },
+  "scripts": {
+    "provision": "tsx src/bin/provision.ts --dry-run",
+    "dev": "NODE_ENV=dev npx tsx watch-free src/bin/provision.ts",
+    "lint": "eslint ."
+  }
+}

@@ -25,10 +25,11 @@ export function personOnlyStep(command, rest) {
   switch (command) {
     case "plan": return ["init", "agree", "close", "reopen", "promote"].includes(sub) ? `plan ${sub}` : null;
     case "software": return ["ratify", "remove"].includes(sub) ? `software ${sub}` : null;
-    case "constraints": return ["ratify", "remove"].includes(sub) ? `constraints ${sub}` : null;
+    case "constraints": case "constraint": return ["ratify", "remove", "accept", "reject"].includes(sub) ? `constraints ${sub}` : null;
     case "skills": return ["ratify", "reaffirm", "auto-reaffirm"].includes(sub) ? `skills ${sub}` : null;
     case "architecture": return has("--ratify") || has("--reject") ? `architecture ${has("--ratify") ? "--ratify" : "--reject"}` : null;
     // Taking the hooks or skills out is how a session would stop being checked.
+    case "hook": return sub === "install" && has("--remove") ? "hook install --remove" : null;
     case "init": return has("--remove-hooks") || has("--remove-skill") ? `init ${has("--remove-hooks") ? "--remove-hooks" : "--remove-skill"}` : null;
     default: return null;
   }

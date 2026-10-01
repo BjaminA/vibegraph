@@ -116,7 +116,13 @@ ls .vibegraph/knowledge/                 # README.md, architecture.md, threads/,
   run. The hooks translate the Windows paths Claude Code sends
   (`\\wsl.localhost\Ubuntu\…`, `C:\…`). Paths are spelled `//home/…` on
   purpose: Git Bash rewrites `/home/…` before it reaches WSL. A hook costs
-  about 0.7 s through `wsl.exe`.
+  about 0.7 s through `wsl.exe`. `vibegraph-knowledge hook install --target
+  wsl` installs the same hooks without the `CLAUDE.md` block.
+- **Check they work:** in the next session, `vibegraph-knowledge doctor` says
+  whether the hooks are installed, can run from this side, and have fired
+  since they were installed. `vibegraph-knowledge hook run post-edit --file
+  <path>` (or `hook run prompt --prompt "…"`) fires one by hand with the
+  payload built for you, and exits as the hook would (0, or 2 when it blocks).
 - `--skill` installs `/vibegraph` (set-up and use) and the task skills
   `/vibegraph-plan`, `-debug`, `-security` and `-review`. `--skills
   plan,security` picks some; `--user` installs them for every project on the
@@ -212,6 +218,13 @@ still starts — it says so — and refuses edits until `black` 24+ is importabl
 **`view` says python3 is not on your PATH.** The app runs its parser, edits
 and runs through `python3` by that name; install Python 3.10+ so `python3
 --version` works.
+
+**The hooks never seem to run.** `vibegraph-knowledge doctor`. Hooks apply
+from the session after they were installed. "Never fired" with a session
+since usually means a Windows-side Claude Code against a WSL project with
+hooks that hold Linux paths: reinstall from the WSL shell with `hook install
+--target wsl`. "does not exist here" means the CLI the hooks name moved
+(reinstall them).
 
 **Port 4200 is taken.** `vibegraph-knowledge view . --port 4300`.
 

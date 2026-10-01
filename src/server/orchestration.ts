@@ -29,6 +29,7 @@ import type {
 } from "../shared/protocol.ts";
 import { validateConstraintInput, type ConstraintInput } from "./constraint_store.ts";
 import { STACK_ROLES, isSafeToolName, type StackRole } from "../shared/stack_taxonomy.ts";
+import { isTestFile } from "../shared/path_match.ts";
 
 export const BRIEF_FENCE = "vg-orchestration";
 export const VERDICT_FENCE = "vg-review-verdict";
@@ -623,14 +624,9 @@ export function preCheckReport(packet: WorkRunPacket, evidence: WorkPacketEviden
   };
 }
 
-/** A path the repository treats as a test: a test/tests/__tests__ directory,
- *  a `test_` basename, or a `.test.` / `.spec.` / `_test.` suffix. */
-export function isTestFile(path: string): boolean {
-  const segs = path.split("/");
-  const base = segs[segs.length - 1] ?? "";
-  return segs.slice(0, -1).some((s) => s === "test" || s === "tests" || s === "__tests__")
-    || /^test_/.test(base) || /\.(test|spec)\.[A-Za-z]+$/.test(base) || /_test\.[A-Za-z]+$/.test(base);
-}
+// isTestFile moved to src/shared/path_match.ts (2026-10-01): stated rules
+// use it too (`allowTests`).
+export { isTestFile } from "../shared/path_match.ts";
 
 const SKIP_MARKER = /^\+.*(\btest\.skip\(|\bit\.skip\(|\bdescribe\.skip\(|\btest\.fixme\(|\bxit\(|\bxdescribe\(|@unittest\.skip|pytest\.mark\.skip|@skip\b)/m;
 

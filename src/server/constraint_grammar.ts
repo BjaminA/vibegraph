@@ -31,6 +31,7 @@ import {
   checkPayloadKeys, describePayloadKeys, isPayloadKeysCheck,
   type CallSiteFact, type PayloadKeysCheck,
 } from "./payload_check.ts";
+import { pathAllowed, describeAllowList } from "../shared/path_match.ts";
 
 /** What a human can say that the IR can check.
  *
@@ -47,8 +48,8 @@ import {
  *  it does not prove the call to `through` GUARDS the call to `target`, only
  *  that the function does both. Order and control flow are not checked. */
 export type ConstraintCheck =
-  | { rule: "callers-only"; target: string; files?: string[]; functions?: string[] }
-  | { rule: "import-only"; tool: string; files: string[] }
+  | { rule: "callers-only"; target: string; files?: string[]; functions?: string[]; allowTests?: boolean }
+  | { rule: "import-only"; tool: string; files: string[]; allowTests?: boolean }
   | { rule: "calls-through"; target: string; through: string }
   | PayloadKeysCheck;
 
@@ -203,10 +204,12 @@ export function isConstraintCheck(v: unknown): v is ConstraintCheck {
   if (c.rule === "callers-only") {
     if (typeof c.target !== "string" || !c.target) return false;
     const hasFiles = c.files !== undefined, hasFns = c.functions !== undefined;
-    if (!hasFiles && !hasFns) return false; // "callers only … nowhere" is not a rule
+    if (!hasFiles && !hasFns && c.allowTests !== true) return false; // "callers only … nowhere" is not a rule
+    if (c.allowTests !== undefined && typeof c.allowTests !== "boolean") return false;
     return (!hasFiles || strs(c.files)) && (!hasFns || strs(c.functions));
   }
-  if (c.rule === "import-only") return typeof c.tool === "string" && !!c.tool && strs(c.files);
+  if (c.rule === "import-only") return typeof c.tool === "string" && !!c.tool && strs(c.files)
+    && (c.allowTests === undefined || typeof c.allowTests === "boolean");
   if (c.rule === "calls-through") return typeof c.target === "string" && !!c.target
     && typeof c.through === "string" && !!c.through;
   if (c.rule === "payload-keys") return isPayloadKeysCheck(c);
@@ -255,11 +258,11 @@ function checkCallersOnly(
     };
   }
 
-  const allowedFiles = new Set(check.files ?? []);
   const allowedFns = new Set(check.functions ?? []);
   const offenders: string[] = [];
   for (const c of calls) {
-    const fileOk = allowedFiles.size > 0 && allowedFiles.has(c.fromFile);
+    // Files: exact, a folder (trailing /) or a glob; `allowTests` adds every test file.
+    const fileOk = pathAllowed(c.fromFile, check.files ?? [], { allowTests: check.allowTests });
     const fn = enclosingFunction(c.fromNodeId);
     const fnOk = allowedFns.size > 0 && !!fn && allowedFns.has(fn);
     // A caller satisfies the rule when it is inside ANY allowed place. With
@@ -270,7 +273,7 @@ function checkCallersOnly(
   }
 
   const where = [
-    ...(check.files?.length ? [`file(s) ${check.files.join(", ")}`] : []),
+    ...(check.files?.length || check.allowTests ? [`file(s) ${describeAllowList(check.files ?? [], check.allowTests)}`] : []),
     ...(check.functions?.length ? [`function(s) ${check.functions.join(", ")}`] : []),
   ].join(" or ");
   if (offenders.length) {
@@ -303,7 +306,6 @@ function checkImportOnly(
   facts: CheckFacts,
   check: Extract<ConstraintCheck, { rule: "import-only" }>,
 ): CheckResult {
-  const allowed = new Set(check.files);
   const importers = Object.entries(facts.importsByFile)
     .filter(([, tools]) => tools.includes(check.tool))
     .map(([file]) => file);
@@ -315,11 +317,12 @@ function checkImportOnly(
       offenders: [],
     };
   }
-  const offenders = importers.filter((f) => !allowed.has(f));
+  // Files: exact, a folder (trailing /) or a glob; `allowTests` adds every test file.
+  const offenders = importers.filter((f) => !pathAllowed(f, check.files, { allowTests: check.allowTests }));
   if (offenders.length) {
     return {
       verdict: "violated",
-      reason: `\`${check.tool}\` is imported outside ${check.files.join(", ")}: ${offenders.join(", ")}.`,
+      reason: `\`${check.tool}\` is imported outside ${describeAllowList(check.files, check.allowTests)}: ${offenders.join(", ")}.`,
       offenders,
     };
   }
@@ -345,13 +348,13 @@ export function describeCheck(check: ConstraintCheck): string {
   switch (check.rule) {
     case "callers-only": {
       const where = [
-        ...(check.files?.length ? [check.files.join(", ")] : []),
+        ...(check.files?.length || check.allowTests ? [describeAllowList(check.files ?? [], check.allowTests)] : []),
         ...(check.functions?.length ? [check.functions.join(", ")] : []),
       ].join(" or ");
       return `callers of \`${check.target}\` only in ${where}`;
     }
     case "import-only":
-      return `\`${check.tool}\` imported only in ${check.files.join(", ")}`;
+      return `\`${check.tool}\` imported only in ${describeAllowList(check.files, check.allowTests)}`;
     case "calls-through":
       return `every call to \`${check.target}\` goes through \`${check.through}\``;
     case "payload-keys":

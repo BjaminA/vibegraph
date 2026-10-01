@@ -43,6 +43,61 @@ use none of the new fields (`about`) are read exactly as before; a plan whose
 Tests: test:plan-map (6, fixture `test/fixtures/plan/map_demo`),
 test:e2e-plan-map (2), test:e2e-plan (updated: the Overlay's fourth card).
 
+### Hooks and rules on a multi-package TypeScript repo (hooks-feedback brief)
+
+What an agent hit building a TypeScript monorepo with the hooks, fixed
+generally. `check`, every hook and `plan check` keep their exit codes: 0 pass,
+1 violated, 2 unverifiable (a hook: 0, or 2 to block).
+
+- **A rule can change without being deleted.** `constraint show <id>` (history
+  and open proposals), `constraint edit <id> --check '<json>' --text …` (a
+  person; applied and recorded field by field), `constraint propose <id> …
+  --why "<reason>"` (an agent, or an edit run from inside Claude Code: stored,
+  never applied), `constraint accept|reject <id> <pN>` (a person). Every change
+  is validated as the whole rule. `constraint` is an alias of `constraints`.
+- **A hook blames only what this edit introduced.** A violation an earlier edit
+  introduced is one summary line, not a block (the end-of-turn check still holds
+  the turn to it). Offenders are de-duplicated and capped per check, the reason
+  given once, and a block names the `constraint propose` command for a rule
+  that is now scoped too tightly. **Behaviour change:** an edit to a file that
+  was already in violation no longer blocks unless it adds a violation.
+- **Allow-lists that do not go stale.** `import-only` / `callers-only` `files`
+  take an exact path, a folder (`src/db/`) or a glob (`packages/*/src/**`), and
+  `allowTests: true` adds every test file. Exact lists behave as before. `plan
+  promote` warns when a rule's only allowed file is one test file.
+- **Programs found without manual seeds.** A `package.json` `bin` (mapped from
+  `dist/` back to the parsed source) or a script whose runner (node, tsx,
+  ts-node, bun, deno, vite-node — through npx / pnpm / yarn) names a file makes
+  that file an entry point; so does a JS/TS file that awaits at the top level,
+  calls `.listen()` or reads `process.argv`. `seed` is an alias of `seeds`.
+  **Behaviour change:** projects like this gain entry points, and threads, they
+  did not have; `package.json` now invalidates the envelope cache.
+- **Planned threads with human names.** A plan thread may set `entryPoint` (an
+  entry id, or a file with one entry) and is matched on it first; an unmatched
+  thread lists the nearest entry points (a word-match guess, said as one); a
+  drifted thread says why each step is missing. A `plan edit` op
+  `{"op":"rename","section":…,"from":…,"to":…}` renames an item and every
+  reference to it.
+- **Plan state that goes stale is said.** Removing a constraint demotes the
+  planned rule promoted into it back to agreed; a boundary whose end is a
+  dropped process is **orphaned**; a stack tool may name the client libraries
+  it is reached `via`; a cap refusal lists items to drop and pairs to merge.
+- **Greenfield prompts.** A prompt about a planned thread the code does not
+  have yet gets that thread's plan (what it serves, where it will live, its
+  steps and the boundaries they cross) instead of a keyword guess at existing
+  code.
+- **Hooks across OS boundaries.** `hook install [--target posix|wsl]` installs
+  the hooks alone (`wsl` = the form a Windows-side Claude Code can run against a
+  WSL project); `hook run <event> --file <path>` (or `--command`, `--prompt`)
+  builds the Claude Code payload itself and keeps the hook's exit codes;
+  `doctor` says whether the hooks are installed, can run from this side, and
+  have fired since they were installed (every hook now leaves a one-line record
+  under `~/.cache`, never in the project).
+
+Tests: test:constraint-amend (4), test:hooks (17), test:allow-lists (5),
+test:program-entries (5), test:plan-thread-match (5), test:plan-stale (5),
+test:plan-prompt (2), test:hook-tools (4).
+
 ## 0.16.0 — 2026-10-01
 
 - `init --hooks --windows`: hooks a Windows-side Claude Code runs against a

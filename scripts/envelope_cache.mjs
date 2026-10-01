@@ -41,7 +41,8 @@ import { shouldSkipDir, languageForFile } from "../src/server/languages.ts";
 
 const CACHE_VERSION = "1";
 const HERE = fileURLToPath(import.meta.url);
-const CONTEXT_FILE = /^(tsconfig.*\.json|jsconfig.*\.json|Cargo\.toml)$/;
+// package.json too (2026-10-01): its `bin` and `scripts` make entry points.
+const CONTEXT_FILE = /^(tsconfig.*\.json|jsconfig.*\.json|Cargo\.toml|package\.json)$/;
 const METHOD_ID = /^module\/[^/]+\.class\/[^/]+\.fn$/;
 
 const sha1 = (s) => createHash("sha1").update(s).digest("hex");

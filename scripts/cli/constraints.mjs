@@ -17,19 +17,26 @@
 // check is refused here exactly as it is there, and a restatement of an
 // existing rule is refused as a duplicate rather than stored as a twin.
 import {
-  CONSTRAINT_KINDS, addConstraint, findDuplicate, loadConstraints, removeConstraint, saveConstraints, validateConstraintInput,
+  CONSTRAINT_KINDS, addConstraint, findDuplicate, loadConstraints, removeConstraintAndDemote, saveConstraints, validateConstraintInput,
 } from "../../src/server/constraint_store.ts";
 import { describeCheck, isConstraintCheck } from "../../src/server/constraint_grammar.ts";
 import { describeRun1Check, isRun1Check } from "../../src/server/quality/verbs/index.ts";
 import { isAgentRun } from "./actor.mjs";
+import { AMEND_SUBS, runConstraintAmend } from "./constraint_amend.mjs";
 
-export const CONSTRAINTS_USAGE = `constraints list|add|remove|ratify [...]   the stated rules (.vibegraph/constraints.json); zero tokens
+export const CONSTRAINTS_USAGE = `constraint(s) list|add|remove|ratify|show|edit|propose|accept|reject [...]   the stated rules (.vibegraph/constraints.json); zero tokens
       list [<root>] [--json]
       add [<root>] --kind <${CONSTRAINT_KINDS.join("|")}> --text "<the rule, with its reason>"
           scope: --all | --threads <entry ids> | --files <paths> | --tools <names>   (comma-separated)
           [--note "<why>"] [--check '<json>'] [--policy '<json>']   or the whole object: --json '<object>'
       remove <id> [<root>]
-      ratify <id> [<root>]    an agent- or orchestrator-stated rule becomes human-stated`;
+      ratify <id> [<root>]    an agent- or orchestrator-stated rule becomes human-stated
+      show <id> [--json]      the rule, its history (who, when, before → after) and open proposals
+      edit <id> <changes> [--why "…"]      a person's change, applied now and recorded; from an agent
+                                           (--as agent, or inside Claude Code) it becomes a proposal
+      propose <id> <changes> --why "…"     a change for a person to accept; the rule stands meanwhile
+      accept|reject <id> <pN>              a person decides a proposal
+          <changes>: --text · --check '<clause>' (replaces every clause) · --checks '<array>' · --note · a scope flag`;
 
 const list = (v) => (v ?? "").split(",").map((s) => s.trim()).filter(Boolean);
 
@@ -97,8 +104,9 @@ export function runConstraints({ root, sub, id, values }) {
   }
   if (sub === "remove") {
     if (!id) return { lines, messages: ["remove needs an id (see `constraints list`)"], exitCode: 2 };
-    if (!removeConstraint(root, id)) return { lines, messages: [`no constraint ${id}`], exitCode: 1 };
-    lines.push(`removed ${id}`);
+    const r = removeConstraintAndDemote(root, id);
+    if (!r.removed) return { lines, messages: [`no constraint ${id}`], exitCode: 1 };
+    lines.push(`removed ${id}${r.demoted.length ? ` — the plan's ${r.demoted.join(", ")} (promoted into it) ${r.demoted.length === 1 ? "is a planned rule" : "are planned rules"} again, agreed and no longer enforced` : ""}`);
     return { lines, messages, exitCode: 0 };
   }
   if (sub === "ratify") {
@@ -113,5 +121,6 @@ export function runConstraints({ root, sub, id, values }) {
     lines.push(`${id} is now human-stated (was ${was}-stated) — whoever ran this command reviewed it`, formatConstraint(c));
     return { lines, messages, exitCode: 0 };
   }
-  return { lines, messages: [`unknown constraints subcommand: ${sub ?? "(none)"} — list, add, remove or ratify`], exitCode: 2 };
+  if (AMEND_SUBS.includes(sub)) return runConstraintAmend({ root, sub, id, pid: values.pid, values, formatConstraint });
+  return { lines, messages: [`unknown constraints subcommand: ${sub ?? "(none)"} — list, add, remove, ratify, show, edit, propose, accept or reject`], exitCode: 2 };
 }

@@ -2873,7 +2873,10 @@
           "source": "async function createOrder(req, res) {\n  const problems = validateOrderInput(req.body);\n  if (problems.length > 0) {\n    res.status(400);\n    res.json({ problems });\n    return;\n  }\n  const created = await postOrder(req.body);\n  console.log(\"order forwarded\", created.id);\n  res.status(201);\n  res.json(created);\n}"
         }
       ],
-      "modulePath": "gateway/server.ts"
+      "modulePath": "gateway/server.ts",
+      "programSignals": [
+        "listen"
+      ]
     },
     "ops/deploy.sh": {
       "language": "bash",

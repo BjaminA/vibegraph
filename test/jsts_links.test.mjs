@@ -60,7 +60,10 @@ test("plan check matches a step written `Class.method` against the step's own id
   const rec = reconcilePlan(plan, env, buildStackIndex(env, ROOT), ROOT);
   const f = rec.findings.find((x) => x.section === "threads");
   assert.equal(f.verdict, "drifted");
-  assert.match(f.detail, /not found on its thread: Nope\.run$/, "only the method no class here defines is missing");
+  assert.deepEqual(f.missing, ["Nope.run"], "only the method no class here defines is missing");
+  // A dynamic `either.run` sits on the thread; which class's run it calls is
+  // decided at run time, so the reason says "may be" (plan_thread_match.ts).
+  assert.match(f.missingWhy["Nope.run"], /^may be reached only through a dynamic call \(`either\.run`\)/);
 });
 
 test("the thread walks through them: the steps a plan names are found", () => {
