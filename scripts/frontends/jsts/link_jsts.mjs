@@ -213,6 +213,23 @@ export function linkFiles(files) {
         // 2026-09-30 — `writer.write()` where `writer` holds ONE instance of a
         // project class (see instanceReceivers) → that class's method.
         const parts = callee.split(".");
+        if (parts.length === 3 && parts[0] === "this") {
+          // 2026-10-01 — `this.codec.toJson()` inside a class whose field
+          // `codec` names ONE class: declared `codec: Codec` (when nothing
+          // extends Codec — a subclass instance could override toJson), or
+          // assigned exactly once in the class, `this.codec = new Codec(…)`
+          // (when nothing extends the OWNER — a subclass could reassign it).
+          const k = fieldClass(nodes, id, parts[1], subclassed);
+          const c = k ? classFor(k) : null;
+          const methodId = c?.cls.methods.get(parts[2]);
+          if (methodId) {
+            edges.push({
+              source: id, target: methodId, type: "reference", targetFile: c.file,
+              qualifiedTarget: `${files[c.file].modulePath ?? c.file}:${k}.${parts[2]}`,
+            });
+          }
+          continue;
+        }
         if (parts.length !== 2 || parts[0] === "this") continue; // this.m(): a subclass may override — stays dynamic
         const recv = receiverFor(receivers, id, parts[0]);
         if (!recv || (recv.typed && subclassed.has(recv.className))) continue;
@@ -275,6 +292,25 @@ function instanceReceivers(nodes) {
     }
   }
   return byScope;
+}
+
+/** The class a `this.<field>` holds, for a call inside a class (see the call
+ *  site), or null when the class does not pin it down. */
+function fieldClass(nodes, callId, field, subclassed) {
+  const segs = callId.split("/");
+  const k = segs.findIndex((s) => s.endsWith(".class"));
+  if (k < 0) return null;
+  const ownerId = segs.slice(0, k + 1).join("/");
+  const owner = nodes.find((n) => n.id === ownerId && n.type === "class_def");
+  if (!owner) return null;
+  const declared = owner.fieldTypes?.[field];
+  if (declared) return subclassed.has(declared) ? null : declared;
+  if (subclassed.has(owner.name)) return null;
+  const sets = nodes.filter((n) => n.type === "assignment" && n.name === `this.${field}` && n.id.startsWith(`${ownerId}/`));
+  if (sets.length !== 1) return null;
+  const s = sets[0];
+  const isNew = s.valueKind === "call" && /^new\s/.test(s.preview ?? "") && /^[A-Za-z_$][\w$]*$/.test(s.callTarget ?? "");
+  return isNew ? s.callTarget : null;
 }
 
 /** The receiver a call's name refers to: its own scope first, then the

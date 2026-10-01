@@ -498,6 +498,11 @@
             "null"
           ]
         },
+        "fieldTypes": {
+          "description": "2026-10-01, field-additive, TypeScript only: fields whose declared type is one plain name (`private readonly codec: Codec`, and constructor parameter properties) → that name. The linker follows `this.codec.m()` through it; absent when no field qualifies.",
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        },
         "decoratorLine": {
           "description": "M-CONTRACT.6 — see FunctionDefNode.decoratorLine: where a decorated class (@dataclass) really starts.",
           "type": "integer",

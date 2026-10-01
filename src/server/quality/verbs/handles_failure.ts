@@ -37,12 +37,20 @@ export interface HandlesFailureOp { rule: "handles-failure"; scope: "thread" | "
 
 const BY = "quality/verbs/handles_failure.ts";
 /** The language runtime's own ways of making a failure visible. A table,
- *  not a heuristic: each is a Python-owned name. */
+ *  not a heuristic: each is a name the language itself owns. (`console.*` is
+ *  stamped effectKind `log` by the TS parser, so it needs no line here.) */
 const REPORTS: Record<string, string> = {
   "print": "prints", "sys.exit": "exits", "os._exit": "exits",
   "traceback.print_exc": "prints the traceback", "traceback.print_exception": "prints the traceback",
   "warnings.warn": "warns",
+  "process.exit": "exits",
 };
+/** 2026-10-01 — the languages whose arms this verb can judge. TypeScript /
+ *  JavaScript joined with two parser stamps: `bodyEmpty` on a catch with no
+ *  statement (a JS catch has no type, so every catch is broad and an empty
+ *  one is the swallow), and `swallows` on `.catch(() => {})`, the promise
+ *  spelling of the same thing. */
+const JUDGED = new Set(["python", "jsts"]);
 /** A bare except, `Exception`, `BaseException`, or a tuple holding one. */
 export function isBroadExcept(exceptType: string | null | undefined): boolean {
   if (exceptType == null || !exceptType.trim()) return true;
@@ -55,7 +63,7 @@ function isOp(v: unknown): v is HandlesFailureOp {
   return r.rule === "handles-failure" && (r.scope === "thread" || r.scope === "files") && Object.keys(r).every((k) => k === "rule" || k === "scope");
 }
 
-type Arm = { file: string; id: string; label: string; exceptType: string | null };
+type Arm = { file: string; id: string; label: string; exceptType: string | null; lang: string; bodyEmpty?: boolean; declared?: string; promise?: boolean };
 type Judgement =
   | { kind: "handled"; how: string }
   | { kind: "empty" }
@@ -77,7 +85,14 @@ function handlesDirectly(nodes: readonly FactNode[]): string | null {
 }
 
 function judgeArm(facts: QualityFacts, idx: IrIndex, arm: Arm): Judgement {
+  if (arm.promise) return { kind: "empty" };
   const body = descendants(idx, arm.id);
+  if (arm.lang === "jsts" && !body.length) {
+    // No type to name: every catch is broad. Empty only when the parser saw
+    // no statement; otherwise its statements are ones the IR does not keep.
+    if (arm.bodyEmpty && arm.declared) return { kind: "handled", how: `skips it and says why ("${arm.declared}") — a declared expected failure, not a swallow` };
+    return arm.bodyEmpty ? { kind: "empty" } : { kind: "assigns", at: [] };
+  }
   if (!body.length) {
     if (isBroadExcept(arm.exceptType)) return { kind: "empty" };
     return { kind: "handled", how: `expects \`${arm.exceptType}\` and skips it (a named expected failure, not a swallow)` };
@@ -90,7 +105,7 @@ function judgeArm(facts: QualityFacts, idx: IrIndex, arm: Arm): Judgement {
     const label = labelOf(c);
     const ref = `${arm.file}:${c.id}` as NodeRef;
     // A bare builtin (`str`, `type`, `isinstance`, `getattr`) cannot log.
-    if (!label.includes(".") && PYTHON_BUILTINS.has(label)) continue;
+    if (arm.lang === "python" && !label.includes(".") && PYTHON_BUILTINS.has(label)) continue;
     if (c.resolved === false) {
       const kind = facts.terminalKindOf?.(arm.file, c.id) ?? (label.includes(".") ? "dynamic" : "unresolved");
       hidden.push({ ref, kind });
@@ -115,7 +130,7 @@ export const handlesFailure: CheckDefinition<HandlesFailureOp> = {
   costClass: "local",
   forcedBy: ["AS-7", "AS-35", "SP-6"],
   isOperands: isOp,
-  describe: (op) => `every except arm ${op.scope === "thread" ? "on this thread" : "in these files"} raises, returns, reports, or names what it expects`,
+  describe: (op) => `every failure arm (except, catch, .catch) ${op.scope === "thread" ? "on this thread" : "in these files"} raises, returns, reports, or names what it expects`,
   preconditions(facts, op): Unverifiable | null {
     const provenance = derivedBy(BY, facts);
     if (!facts.nodesByFile) {
@@ -126,8 +141,8 @@ export const handlesFailure: CheckDefinition<HandlesFailureOp> = {
       const t = facts.threadOf(facts.entryPointId);
       if (!t) return { verdict: "unverifiable", reason: `no thread for entry point ${facts.entryPointId}`, cause: "precondition", at: [], offenders: [], provenance };
       const lang = facts.languageOf?.(t.seed.file) ?? null;
-      if (lang !== "python") {
-        return { verdict: "unverifiable", reason: `the reporting-call table, the builtin filter and the broad-exception rule are Python's; this thread is ${lang ?? "of unknown language"}`, cause: "precondition", at: [], offenders: [], provenance };
+      if (!lang || !JUDGED.has(lang)) {
+        return { verdict: "unverifiable", reason: `the arm rules exist for Python and TypeScript/JavaScript; this thread is ${lang ?? "of unknown language"}`, cause: "precondition", at: [], offenders: [], provenance };
       }
     } else if (!facts.scopeFiles?.length) {
       return { verdict: "unverifiable", reason: "scope files: no files were supplied", cause: "precondition", at: [], offenders: [], provenance };
@@ -137,7 +152,10 @@ export const handlesFailure: CheckDefinition<HandlesFailureOp> = {
   evaluate(facts: QualityFacts, op: HandlesFailureOp): CheckResult {
     const provenance = derivedBy(BY, facts);
     const arms: Arm[] = [];
-    const armOf = (file: string, n: FactNode): Arm => ({ file, id: n.id, label: `except ${n.exceptType ?? ""}`.trim(), exceptType: n.exceptType ?? null });
+    const armOf = (file: string, n: FactNode, lang: string): Arm => n.type === "call"
+      ? { file, id: n.id, label: `${labelOf(n)}(<empty handler>)`, exceptType: null, lang, promise: true }
+      : { file, id: n.id, label: lang === "jsts" ? `catch${n.exceptType ? ` (${n.exceptType})` : ""}` : `except ${n.exceptType ?? ""}`.trim(), exceptType: lang === "jsts" ? null : n.exceptType ?? null, lang, bodyEmpty: n.bodyEmpty === true, declared: n.declared };
+    const isArm = (n: FactNode) => n.type === "except_handler" || (n.type === "call" && n.swallows === true);
     if (op.scope === "thread") {
       const thread = facts.threadOf!(facts.entryPointId!)!;
       // The arms are read from the IR of the FUNCTIONS this thread walks,
@@ -184,17 +202,19 @@ export const handlesFailure: CheckDefinition<HandlesFailureOp> = {
         walked.get(file)!.add(fn);
       }
       for (const [file, fns] of walked) {
-        if ((facts.languageOf?.(file) ?? null) !== "python") continue;
+        const lang = facts.languageOf?.(file) ?? null;
+        if (!lang || !JUDGED.has(lang)) continue;
         for (const n of facts.nodesByFile!(file) ?? []) {
-          if (n.type !== "except_handler") continue;
+          if (!isArm(n)) continue;
           if (![...fns].some((fn) => n.id.startsWith(`${fn}/`))) continue;
-          arms.push(armOf(file, n));
+          arms.push(armOf(file, n, lang));
         }
       }
     } else {
       for (const file of facts.scopeFiles!) {
-        if ((facts.languageOf?.(file) ?? null) !== "python") continue;
-        for (const n of facts.nodesByFile!(file) ?? []) if (n.type === "except_handler") arms.push(armOf(file, n));
+        const lang = facts.languageOf?.(file) ?? null;
+        if (!lang || !JUDGED.has(lang)) continue;
+        for (const n of facts.nodesByFile!(file) ?? []) if (isArm(n)) arms.push(armOf(file, n, lang));
       }
     }
     const byFile = new Map<string, IrIndex>();
@@ -216,7 +236,7 @@ export const handlesFailure: CheckDefinition<HandlesFailureOp> = {
     if (offenders.length) {
       return {
         verdict: "violated",
-        reason: `${offenders.length} except arm(s) are EMPTY and BROAD (bare, \`Exception\` or \`BaseException\`; \`pass\`, \`continue\` and \`break\` look the same to the IR): ${offenders.join(", ")}`
+        reason: `${offenders.length} failure arm(s) are EMPTY and BROAD (Python: bare, \`Exception\` or \`BaseException\`, where \`pass\`, \`continue\` and \`break\` look the same to the IR; TypeScript: \`catch {}\` or \`.catch(() => {})\`, which catch everything): ${offenders.join(", ")}`
           + (others ? `. ${others} other arm(s) could not be judged and are not counted here.` : ""),
         offenders: [offenders[0], ...offenders.slice(1)], provenance,
       };
@@ -235,12 +255,13 @@ export const handlesFailure: CheckDefinition<HandlesFailureOp> = {
     }
     return {
       verdict: "pass",
-      reason: arms.length ? `all ${arms.length} except arm(s) handle the failure: ${handled.join("; ")}` : `no except arm ${op.scope === "thread" ? "on this thread" : "in these files"}`,
+      reason: arms.length ? `all ${arms.length} failure arm(s) handle the failure: ${handled.join("; ")}` : `no failure arm ${op.scope === "thread" ? "on this thread" : "in these files"}`,
       notFollowed: [
         "re-raise semantics (a bare `raise` versus a new exception)",
         "whether the report precedes a swallowing return",
         "the log level (an error logged at debug is still 'logged' here)",
         "whether a narrow named exception is the only one that can occur in the try body",
+        "a promise with no rejection handler at all (fire-and-forget), and a `.catch` handler passed by name",
         ...(arms.length ? [] : ["no arm existed to check"]),
       ],
       offenders: [], provenance,

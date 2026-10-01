@@ -34,6 +34,7 @@ import { capabilitiesForPath } from "../../shared/languages";
 
 import { ThreadNode } from "./ThreadNode";
 import { ThreadContainerNode, TARGET_PORTS } from "./ThreadContainerNode";
+import { chipLabel, CHIP_LEFT, placeChips } from "./chipPlacement";
 import { ThreadEdge, type ThreadEdgeData } from "./ThreadEdge";
 import { ThreadNodeTooltip, type AnchorRect } from "./ThreadNodeTooltip";
 import { attributeBoundary, type Attribution } from "../../shared/stack_attribution";
@@ -1070,7 +1071,14 @@ function ThreadCanvas({ thread: rawThread, width, height, projectIR, entryPoints
   }, [edges, viewRect, layout.positions]);
   // One array identity per real change: a fresh spread on every render made
   // react-flow diff every node of a big thread on each unrelated re-render.
-  const allNodes = useMemo(() => [...containerReactFlowNodes, ...nestContainerNodes, ...nodes], [containerReactFlowNodes, nestContainerNodes, nodes]);
+  const allNodes = useMemo(() => {
+    // No two container chips on one spot (chipPlacement.ts): a chip that
+    // would land on an earlier one moves right of it.
+    const boxes = [...containerReactFlowNodes, ...nestContainerNodes];
+    const left = placeChips(boxes.map((n) => ({ id: n.id, x: n.position.x, y: n.position.y, text: chipLabel(String((n.data as { label?: string }).label ?? ""), Number((n.data as { alsoIn?: number }).alsoIn ?? 0)) })));
+    const placed = boxes.map((n) => (left.get(n.id) === CHIP_LEFT ? n : { ...n, data: { ...n.data, chipLeft: left.get(n.id) } }));
+    return [...placed, ...nodes];
+  }, [containerReactFlowNodes, nestContainerNodes, nodes]);
   const setInvZoom = (zoom: number) => {
     lodWrapRef.current?.style.setProperty("--vg-inv-zoom", (1 / Math.max(zoom, 0.01)).toFixed(4));
   };

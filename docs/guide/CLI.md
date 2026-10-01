@@ -37,7 +37,7 @@ CLI) and says so; everything else is deterministic.
 | Command | What it does | What it writes | Tokens |
 |---|---|---|---|
 | `init [--print]` | Points Claude Code at the knowledge folder | a marked block in `CLAUDE.md`; a line in `.gitignore` | — |
-| `init --hooks` / `--remove-hooks` | Installs (removes) the four Claude Code hooks | `.claude/settings.local.json` (per user, never committed) | — |
+| `init --hooks [--windows]` / `--remove-hooks` | Installs (removes) the four Claude Code hooks; `--windows` writes them as `wsl.exe` commands for a Windows-side Claude | `.claude/settings.local.json` (per user, never committed) | — |
 | `init --skill [--user]` / `--skills plan,…` / `--remove-skill` | Installs (removes) `/vibegraph` and the four task skills | `.claude/skills/`, or `~/.claude/skills/` with `--user` | — |
 | `view [<path>] [--port n] [--open]` | Starts the visualisation until Ctrl-C | `.vibegraph/` state, as you use the app | only the app's Claude features |
 

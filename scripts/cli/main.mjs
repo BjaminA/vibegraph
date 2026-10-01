@@ -19,7 +19,8 @@ import { PACKAGE_NAME, gitHead, locate, toolLabel } from "./paths.mjs";
 import { resolvePython } from "./pyenv.mjs";
 import { exportKnowledge } from "../export_knowledge.mjs";
 import { formatCheckReport, runConstraintChecks } from "./check.mjs";
-import { applyHooks, applyInit, ALL_SKILLS, applySkills, hookCommand, POINTER, skillsFromList } from "./init.mjs";
+import { hookInputFromWindows } from "./winpath.mjs";
+import { applyHooks, applyInit, ALL_SKILLS, applySkills, hookCommand, windowsHookCommand, POINTER, skillsFromList } from "./init.mjs";
 import { spawnSync } from "node:child_process";
 import { HOOK_EVENTS, runHook } from "./hooks.mjs";
 import { LESSONS_USAGE, runLessons } from "./lessons.mjs";
@@ -78,6 +79,9 @@ usage:
                            compaction); each prompt gets its threads' contracts, rules and skills;
                            each edit and the end of each turn re-check every stated rule, and a NEW
                            violation blocks with the rule and the offending call. Zero tokens.
+      --windows            with --hooks: write them as \`wsl.exe -d <distro> -e …\` commands, for a Claude Code
+                           running on Windows against this WSL project (\\\\wsl.localhost\\…); they also run from
+                           inside WSL. Run init from WSL with an installed CLI (not npx).
       --remove-hooks       take exactly those hooks out again
       --skill              also install the Claude Code skills into .claude/skills/: /vibegraph (set up and
                            use this) and the task skills /vibegraph-plan, -debug, -security, -review (which
@@ -247,7 +251,7 @@ function cmdInit(args) {
     parsed = parseArgs({
       args, allowPositionals: true,
       options: {
-        print: { type: "boolean" }, hooks: { type: "boolean" }, "remove-hooks": { type: "boolean" },
+        print: { type: "boolean" }, hooks: { type: "boolean" }, windows: { type: "boolean" }, "remove-hooks": { type: "boolean" },
         skill: { type: "boolean" }, skills: { type: "string" }, "remove-skill": { type: "boolean" }, user: { type: "boolean" },
       },
     });
@@ -291,7 +295,10 @@ function cmdInit(args) {
         env = { VG_PYTHON: exe, ...(deps ? { VIBEGRAPH_PYDEPS: deps } : {}) };
       }
       const version = packageVersion(loc);
-      h = applyHooks({ root: absRoot, remove, command: (root, event) => hookCommand(root, event, env, process.argv, process.execPath, process.execArgv, version) });
+      const windows = parsed.values.windows === true;
+      h = applyHooks({ root: absRoot, remove, command: (root, event) => windows
+        ? windowsHookCommand(root, event, env)
+        : hookCommand(root, event, env, process.argv, process.execPath, process.execArgv, version) });
     } catch (e) { return fail(e.message); }
     process.stdout.write(`${h.path}: hooks ${h.state}${h.state === "removed" ? "" : " (prompt → routed contracts, rules and skills; post-edit and stop → every stated rule re-checked, a new violation blocks). Claude Code reads hooks when a session starts: they apply from the NEXT session (review them with /hooks)."}\n`);
     if (parsed.values["remove-hooks"]) return 0;
@@ -444,7 +451,13 @@ function cmdHook(args) {
   const event = parsed.positionals[0];
   if (!HOOK_EVENTS.includes(event)) return fail(`hook event must be one of: ${HOOK_EVENTS.join(", ")}`);
   let input = {};
-  try { input = JSON.parse(readFileSync(0, "utf-8") || "{}"); } catch { input = {}; }
+  // A UTF-8 byte-order mark (PowerShell adds one when it pipes text) is not JSON.
+  try { input = JSON.parse(readFileSync(0, "utf-8").replace(/^﻿/, "") || "{}"); } catch { input = {}; }
+  // A Windows-side Claude Code (init --hooks --windows) sends Windows paths,
+  // and its hook command spells our own paths `//x` to get them past Git Bash.
+  input = hookInputFromWindows(input);
+  for (const k of ["VG_PYTHON", "VIBEGRAPH_PYDEPS"]) if (process.env[k]?.startsWith("//")) process.env[k] = process.env[k].slice(1);
+  if (parsed.values.root?.startsWith("//")) parsed.values.root = parsed.values.root.slice(1);
   const silent = (msg) => { process.stdout.write(JSON.stringify({ systemMessage: msg })); return 0; };
   let absRoot;
   try { absRoot = projectRoot(parsed.values.root ?? process.env.CLAUDE_PROJECT_DIR ?? input.cwd); }

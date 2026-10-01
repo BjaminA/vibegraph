@@ -24,7 +24,7 @@ import { buildStackIndex } from "../../src/server/stack.ts";
 import { buildQualityFacts } from "../../src/server/quality/facts.ts";
 import { newRegistry, isRun1Check, describeRun1Check } from "../../src/server/quality/verbs/index.ts";
 import { checkConstraint, describeCheck, isConstraintCheck } from "../../src/server/constraint_grammar.ts";
-import { loadConstraints, routeConstraints } from "../../src/server/constraint_store.ts";
+import { loadConstraints, routeConstraints, statedScopeFiles } from "../../src/server/constraint_store.ts";
 import { derivedPolicyClauses, checkPolicyClause, describePolicyClause } from "../../src/server/policy_check.ts";
 
 const VERDICT_RANK = { violated: 2, unverifiable: 1, pass: 0 };
@@ -115,6 +115,14 @@ export function runConstraintChecks({ root, envelope: envelopePath, pipeline, gi
       if (isConstraintCheck(clause)) {
         const r = checkConstraint(projectFacts, clause);
         results.push({ ...row, described: describeCheck(clause), verdict: r.verdict, reason: r.reason, offenders: [...r.offenders], notFollowed: [] });
+      } else if (isRun1Check(clause) && clause.scope === "files") {
+        // 2026-10-01 — a `files`-scoped verb reads the files the rule is
+        // STATED for (`scope.files`: a path ending "/" is a folder, the
+        // store's own routing rule; `scope.all`: every file). It used to get
+        // none and answered "no files were supplied" whatever the rule said.
+        const scopeFiles = statedScopeFiles(c, Object.keys(env.files));
+        const r = registry.run(scopeFiles.length ? buildQualityFacts({ ...base, scopeFiles }) : projectFacts, clause);
+        results.push({ ...row, described: describeRun1Check(clause), verdict: r.verdict, reason: r.reason, offenders: [...(r.offenders ?? [])], notFollowed: [...(r.notFollowed ?? [])] });
       } else if (isRun1Check(clause)) {
         const eps = routed.length ? routed : [null];
         const per = eps.map((ep) => {

@@ -28,6 +28,7 @@ import React, { useRef } from "react";
 import { Handle, Position, useStore, type NodeProps } from "@xyflow/react";
 import type { ContainerKind } from "./types";
 import { tierForZoom, lodLabelFontSize } from "./lod";
+import { chipLabel, CHIP_LEFT } from "./chipPlacement";
 
 // §5.6 — number of target ports distributed along the container's entry
 // border. Multiple flow/fork edges converging on one container would
@@ -45,6 +46,8 @@ export interface ThreadContainerData {
   label: string;
   /** other blocks around the very same cards, folded into this box */
   alsoIn?: number;
+  /** The chip's left offset when a sibling's chip would sit under it (chipPlacement.ts). */
+  chipLeft?: number;
   accentVar: string;
   /** The container's own identity, so its CHIP can open the same tooltip
    *  every other node opens. A `for`/`if`/`while`/`try` has source and
@@ -61,18 +64,6 @@ export interface ThreadContainerData {
   // can position the label without hardcoding canvas dims.
 }
 
-// Chip label per kind. Source-text-bearing kinds (except + while)
-// already get their full label from the extractor ("except ValueError"
-// / "while x > 0"); we uppercase just the keyword head so the chip
-// reads as a scan-only tag, not a code snippet.
-function formatChipLabel(label: string, kind: ContainerKind): string {
-  // "except ValueError" → "EXCEPT  ValueError" (uppercase head, body kept).
-  const space = label.indexOf(" ");
-  if (space === -1) return label.toUpperCase();
-  const head = label.slice(0, space).toUpperCase();
-  const tail = label.slice(space + 1);
-  return `${head}  ${tail}`;
-}
 
 // M17.3 — `if_else` reads as "the other branch": same teal family as
 // if_then but a touch quieter (lower border + tint opacity) so a then/else
@@ -86,8 +77,8 @@ const TINT = {
 export function ThreadContainerNode({ data }: NodeProps) {
   const d = data as unknown as ThreadContainerData;
   const accentVar = d.accentVar ?? "--accent-thread";
-  const chipText = formatChipLabel(d.label, d.containerKind)
-    + (d.alsoIn ? ` · +${d.alsoIn} more block${d.alsoIn === 1 ? "" : "s"}` : "");
+  // chipPlacement.ts owns the text and moves a chip clear of a sibling's.
+  const chipText = chipLabel(d.label, d.alsoIn ?? 0);
   // The CHIP is the hover target, not the region: the region spans every
   // child, so a tooltip bound to it would open whenever the cursor
   // crossed a loop. A container with no IR identity (the synthetic
@@ -171,7 +162,7 @@ export function ThreadContainerNode({ data }: NodeProps) {
         style={{
           position: "absolute",
           top: -10,
-          left: 12,
+          left: d.chipLeft ?? CHIP_LEFT,
           cursor: chipHoverable ? "pointer" : "default",
           padding: "2px 8px",
           background: `color-mix(in oklab, var(${accentVar}) ${tint.chipBg}%, var(--bg-canvas))`,
@@ -185,7 +176,7 @@ export function ThreadContainerNode({ data }: NodeProps) {
           lineHeight: 1.35,
           // Letter-spacing widens the chip slightly; keep it readable
           // by mixing uppercase keyword with mixed-case body via the
-          // double-space separator in formatChipLabel.
+          // double-space separator in chipLabel (chipPlacement.ts).
           whiteSpace: "nowrap",
           pointerEvents: "auto",
         }}

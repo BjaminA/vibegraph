@@ -54,7 +54,8 @@ You need **Node 20+** and **Python 3.10+** (`python3` on your PATH). The first
 run installs the Python parser and formatter (`libcst`, `black`) into
 `~/.cache/vibegraph-knowledge` by itself. **Claude Code** (`claude`, logged in)
 is optional for the visualisation and is what the hooks plug into. On Windows,
-use WSL2.
+use WSL2 — and if you run Claude Code on the Windows side against a WSL project,
+add `--windows` to `init --hooks` (see [SETUP.md](docs/guide/SETUP.md)).
 
 ### Claude Code, with VibeGraph in the loop (recommended)
 
@@ -349,7 +350,7 @@ CLI) and says so; everything else is deterministic.
 | Command | What it does | What it writes | Tokens |
 |---|---|---|---|
 | `init [--print]` | Points Claude Code at the knowledge folder | a marked block in `CLAUDE.md`; a line in `.gitignore` | — |
-| `init --hooks` / `--remove-hooks` | Installs (removes) the four Claude Code hooks | `.claude/settings.local.json` (per user, never committed) | — |
+| `init --hooks [--windows]` / `--remove-hooks` | Installs (removes) the four Claude Code hooks; `--windows` writes them as `wsl.exe` commands for a Windows-side Claude | `.claude/settings.local.json` (per user, never committed) | — |
 | `init --skill [--user]` / `--skills plan,…` / `--remove-skill` | Installs (removes) `/vibegraph` and the four task skills | `.claude/skills/`, or `~/.claude/skills/` with `--user` | — |
 | `view [<path>] [--port n] [--open]` | Starts the visualisation until Ctrl-C | `.vibegraph/` state, as you use the app | only the app's Claude features |
 

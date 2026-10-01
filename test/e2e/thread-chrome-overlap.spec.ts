@@ -111,7 +111,12 @@ test.describe("thread chrome overlaps", () => {
       return { strip, canvas, toggleOwnsCentre, stripBottom, published, row0Top };
     });
 
-    expect(measured.strip.length, "strip is skill + artifact since the README chip retired").toBe(2);
+    // Skill + artifact since the README chip retired — and, since GUI INSIGHT
+    // (2026-09-28), the thread's insight chips (`tested · N`, `env · N`) too.
+    // The count was pinned at 2 and failed from then on (verified on ca010ab);
+    // what this test guards is the overlap below, so it asserts the two chips
+    // it was written for are present, not the strip's total.
+    expect(measured.strip.length, "the strip holds at least the skill and artifact chips").toBeGreaterThanOrEqual(2);
     // The strip must publish a height at least as tall as it actually is —
     // an under-measured value is exactly what let a chip overhang row 0.
     expect(measured.published, "--vg-chipstrip-h must be published").toBeGreaterThan(0);

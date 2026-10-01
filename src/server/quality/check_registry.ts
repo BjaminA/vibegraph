@@ -110,6 +110,12 @@ export interface FactNode {
   valueKind?: string;
   /** except_handler: the caught type's source text, null for a bare except. */
   exceptType?: string | null;
+  /** except_handler (TS): the catch holds no statement at all. */
+  bodyEmpty?: boolean;
+  /** except_handler (TS): an empty catch's comment — the author's stated reason. */
+  declared?: string;
+  /** call (TS): `.catch(…)` with a handler that does nothing. */
+  swallows?: boolean;
   /** call / assignment: a reference edge leaves this node (the linker resolved it). */
   resolved?: boolean;
 }

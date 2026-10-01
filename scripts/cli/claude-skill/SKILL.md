@@ -34,6 +34,13 @@ first run installs `libcst` into `~/.cache/vibegraph-knowledge` by itself.
    review them with `/hooks`). Nothing is enforced in the session that
    installed them.
 
+If this Claude Code runs on **Windows** and the project lives in WSL
+(`\wsl.localhost\…`), the hooks must be installed from the WSL shell with
+`--windows` (`vibegraph-knowledge init --hooks --windows`, CLI installed with
+`npm install -g`, not npx): each hook is then a `wsl.exe` command any Windows
+shell can run. Without it, hooks installed from WSL hold Linux paths a Windows
+session cannot run — run the checks by hand (`check`) instead.
+
 To remove: `vibegraph-knowledge init --remove-hooks` (takes out exactly these
 four entries).
 

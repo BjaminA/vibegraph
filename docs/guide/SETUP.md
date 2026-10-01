@@ -103,6 +103,20 @@ ls .vibegraph/knowledge/                 # README.md, architecture.md, threads/,
   turn, where a **new** violation stops the edit with the rule and its reason.
   They spend no tokens and start no server. `--remove-hooks` takes exactly
   them out.
+- **Claude Code on Windows, project in WSL** (you open
+  `\\wsl.localhost\Ubuntu\…` from a Windows Claude): add `--windows`, run
+  from the WSL shell with the CLI installed (`npm install -g`, not `npx`):
+
+  ```bash
+  cd ~/path/to/project && vibegraph-knowledge init --hooks --windows --skill
+  ```
+
+  Each hook is written as one `wsl.exe -d <distro> -e …` command, which Git
+  Bash, PowerShell and cmd all run, and which a Claude inside WSL can still
+  run. The hooks translate the Windows paths Claude Code sends
+  (`\\wsl.localhost\Ubuntu\…`, `C:\…`). Paths are spelled `//home/…` on
+  purpose: Git Bash rewrites `/home/…` before it reaches WSL. A hook costs
+  about 0.7 s through `wsl.exe`.
 - `--skill` installs `/vibegraph` (set-up and use) and the task skills
   `/vibegraph-plan`, `-debug`, `-security` and `-review`. `--skills
   plan,security` picks some; `--user` installs them for every project on the

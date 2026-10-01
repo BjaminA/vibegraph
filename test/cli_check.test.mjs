@@ -10,7 +10,7 @@
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { appendFileSync, cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -128,6 +128,20 @@ test("--uncommitted makes the working tree the delta, so co-changes is verifiabl
   assert.match(withTree.deltaNote, /working tree's 1 uncommitted change/);
   assert.equal(withTree.exitCode, 1);
   assert.ok(formatCheckReport(withTree).includes("delta: the working tree's 1 uncommitted change"));
+});
+
+test("a files-scoped verb reads the files the rule is STATED for (TypeScript handles-failure; it used to say 'no files were supplied')", () => {
+  const dir = join(tmp, "jsts_failure");
+  cpSync(join(ROOT, "test", "fixtures", "quality", "jsts_failure"), dir, { recursive: true });
+  const rule = (id, files) => ({ id, kind: "invariant", source: "human", text: "never swallow a write failure", scope: { files }, check: { rule: "handles-failure", scope: "files" }, createdAt: "2026-10-01T00:00:00Z" });
+  mkdirSync(join(dir, ".vibegraph"), { recursive: true });
+  writeFileSync(join(dir, ".vibegraph", "constraints.json"), JSON.stringify({ version: "1", constraints: [rule("c1", ["writes.ts"]), rule("c2", ["report.ts"])] }));
+  const r = runConstraintChecks({ root: dir, commit: "test" });
+  const by = Object.fromEntries(r.results.map((x) => [x.id, x]));
+  assert.equal(by.c1.verdict, "violated", by.c1.reason);
+  assert.deepEqual(by.c1.offenders.sort(), ["writes.ts:module/badEmpty.fn/except@0", "writes.ts:module/badPromise.fn/store_put_3_catch.call"]);
+  assert.equal(by.c2.verdict, "pass", by.c2.reason);
+  assert.equal(r.exitCode, 1);
 });
 
 test("a project with no stated constraints says so and exits 0", () => {

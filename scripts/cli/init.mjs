@@ -132,6 +132,39 @@ export function hookCommand(root, event, env = {}, argv = process.argv, execPath
   return [...prefix, ...cliInvocation(argv, execPath, execArgv, version), "hook", event, "--root", q(root), HOOK_MARKER].join(" ");
 }
 
+/** 2026-10-01 — `init --hooks --windows`: the same hook for a Claude Code
+ *  running on WINDOWS against a project inside WSL (opened as
+ *  \\wsl.localhost\<distro>\…). A Linux path means nothing to Windows, so the
+ *  hook is ONE executable with arguments — `wsl.exe -d <distro> -e env
+ *  VG_PYTHON=… node cli hook <event> --root /linux/root` — which Git Bash,
+ *  PowerShell and cmd all run alike (no shell syntax: no `VAR=x` prefix, no
+ *  `$`), and which a session inside WSL can still run through interop.
+ *  stdin, stdout, stderr and the exit code (2 = block) pass through wsl.exe.
+ *  Every token is single-quoted when it needs quoting, which both shells read
+ *  literally; a path holding a single quote is refused rather than escaped
+ *  two different ways. An npx run cannot be pinned (its cache path moves and
+ *  `wsl.exe -e` has no login PATH to find npx on), so it is refused too. */
+export function windowsHookCommand(root, event, env = {}, distro = process.env.WSL_DISTRO_NAME, argv = process.argv, execPath = process.execPath, execArgv = process.execArgv) {
+  if (!distro) throw new Error("--windows writes hooks that call into WSL: run init from inside the WSL distro that holds the project");
+  const script = String(argv[1] ?? "");
+  if (/[\\/]_npx[\\/]/.test(script)) throw new Error("--windows needs an installed CLI (npm install -g vibegraph-knowledge) — an npx cache path is not stable");
+  const sq = (s) => {
+    s = String(s);
+    if (/^[\w./@:=+,-]+$/.test(s)) return s;
+    if (s.includes("'")) throw new Error(`--windows cannot quote a path holding a single quote: ${s}`);
+    return `'${s}'`;
+  };
+  // Git Bash — Claude Code's default hook shell on Windows — rewrites any
+  // argument that looks like a POSIX path before handing it to a Windows
+  // program (`/tmp/x` arrived in WSL as `C:/Users/…/Temp/x`, `/usr/bin/env` as
+  // `C:/Program Files/Git/usr/bin/env`). A DOUBLE leading slash passes Git Bash
+  // and PowerShell untouched (measured both), and Linux reads `//x` as `/x`;
+  // the hook folds it back (`fromWindowsPath`'s neighbour in main.mjs).
+  const posix = (s) => (String(s).startsWith("/") && !String(s).startsWith("//") ? `/${s}` : String(s));
+  const envArgs = Object.entries(env).map(([k, v]) => `${k}=${posix(v)}`);
+  return ["wsl.exe", "-d", distro, "-e", posix("/usr/bin/env"), ...envArgs, posix(execPath), ...execArgv, posix(script), "hook", event, "--root", posix(root), HOOK_MARKER].map(sq).join(" ");
+}
+
 /** How a hook reaches this CLI again. Run from npx, the script lives in
  *  npx's cache (`…/_npx/<hash>/…`), which npm may clean at any time — a hook
  *  pinned to it would stop working without a word. So an npx run writes

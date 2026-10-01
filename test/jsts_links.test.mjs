@@ -13,6 +13,9 @@
 import { test, before } from "node:test";
 import assert from "node:assert/strict";
 import { buildPolyglotEnvelope } from "../scripts/regen_polyglot.mjs";
+import { applyPlanOps } from "../src/server/plan_ops.ts";
+import { reconcilePlan } from "../src/server/plan_reconcile.ts";
+import { buildStackIndex } from "../src/server/stack.ts";
 
 const ROOT = "test/fixtures/jsts/barrel_demo";
 let env, refs;
@@ -38,6 +41,26 @@ test("class instances: a `new` binding and a typed parameter link; a subclassed 
   assert.equal(refs.get("typed_write.call"), "lib/writer.ts#module/GuardedWriter.class/write.fn", "typed as a class nothing extends");
   assert.equal(refs.has("base_m.call"), false, "Base has a subclass: which m runs is decided at run time");
   assert.equal(refs.has("either_run.call"), false, "assigned twice: the file does not say which instance");
+});
+
+test("fields that hold instances: this.<field>.<method>() follows a declared type or a single `new`, and refuses when the class does not say", () => {
+  const svc = new Map(env.files["service.ts"].edges.filter((e) => e.type === "reference").map((e) => [e.source.split("/").slice(-2).join("/"), `${e.targetFile}#${e.target}`]));
+  assert.equal(svc.get("save.fn/this_writer_write.call"), "lib/writer.ts#module/GuardedWriter.class/write.fn", "declared `writer: GuardedWriter`");
+  assert.equal(svc.get("save.fn/this_backup_write.call"), "lib/writer.ts#module/GuardedWriter.class/write.fn", "a constructor parameter property");
+  assert.equal(svc.get("save.fn/this_local_run.call"), "app.ts#module/Local.class/run.fn", "untyped, set once: `this.local = new Local()`");
+  assert.equal(svc.has("save.fn/this_base_m.call"), false, "Base has a subclass: which m runs is decided at run time");
+  assert.equal(svc.has("go.fn/this_local_run.call"), false, "assigned in two places: the class does not say which instance");
+  const cls = env.files["service.ts"].nodes.find((n) => n.id === "module/Service.class");
+  assert.deepEqual(cls.fieldTypes, { writer: "GuardedWriter", base: "Base", backup: "GuardedWriter" });
+});
+
+test("plan check matches a step written `Class.method` against the step's own id (the label is only `method`)", () => {
+  let plan = applyPlanOps(null, [{ op: "set-objective", text: "Guarded writes reach storage" }], "human").plan;
+  plan = applyPlanOps(plan, [{ op: "add", section: "threads", item: { id: "app.test.ts:module", entry: "test", serves: "guarded writes", primary: ["GuardedWriter.write", "Local.run", "helper", "Nope.run"] } }], "human").plan;
+  const rec = reconcilePlan(plan, env, buildStackIndex(env, ROOT), ROOT);
+  const f = rec.findings.find((x) => x.section === "threads");
+  assert.equal(f.verdict, "drifted");
+  assert.match(f.detail, /not found on its thread: Nope\.run$/, "only the method no class here defines is missing");
 });
 
 test("the thread walks through them: the steps a plan names are found", () => {

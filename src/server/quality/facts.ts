@@ -20,7 +20,7 @@ import { languageForPath } from "../../shared/languages.ts";
 interface IrNodeLike {
   id: string; type: string; parentId?: string | null; line?: number; col?: number;
   name?: string; funcName?: string; callTarget?: string; effectKind?: string | null; paramTypes?: Record<string, string>;
-  params?: string[]; condition?: string; elseLine?: number; exceptType?: string | null;
+  params?: string[]; condition?: string; elseLine?: number; exceptType?: string | null; bodyEmpty?: boolean; declared?: string; swallows?: boolean;
   iterName?: string; valueKind?: string; argKeys?: unknown;
 }
 interface IrEdgeLike { type?: string; source?: string; target?: string; targetFile?: string; qualifiedTarget?: string }
@@ -102,6 +102,9 @@ function toFactNode(n: IrNodeLike, resolved: Set<string>): FactNode {
   if (typeof n.iterName === "string") out.iterName = n.iterName;
   if (typeof n.valueKind === "string") out.valueKind = n.valueKind;
   if (n.exceptType !== undefined) out.exceptType = n.exceptType;
+  if (n.bodyEmpty === true) out.bodyEmpty = true;
+  if (typeof n.declared === "string") out.declared = n.declared;
+  if (n.swallows === true) out.swallows = true;
   if (n.type === "call" || n.type === "assignment") out.resolved = resolved.has(n.id);
   return out;
 }

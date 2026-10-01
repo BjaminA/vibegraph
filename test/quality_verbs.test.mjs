@@ -211,6 +211,27 @@ test("handles-failure: run_demo's `swallowed` is the violation the fixture was b
   assert.match(r.reason, /look the same to the IR/);
 });
 
+test("handles-failure in TypeScript: `catch {}` and `.catch(() => {})` are the swallows; a comment saying why, logging, throwing, returning and a one-hop report are not", () => {
+  // A JS catch names no type, so the Python narrowing (a named expected
+  // exception is handled) has no spelling here; its counterpart is the
+  // comment. Censused on this repository's scripts before choosing: 22 of
+  // the empty catches say why in a comment, one is bare.
+  const D = "test/fixtures/quality/jsts_failure";
+  const r = run(D, { rule: "handles-failure", scope: "files" }, { scopeFiles: ["writes.ts"] });
+  assert.equal(r.verdict, "violated");
+  assert.deepEqual(r.offenders.map((o) => o.replace(/^writes\.ts:/, "")).sort(), [
+    "module/badEmpty.fn/except@0",
+    "module/badPromise.fn/store_put_3_catch.call",
+  ]);
+  assert.match(r.reason, /catch \{\}.*\.catch\(\(\) => \{\}\)/);
+  const good = run(D, { rule: "handles-failure", scope: "files" }, { scopeFiles: ["report.ts"] });
+  assert.equal(good.verdict, "pass");
+  // `ok = false` emits no node — the arm is NOT empty, and the verb says it cannot judge it.
+  const fb = run(D, { rule: "handles-failure", scope: "files" }, { scopeFiles: ["fallback.ts"] });
+  assert.equal(fb.verdict, "unverifiable");
+  assert.equal(fb.cause, "precondition");
+});
+
 test("handles-failure: this repository's own scripts have ONE EMPTY arm left (files scope) and four honest unverifiables (thread scope)", () => {
   const { envelope } = project("scripts");
   const files = run("scripts", { rule: "handles-failure", scope: "files" }, { scopeFiles: Object.keys(envelope.files) });
@@ -227,7 +248,17 @@ test("handles-failure: this repository's own scripts have ONE EMPTY arm left (fi
   // sys.setprofile, where an exception escaping the profiler would kill
   // the traced program. A trace that loses one call site is honest; a
   // trace that kills the run it is observing is not.
+  // 2026-10-01 — the verb reads TypeScript/JavaScript too, and this repo's
+  // .mjs scripts added five: all in review_overlaps.mjs, a screenshot script
+  // whose optional clicks end `.catch(() => {})` and whose localStorage
+  // reset is a bare `catch {}`. True swallows, reported rather than edited;
+  // the 22 empty catches elsewhere say why in a comment and count as handled.
   assert.deepEqual(files.offenders, [
+    "review_overlaps.mjs:module/if@0/banner_locator_button_click_catch.call",
+    "review_overlaps.mjs:module/except@0",
+    "review_overlaps.mjs:module/for@0/x_click_catch.call",
+    "review_overlaps.mjs:module/for@1/btn_click_catch.call",
+    "review_overlaps.mjs:module/if@3/p_getByRole_button_name_Thread_click_catch.call",
     "trace_run.py:module/_Tracer.class/__call__.fn/except@0",
   ]);
   const byThread = {};

@@ -261,6 +261,17 @@ export interface RoutableThread {
   stack?: string[];
 }
 
+/** 2026-10-01 — the files a constraint is STATED for, out of `files`: its
+ *  `scope.files` (a path ending "/" is a folder — routeConstraints' rule) or,
+ *  for `scope.all`, every file. What a `files`-scoped verb
+ *  (`handles-failure` with scope "files") reads when no packet supplies an
+ *  edit scope — before, it got none and answered "no files were supplied". */
+export function statedScopeFiles(c: Pick<Constraint, "scope">, files: readonly string[]): string[] {
+  if (c.scope.all) return [...files];
+  const want = c.scope.files ?? [];
+  return files.filter((f) => want.some((w) => (w.endsWith("/") ? f.startsWith(w) : f === w)));
+}
+
 /** Deterministic: a constraint reaches a thread when its scope names the
  *  thread, a file the thread reaches (or a directory prefix of one), a
  *  TOOL the thread's stack uses, or everything. Order preserved

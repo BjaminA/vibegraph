@@ -149,7 +149,7 @@ import { buildWorkerPrompt, buildSystemWorkerPrompt, parsePacketResult, lineDiff
 import { computeThreadContract, formatContractBlock, summarizeContract, type ThreadContract } from "./src/server/thread_contract";
 import {
   loadConstraints, addConstraint, removeConstraint, routeConstraints, formatConstraintsBlock,
-  validateConstraintInput, findDuplicate, type Constraint, type ConstraintSource,
+  validateConstraintInput, findDuplicate, statedScopeFiles, type Constraint, type ConstraintSource,
 } from "./src/server/constraint_store";
 // M-ORCH — the holistic orchestrator (brief + review), pure + tested.
 import {
@@ -1673,7 +1673,7 @@ function evaluateRoutedChecks(run: WorkRun | null, packet: RunPacket | null, con
   const facts = qualityFactsFor(run, packet);
   const registry = run1Registry();
   const out: RoutedCheckResult[] = [];
-  const evalClause = (id: string, source: string, clause: unknown, mayGate: boolean, baseline?: readonly string[]) => {
+  const evalClause = (id: string, source: string, clause: unknown, mayGate: boolean, baseline?: readonly string[], stated?: Constraint) => {
     if (isConstraintCheck(clause)) {
       const r = checkConstraint(facts, clause);
       // The three original M-GRAMMAR verbs are live grammar and always may
@@ -1682,7 +1682,11 @@ function evaluateRoutedChecks(run: WorkRun | null, packet: RunPacket | null, con
       return;
     }
     if (isRun1Check(clause)) {
-      const r = registry.run(facts, clause);
+      // A `files`-scoped verb outside a packet reads the files the rule is
+      // stated for (statedScopeFiles); inside one, the packet's edit scope.
+      const own = !packet && stated && (clause as { scope?: string }).scope === "files"
+        ? statedScopeFiles(stated, Object.keys(relativeProjectFiles())) : [];
+      const r = registry.run(own.length ? { ...facts, scopeFiles: own } : facts, clause);
       const row: RoutedCheckResult = {
         id, source, described: describeRun1Check(clause), rule: clause.rule,
         verdict: r.verdict, reason: r.reason,
@@ -1709,7 +1713,7 @@ function evaluateRoutedChecks(run: WorkRun | null, packet: RunPacket | null, con
     }
     console.warn(`  [Constraint] ${id} has a malformed check — not evaluated`);
   };
-  for (const c of withChecks) for (const clause of clausesOf(c)) evalClause(c.id, c.source, clause, true);
+  for (const c of withChecks) for (const clause of clausesOf(c)) evalClause(c.id, c.source, clause, true, undefined, c);
   // A derived binding that IS a stated clause (the model derives guards
   // from calls-through and not-in-loop from a perf-lever) has already run
   // above with the constraint as its basis; running it twice would put

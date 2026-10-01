@@ -19,6 +19,7 @@ import type { StackIndex } from "./stack.ts";
 import { buildQualityFacts } from "./quality/facts.ts";
 import { checkConstraint, isConstraintCheck } from "./constraint_grammar.ts";
 import { newRegistry, isRun1Check } from "./quality/verbs/index.ts";
+import { statedScopeFiles } from "./constraint_store.ts";
 
 export const PLAN_RECONCILE_LIMITS = [
   "matching is by name and path: a planned thread matches an entry point whose label or name reads the same; a step matches a node on that thread whose label contains it",
@@ -132,6 +133,15 @@ export function reconcilePlan(plan: Plan, env: EnvLike, stack: StackIndex, root:
     if (!ep) { add({ section: "threads", id: t.id, verdict: "not-built", detail: "no entry point reads like it yet" }); continue; }
     const thread = env.threads.find((x) => x.entryPointId === ep.id);
     const labels = (thread?.nodes ?? []).map((n: any) => String(n.label ?? "").toLowerCase());
+    // A step's own name forms, from its id: `module/Writer.class/write.fn` is
+    // also `Writer.write` — the spelling a plan uses for a method, which the
+    // label (`write`) alone never matched.
+    const qualified = new Set<string>();
+    for (const n of (thread?.nodes ?? []) as any[]) {
+      if (n.kind !== "step" && n.kind !== "seed") continue;
+      const segs = String(n.irNodeId ?? "").split("/").filter((s) => s.endsWith(".class") || s.endsWith(".fn")).map((s) => s.replace(/\.(class|fn)$/, ""));
+      for (let i = 0; i < segs.length; i++) qualified.add(segs.slice(i).join(".").toLowerCase());
+    }
     const called = new Set((stack.byThreadCalled?.[ep.id] ?? stack.byThread[ep.id] ?? []).map((x) => x.toLowerCase()));
     const missing: string[] = [];
     for (const step of t.primary) {
@@ -142,7 +152,7 @@ export function reconcilePlan(plan: Plan, env: EnvLike, stack: StackIndex, root:
         continue;
       }
       const name = (rest.length ? rest.join(":") : head).trim().toLowerCase();
-      if (!name || !labels.some((l) => l.includes(name))) missing.push(step);
+      if (!name || !(qualified.has(name) || labels.some((l) => l.includes(name)))) missing.push(step);
     }
     add(missing.length
       ? { section: "threads", id: t.id, verdict: "drifted", detail: `entry point ${ep.id} exists; not found on its thread: ${missing.join(", ")}`, entryPointId: ep.id }
@@ -160,7 +170,11 @@ export function reconcilePlan(plan: Plan, env: EnvLike, stack: StackIndex, root:
       facts ??= buildQualityFacts({ envelope: env as never, root, commit, stack });
       let r: { verdict: string; reason: string } | null = null;
       if (isConstraintCheck(p.check)) r = checkConstraint(facts as never, p.check);
-      else if (isRun1Check(p.check)) r = registry.run(facts as never, p.check as never);
+      else if (isRun1Check(p.check)) {
+        // A `files`-scoped verb reads the files the rule names (statedScopeFiles).
+        const own = (p.check as { scope?: string }).scope === "files" ? statedScopeFiles({ scope: { files: p.files ?? [] } } as never, files) : [];
+        r = registry.run((own.length ? { ...facts, scopeFiles: own } : facts) as never, p.check as never);
+      }
       add(r
         ? { section: "policies", id: p.id, verdict: r.verdict as PlanVerdict, detail: `${r.reason} (advice — a planned rule blocks nothing)` }
         : { section: "policies", id: p.id, verdict: "unverifiable", detail: "the check matches no verb in the constraint grammar" });

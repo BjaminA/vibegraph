@@ -629,7 +629,9 @@ export class JstsGraphBuilder {
     const p = this.pos(n);
     const anchor = n.parent?.type === "export_statement" ? n.parent : n;
     const docstring = docFromComments(anchor, this.source);
-    this.emit({ id, type: "class_def", parentId: parentId ?? null, ...p, name, bases, docstring }, parentId, n);
+    const body0 = n.namedChildren.find((c) => c.type === "class_body");
+    const fieldTypes = this.classFieldTypes(body0);
+    this.emit({ id, type: "class_def", parentId: parentId ?? null, ...p, name, bases, docstring, ...(fieldTypes ? { fieldTypes } : {}) }, parentId, n);
     this.symbolIndex.push({
       sym: `class:${name}`, kind: "class", name, scope: parentId ?? "module",
       loc: { line: p.line, endLine: p.endLine, col: p.col, endCol: p.endCol },
@@ -655,6 +657,37 @@ export class JstsGraphBuilder {
         this.walkExpressionCalls(fValue, id);
       }
     }
+  }
+
+  /** 2026-10-01 — a class's fields whose declared type is ONE plain name:
+   *  `private readonly codec: Codec;` and constructor parameter properties
+   *  (`constructor(private readonly o: Opts)`). The linker reads them to
+   *  follow `this.codec.toJson()`; a union, generic or array type says no
+   *  single class, so it is left out. null when there are none. */
+  classFieldTypes(body) {
+    const out = {};
+    const plain = (t) => {
+      const s = t ? this.text(t).replace(/^:\s*/, "").trim() : "";
+      return /^[A-Za-z_$][\w$]*$/.test(s) ? s : null;
+    };
+    for (const m of body?.namedChildren ?? []) {
+      if (m.type === "public_field_definition" || m.type === "field_definition") {
+        const f = m.childForFieldName("name");
+        const t = plain(m.childForFieldName("type"));
+        if (f && t) out[this.text(f)] = t;
+      }
+      if (m.type === "method_definition" && this.text(m.childForFieldName("name") ?? m) === "constructor") {
+        for (const prm of m.childForFieldName("parameters")?.namedChildren ?? []) {
+          const isProp = prm.namedChildren.some((c) => c.type === "accessibility_modifier" || c.type === "override_modifier")
+            || /^(public|private|protected|readonly)\s/.test(this.text(prm));
+          if (!isProp) continue;
+          const pat = prm.childForFieldName("pattern");
+          const t = plain(prm.childForFieldName("type"));
+          if (pat?.type === "identifier" && t) out[this.text(pat)] = t;
+        }
+      }
+    }
+    return Object.keys(out).length ? out : null;
   }
 
   visitExpressionStatement(n, parentId) {
@@ -699,6 +732,7 @@ export class JstsGraphBuilder {
     if (argKeys) node.argKeys = argKeys;
     const effect = effectKindForCallee(callee);
     if (effect) { node.effectKind = effect; node.isEffect = true; }
+    if (/\.catch$/.test(callee) && this.isEmptyHandler(callNode.childForFieldName("arguments")?.namedChildren[0])) node.swallows = true;
     this.emit(node, parentId, posNode ?? callNode);
     if (!callee.includes(".") && callee !== "import") this.callSites.push({ id, callee });
     this.stampNests(callNode, node, id);
@@ -709,6 +743,27 @@ export class JstsGraphBuilder {
     if (toolName) node.mcpTool = toolName;
     this.walkInlineCallbacks(callNode, parentId, toolName);
     return id;
+  }
+
+  /** `.catch(() => {})`, `.catch(function () {})`: a rejection handler with an
+   *  EMPTY body — the promise spelling of an empty catch (2026-10-01, stamped
+   *  `swallows` on the call). An expression body RETURNS a value
+   *  (`.catch(() => null)` → "no config, use defaults"), which is how the
+   *  Python rule reads `except: return None` — handled, so not stamped. */
+  isEmptyHandler(fn) {
+    fn = this.unwrap(fn);
+    if (!fn || !FUNCTION_EXPR_TYPES.has(fn.type)) return false;
+    const body = fn.childForFieldName("body");
+    // A comment says why (see visitTry): `.catch(() => { /* best effort */ })` is declared, not a swallow.
+    return body?.type === "statement_block" && !body.namedChildren.length;
+  }
+
+  /** The first comment in a block, trimmed to one short line, or null. */
+  commentNote(block) {
+    const c = (block?.namedChildren ?? []).find((x) => x.type === "comment");
+    if (!c) return null;
+    const t = this.text(c).replace(/^\/\/\s?|^\/\*+\s?|\s?\*+\/$/g, "").replace(/\s+/g, " ").trim();
+    return t ? t.slice(0, 80) : null;
   }
 
   walkInlineCallbacks(callNode, parentId, toolName = null) {
@@ -969,11 +1024,22 @@ export class JstsGraphBuilder {
     if (handler) {
       const hid = this.makeAnonId(parentId, "except");
       const param = handler.childForFieldName("parameter");
+      const hbody = handler.childForFieldName("body");
+      // `bodyEmpty` (2026-10-01): a catch with no statement at all (comments
+      // do not count). `ok = false` emits no node, so "no child nodes" cannot
+      // be read as "empty" — this stamp is what lets handles-failure tell a
+      // swallow from an arm whose statements the IR does not keep.
+      // A comment in an empty catch is how JS says WHY it skips the failure
+      // (`catch { /* no record */ }`) — the counterpart of Python naming the
+      // exception it expects — so it is kept as `declared`.
+      const empty = !(hbody?.namedChildren ?? []).some((c) => c.type !== "comment");
+      const note = empty ? this.commentNote(hbody) : null;
       this.emit({
         id: hid, type: "except_handler", parentId: parentId ?? null, ...this.pos(handler),
         exceptType: param ? this.text(param) : null,
+        ...(empty ? { bodyEmpty: true } : {}),
+        ...(note ? { declared: note } : {}),
       }, parentId, handler);
-      const hbody = handler.childForFieldName("body");
       if (hbody) this.walkChildren(hbody, hid);
     }
     const finalizer = n.childForFieldName("finalizer");
