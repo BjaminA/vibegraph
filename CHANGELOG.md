@@ -3,7 +3,184 @@
 `vibegraph-knowledge` and the VibeGraph app. Newest first. Each entry says what
 changed and, where an existing user would notice, how behaviour differs.
 
-## 0.17.0 — unreleased
+## 0.18.0 — unreleased
+
+### The proposal backlog (plan-architecture brief, Module 11)
+
+- **`plan review`** puts every pending proposal on one page: a new item in
+  full, a change to an agreed item as a field diff against the version a
+  person agreed to (kept as `agreedAs` when an agent edits it), the evidence
+  for each, the command that decides it, and the rule changes agents proposed
+  to `constraints.json`.
+- **`plan review --agree … --reject …`** decides several at once (a person
+  only). A new `reject` op restores the agreed version of a change, or drops
+  a new item.
+- The **session-start hook** gives the backlog count. The Plan panel shows the
+  count, an agent's change and a **Reject change** button.
+
+Tests: test:plan-review (4).
+
+**Migration (Modules 1–11).** Nothing to migrate: every new plan section and
+field is optional, a plan without them saves byte-for-byte as before, and
+`version` stays "1". See the migration note in
+[docs/guide/PLAN-ARCHITECTURE.md](docs/guide/PLAN-ARCHITECTURE.md#migration-note).
+
+### Generated documents go stale visibly (plan-architecture brief, Module 10)
+
+- **`docs add|remove|list|check`** registers a project's generated documents
+  (path, generator command, inputs) in `.vibegraph/docs.json`. `check` reports
+  each as fresh, **stale since <commit>** (the first later commit that changed
+  an input, or the working tree) or unknown, and exits 1 when any is stale.
+- The **session-start hook** lists stale documents with the command that
+  regenerates them.
+
+Tests: test:docs-registry (5).
+
+### Rename safety and change impact (plan-architecture brief, Module 9)
+
+- **`plan affected [--uncommitted] [<file>…]`** lists the plan items whose
+  named steps, routers, access functions, rule targets or entry points the
+  change touches, and any name now **gone** (defined in a changed file at
+  HEAD, nowhere now).
+- The **post-edit hook** says when an edit removed a function the plan names,
+  once per name per session, with the op that fixes it.
+- **`rename-symbol`** (a `plan edit` op) renames a function in every place the
+  plan names it.
+
+Tests: test:plan-affected (4).
+
+### Assumptions and evidence (plan-architecture brief, Module 8)
+
+- Any plan item may list **`assumes`** (open-question ids), and a question or
+  an item may carry **`evidence`**: command, expected result, date and, once
+  run, the result. The latest run decides whether an assumption is confirmed,
+  refuted or unverified. VibeGraph never runs the command.
+- `plan check` adds "realised in code, assumption UNVERIFIED / REFUTED" to an
+  item's finding without changing its verdict. A refuted assumption is its own
+  violated finding that flags every item resting on it. Shown in `plan.md`, the
+  hook's plan and the Plan panel.
+- A question something rests on can't be dropped, only answered with
+  evidence.
+
+Tests: test:plan-assumptions (4), test:e2e-plan-stores.
+
+### Access and authority rules that are checked (plan-architecture brief, Module 7)
+
+- Three new verbs in the constraint grammar:
+  - **`single-writer`**: only these functions or files write a zone or
+    document family, through the store's write functions;
+  - **`always-with`**: every path through function X also calls Y;
+  - **`id-scheme`**: ids of a family come only from its producer functions.
+- Each says what it checked and what it could not. A computed zone, an id from
+  a parameter or an absent function is **unverifiable**, never a pass.
+- In the plan they take the plan's own names (`zone: "store/zone"`, process
+  ids), expanded on promotion.
+- Like `layer`, they fail `check` and are advice in the hooks until calibrated.
+
+Tests: test:plan-authority (5, fixture `test/fixtures/plan/authority_demo`: a
+passing and a failing case of each).
+
+### Layering rules that are checked (plan-architecture brief, Module 6)
+
+- A new verb in the constraint grammar, **`layer`**: `{rule: "layer", files,
+  mayImport, allowStdlib?}`. It says the files of a layer may import only what
+  `mayImport` names (project folders, globs, package names, `@acme/*` scopes;
+  the standard library unless `allowStdlib: false`). It is checked against the
+  project import graph, and a violation names each import with file and line.
+  A layer with no parsed file is unverifiable, never a pass.
+- In the plan, a layer rule may name **planned module ids**. `plan check`
+  expands them, and `plan promote` writes folders into `constraints.json`.
+- **`plan layers [--apply]`** proposes each module's rule from today's import
+  graph.
+- Like `payload-keys` before calibration, a `layer` violation fails `check`
+  (exit 1) but is advice in the hooks.
+
+Tests: test:plan-layers (5).
+
+### Library vs deployable (plan-architecture brief, Module 5)
+
+- A plan may hold **`modules`** (code units: `at`, kind `library` | `app` |
+  `tool`), and a process may say what it starts from (**`entryPoints`**) and
+  what it runs (**`uses`**). A process's files are its own plus its modules'.
+  A library two processes use belongs to neither when placing a write.
+- A planned thread with no `process` attaches to the process its entry point
+  lives in, so the "threads the plan gives no process" card no longer fills up.
+- **Workspace packages imported by name are project code.** `import … from
+  "@acme/rules"` in a multi-package repository is resolved by the parser
+  (`scripts/frontends/jsts/workspace.mjs`) into the package's source and
+  linked, so threads cross the package boundary. **Behaviour change:** such
+  packages are no longer listed as third-party tools in the stack, and threads
+  that stopped at them now continue into them.
+
+Tests: test:plan-modules (4, fixture `test/fixtures/plan/deploy_demo`).
+
+### Coordination through the store (plan-architecture brief, Module 4)
+
+- A plan may hold **`flows`**: ordered steps across processes, each "process
+  writes / reads / watches store/zone (family)". `plan check` reports each step
+  found or missing, and the flow as realised, drifted or not built.
+- **Indirect hops** are derived from the code: a write of a family in one
+  process and a watch or read of it in another. The map joins the two
+  processes with a dashed edge labelled by the family, so request → decision →
+  verdict reads as A → B → A. A computed zone never makes a hop.
+
+Tests: test:plan-flows (5), test:e2e-plan-stores (3).
+
+### Principals and who may write (plan-architecture brief, Module 3)
+
+- A plan may hold **`principals`** (`service`, `human-role`, `owner`). A
+  process says what it **`runsAs`**, and a zone's **`writers`** / **`readers`**
+  name principals, so "only P writes zone Z" is data. Every name is validated,
+  and a rename carries it everywhere.
+- `plan check` derives the **write matrix** (principal × zone) from the code's
+  access sites and checks each zone's writers: **pass**, **violated** (a
+  process writes a zone its principal may not, with file and line) or
+  **unverifiable** (a write it cannot place). It is shown in `plan.md`, the Plan
+  panel and on the map's zone and process cards.
+
+Tests: test:plan-principals (4), test:e2e-plan-stores (2).
+
+### Zones inside a store (plan-architecture brief, Module 2)
+
+- A store may list **`zones`** (`holds` document families or key patterns,
+  `writers`, `readers`, `routedBy`) and its **`access`** functions (the
+  client's own `write` / `read` / `watch` API). A call to an access function is
+  an access site, read with its literal arguments.
+- `plan check` marks a zone **realised** where the code's routing names it:
+  an access call's literal, or the router function the plan names. A zone the
+  code only reaches with a computed argument is **unverified**, never a pass.
+- A boundary may name the **`zone`** it writes. It is realised at its own
+  process's access to that zone, and **drifted** when that process touches
+  only other zones.
+- The map draws the store as a box with its zones inside it, and a boundary
+  with a zone ends on that zone.
+
+Tests: test:plan-zones (5), test:e2e-plan-stores (1).
+
+### Stores are resources, not processes (plan-architecture brief, Module 1)
+
+- A plan may hold **`stores`**: a database, sync service, object store or queue
+  the processes share, with what the code reaches it through (tools, a project
+  funnel, a folder or a workspace package name). `plan check` marks a store
+  realised when any of those is used. A boundary may target a store, and is
+  then realised or unverified, never drifted or orphaned while the store lives.
+- **`to-store`** (a `plan edit` op) converts a database or cache that was
+  modelled as a process into a store under the same id. A db/cache process,
+  and an orphaned boundary into a dropped one, now say so.
+- The map draws a store as its own card (or marks the real tool box that
+  realises it), and `plan.md` and the hook's plan list stores.
+- Found on the way: a planned tool whose role no table knows (`unknown`) read
+  as **drifted**. Silence is not a contradiction, so it now reads realised,
+  with a note.
+
+**Behaviour change.** Plans that don't use `stores` load and save exactly as
+before. The only verdict that moves on an existing plan is a stack tool the
+tables don't know, which goes from drifted to realised.
+
+Tests: test:plan-stores (5, fixture `test/fixtures/plan/store_demo`).
+Docs: [docs/guide/PLAN-ARCHITECTURE.md](docs/guide/PLAN-ARCHITECTURE.md).
+
+## 0.17.0 — 2026-10-01
 
 ### The planned architecture on the map (brief Module 1)
 

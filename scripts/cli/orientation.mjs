@@ -7,6 +7,9 @@ import { join } from "node:path";
 import { readStoredThreadSkill } from "../../src/server/thread_skill_store.ts";
 import { derivedPolicyClauses } from "../../src/server/policy_check.ts";
 import { enabledDirection } from "./direction.mjs";
+import { docsStatus } from "../../src/server/docs_registry.ts";
+import { loadPlan } from "../../src/server/plan_store.ts";
+import { backlogCount, planBacklog } from "../../src/server/plan_review.ts";
 
 const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
@@ -56,6 +59,13 @@ export function orientation(absRoot, loaded, constraints) {
   } else {
     lines.push("No knowledge folder yet — `vibegraph-knowledge export` writes the architecture map, one contract per thread and the rules.");
   }
+  // 2026-10-01 — proposals waiting on a person (plan items, an objective, rule changes).
+  const plan = (() => { try { return loadPlan(absRoot); } catch { return null; } })();
+  const backlog = plan && !plan.closed ? backlogCount(planBacklog(plan, null, constraints)) : constraints.reduce((n, c) => n + (c.proposals?.length ?? 0), 0);
+  if (backlog) lines.push("", `Review backlog: ${backlog} proposal${backlog === 1 ? "" : "s"} await a person — \`vibegraph-knowledge plan review\` lists them with their diffs (deciding is the person's, not yours).`);
+  // 2026-10-01 — generated documents whose inputs changed since they were generated.
+  const stale = docsStatus(absRoot).filter((r) => r.state === "stale");
+  if (stale.length) lines.push("", `Stale generated documents (${stale.length}) — do not trust them as current: ${stale.slice(0, 6).map((r) => `${r.doc.path} (${r.since === "the working tree" ? "inputs changed in the working tree" : `since ${r.since}`}; regenerate: ${r.doc.generator})`).join("; ")}${stale.length > 6 ? "; …" : ""}.`);
   lines.push("", "How this session is wired: name a function or file in a prompt to get its thread's contract, rules and skill; an edit that breaks a checkable rule is stopped with the rule and its reason.");
   return lines.join("\n");
 }

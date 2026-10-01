@@ -800,6 +800,9 @@ export interface ArchEdgeRecord {
   /** GUI ONLY (arch_plan.ts): a planned boundary's keys, rules and questions
    *  `about` it, and the stated trust zones it crosses ("app → external"). */
   planBoundary?: string;
+  /** GUI ONLY (arch_plan.ts): an INDIRECT hop through a store — one process
+   *  writes this family, another watches or reads it ("docs/requests · request"). */
+  planHop?: string;
   planCarries?: string[];
   planRules?: string[];
   planQuestions?: string[];

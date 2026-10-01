@@ -10,9 +10,9 @@
 // real thread. The architecture map's Plan / Overlay views draw the rest.
 
 import React, { useState } from "react";
-import { DraftingCompass, X, Check, Trash2, ArrowUpRight, ExternalLink } from "lucide-react";
-import type { Plan, PlanFinding, PlanSection } from "../shared/plan_types";
-import { planItemId } from "../shared/plan_types";
+import { DraftingCompass, X, Check, Trash2, ArrowUpRight, ExternalLink, Undo2 } from "lucide-react";
+import type { Plan, PlanFinding, PlanSection, WriteCell } from "../shared/plan_types";
+import { planItemId, sectionItems } from "../shared/plan_types";
 import { belowToolbar, heightBelowToolbar } from "./TopToolbar";
 import { VERDICT_TONE, verdictTone } from "./planTone";
 import { usePlanState, sendPlanOp, sendPlanOps, promotePlanRule, useSoftwareState, sendSoftware } from "./usePlanState";
@@ -42,13 +42,21 @@ function Chip({ text, tone, title, dashed }: { text: string; tone: string; title
 
 const SECTION_TITLE: Record<PlanSection, string> = {
   processes: "Processes", stack: "Stack", boundaries: "Data boundaries", threads: "Threads (primary steps)", policies: "Planned rules (advice until promoted)", open: "Open questions",
+  stores: "Stores (shared resources)",
+  principals: "Principals (identities)",
+  flows: "Flows through the stores",
+  modules: "Modules (code units)",
 };
 
 function describe(section: PlanSection, it: any): { name: string; sub: string } {
   switch (section) {
-    case "processes": return { name: it.label && it.label !== it.id ? `${it.id} — ${it.label}` : it.id, sub: `${it.kind}${it.at ? ` · ${it.at}` : ""}${it.serves ? ` · serves: ${it.serves}` : ""}` };
+    case "processes": return { name: it.label && it.label !== it.id ? `${it.id} — ${it.label}` : it.id, sub: `${it.kind}${it.at ? ` · ${it.at}` : ""}${it.runsAs ? ` · runs as ${it.runsAs}` : ""}${it.uses?.length ? ` · uses ${it.uses.join(", ")}` : ""}${it.serves ? ` · serves: ${it.serves}` : ""}` };
     case "stack": return { name: it.tool, sub: `${it.role}${it.why ? ` · ${it.why}` : ""}` };
-    case "boundaries": return { name: `${it.id}  ${it.from} → ${it.to}`, sub: `${it.protocol ?? ""}${it.carries?.length ? ` {${it.carries.join(", ")}}` : ""}` };
+    case "modules": return { name: it.label ? `${it.id} — ${it.label}` : it.id, sub: `${it.kind} · ${it.at}` };
+    case "flows": return { name: it.id, sub: (it.steps ?? []).map((st: any) => `${st.process} ${st.op} ${st.zone}`).join(" → ") };
+    case "principals": return { name: it.label ? `${it.id} — ${it.label}` : it.id, sub: it.kind };
+    case "stores": return { name: it.label ? `${it.id} — ${it.label}` : it.id, sub: `${it.kind} · via ${(it.reachedThrough ?? []).join(", ")}${it.zones?.length ? ` · zones ${it.zones.map((z: any) => z.id).join(", ")}` : ""}` };
+    case "boundaries": return { name: `${it.id}  ${it.from} → ${it.to}${it.zone ? `/${it.zone}` : ""}`, sub: `${it.protocol ?? ""}${it.carries?.length ? ` {${it.carries.join(", ")}}` : ""}` };
     case "threads": return { name: it.id, sub: `${it.entry}${it.process ? ` in ${it.process}` : ""} · serves: ${it.serves}` };
     case "policies": return { name: `${it.id}  ${it.text}`, sub: `why: ${it.why}${it.check ? ` · checked: ${it.check.rule}` : ""}` };
     default: return { name: it.id, sub: it.text };
@@ -82,7 +90,18 @@ function Item({ section, it, finding, off }: { section: PlanSection; it: any; fi
         </div>
       )}
       {finding?.detail && <div style={{ ...small, fontStyle: "italic" }}>{finding.detail}</div>}
+      {it.agreedAs && (
+        // 2026-10-01 — an agent changed an agreed item: what changed, against the agreed version.
+        <div data-plan-change style={{ ...small, color: "var(--accent-warning)" }}>
+          changed by an agent: {Object.keys({ ...it, ...it.agreedAs }).filter((k) => k !== "status" && k !== "agreedAs" && JSON.stringify(it[k]) !== JSON.stringify(it.agreedAs[k])).map((k) => `${k}: ${JSON.stringify(it.agreedAs[k]) ?? "(absent)"} → ${JSON.stringify(it[k]) ?? "(absent)"}`).join("; ")}
+        </div>
+      )}
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        {it.status === "proposed" && it.agreedAs && (
+          <button data-plan-reject style={btn} onClick={() => sendPlanOp({ op: "reject", section, id })} title="Reject the change — the agreed version comes back">
+            <Undo2 size={12} strokeWidth={1.5} /> Reject change
+          </button>
+        )}
         {it.status === "proposed" && (
           <button data-plan-agree style={btn} onClick={() => sendPlanOp({ op: "agree", section, id })} title="Agree to this planned item">
             <Check size={12} strokeWidth={1.5} /> Agree
@@ -111,7 +130,7 @@ function Item({ section, it, finding, off }: { section: PlanSection; it: any; fi
 }
 
 function Section({ plan, section, findings, off }: { plan: Plan; section: PlanSection; findings: PlanFinding[]; off: Set<string> }) {
-  const items = (plan[section] as any[]).filter((i) => i.status !== "dropped");
+  const items = sectionItems(plan, section).filter((i) => i.status !== "dropped");
   if (!items.length) return null;
   if (section === "open") {
     return (
@@ -120,6 +139,13 @@ function Section({ plan, section, findings, off }: { plan: Plan; section: PlanSe
         {items.map((q) => (
           <div key={q.id} style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <span style={{ ...small, color: "var(--text-primary)", flex: 1 }}>{q.id} {q.text}</span>
+            {(() => {
+              // 2026-10-01 — an assumption's standing, from its recorded evidence.
+              const f = findings.find((x) => x.section === "open" && x.id === q.id);
+              if (!f) return null;
+              const state = f.verdict === "violated" ? "refuted" : f.verdict === "pass" ? "confirmed" : "unverified";
+              return <span data-plan-question-state={state} title={f.detail} style={{ ...small, color: state === "refuted" ? "var(--accent-error)" : state === "confirmed" ? "var(--text-secondary)" : "var(--accent-warning)" }}>{state}</span>;
+            })()}
             {/* Claude may propose a new objective; only a person adopts it. */}
             {q.text.startsWith(PROPOSED_OBJECTIVE) && (
               <button data-plan-adopt-objective style={btn} title="Make this the plan's objective"
@@ -142,6 +168,40 @@ function Section({ plan, section, findings, off }: { plan: Plan; section: PlanSe
         const id = planItemId(section, it);
         return <Item key={id} section={section} it={it} finding={findings.find((f) => f.section === section && f.id === id)} off={off.has(`${section}:${id}`)} />;
       })}
+    </div>
+  );
+}
+
+/** 2026-10-01 — who may write which zone (the plan), and who does (the code). */
+function WriteMatrix({ plan, findings, matrix }: { plan: Plan; findings: PlanFinding[]; matrix: WriteCell[] }) {
+  if (!matrix.length) return null;
+  const zones = [...new Set(matrix.map((c) => c.zone))];
+  const who = [...new Set(matrix.map((c) => c.principal))];
+  const cellOf = (p: string, z: string) => matrix.find((c) => c.principal === p && c.zone === z);
+  const verdict = (z: string) => findings.find((f) => f.section === "stores" && f.id === `${z}:writers`);
+  return (
+    <div data-plan-write-matrix style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      <div style={{ fontSize: "var(--fs-12)", color: "var(--text-secondary)" }}>Who writes where (plan vs code)</div>
+      <table style={{ borderCollapse: "collapse", fontSize: "var(--fs-11)" }}>
+        <thead><tr><th />{zones.map((z) => <th key={z} data-verdict={verdict(z)?.verdict} title={verdict(z)?.detail} style={{ textAlign: "left", padding: 4, color: verdict(z)?.verdict === "violated" ? "var(--accent-error)" : "var(--text-secondary)" }}>{z}</th>)}</tr></thead>
+        <tbody>
+          {who.map((p) => (
+            <tr key={p}>
+              <td style={{ padding: 4, color: "var(--text-primary)" }}>{p}</td>
+              {zones.map((z) => {
+                const c = cellOf(p, z);
+                const state = !c ? "" : c.writes.length ? (c.allowed ? "writes" : "violation") : "allowed";
+                return (
+                  <td key={z} data-write-cell={`${p}|${z}`} data-state={state || "none"} title={c?.writes.join("\n") || undefined}
+                    style={{ padding: 4, color: state === "violation" ? "var(--accent-error)" : state === "writes" ? "var(--text-primary)" : "var(--text-muted)" }}>
+                    {state === "violation" ? "writes — not allowed" : state === "writes" ? `writes (${c!.writes.length})` : state === "allowed" ? "allowed" : ""}
+                  </td>
+                );
+              })}
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
@@ -234,13 +294,19 @@ export function PlanPanel({ open, onClose }: { open: boolean; onClose: () => voi
             <div style={small}>Objective</div>
             <div style={{ fontSize: "var(--fs-14)", lineHeight: 1.4 }}>{plan.objective}</div>
           </div>
+          {(() => {
+            // 2026-10-01 — the review backlog: proposals waiting on a person.
+            const n = (["processes", "modules", "stores", "principals", "stack", "boundaries", "threads", "flows", "policies"] as PlanSection[]).reduce((k, sec) => k + sectionItems(plan, sec).filter((i) => i.status === "proposed").length, 0);
+            return n ? <div data-plan-backlog={n} style={{ ...small, color: "var(--accent-warning)" }}>{n} proposal{n === 1 ? "" : "s"} await review — agree or reject each below (or run <code>vibegraph-knowledge plan review</code> for one page with every diff).</div> : null;
+          })()}
           {reconcile && (
             <div data-plan-counts style={{ display: "flex", gap: 8, flexWrap: "wrap" }} title={reconcile.limits.join("\n")}>
               {Object.entries(reconcile.counts).map(([k, n]) => <Chip key={k} text={`${n} ${k}`} tone={verdictTone(k)} />)}
               <span style={small}>plan vs code — hover for what it cannot see</span>
             </div>
           )}
-          {(["processes", "stack", "boundaries", "threads", "policies", "open"] as PlanSection[]).map((s) => <Section key={s} plan={plan} section={s} findings={findings} off={offSet} />)}
+          {(["processes", "modules", "stores", "principals", "stack", "boundaries", "threads", "flows", "policies", "open"] as PlanSection[]).map((s) => <Section key={s} plan={plan} section={s} findings={findings} off={offSet} />)}
+          <WriteMatrix plan={plan} findings={findings} matrix={reconcile?.writeMatrix ?? []} />
           {plan.changelog.length > 0 && (
             <div data-plan-changelog style={{ display: "flex", flexDirection: "column", gap: 4 }}>
               <div style={{ fontSize: "var(--fs-12)", color: "var(--text-secondary)" }}>Recent changes</div>

@@ -14,6 +14,8 @@
 import type { Plan, PlanActor, PlanSection } from "../shared/plan_types.ts";
 import { PLAN_CAPS, PLAN_SECTIONS, planItemId } from "../shared/plan_types.ts";
 import { validatePlan, validateItem, emptyPlan } from "./plan_store.ts";
+import { validateStore } from "./plan_store_items.ts";
+import { renameSymbolRefs } from "./plan_affected.ts";
 
 export type PlanOp =
   | { op: "set-objective"; text: string }
@@ -22,9 +24,16 @@ export type PlanOp =
   | { op: "drop"; section: PlanSection; id: string }
   | { op: "agree"; section: PlanSection; id: string }
   | { op: "rename"; section: PlanSection; from: string; to: string }
+  /** 2026-10-01 — a db/cache modelled as a PROCESS becomes the store it is */
+  | { op: "to-store"; id: string; reachedThrough?: string[]; kind?: string }
+  /** 2026-10-01 — a FUNCTION was renamed: every place the plan names it follows */
+  | { op: "rename-symbol"; from: string; to: string }
+  /** 2026-10-01 — a person declines a proposal: a change to an AGREED item
+   *  goes back to the agreed version (kept as `agreedAs`); a new item is dropped */
+  | { op: "reject"; section: PlanSection; id: string }
   | { op: "close" } | { op: "reopen" };
 
-export const PLAN_OP_NAMES = ["set-objective", "add", "update", "drop", "agree", "rename", "close", "reopen"] as const;
+export const PLAN_OP_NAMES = ["set-objective", "add", "update", "drop", "agree", "rename", "to-store", "rename-symbol", "reject", "close", "reopen"] as const;
 
 /** Parse an untrusted op (WS, MCP, the CLI). */
 export function parsePlanOp(x: unknown): { ok: true; op: PlanOp } | { ok: false; error: string } {
@@ -33,6 +42,16 @@ export function parsePlanOp(x: unknown): { ok: true; op: PlanOp } | { ok: false;
   if (!PLAN_OP_NAMES.includes(o.op)) return { ok: false, error: `op must be one of ${PLAN_OP_NAMES.join("|")}` };
   if (o.op === "set-objective") return typeof o.text === "string" ? { ok: true, op: { op: o.op, text: o.text } } : { ok: false, error: "set-objective needs text" };
   if (o.op === "close" || o.op === "reopen") return { ok: true, op: { op: o.op } };
+  if (o.op === "rename-symbol") {
+    return typeof o.from === "string" && o.from && typeof o.to === "string" && o.to && /^[A-Za-z_$][\w$.]*$/.test(o.to)
+      ? { ok: true, op: { op: "rename-symbol", from: o.from, to: o.to } }
+      : { ok: false, error: "rename-symbol needs from and to (the old and the new function name)" };
+  }
+  if (o.op === "to-store") {
+    if (typeof o.id !== "string" || !o.id) return { ok: false, error: "to-store needs the process id" };
+    if (o.reachedThrough !== undefined && !(Array.isArray(o.reachedThrough) && o.reachedThrough.every((x: unknown) => typeof x === "string"))) return { ok: false, error: "reachedThrough must be a list of names" };
+    return { ok: true, op: { op: "to-store", id: o.id, ...(o.reachedThrough ? { reachedThrough: o.reachedThrough } : {}), ...(typeof o.kind === "string" ? { kind: o.kind } : {}) } };
+  }
   if (!PLAN_SECTIONS.includes(o.section)) return { ok: false, error: `section must be one of ${PLAN_SECTIONS.join("|")}` };
   if (o.op === "add") return o.item && typeof o.item === "object" ? { ok: true, op: { op: "add", section: o.section, item: o.item } } : { ok: false, error: "add needs an item" };
   if (o.op === "rename") {
@@ -47,7 +66,7 @@ export function parsePlanOp(x: unknown): { ok: true; op: PlanOp } | { ok: false;
 
 /** The next free id in a section ("b3", "p2", "q4"). */
 function nextId(plan: Plan, section: PlanSection): string {
-  const prefix = { boundaries: "b", policies: "p", open: "q" }[section as string] ?? "x";
+  const prefix = { boundaries: "b", policies: "p", open: "q", flows: "f" }[section as string] ?? "x";
   const used = new Set((plan[section] as any[]).map((i) => planItemId(section, i)));
   let n = (plan[section] as any[]).length + 1;
   while (used.has(`${prefix}${n}`)) n++;
@@ -58,6 +77,8 @@ const describe = (op: PlanOp, id?: string) =>
   op.op === "set-objective" ? `objective: "${op.text}"`
   : op.op === "close" || op.op === "reopen" ? `${op.op}d the plan`
   : op.op === "rename" ? `rename ${op.section} ${op.from} → ${op.to}`
+  : op.op === "to-store" ? `process ${op.id} → store ${op.id}`
+  : op.op === "rename-symbol" ? `rename function ${op.from} → ${op.to} in the plan`
   : `${op.op} ${op.section} ${id ?? (op as any).id}`;
 
 export interface ApplyResult { plan?: Plan; error?: string; changes: string[] }
@@ -112,7 +133,15 @@ function applyOne(plan: Plan, op: PlanOp, by: PlanActor, changes: string[]): str
     changes.push(describe(op));
     return null;
   }
-  const list = plan[op.section] as any[];
+  if (op.op === "to-store") return processToStore(plan, op, by, changes);
+  if (op.op === "rename-symbol") {
+    const n = renameSymbolRefs(plan, op.from, op.to);
+    if (!n) return `the plan names no function "${op.from}"`;
+    changes.push(`${describe(op)} (${n} reference${n === 1 ? "" : "s"} updated)`);
+    return null;
+  }
+  // An optional section (stores, …) a plan written before it lacks.
+  const list = ((plan as any)[op.section] ??= []) as any[];
   if (op.op === "rename") return renameItem(plan, op, by, changes);
   if (op.op === "add") {
     const item: any = { ...op.item };
@@ -120,7 +149,7 @@ function applyOne(plan: Plan, op: PlanOp, by: PlanActor, changes: string[]): str
       if (!item.id) item.id = nextId(plan, "open");
       delete item.status;
     } else {
-      if (op.section !== "stack" && op.section !== "processes" && op.section !== "threads" && !item.id) item.id = nextId(plan, op.section);
+      if (!["stack", "processes", "threads", "stores", "principals", "modules"].includes(op.section) && !item.id) item.id = nextId(plan, op.section);
       // An agent proposes; only a person may add something already agreed.
       if (by === "agent" || !item.status) item.status = "proposed";
       if (item.status === "promoted") return "an item cannot be added as promoted — promote it with `plan promote`";
@@ -137,12 +166,32 @@ function applyOne(plan: Plan, op: PlanOp, by: PlanActor, changes: string[]): str
   if (idx < 0) return `no "${op.id}" in ${op.section}`;
   const item = list[idx];
   if (op.op === "drop") {
-    if (op.section === "open") list.splice(idx, 1);
-    else {
+    if (op.section === "open") {
+      // A question something rests on is answered by its evidence, not deleted.
+      const resting = ([] as Array<{ id?: string; tool?: string; assumes?: string[] }>)
+        .concat(plan.processes, plan.boundaries, plan.stack, plan.threads, plan.policies, plan.stores ?? [], plan.principals ?? [], plan.flows ?? [], plan.modules ?? [])
+        .filter((x) => x.assumes?.includes(op.id)).map((x) => x.id ?? x.tool);
+      if (resting.length) return `${resting.join(", ")} assume${resting.length === 1 ? "s" : ""} ${op.id} — record its evidence (\`{"op":"update","section":"open","id":"${op.id}","fields":{"evidence":[…]}}\`), or take it out of their \`assumes\` first`;
+      list.splice(idx, 1);
+    } else {
       if (item.status === "promoted") return `a promoted rule lives in constraints.json now as ${item.constraintId ?? "a constraint"} — remove it with \`vibegraph-knowledge constraint remove ${item.constraintId ?? "<id>"}\``;
       item.status = "dropped";
     }
     changes.push(describe(op));
+    return null;
+  }
+  if (op.op === "reject") {
+    if (by !== "human") return "only a person rejects a proposal";
+    if (op.section === "open") return "a question is answered by dropping it";
+    if (item.status !== "proposed") return `${op.id} is ${item.status}, not a proposal`;
+    if (item.agreedAs) {
+      // A change to an agreed item: the agreed version comes back.
+      list[idx] = { ...item.agreedAs, status: "agreed" };
+      changes.push(`reject the proposed change to ${op.section} ${op.id} (back to the agreed version)`);
+    } else {
+      item.status = "dropped";
+      changes.push(`reject ${op.section} ${op.id} (dropped)`);
+    }
     return null;
   }
   if (op.op === "agree") {
@@ -150,20 +199,26 @@ function applyOne(plan: Plan, op: PlanOp, by: PlanActor, changes: string[]): str
     if (op.section === "open") return "a question is answered by dropping it (and recording the answer as an item)";
     if (item.status === "promoted") return "already promoted";
     item.status = "agreed";
+    delete item.agreedAs;
     changes.push(describe(op));
     return null;
   }
   // update
   const fields = { ...op.fields };
-  for (const k of ["id", "tool", "constraintId"]) delete (fields as any)[k];
+  for (const k of ["id", "tool", "constraintId", "agreedAs"]) delete (fields as any)[k];
   if ("status" in fields) {
     if (by === "agent") return "an agent cannot set a status — it proposes; a person agrees or drops";
     if (fields.status === "promoted") return "promote a rule with `plan promote`";
   }
   if (item.status === "promoted") return `a promoted rule lives in constraints.json now as ${item.constraintId ?? "a constraint"} — change it there: \`vibegraph-knowledge constraint ${by === "agent" ? "propose" : "edit"} ${item.constraintId ?? "<id>"} --check '<json>' --why "…"\` (\`constraint show ${item.constraintId ?? "<id>"}\` prints it)`;
   const next = { ...item, ...fields };
-  // An agreement a model can quietly edit is not one.
-  if (by === "agent" && item.status === "agreed") next.status = "proposed";
+  // An agreement a model can quietly edit is not one. The agreed version is
+  // kept, so a person reviewing the change sees the diff and can reject it.
+  if (by === "agent" && item.status === "agreed") {
+    next.status = "proposed";
+    const { agreedAs: _, ...agreed } = item;
+    next.agreedAs = agreed;
+  }
   const bad = validateItem(op.section, next);
   if (bad) return bad;
   list[idx] = next;
@@ -189,16 +244,63 @@ function renameItem(plan: Plan, op: Extract<PlanOp, { op: "rename" }>, by: PlanA
   if (bad) return bad;
   let refs = 0;
   const swap = (v: string) => { if (v === op.from) { refs++; return op.to; } return v; };
-  if (op.section === "processes" || op.section === "stack") {
+  if (op.section === "processes" || op.section === "stack" || op.section === "stores") {
     for (const b of plan.boundaries) { b.from = swap(b.from); b.to = swap(b.to); }
   }
   if (op.section === "processes") for (const t of plan.threads) if (t.process) t.process = swap(t.process);
+  if (op.section === "processes") for (const f of plan.flows ?? []) for (const st of f.steps) st.process = swap(st.process);
+  if (op.section === "stores") for (const f of plan.flows ?? []) for (const st of f.steps) if (st.zone.startsWith(`${op.from}/`)) { refs++; st.zone = `${op.to}${st.zone.slice(op.from.length)}`; }
+  if (op.section === "modules") for (const p of plan.processes) if (p.uses) p.uses = p.uses.map(swap);
+  if (op.section === "principals") {
+    for (const p of plan.processes) if (p.runsAs) p.runsAs = swap(p.runsAs);
+    for (const st of plan.stores ?? []) for (const z of st.zones ?? []) {
+      if (z.writers) z.writers = z.writers.map(swap);
+      if (z.readers) z.readers = z.readers.map(swap);
+    }
+  }
   if (op.section === "boundaries") {
     for (const t of plan.threads) t.primary = t.primary.map((s) => (s.startsWith(`${op.from}:`) ? (refs++, `${op.to}:${s.slice(op.from.length + 1)}`) : s));
   }
-  for (const x of [...plan.policies, ...plan.open] as Array<{ about?: string }>) if (x.about) x.about = swap(x.about);
+  for (const x of [...plan.policies, ...plan.open] as Array<{ about?: string }>) {
+    if (!x.about) continue;
+    // A store rename carries its zones' "store/zone" references too.
+    x.about = op.section === "stores" && x.about.startsWith(`${op.from}/`) ? (refs++, `${op.to}${x.about.slice(op.from.length)}`) : swap(x.about);
+  }
   const demoted = by === "agent" && item.status === "agreed";
   if (demoted) item.status = "proposed";
   changes.push(`${describe(op)}${refs ? ` (${refs} reference${refs === 1 ? "" : "s"} updated)` : ""}${demoted ? " (was agreed — back to proposed: an agent renamed it; a person agrees again)" : ""}`);
+  return null;
+}
+
+const STORE_KIND_OF: Record<string, string> = { db: "database", cache: "cache" };
+
+/** 2026-10-01 — a database / cache modelled as a PROCESS is a STORE: move it
+ *  to `stores` under the same id (so every boundary pointing at it now points
+ *  at the store), live again if it had been dropped. What it is reached
+ *  through is given, or read off the plan: the tools its boundaries already
+ *  name, else the planned tools whose role matches its kind. */
+function processToStore(plan: Plan, op: Extract<PlanOp, { op: "to-store" }>, by: PlanActor, changes: string[]): string | null {
+  const idx = plan.processes.findIndex((p) => p.id === op.id);
+  if (idx < 0) return `no process "${op.id}"`;
+  const p = plan.processes[idx];
+  const viaBoundaries = plan.boundaries.filter((b) => b.from === op.id && plan.stack.some((t) => t.tool === b.to)).map((b) => b.to);
+  const byRole = plan.stack.filter((t) => t.status !== "dropped" && t.role === p.kind).map((t) => t.tool);
+  const reachedThrough = op.reachedThrough?.length ? op.reachedThrough : [...new Set([...viaBoundaries, ...byRole])];
+  if (!reachedThrough.length) return `say what the code reaches it through: {"op":"to-store","id":"${op.id}","reachedThrough":["<sdk>","<data library or project module>"]}`;
+  const kind = op.kind ?? STORE_KIND_OF[p.kind] ?? "other";
+  const store: Record<string, unknown> = {
+    id: p.id, kind, ...(p.label && p.label !== p.id ? { label: p.label } : {}), serves: p.serves ?? null, reachedThrough,
+    ...(p.groundedIn !== undefined ? { groundedIn: p.groundedIn } : {}),
+    // A dropped db process was dropped because it was never a process: as a
+    // store it is live again, for a person to agree.
+    status: p.status === "dropped" || by === "agent" ? "proposed" : p.status,
+  };
+  const bad = validateStore(store);
+  if (bad) return bad;
+  plan.processes.splice(idx, 1);
+  ((plan as any).stores ??= []).push(store);
+  const owned = plan.threads.filter((t) => t.process === op.id);
+  for (const t of owned) delete t.process;
+  changes.push(`process ${op.id} is a store (${kind}, reached through ${reachedThrough.join(", ")})${owned.length ? `; ${owned.length} thread(s) it held no longer name a process` : ""}`);
   return null;
 }

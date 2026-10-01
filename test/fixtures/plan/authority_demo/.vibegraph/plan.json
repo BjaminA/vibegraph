@@ -1,0 +1,35 @@
+{
+  "version": "1",
+  "revision": 1,
+  "objective": "Only the decider writes verdicts, every decision is audited, and ids say what they identify",
+  "processes": [
+    { "id": "decider", "kind": "backend", "label": "Decider", "serves": "verdicts are written and audited", "at": "decider", "status": "agreed" },
+    { "id": "rogue", "kind": "backend", "label": "Rogue", "serves": "the paths the rules exist to catch", "at": "rogue", "status": "agreed" }
+  ],
+  "boundaries": [],
+  "stack": [],
+  "threads": [],
+  "policies": [
+    { "id": "p1", "text": "Only the decider writes verdicts", "why": "a verdict is authority: two writers mean two sources of truth", "check": { "rule": "single-writer", "zone": "docs/verdicts", "by": ["decider"] }, "status": "agreed" },
+    { "id": "p2", "text": "Only appendAudit writes audit events", "why": "the audit log is append-only and written in one place", "check": { "rule": "single-writer", "zone": "docs/audit", "by": ["appendAudit"] }, "status": "agreed" },
+    { "id": "p3", "text": "Every verdict is audited", "why": "a decision with no audit event cannot be reviewed", "check": { "rule": "always-with", "target": "recordVerdict", "with": "appendAudit" }, "status": "agreed" },
+    { "id": "p4", "text": "Every quick decision is audited", "why": "a decision with no audit event cannot be reviewed", "check": { "rule": "always-with", "target": "quickDecide", "with": "appendAudit" }, "status": "agreed" },
+    { "id": "p5", "text": "Every review is audited", "why": "a decision with no audit event cannot be reviewed", "check": { "rule": "always-with", "target": "reviewLater", "with": "appendAudit" }, "status": "agreed" },
+    { "id": "p6", "text": "Verdict ids come only from verdictId", "why": "an id that encodes its family is what lets a reader route it", "check": { "rule": "id-scheme", "family": "verdict", "producers": ["verdictId"] }, "status": "agreed" },
+    { "id": "p7", "text": "Audit event ids come only from eventId", "why": "an id that encodes its family is what lets a reader route it", "check": { "rule": "id-scheme", "family": "event", "producers": ["eventId"] }, "status": "agreed" },
+    { "id": "p8", "text": "Request ids come only from requestId", "why": "an id that encodes its family is what lets a reader route it", "check": { "rule": "id-scheme", "family": "request", "producers": ["requestId"] }, "status": "agreed" },
+    { "id": "p9", "text": "Every review decision is audited, both ways", "why": "a decision with no audit event cannot be reviewed", "check": { "rule": "always-with", "target": "recordReview", "with": "appendAudit" }, "status": "agreed" }
+  ],
+  "open": [],
+  "changelog": [],
+  "stores": [
+    { "id": "docs", "kind": "document-store", "reachedThrough": ["lib/"],
+      "access": { "write": ["writeDoc"] },
+      "zones": [
+        { "id": "verdicts", "holds": ["verdict"] },
+        { "id": "audit", "holds": ["event"] },
+        { "id": "requests", "holds": ["request"] }
+      ],
+      "status": "agreed" }
+  ]
+}

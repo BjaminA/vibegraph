@@ -17,9 +17,10 @@
 import * as fs from "fs";
 import * as path from "path";
 import type {
-  Plan, PlanProcess, PlanBoundary, PlanTool, PlanThread, PlanPolicy, PlanQuestion, PlanSection,
+  Plan, PlanProcess, PlanBoundary, PlanTool, PlanThread, PlanPolicy, PlanQuestion, PlanSection, PlanStore,
 } from "../shared/plan_types.ts";
-import { PLAN_CAPS, PLAN_SECTIONS, planItemId } from "../shared/plan_types.ts";
+import { PLAN_CAPS, PLAN_OPTIONAL_SECTIONS, PLAN_SECTIONS, planItemId } from "../shared/plan_types.ts";
+import { validateArchRefs, validateAssumptions, validateFlow, validateModule, validatePrincipal, validateStore } from "./plan_store_items.ts";
 import { STACK_ROLES } from "../shared/stack_taxonomy.ts";
 import { words } from "./plan_thread_match.ts";
 import type { SystemPlan, SubsystemKind } from "../shared/protocol";
@@ -49,11 +50,14 @@ export function validatePlan(x: unknown): string | null {
   if (p.description !== undefined && !(str(p.description) && (p.description as string).length <= PLAN_CAPS.description)) return `description must be text of at most ${PLAN_CAPS.description} characters`;
   for (const k of ["closed", "drafted"]) if (p[k] !== undefined && typeof p[k] !== "boolean") return `${k} must be a boolean`;
   if (p.ratifiedAt !== undefined && !str(p.ratifiedAt)) return "ratifiedAt must be a string";
-  for (const s of PLAN_SECTIONS) if (!Array.isArray(p[s])) return `${s} must be an array`;
+  for (const s of PLAN_SECTIONS) {
+    if (p[s] === undefined && PLAN_OPTIONAL_SECTIONS.includes(s)) continue;
+    if (!Array.isArray(p[s])) return `${s} must be an array`;
+  }
   if (!Array.isArray(p.changelog)) return "changelog must be an array";
 
   for (const s of PLAN_SECTIONS) {
-    const items = p[s] as unknown[];
+    const items = (p[s] ?? []) as unknown[];
     const cap = PLAN_CAPS[s];
     // Dropped items stay for the record but do not count against the cap.
     const live = items.filter((i: any) => i?.status !== "dropped").length;
@@ -79,13 +83,15 @@ export function validatePlan(x: unknown): string | null {
   const known = new Set([
     ...procs, ...(p.threads as PlanThread[]).map((x) => x.id),
     ...(p.boundaries as PlanBoundary[]).map((x) => x.id), ...(p.stack as PlanTool[]).map((x) => x.tool),
+    ...((p.stores ?? []) as PlanStore[]).flatMap((s) => [s.id, ...(s.zones ?? []).map((z) => `${s.id}/${z.id}`)]),
+    ...((p.modules ?? []) as Array<{ id: string }>).map((m) => m.id),
   ]);
   for (const [s, items] of [["policies", p.policies], ["open", p.open]] as const) {
     for (const it of items as Array<{ id: string; about?: string }>) {
-      if (it.about !== undefined && !known.has(it.about)) return `${s} ${it.id}: about "${it.about}" names no planned process, thread, boundary or tool`;
+      if (it.about !== undefined && !known.has(it.about)) return `${s} ${it.id}: about "${it.about}" names no planned process, thread, boundary, tool, store, zone (store/zone) or module`;
     }
   }
-  return null;
+  return validateArchRefs(p as unknown as Plan);
 }
 
 /** 2026-10-01 — a cap refusal names what to drop or merge, not only "no":
@@ -119,6 +125,10 @@ export function capCandidates(section: PlanSection, items: unknown[]): string {
 export function validateItem(section: PlanSection, raw: unknown): string | null {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return "must be an object";
   const o = raw as Record<string, any>;
+  const assumed = validateAssumptions(o, section === "open");
+  if (assumed) return assumed;
+  // 2026-10-01 — the agreed version an agent's change replaced (plan review's diff).
+  if (o.agreedAs !== undefined && (!o.agreedAs || typeof o.agreedAs !== "object" || Array.isArray(o.agreedAs) || (o.agreedAs as any).agreedAs !== undefined)) return "agreedAs must be the agreed version of the item";
   if ((section === "open" || section === "policies") && o.about !== undefined && !line(o.about, 80)) return "about must name a planned item (a process, thread, boundary or tool id)";
   if (section === "open") {
     if (!str(o.id) || !ID_RE.test(o.id)) return "id must be a short name";
@@ -137,10 +147,22 @@ export function validateItem(section: PlanSection, raw: unknown): string | null 
       if (!line(o.label, 80)) return "label must be a short name";
       if (o.serves !== null && !line(o.serves)) return "serves must say, in one line, which part of the objective this is for";
       if (o.at !== undefined && !line(o.at, 120)) return "at must be a path prefix";
+      if (o.runsAs !== undefined && !line(o.runsAs, 80)) return "runsAs must be a principal id";
+      if (o.entryPoints !== undefined && !(Array.isArray(o.entryPoints) && o.entryPoints.length <= 8 && o.entryPoints.every((x: unknown) => line(x, 200)))) return "entryPoints must list up to 8 files or entry-point ids it starts from";
+      if (o.uses !== undefined && !(Array.isArray(o.uses) && o.uses.length <= 12 && o.uses.every((x: unknown) => line(x, 80)))) return "uses must list up to 12 module ids";
       if (o.groundedIn !== undefined && o.groundedIn !== null && !str(o.groundedIn)) return "groundedIn must be a quote or null";
       return null;
+    case "stores":
+      return validateStore(o);
+    case "principals":
+      return validatePrincipal(o);
+    case "flows":
+      return validateFlow(o);
+    case "modules":
+      return validateModule(o);
     case "boundaries":
       if (!str(o.from) || !str(o.to)) return "from and to are required";
+      if (o.zone !== undefined && !line(o.zone, 60)) return "zone must be a zone id of the store it targets";
       if (o.protocol !== undefined && !line(o.protocol, 40)) return "protocol must be a short name";
       if (o.carries !== undefined && !(Array.isArray(o.carries) && o.carries.length <= 16 && o.carries.every((k: unknown) => line(k, 60)))) return "carries must be up to 16 key names";
       if (o.groundedIn !== undefined && o.groundedIn !== null && !str(o.groundedIn)) return "groundedIn must be a quote or null";
@@ -207,7 +229,11 @@ export function savePlan(root: string, plan: Plan): { path?: string; error?: str
   const file = path.join(root, PLAN_FILE);
   try {
     fs.mkdirSync(path.dirname(file), { recursive: true });
-    fs.writeFileSync(`${file}.tmp`, JSON.stringify(plan, null, 2) + "\n", "utf-8");
+    // An empty optional section is left out, so a plan that uses none of
+    // them is byte-for-byte what it was before they existed.
+    const out: Record<string, unknown> = { ...plan };
+    for (const s of PLAN_OPTIONAL_SECTIONS) if (!(out[s] as unknown[] | undefined)?.length) delete out[s];
+    fs.writeFileSync(`${file}.tmp`, JSON.stringify(out, null, 2) + "\n", "utf-8");
     fs.renameSync(`${file}.tmp`, file);
     // The converted legacy file is now a second, stale copy: remove it.
     fs.rmSync(path.join(root, LEGACY_PLAN_FILE), { force: true });

@@ -15,11 +15,17 @@ import { loadConstraints } from "../../src/server/constraint_store.ts";
 import { applyPlanOps, parsePlanOp } from "../../src/server/plan_ops.ts";
 import { formatPlanMd } from "../../src/server/plan_render.ts";
 import { reconcilePlan } from "../../src/server/plan_reconcile.ts";
+import { proposeLayers } from "../../src/server/plan_layers.ts";
+import { formatPlanAffected, planAffected } from "../../src/server/plan_affected.ts";
+import { formatBacklog, planBacklog, reviewOps } from "../../src/server/plan_review.ts";
+import { headText } from "./head_text.mjs";
+import { workingTreeDelta } from "./check.mjs";
+import { importGraph, workspacePackages } from "../../src/server/import_graph.ts";
 import { promotePolicy } from "../../src/server/plan_promote.ts";
 import { PLAN_SECTIONS } from "../../src/shared/plan_types.ts";
 import { isAgentRun } from "./actor.mjs";
 
-export const PLAN_USAGE = `plan init "<objective>" | show | check | edit '<op>' | agree|drop <section> <id> | promote <rule id> | close|reopen
+export const PLAN_USAGE = `plan init "<objective>" | show | check | edit '<op>' | agree|drop <section> <id> | promote <rule id> | layers [--apply] | affected [--uncommitted] | review | close|reopen
                                   [--root <dir>] [--json] [--as agent]   the HYPOTHETICAL project (.vibegraph/plan.json): objective,
                                   processes, stack, data boundaries, primary threads, planned rules, open questions; zero tokens
                                   (except \`plan draft --from <docs>\`, which SPENDS TOKENS: items drafted from documents, each quoted).
@@ -38,17 +44,26 @@ const HELP = `usage: vibegraph-knowledge ${PLAN_USAGE}
                                 {"op":"update","section":"processes","id":"api","fields":{"at":"api/"}}
                                 {"op":"update","section":"threads","id":"provision-tenant","fields":{"entryPoint":"bin/provision.ts"}}
                                 {"op":"rename","section":"threads","from":"old id","to":"new id"}   (references follow)
+                                {"op":"to-store","id":"db","reachedThrough":["@acme/store-client"]}   a db/cache process becomes a store
+                              sections also: stores (shared resources) — see docs/guide/PLAN-ARCHITECTURE.md
                                 {"op":"set-objective","text":"…"}
   agree <section> <id>        a person agrees to a proposed item
   drop <section> <id>         drop an item (kept for the record); drop an open question to close it
   promote <rule id>           copy a planned rule into .vibegraph/constraints.json (human-stated), where it is checked and may gate
+  review [--agree <s:id,…>] [--reject <s:id,…>]   every pending proposal on one page — a new item in full, a change to an
+                              agreed item as a diff, the evidence for each; decide several at once (rejecting a change
+                              restores the agreed version)
+  affected [--uncommitted] [<file>…]   the plan items whose named steps, routers, access functions, rule
+                              targets or entry points the change touches — and any name now GONE (renamed?)
+  layers [--apply]            one LAYER rule per planned module, read off today's import graph ("rules imports only zod");
+                              --apply adds them as proposed planned rules, to tighten and agree
   close | reopen              stop / resume sending the plan to hooked sessions
   --as agent                  record the edit as a model's proposal (what MCP does)`;
 
 export function runPlan(args) {
   let parsed;
   try {
-    parsed = parseArgs({ args, allowPositionals: true, options: { root: { type: "string" }, json: { type: "boolean" }, file: { type: "string" }, as: { type: "string" } } });
+    parsed = parseArgs({ args, allowPositionals: true, options: { root: { type: "string" }, json: { type: "boolean" }, file: { type: "string" }, as: { type: "string" }, apply: { type: "boolean" }, uncommitted: { type: "boolean" }, agree: { type: "string" }, reject: { type: "string" } } });
   } catch (e) { return { exitCode: 2, text: `${e.message}\n\n${HELP}\n` }; }
   const [sub, ...rest] = parsed.positionals;
   const root = resolve(parsed.values.root ?? ".");
@@ -97,6 +112,37 @@ export function runPlan(args) {
     const [section, id] = rest;
     if (!PLAN_SECTIONS.includes(section) || !id) return done(`${sub} needs a section (${PLAN_SECTIONS.join("|")}) and an id`, 2);
     return apply([{ op: sub, section, id }]);
+  }
+  if (sub === "review") {
+    // Every pending proposal on one page, with its diff and its evidence.
+    const { envelope } = loadEnvelope(root, null, pipelineHere(root), { cache: true });
+    const backlog = planBacklog(plan, reconcilePlan(plan, envelope, buildStackIndex(envelope, root), root), loadConstraints(root));
+    const agree = (parsed.values.agree ?? "").split(",").map((x) => x.trim()).filter(Boolean);
+    const reject = (parsed.values.reject ?? "").split(",").map((x) => x.trim()).filter(Boolean);
+    if (!agree.length && !reject.length) return done(parsed.values.json ? JSON.stringify(backlog, null, 2) : formatBacklog(backlog));
+    if (by === "agent") return done("refused: only a person decides a proposal", 1);
+    const r = reviewOps(backlog, agree, reject);
+    return r.error ? done(`refused: ${r.error}`, 1) : apply(r.ops);
+  }
+  if (sub === "affected") {
+    // Which plan items name something this change touches — and which name is gone.
+    let files = rest;
+    if (parsed.values.uncommitted) {
+      try { files = [...files, ...workingTreeDelta(root).entries.map((e) => e.file)]; }
+      catch (e) { return done(`affected --uncommitted needs a git repository: ${e.message}`, 2); }
+    }
+    if (!files.length) return done("name the changed files, or pass --uncommitted", 2);
+    const { envelope } = loadEnvelope(root, null, pipelineHere(root), { cache: true });
+    const impact = planAffected(plan, envelope.files, files, (f) => headText(root, f));
+    return done(parsed.values.json ? JSON.stringify(impact, null, 2) : formatPlanAffected(impact));
+  }
+  if (sub === "layers") {
+    // The import graph as it is today, as each module's starting layer rule.
+    const { envelope } = loadEnvelope(root, null, pipelineHere(root), { cache: true });
+    const p = proposeLayers(plan, importGraph(envelope.files, workspacePackages(root)));
+    if (!parsed.values.apply || !p.ops.length) return done(`${p.lines.join("\n")}${p.ops.length ? "\n(add them as proposed planned rules with --apply)" : ""}`);
+    const r = apply(p.ops);
+    return r.exitCode ? r : done(`${p.lines.join("\n")}\n${r.text}`);
   }
   if (sub === "close" || sub === "reopen") return apply([{ op: sub }]);
   if (sub === "promote") {

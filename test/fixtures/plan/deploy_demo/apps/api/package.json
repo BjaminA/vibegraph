@@ -1,0 +1,7 @@
+{
+  "name": "api",
+  "private": true,
+  "scripts": {
+    "start": "tsx src/server.ts"
+  }
+}

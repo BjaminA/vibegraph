@@ -46,7 +46,7 @@ import { affectedTests } from "../../src/shared/test_reach.ts";
 import { verbMayGate } from "../../src/server/quality/standings.ts";
 import { archForPrompt } from "./arch_context.mjs";
 import { orientation } from "./orientation.mjs";
-import { planForPrompt, plannedThreadsForPrompt } from "./plan_context.mjs";
+import { planAffectedNote, planForPrompt, plannedThreadsForPrompt } from "./plan_context.mjs";
 import { softwareForPrompt } from "./software_context.mjs";
 import { directionForPrompt, directionForFindings } from "./direction.mjs";
 import { untrustedBaseline, newUntrustedNote } from "../dataflow_cache.mjs";
@@ -429,7 +429,7 @@ function afterEdit(rel, input, { absRoot, loaded, state, constraints }) {
   const why = directionForFindings(absRoot, introduced, state);
   if (why) notes.push(why);
   const untrusted = newUntrustedNote(loaded.envelope, absRoot, state);
-  if (untrusted) notes.push(untrusted);
+  for (const n of [untrusted, planAffectedNote(absRoot, loaded.envelope, files, state)]) if (n) notes.push(n);
   const gating = introduced.filter((f) => f.gates);
   const advisory = introduced.filter((f) => !f.gates);
   if (advisory.length) {

@@ -31,6 +31,7 @@ import {
   checkPayloadKeys, describePayloadKeys, isPayloadKeysCheck,
   type CallSiteFact, type PayloadKeysCheck,
 } from "./payload_check.ts";
+import { checkAlwaysWith, checkIdScheme, checkLayer, checkSingleWriter, describeAuthority, describeLayer, isAuthorityCheck, isLayerCheck, type AlwaysWithCheck, type ArchCheckFacts, type IdSchemeCheck, type LayerCheck, type SingleWriterCheck } from "./arch_checks.ts";
 import { pathAllowed, describeAllowList } from "../shared/path_match.ts";
 
 /** What a human can say that the IR can check.
@@ -51,9 +52,13 @@ export type ConstraintCheck =
   | { rule: "callers-only"; target: string; files?: string[]; functions?: string[]; allowTests?: boolean }
   | { rule: "import-only"; tool: string; files: string[]; allowTests?: boolean }
   | { rule: "calls-through"; target: string; through: string }
-  | PayloadKeysCheck;
+  | PayloadKeysCheck
+  | LayerCheck
+  | SingleWriterCheck
+  | AlwaysWithCheck
+  | IdSchemeCheck;
 
-export const CHECK_RULES = ["callers-only", "import-only", "calls-through", "payload-keys"] as const;
+export const CHECK_RULES = ["callers-only", "import-only", "calls-through", "payload-keys", "layer", "single-writer", "always-with", "id-scheme"] as const;
 
 /** One resolved call, as the linker recorded it. */
 export interface ReferenceFact {
@@ -81,7 +86,7 @@ export interface ExternalCallFact {
   nodeId: string;
 }
 
-export interface CheckFacts {
+export interface CheckFacts extends ArchCheckFacts {
   references: ReferenceFact[];
   /** file -> the tool names imported there (the stack index's view). */
   importsByFile: Record<string, string[]>;
@@ -213,6 +218,8 @@ export function isConstraintCheck(v: unknown): v is ConstraintCheck {
   if (c.rule === "calls-through") return typeof c.target === "string" && !!c.target
     && typeof c.through === "string" && !!c.through;
   if (c.rule === "payload-keys") return isPayloadKeysCheck(c);
+  if (c.rule === "layer") return isLayerCheck(c);
+  if (c.rule === "single-writer" || c.rule === "always-with" || c.rule === "id-scheme") return isAuthorityCheck(c);
   return false;
 }
 
@@ -340,6 +347,10 @@ export function checkConstraint(facts: CheckFacts, check: ConstraintCheck): Chec
     case "calls-through": return checkCallsThrough(facts, check);
     case "callers-only": return checkCallersOnly(facts, check);
     case "payload-keys": return checkPayloadKeys(facts.callSites, check);
+    case "layer": return checkLayer(facts, check);
+    case "single-writer": return checkSingleWriter(facts, check);
+    case "always-with": return checkAlwaysWith(facts, check);
+    case "id-scheme": return checkIdScheme(facts, check);
   }
 }
 
@@ -359,5 +370,9 @@ export function describeCheck(check: ConstraintCheck): string {
       return `every call to \`${check.target}\` goes through \`${check.through}\``;
     case "payload-keys":
       return describePayloadKeys(check);
+    case "layer":
+      return describeLayer(check);
+    case "single-writer": case "always-with": case "id-scheme":
+      return describeAuthority(check);
   }
 }

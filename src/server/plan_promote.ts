@@ -12,13 +12,16 @@ import { PLAN_CAPS } from "../shared/plan_types.ts";
 import { addConstraint, findDuplicate, loadConstraints, validateConstraintInput } from "./constraint_store.ts";
 import { savePlan } from "./plan_store.ts";
 import { singleTestFileList } from "../shared/path_match.ts";
+import { expandModuleRefs } from "./plan_layers.ts";
 
-export function constraintInputFor(p: PlanPolicy): unknown {
+export function constraintInputFor(p: PlanPolicy, plan?: Plan): unknown {
+  // A layer rule's module ids become their folders: constraints.json knows no plan.
+  const check = plan ? expandModuleRefs(p.check, plan) : p.check;
   return {
     kind: "invariant",
     text: `${p.text.replace(/\.$/, "")} — ${p.why}`,
     scope: p.files?.length ? { files: p.files } : { all: true },
-    ...(p.check ? { check: p.check } : {}),
+    ...(check ? { check } : {}),
     note: `promoted from the plan (${p.id})`,
   };
 }
@@ -30,7 +33,7 @@ export function promotePolicy(root: string, plan: Plan, id: string | undefined, 
   const p = plan.policies[idx];
   if (p.status === "promoted") return { error: `${id} is already ${p.constraintId}` };
   if (p.status === "dropped") return { error: `${id} was dropped — agree it again before promoting` };
-  const v = validateConstraintInput(constraintInputFor(p));
+  const v = validateConstraintInput(constraintInputFor(p, plan));
   if (!v.ok) return { error: `constraints.json would refuse it: ${v.error}` };
   const twin = findDuplicate(loadConstraints(root), v.value.text);
   if (twin) return { error: `it restates ${twin.id} ("${twin.text.slice(0, 80)}")` };

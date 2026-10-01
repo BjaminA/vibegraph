@@ -20,7 +20,7 @@
 // once — on its ghost, on the real box that realised it, or, for what has no
 // place on the map, in the counts `planModel` returns as `unplaced`.
 
-import type { ArchModelRecord, ArchNodeRecord, ArchEdgeRecord, PlanFlowRecord } from "../../shared/protocol";
+import type { ArchModelRecord, ArchNodeRecord, ArchEdgeRecord, ArchGroupRecord, PlanFlowRecord } from "../../shared/protocol";
 import type { ArchCategory } from "../../shared/arch_protocol";
 import type { Plan, PlanFinding, PlanReconcile, PlanSection } from "../../shared/plan_types";
 
@@ -35,6 +35,10 @@ const PROCESS_CATEGORY: Record<string, ArchCategory> = {
 const ROLE_CATEGORY: Record<string, ArchCategory> = {
   db: "database", cache: "cache", queue: "queue", "model-api": "model", "http-client": "external", cloud: "cloud",
   platform: "platform", "web-framework": "backend", frontend: "frontend", "agent-protocol": "agent", data: "pipeline",
+};
+/** 2026-10-01 — a planned store's card category. */
+const STORE_CATEGORY: Record<string, ArchCategory> = {
+  database: "database", "document-store": "database", "object-store": "storage", queue: "queue", cache: "cache", sync: "platform", kv: "database", other: "storage",
 };
 const EMPTY_UNPLACED: ArchModelRecord["unplaced"] = { tests: 0, unmatchedHops: 0, toolsPresentNotCalled: [], unattributedBoundaries: 0 };
 const TRUST_KINDS = new Set(["trust", "zone"]);
@@ -99,10 +103,11 @@ function trustZones(real: ArchModelRecord | null): Map<string, string> {
  * the Plan view, where everything is a ghost.
  */
 export function planRecords(plan: Plan, rec: PlanReconcile | null, real: ArchModelRecord | null, opts: PlanDrawOpts = {}):
-  { nodes: ArchNodeRecord[]; edges: ArchEdgeRecord[]; decorate: Map<string, Partial<ArchNodeRecord>>; decorateEdges: Map<string, Partial<ArchEdgeRecord>>; unplaced: PlanUnplaced } {
+  { nodes: ArchNodeRecord[]; edges: ArchEdgeRecord[]; groups: ArchGroupRecord[]; decorate: Map<string, Partial<ArchNodeRecord>>; decorateEdges: Map<string, Partial<ArchEdgeRecord>>; unplaced: PlanUnplaced } {
   const targets = realisedTargets(plan, rec, real);
   const status = (s: string) => (s === "agreed" ? "agreed" : "proposed");
   const nodes: ArchNodeRecord[] = [];
+  const groups: ArchGroupRecord[] = [];
   const decorate = new Map<string, Partial<ArchNodeRecord>>();
   const where = new Map<string, string>(); // planned id → the box id it is drawn on
   const deco = (id: string) => { if (!decorate.has(id)) decorate.set(id, {}); return decorate.get(id)!; };
@@ -120,7 +125,7 @@ export function planRecords(plan: Plan, rec: PlanReconcile | null, real: ArchMod
     if (real && f?.verdict === "realised") deco(id).plannedAs = { id: p.id, label: p.label, verdict: "realised" };
     nodes.push({
       id, kind: "cluster", label: p.label, source: "planned",
-      sublabel: `planned ${p.kind} · ${status(p.status)}${f ? ` · ${f.verdict}` : ""}${p.at ? ` · ${p.at}` : ""}`,
+      sublabel: `planned ${p.kind} · ${status(p.status)}${f ? ` · ${f.verdict}` : ""}${p.at ? ` · ${p.at}` : ""}${p.runsAs ? ` · runs as ${p.runsAs}` : ""}${p.uses?.length ? ` · uses ${p.uses.join(", ")}` : ""}`,
       category: PROCESS_CATEGORY[p.kind] ?? "unknown", threads: [], refs: [],
       notes: [p.serves ? `serves: ${p.serves}` : "serves: (not said)", ...(f ? [`${f.verdict}: ${f.detail}`] : [])],
     });
@@ -146,6 +151,55 @@ export function planRecords(plan: Plan, rec: PlanReconcile | null, real: ArchMod
     });
   }
 
+  // ── stores: shared resources, one card each (a realised store marks the
+  // real tool box it is reached through, when the map draws one) ──
+  for (const st of live(plan.stores ?? [])) {
+    const f = finding(rec, "stores", st.id);
+    const names = new Set(st.reachedThrough.map((n) => n.toLowerCase()));
+    const realBox = real && f?.verdict === "realised" ? real.nodes.find((n) => n.kind === "tool" && names.has((n.tool ?? "").toLowerCase())) : undefined;
+    let box: string;
+    if (realBox) {
+      box = realBox.id;
+      deco(realBox.id).plannedAs = { id: st.id, label: st.label ?? st.id, verdict: f!.verdict };
+    } else {
+      box = `${PLAN_ID}store:${st.id}`;
+      if (real && f?.verdict === "realised") deco(box).plannedAs = { id: st.id, label: st.label ?? st.id, verdict: "realised" };
+      nodes.push({
+        id: box, kind: "tool", label: st.label ?? st.id, source: "planned",
+        sublabel: `planned ${st.kind} store · ${status(st.status)}${f ? ` · ${f.verdict}` : ""}`,
+        category: STORE_CATEGORY[st.kind] ?? "storage", threads: [], refs: [],
+        notes: [`reached through ${st.reachedThrough.join(", ")}`, ...(st.serves ? [`serves: ${st.serves}`] : []), ...(f ? [`${f.verdict}: ${f.detail}`] : [])],
+      });
+    }
+    where.set(st.id, box);
+    // Zones: a card each, inside one group box with the store, so a write
+    // edge lands on the zone it writes.
+    if (!st.zones?.length) continue;
+    const zoneIds: string[] = [];
+    for (const z of st.zones) {
+      const zf = finding(rec, "stores", `${st.id}/${z.id}`);
+      // Who may write it (the plan) and, when the code breaks that, who does.
+      const wf = finding(rec, "stores", `${st.id}/${z.id}:writers`);
+      const zid = `${PLAN_ID}zone:${st.id}/${z.id}`;
+      zoneIds.push(zid);
+      where.set(`${st.id}/${z.id}`, zid);
+      nodes.push({
+        id: zid, kind: "tool", label: z.label ?? z.id, source: "planned",
+        sublabel: `zone · ${z.holds.join(", ")}${zf ? ` · ${zf.verdict}` : ""}${z.writers?.length ? ` · writers ${z.writers.join(", ")}` : ""}${wf?.verdict === "violated" ? " · WRITER VIOLATED" : ""}`,
+        category: STORE_CATEGORY[st.kind] ?? "storage", threads: [], refs: [],
+        notes: [
+          `holds ${z.holds.join(", ")}`,
+          ...(z.writers?.length ? [`writers: ${z.writers.join(", ")}`] : []),
+          ...(z.readers?.length ? [`readers: ${z.readers.join(", ")}`] : []),
+          ...(z.routedBy ? [`routed by ${z.routedBy}`] : []),
+          ...(zf ? [`${zf.verdict}: ${zf.detail}`] : []),
+          ...(wf ? [`writers ${wf.verdict}: ${wf.detail}`] : []),
+        ],
+      });
+    }
+    groups.push({ id: `${PLAN_ID}storegroup:${st.id}`, kind: "store", label: `${st.label ?? st.id} (${st.kind})`, wraps: [box, ...zoneIds], source: "planned" });
+  }
+
   // ── threads, on the box of the process that owns them ──
   const realClusterOf = (ep: string | undefined) => (ep && real ? real.nodes.find((n) => n.kind === "cluster" && n.entryPoints?.includes(ep))?.id : undefined);
   for (const t of live(plan.threads)) {
@@ -158,7 +212,9 @@ export function planRecords(plan: Plan, rec: PlanReconcile | null, real: ArchMod
     };
     // Its process's box; else the real cluster its entry point sits in; else
     // the card for threads no process owns.
-    const box = (t.process && where.get(t.process)) || realClusterOf(f?.entryPointId) || UNOWNED_THREADS;
+    // A thread with no `process` goes to the process whose own files hold
+    // the entry point it starts from (plan check says which).
+    const box = (t.process && where.get(t.process)) || (f?.process && where.get(f.process)) || realClusterOf(f?.entryPointId) || UNOWNED_THREADS;
     where.set(t.id, box);
     (deco(box).planFlows ??= []).push(flow);
   }
@@ -177,7 +233,8 @@ export function planRecords(plan: Plan, rec: PlanReconcile | null, real: ArchMod
   const edgeOf = new Map<string, string>(); // boundary id → the edge id it is drawn as
   const unplaced: PlanUnplaced = { rules: [], questions: [], boundaries: [] };
   for (const b of live(plan.boundaries)) {
-    const from = where.get(b.from), to = where.get(b.to);
+    // A boundary that names a zone lands on that zone's card.
+    const from = where.get(b.from), to = (b.zone && where.get(`${b.to}/${b.zone}`)) || where.get(b.to);
     if (!from || !to) { unplaced.boundaries.push(`${b.id} (${b.from} → ${b.to}: ${!from ? b.from : b.to} is not on the map)`); continue; }
     const f = finding(rec, "boundaries", b.id);
     const crosses = zones.get(from) && zones.get(to) && zones.get(from) !== zones.get(to) ? `${zones.get(from)} → ${zones.get(to)}` : undefined;
@@ -198,6 +255,19 @@ export function planRecords(plan: Plan, rec: PlanReconcile | null, real: ArchMod
       protocol: b.protocol ?? "planned",
       protocolBasis: `planned boundary ${b.id} (${status(b.status)})${f ? ` — ${f.verdict}: ${f.detail}` : ""}`,
       count: 1, threads: [], confidence: "path", refs: [], source: "planned", ...extra,
+    });
+  }
+
+  // ── indirect hops: processes that meet only in a store, joined by a
+  // dashed edge labelled with what they share ──
+  for (const h of rec?.indirectHops ?? []) {
+    const from = where.get(h.from), to = where.get(h.to);
+    if (!from || !to) continue;
+    const via = `${h.store}${h.zone ? `/${h.zone}` : ""}${h.family ? ` · ${h.family}` : ""}`;
+    edges.push({
+      id: `${PLAN_ID}hop:${h.from}>${h.to}:${via}`, from, to, kind: "uses",
+      protocol: `via ${via}`, protocolBasis: `indirect: ${h.from} writes at ${h.write}; ${h.to} reads/watches at ${h.read}`,
+      count: 1, threads: [], confidence: "path", refs: [], source: "planned", planHop: via,
     });
   }
 
@@ -233,12 +303,12 @@ export function planRecords(plan: Plan, rec: PlanReconcile | null, real: ArchMod
   // Ghosts carry their own decorations; the real boxes get theirs in overlayModel.
   const ghosts = nodes.map((n) => ({ ...n, ...(decorate.get(n.id) ?? {}) }));
   const ghostEdges = edges.map((e) => ({ ...e, ...(decorateEdges.get(e.id) ?? {}) }));
-  return { nodes: ghosts, edges: ghostEdges, decorate, decorateEdges, unplaced };
+  return { nodes: ghosts, edges: ghostEdges, groups, decorate, decorateEdges, unplaced };
 }
 
 export function planModel(plan: Plan, rec: PlanReconcile | null, opts: PlanDrawOpts = {}): ArchModelRecord & { planUnplaced: PlanUnplaced } {
-  const { nodes, edges, unplaced } = planRecords(plan, rec, null, opts);
-  return { version: "1", nodes, edges, groups: [], unplaced: EMPTY_UNPLACED, notes: [`the plan, revision ${plan.revision} — hypothetical, not the code`], planUnplaced: unplaced };
+  const { nodes, edges, groups, unplaced } = planRecords(plan, rec, null, opts);
+  return { version: "1", nodes, edges, groups, unplaced: EMPTY_UNPLACED, notes: [`the plan, revision ${plan.revision} — hypothetical, not the code`], planUnplaced: unplaced };
 }
 
 /** The real model with the plan on it: realised items decorate their real
@@ -249,7 +319,7 @@ export function overlayModel(real: ArchModelRecord, plan: Plan, rec: PlanReconci
   const edges = real.edges.map((e) => (r.decorateEdges.has(e.id) ? { ...e, ...r.decorateEdges.get(e.id) } : e));
   const marked = [...r.decorate.values()].filter((d) => d.plannedAs).length;
   return {
-    ...real, nodes: [...nodes, ...r.nodes], edges: [...edges, ...r.edges], planUnplaced: r.unplaced,
+    ...real, nodes: [...nodes, ...r.nodes], edges: [...edges, ...r.edges], groups: [...(real.groups ?? []), ...r.groups], planUnplaced: r.unplaced,
     notes: [...(real.notes ?? []), `the plan on the code: ${marked} realised item(s) marked "planned ✓" on their real box, ${r.nodes.length} planned item(s) the code does not have yet (dashed)`],
   };
 }

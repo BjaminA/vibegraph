@@ -11,6 +11,8 @@
 import { loadPlan } from "../../src/server/plan_store.ts";
 import { compactPlan } from "../../src/server/plan_render.ts";
 import { matchThreadEntry, words } from "../../src/server/plan_thread_match.ts";
+import { planAffected } from "../../src/server/plan_affected.ts";
+import { headText } from "./head_text.mjs";
 
 /** 2026-10-01 — GREENFIELD routing: a prompt that names a planned thread the
  *  code does not have yet gets THAT thread's plan — what it serves, where it
@@ -77,4 +79,20 @@ export function planForPrompt(absRoot, state) {
   if (sent === plan.revision) return objectiveReminder(plan);
   state.planRev = plan.revision;
   return compactPlan(plan, sent === undefined ? undefined : sent);
+}
+
+/** 2026-10-01 — after an edit: a function the plan NAMES that this edit made
+ *  disappear (defined in the edited file at HEAD, nowhere now) — said once per
+ *  name per session, with the op that renames it in the plan. Null when the
+ *  plan is closed, absent, or nothing it names is gone. */
+export function planAffectedNote(absRoot, env, files, state) {
+  let plan;
+  try { plan = loadPlan(absRoot); } catch { return null; }
+  if (!plan || plan.closed || !files?.length) return null;
+  const { gone } = planAffected(plan, env.files, files, (f) => headText(absRoot, f));
+  const sent = new Set(state.planGoneSent ?? []);
+  const fresh = gone.filter((g) => !sent.has(`${g.name}@${g.where}`));
+  if (!fresh.length) return null;
+  state.planGoneSent = [...sent, ...fresh.map((g) => `${g.name}@${g.where}`)];
+  return `The plan names ${fresh.map((g) => `\`${g.name}\` (${g.where})`).join(", ")}, which this edit removed from ${[...new Set(fresh.map((g) => g.file))].join(", ")} — nothing defines it now. If it was renamed, rename it in the plan too: vibegraph-knowledge plan edit '{"op":"rename-symbol","from":"${fresh[0].name}","to":"<new name>"}' (from Claude Code it is recorded as a proposal).`;
 }

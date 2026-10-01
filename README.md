@@ -385,6 +385,9 @@ CLI) and says so; everything else is deterministic.
 | `plan init "<objective>"` / `show` / `check` | A hypothetical plan: start it, read it, measure the code against it (realised / drifted / not built) | `.vibegraph/plan.json` (init) | — |
 | `plan edit '<op>'` / `agree` / `drop` / `close` / `reopen` | Change the plan by small operations, each one a changelog line (a `rename` op carries every reference; a thread's `entryPoint`, a tool's `via`); `--as agent` records a proposal | `.vibegraph/plan.json` | — |
 | `plan promote <rule>` | Copy a planned rule into the stated rules, where it is checked and may block | `.vibegraph/constraints.json`, `plan.json` | — |
+| `plan review [--agree \| --reject <s:id,…>]` | Every pending proposal on one page — a diff against what was agreed, its evidence; decide several at once | `.vibegraph/plan.json` | — |
+| `plan affected [--uncommitted]` / `plan layers [--apply]` | Plan items a change touches (and names now gone) / each module's layer rule from today's imports | nothing / `plan.json` | — |
+| `docs add \| list \| check \| remove` | Generated documents and the commit since which each is stale | `.vibegraph/docs.json` | — |
 | `plan draft --from <url\|file>…` | Draft plan items from documents and the ratified software specs; a quote not in them drops the item; all proposed | `.vibegraph/plan.json` | **yes** |
 | `software add <tool> --from <url\|file>…` | Draft a spec for a tool from its own documents, behind the citation gate; saved as a draft | `.vibegraph/software/` | **yes** |
 | `software list` / `show <tool> [--usage]` / `ratify <tool>` / `remove <tool>` | The specs; one with every quote and where the code calls it; accept one (quotes re-checked) | `.vibegraph/software/` | — |

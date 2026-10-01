@@ -5,7 +5,7 @@
   "description": "The verbs a checkable half may use: the M-GRAMMAR verbs in constraint_grammar.ts (callers-only, import-only, calls-through, and payload-keys, added 2026-09-28 in src/server/payload_check.ts) and the five Run 1 forced into existence (guards, not-in-loop, handles-failure, annotated, co-changes; reviews/quality-layer/RUN1.md section 3). Operand shapes only. Decision procedures are specified in RUN1.md and implemented in Run 3. A malformed check is refused at the boundary, never coerced (constraint_store.ts precedent).",
   "$defs": {
     "CheckRule": {
-      "enum": ["callers-only", "import-only", "calls-through", "payload-keys", "guards", "not-in-loop", "handles-failure", "annotated", "co-changes"]
+      "enum": ["callers-only", "import-only", "calls-through", "payload-keys", "layer", "single-writer", "always-with", "id-scheme", "guards", "not-in-loop", "handles-failure", "annotated", "co-changes"]
     },
     "StackRole": {
       "description": "Mirrors STACK_ROLES in src/shared/stack_taxonomy.ts.",
@@ -58,6 +58,53 @@
         "forbid": { "type": "array", "minItems": 1, "items": { "type": "string", "pattern": "^[^\\s.]+(\\.[^\\s.]+)?$" } }
       },
       "anyOf": [{ "required": ["require"] }, { "required": ["forbid"] }]
+    },
+    "Layer": {
+      "description": "2026-10-01 (src/server/arch_checks.ts): the files of a layer (folders with a trailing /, globs or files) may import only what mayImport names: project folders / globs, or package names (`@acme/*` a scope). Standard-library imports are allowed unless allowStdlib is false. Read from the project import graph; a dynamic import of a computed path is not seen. Advice until calibrated.",
+      "type": "object",
+      "required": ["rule", "files", "mayImport"],
+      "additionalProperties": false,
+      "properties": {
+        "rule": { "const": "layer" },
+        "files": { "$ref": "#/$defs/NonEmptyStrings" },
+        "mayImport": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "allowStdlib": { "type": "boolean" }
+      }
+    },
+    "SingleWriter": {
+      "description": "2026-10-01 (src/server/arch_checks.ts): only these functions (by) or files may call the store's write functions for a zone / document family, read from each call's literal arguments. A write whose zone or family is computed, outside them, is unverifiable. Advice until calibrated.",
+      "type": "object",
+      "required": ["rule", "writes"],
+      "additionalProperties": false,
+      "properties": {
+        "rule": { "const": "single-writer" },
+        "writes": { "$ref": "#/$defs/NonEmptyStrings" },
+        "zone": { "type": "string", "minLength": 1 },
+        "families": { "$ref": "#/$defs/NonEmptyStrings" },
+        "by": { "$ref": "#/$defs/NonEmptyStrings" },
+        "files": { "$ref": "#/$defs/NonEmptyStrings" }
+      },
+      "allOf": [{ "anyOf": [{ "required": ["zone"] }, { "required": ["families"] }] }, { "anyOf": [{ "required": ["by"] }, { "required": ["files"] }] }]
+    },
+    "AlwaysWith": {
+      "description": "2026-10-01: every path through function target also calls with: a call outside any branch or loop with no return before it (both arms of an if count). An exception thrown before it is not followed. Advice until calibrated.",
+      "type": "object",
+      "required": ["rule", "target", "with"],
+      "additionalProperties": false,
+      "properties": { "rule": { "const": "always-with" }, "target": { "type": "string", "minLength": 1 }, "with": { "type": "string", "minLength": 1 } }
+    },
+    "IdScheme": {
+      "description": "2026-10-01: ids for document family `family` come only from the producers: each write of the family passes a producer's result, directly or through a name bound from it in the same function. An id built inline from the family's name is a violation; an id from a parameter is unverifiable. Advice until calibrated.",
+      "type": "object",
+      "required": ["rule", "family", "producers", "writes"],
+      "additionalProperties": false,
+      "properties": {
+        "rule": { "const": "id-scheme" },
+        "family": { "type": "string", "minLength": 1 },
+        "producers": { "$ref": "#/$defs/NonEmptyStrings" },
+        "writes": { "$ref": "#/$defs/NonEmptyStrings" },
+        "idArg": { "type": "integer", "description": "0-based; a negative index is refused by the store (isAuthorityCheck)" }
+      }
     },
     "Guards": {
       "description": "RUN1 3.1. Every call to target is governed by a call to guard: the guard sits in an if-test whose arm contains the target call, or precedes it in the same or an enclosing block with no return between. Stricter than calls-through, which stays for co-occurrence.",
@@ -120,6 +167,10 @@
         { "$ref": "#/$defs/ImportOnly" },
         { "$ref": "#/$defs/CallsThrough" },
         { "$ref": "#/$defs/PayloadKeys" },
+        { "$ref": "#/$defs/Layer" },
+        { "$ref": "#/$defs/SingleWriter" },
+        { "$ref": "#/$defs/AlwaysWith" },
+        { "$ref": "#/$defs/IdScheme" },
         { "$ref": "#/$defs/Guards" },
         { "$ref": "#/$defs/NotInLoop" },
         { "$ref": "#/$defs/HandlesFailure" },

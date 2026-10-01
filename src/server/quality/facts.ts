@@ -13,6 +13,7 @@ import type { ReferenceFact, UnresolvedFact, ExternalCallFact } from "../constra
 import { flattenArgKeys, type CallSiteFact } from "../payload_check.ts";
 import { computeThreadContract, type ThreadContract, type ContractInputThread } from "../thread_contract.ts";
 import { buildStackIndex, contractStackForFile, type StackIndex } from "../stack.ts";
+import { importGraph, workspacePackages, type ImportEdge } from "../import_graph.ts";
 import { buildCrossingIndex } from "../crossings.ts";
 import type { FactNode, QualityFacts, RunDelta } from "./check_registry.ts";
 import { languageForPath } from "../../shared/languages.ts";
@@ -111,6 +112,7 @@ function toFactNode(n: IrNodeLike, resolved: Set<string>): FactNode {
 
 export function buildQualityFacts(input: FactsInput): QualityFacts {
   const { envelope: env, root, commit } = input;
+  let importEdgesMemo: ImportEdge[] | undefined;
   const stack = input.stack ?? buildStackIndex(env as never, root);
 
   // ── the grammar's four fields, as server.ts builds them ──
@@ -191,6 +193,11 @@ export function buildQualityFacts(input: FactsInput): QualityFacts {
   return {
     references,
     importsByFile: Object.fromEntries(Object.entries(stack.byFile ?? {}).map(([f, tools]) => [f, [...(tools as string[])]])),
+    // 2026-10-01 — the project import graph, for the `layer` verb (lazily
+    // read: only that verb looks).
+    parsedFiles: Object.keys(env.files ?? {}),
+    irFiles: env.files as Record<string, any>,
+    get importEdges() { return (importEdgesMemo ??= importGraph(env.files as never, workspacePackages(root))); },
     definedNames: [...definedNames],
     unresolved,
     externalCalls,

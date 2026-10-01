@@ -135,6 +135,6 @@ test("a realised item the real map draws no box for is drawn ONCE, chipped 'plan
 test("`about` must name a planned item — a rule pinned to nothing would be drawn nowhere", () => {
   const bad = structuredClone(plan);
   bad.policies[0].about = "nowhere";
-  assert.match(validatePlan(bad), /about "nowhere" names no planned process, thread, boundary or tool/);
+  assert.match(validatePlan(bad), /about "nowhere" names no planned process, thread, boundary, tool, store, zone \(store\/zone\) or module/);
   assert.equal(validatePlan(plan), null);
 });

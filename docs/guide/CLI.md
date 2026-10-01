@@ -72,6 +72,9 @@ CLI) and says so; everything else is deterministic.
 | `plan init "<objective>"` / `show` / `check` | A hypothetical plan: start it, read it, measure the code against it (realised / drifted / not built) | `.vibegraph/plan.json` (init) | — |
 | `plan edit '<op>'` / `agree` / `drop` / `close` / `reopen` | Change the plan by small operations, each one a changelog line (a `rename` op carries every reference; a thread's `entryPoint`, a tool's `via`); `--as agent` records a proposal | `.vibegraph/plan.json` | — |
 | `plan promote <rule>` | Copy a planned rule into the stated rules, where it is checked and may block | `.vibegraph/constraints.json`, `plan.json` | — |
+| `plan review [--agree \| --reject <s:id,…>]` | Every pending proposal on one page — a diff against what was agreed, its evidence; decide several at once | `.vibegraph/plan.json` | — |
+| `plan affected [--uncommitted]` / `plan layers [--apply]` | Plan items a change touches (and names now gone) / each module's layer rule from today's imports | nothing / `plan.json` | — |
+| `docs add \| list \| check \| remove` | Generated documents and the commit since which each is stale | `.vibegraph/docs.json` | — |
 | `plan draft --from <url\|file>…` | Draft plan items from documents and the ratified software specs; a quote not in them drops the item; all proposed | `.vibegraph/plan.json` | **yes** |
 | `software add <tool> --from <url\|file>…` | Draft a spec for a tool from its own documents, behind the citation gate; saved as a draft | `.vibegraph/software/` | **yes** |
 | `software list` / `show <tool> [--usage]` / `ratify <tool>` / `remove <tool>` | The specs; one with every quote and where the code calls it; accept one (quotes re-checked) | `.vibegraph/software/` | — |
@@ -500,6 +503,12 @@ Where the plan shows up:
 - **The greenfield flow's architecture** is the plan's agreed processes. An
   old `.vibegraph/system-plan.json` is read, and converted on the next save.
 
+The plan's architecture sections — stores and their zones, principals and who
+may write, flows through a store, modules vs deployables, layering and
+authority rules, assumptions with evidence — and the commands around them
+(`plan layers`, `plan affected`, the `to-store` and `rename-symbol` ops) are
+described, with one example each, in [PLAN-ARCHITECTURE.md](PLAN-ARCHITECTURE.md).
+
 ### `software` — a spec for the tool you build on, from its own documents
 
 ```bash
@@ -661,7 +670,17 @@ vibegraph-knowledge constraint accept|reject <id> <pN>
   an exact path, a folder (`"src/db/"`) or a glob (`"packages/*/src/**"`), and
   `"allowTests": true` adds every test file — so a rule does not go stale when
   a file is added beside the allowed one, or a test needs the import.
-  Rules: `callers-only`, `import-only`, `calls-through`, `payload-keys`, `guards`,
+  `'{"rule":"layer","files":["packages/decisions/"],"mayImport":["zod"]}'`
+  (those files may import only what `mayImport` names — folders, globs, package
+  names, `@acme/*` a scope — and the standard library; every other import is
+  named with its file and line; advice in the hooks until calibrated).
+  Access and authority: `single-writer` (only these functions or files write a
+  zone / family through the store's write functions), `always-with` (every path
+  through a function also calls another — an audit event on every decision),
+  `id-scheme` (a family's ids come only from its producer functions); see
+  [PLAN-ARCHITECTURE.md](PLAN-ARCHITECTURE.md).
+  Rules: `callers-only`, `import-only`, `calls-through`, `payload-keys`, `layer`,
+  `single-writer`, `always-with`, `id-scheme`, `guards`,
   `not-in-loop`, `handles-failure`, `annotated`, `co-changes`.
 - **`--policy`** (for `stack-policy`) states a decision about a tool:
   `'{"tool":"requests","rule":"replace-with","with":"lib.http_client"}'`
@@ -685,6 +704,18 @@ the open proposals.
 Write the **why** into the text. "Region changes page the on-call once per
 device per hour — a flapping sensor once paged forty times in a minute" is
 what lets the next reader handle a case the rule did not foresee.
+
+### `docs` — generated documents and when they went stale
+
+```bash
+vibegraph-knowledge docs add <path> --generator "<cmd>" --inputs <paths,folders/,globs>
+vibegraph-knowledge docs list | check | remove <path>
+```
+
+Registers documents a command derives (`.vibegraph/docs.json`). `check` says
+which are stale since which commit, read from git, and exits 1 if any are.
+The session-start hook lists them. See
+[PLAN-ARCHITECTURE.md](PLAN-ARCHITECTURE.md#generated-documents-that-go-stale-visibly).
 
 ### `seeds` — entry points discovery cannot see
 

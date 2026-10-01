@@ -3,7 +3,8 @@
 // say, before anything else, that this is a PLAN and not the code.
 
 import type { Plan, PlanFinding, PlanReconcile, PlanSection } from "../shared/plan_types.ts";
-import { planItemId } from "../shared/plan_types.ts";
+import { planItemId, sectionItems } from "../shared/plan_types.ts";
+import { assumptionState } from "./plan_assumptions.ts";
 
 export const PLAN_BANNER = "HYPOTHETICAL — a plan, not the code. It will change; nothing in it is true of the project until the code says so.";
 
@@ -30,7 +31,16 @@ export function formatPlanMd(plan: Plan, rec?: PlanReconcile | null): string {
   const procs = live(plan.processes);
   if (procs.length) {
     out.push("## Processes", "");
-    for (const p of procs) out.push(`- **${p.id}** (${p.kind}, ${mark(p.status)})${p.label !== p.id ? ` — ${p.label}` : ""}${p.serves ? `; serves: ${p.serves}` : ""}${p.at ? `; code at \`${p.at}\`` : ""}${src(p)}${v(verdictOf(rec, "processes", p.id))}`);
+    for (const p of procs) out.push(`- **${p.id}** (${p.kind}, ${mark(p.status)})${p.label !== p.id ? ` — ${p.label}` : ""}${p.serves ? `; serves: ${p.serves}` : ""}${p.at ? `; code at \`${p.at}\`` : ""}${p.entryPoints?.length ? `; starts from ${p.entryPoints.map((e) => `\`${e}\``).join(", ")}` : ""}${p.uses?.length ? `; uses ${p.uses.join(", ")}` : ""}${p.runsAs ? `; runs as ${p.runsAs}` : ""}${src(p)}${v(verdictOf(rec, "processes", p.id))}`);
+    out.push("");
+  }
+  const mods = live(plan.modules ?? []);
+  if (mods.length) {
+    out.push("## Modules (code units, apart from the processes that run them)", "");
+    for (const m of mods) {
+      const users = plan.processes.filter((p) => p.status !== "dropped" && p.uses?.includes(m.id)).map((p) => p.id);
+      out.push(`- **${m.id}** (${m.kind}, ${mark(m.status)})${m.label ? ` — ${m.label}` : ""}; code at \`${m.at}\`${users.length ? `; used by ${users.join(", ")}` : ""}${v(verdictOf(rec, "modules", m.id))}`);
+    }
     out.push("");
   }
   const tools = live(plan.stack);
@@ -39,13 +49,63 @@ export function formatPlanMd(plan: Plan, rec?: PlanReconcile | null): string {
     for (const t of tools) out.push(`- **${t.tool}** as ${t.role} (${mark(t.status)})${t.why ? ` — ${t.why}` : ""}${src(t)}${v(verdictOf(rec, "stack", t.tool))}`);
     out.push("");
   }
+  const stores = live(plan.stores ?? []);
+  if (stores.length) {
+    out.push("## Stores (shared resources, not processes)", "");
+    for (const st of stores) {
+      out.push(`- **${st.id}** (${st.kind}, ${mark(st.status)})${st.label ? ` — ${st.label}` : ""}; reached through ${st.reachedThrough.map((n) => `\`${n}\``).join(", ")}${st.serves ? `; serves: ${st.serves}` : ""}${src(st)}${v(verdictOf(rec, "stores", st.id))}`);
+      for (const z of st.zones ?? []) out.push(`  - zone **${z.id}** holds ${z.holds.join(", ")}${z.writers?.length ? `; writers: ${z.writers.join(", ")}` : ""}${z.readers?.length ? `; readers: ${z.readers.join(", ")}` : ""}${z.routedBy ? `; routed by ${z.routedBy}` : ""}${v(verdictOf(rec, "stores", `${st.id}/${z.id}`))}`);
+    }
+    out.push("");
+  }
+  const princ = live(plan.principals ?? []);
+  if (princ.length) {
+    out.push("## Principals (who the access rules are about)", "");
+    for (const pr of princ) {
+      const runners = plan.processes.filter((p) => p.status !== "dropped" && p.runsAs === pr.id).map((p) => p.id);
+      out.push(`- **${pr.id}** (${pr.kind}, ${mark(pr.status)})${pr.label ? ` — ${pr.label}` : ""}${runners.length ? `; ${runners.join(", ")} run${runners.length === 1 ? "s" : ""} as it` : ""}${v(verdictOf(rec, "principals", pr.id))}`);
+    }
+    out.push("");
+  }
+  if (rec?.writeMatrix?.length) {
+    const zones = [...new Set(rec.writeMatrix.map((c) => c.zone))];
+    const who = [...new Set(rec.writeMatrix.map((c) => c.principal))];
+    out.push("## Who writes where (plan vs code)", "", "`allowed` = the plan lets it write; `writes` = the code writes it there; **VIOLATION** = it writes where it may not.", "",
+      `| | ${zones.join(" | ")} |`, `|---|${zones.map(() => "---").join("|")}|`);
+    for (const w of who) {
+      out.push(`| **${w}** | ${zones.map((z) => {
+        const c = rec.writeMatrix!.find((x) => x.principal === w && x.zone === z);
+        if (!c) return "";
+        return c.writes.length ? (c.allowed ? `allowed, writes (${c.writes.length})` : `**VIOLATION** (${c.writes[0]})`) : "allowed";
+      }).join(" | ")} |`);
+    }
+    out.push("");
+    for (const st of live(plan.stores ?? [])) for (const z of st.zones ?? []) {
+      const f = verdictOf(rec, "stores", `${st.id}/${z.id}:writers`);
+      if (f) out.push(`- ${st.id}/${z.id} writers — **${f.verdict}**: ${f.detail}`);
+    }
+    out.push("");
+  }
+  const flows = live(plan.flows ?? []);
+  if (flows.length || rec?.indirectHops?.length) {
+    out.push("## Flows through the stores", "");
+    for (const f of flows) {
+      out.push(`- **${f.id}** (${mark(f.status)})${f.serves ? ` — serves: ${f.serves}` : ""}${v(verdictOf(rec, "flows", f.id))}`);
+      out.push(`  ${f.steps.map((st) => `${st.process} ${st.op} ${st.zone}${st.family ? ` (${st.family})` : ""}`).join(" → ")}`);
+    }
+    if (rec?.indirectHops?.length) {
+      out.push("", "Indirect hops the code has (a write in one process, a watch or read of the same family in another):", "");
+      for (const h of rec.indirectHops) out.push(`- ${h.from} → ${h.to} via ${h.store}${h.zone ? `/${h.zone}` : ""}${h.family ? ` (${h.family})` : ""} — writes at ${h.write}; reads at ${h.read}`);
+    }
+    out.push("");
+  }
   const bounds = live(plan.boundaries);
   if (bounds.length) {
-    const known = new Set([...plan.processes.map((p) => p.id), ...plan.stack.map((t) => t.tool)]);
+    const known = new Set([...plan.processes.map((p) => p.id), ...plan.stack.map((t) => t.tool), ...(plan.stores ?? []).map((x) => x.id)]);
     out.push("## Data boundaries", "");
     for (const b of bounds) {
       const outside = [b.from, b.to].filter((x) => !known.has(x));
-      out.push(`- **${b.id}** ${b.from} → ${b.to}${b.protocol ? ` over ${b.protocol}` : ""}${b.carries?.length ? `, carrying ${b.carries.map((k) => `\`${k}\``).join(", ")}` : ""} (${mark(b.status)})${outside.length ? ` — ${outside.join(", ")} not in the plan (existing code?)` : ""}${src(b)}${v(verdictOf(rec, "boundaries", b.id))}`);
+      out.push(`- **${b.id}** ${b.from} → ${b.to}${b.zone ? `/${b.zone}` : ""}${b.protocol ? ` over ${b.protocol}` : ""}${b.carries?.length ? `, carrying ${b.carries.map((k) => `\`${k}\``).join(", ")}` : ""} (${mark(b.status)})${outside.length ? ` — ${outside.join(", ")} not in the plan (existing code?)` : ""}${src(b)}${v(verdictOf(rec, "boundaries", b.id))}`);
     }
     out.push("");
   }
@@ -65,8 +125,11 @@ export function formatPlanMd(plan: Plan, rec?: PlanReconcile | null): string {
     out.push("");
   }
   if (plan.open.length) {
-    out.push("## Open questions", "");
-    for (const q of plan.open) out.push(`- **${q.id}** ${q.text}`);
+    out.push("## Open questions (and assumptions)", "");
+    for (const q of plan.open) {
+      out.push(`- **${q.id}** ${q.text}${v(verdictOf(rec, "open", q.id))}`);
+      for (const e of q.evidence ?? []) out.push(`  - evidence ${e.at.slice(0, 10)}: \`${e.command}\` — expect: ${e.expect}${e.result ? ` → **${e.result.toUpperCase()}**` : " (not run yet)"}${e.note ? ` — ${e.note}` : ""}`);
+    }
     out.push("");
   }
   if (rec?.offObjective?.length) {
@@ -78,7 +141,7 @@ export function formatPlanMd(plan: Plan, rec?: PlanReconcile | null): string {
     const counts = Object.entries(rec.counts).map(([k, n]) => `${n} ${k}`).join(", ");
     out.push("## Plan vs code", "", counts ? `${counts}.` : "Nothing to compare yet.", "", ...rec.limits.map((l) => `- ${l}`), "");
   }
-  const dropped = PLAN_ITEM_SECTIONS.flatMap((s) => (plan[s] as any[]).filter((i) => i.status === "dropped").map((i) => `${s} ${planItemId(s, i)}`));
+  const dropped = PLAN_ITEM_SECTIONS.flatMap((s) => sectionItems(plan, s).filter((i) => i.status === "dropped").map((i) => `${s} ${planItemId(s, i)}`));
   if (dropped.length) out.push(`Dropped (kept for the record): ${dropped.join(", ")}.`, "");
   if (plan.changelog.length) {
     out.push("## Recent changes", "");
@@ -88,7 +151,7 @@ export function formatPlanMd(plan: Plan, rec?: PlanReconcile | null): string {
   return out.join("\n");
 }
 
-const PLAN_ITEM_SECTIONS: PlanSection[] = ["processes", "boundaries", "stack", "threads", "policies"];
+const PLAN_ITEM_SECTIONS: PlanSection[] = ["processes", "boundaries", "stack", "threads", "policies", "stores", "principals", "flows", "modules"];
 
 /** What a hooked session receives while a plan is open: the objective first,
  *  then the live items in a line each. Small by construction (the caps keep
@@ -105,15 +168,25 @@ export function compactPlan(plan: Plan, sinceRevision?: number): string {
   }
   const tag = (s: string) => (s === "agreed" || s === "promoted" ? "" : "?");
   const procs = live(plan.processes);
-  if (procs.length) lines.push(`Processes: ${procs.map((p) => `${p.id}${tag(p.status)} (${p.kind}${p.at ? ` at ${p.at}` : ""})`).join(", ")}`);
+  if (procs.length) lines.push(`Processes: ${procs.map((p) => `${p.id}${tag(p.status)} (${p.kind}${p.at ? ` at ${p.at}` : ""}${p.runsAs ? `, runs as ${p.runsAs}` : ""}${p.uses?.length ? `, uses ${p.uses.join("+")}` : ""})`).join(", ")}`);
+  const mods = live(plan.modules ?? []);
+  if (mods.length) lines.push(`Modules: ${mods.map((m) => `${m.id}${tag(m.status)} (${m.kind} at ${m.at})`).join(", ")}`);
+  const princ = live(plan.principals ?? []);
+  if (princ.length) lines.push(`Principals: ${princ.map((p) => `${p.id}${tag(p.status)} (${p.kind})`).join(", ")}`);
   const tools = live(plan.stack);
   if (tools.length) lines.push(`Stack: ${tools.map((t) => `${t.tool}${tag(t.status)} (${t.role})`).join(", ")}`);
+  const stores = live(plan.stores ?? []);
+  if (stores.length) lines.push(`Stores (shared resources, not processes): ${stores.map((x) => `${x.id}${tag(x.status)} (${x.kind} via ${x.reachedThrough.join(", ")}${x.zones?.length ? `; zones ${x.zones.map((z) => `${z.id}[${z.holds.join(",")}]${z.writers?.length ? ` w:${z.writers.join(",")}` : ""}`).join(" ")}` : ""})`).join("; ")}`);
   const bounds = live(plan.boundaries);
-  if (bounds.length) lines.push(`Boundaries: ${bounds.map((b) => `${b.id}${tag(b.status)} ${b.from}→${b.to}${b.protocol ? ` ${b.protocol}` : ""}${b.carries?.length ? ` {${b.carries.join(",")}}` : ""}`).join("; ")}`);
+  if (bounds.length) lines.push(`Boundaries: ${bounds.map((b) => `${b.id}${tag(b.status)} ${b.from}→${b.to}${b.zone ? `/${b.zone}` : ""}${b.protocol ? ` ${b.protocol}` : ""}${b.carries?.length ? ` {${b.carries.join(",")}}` : ""}`).join("; ")}`);
   for (const t of live(plan.threads)) lines.push(`Thread ${t.id}${tag(t.status)}: ${t.primary.join(" → ")}`);
+  for (const f of live(plan.flows ?? [])) lines.push(`Flow ${f.id}${tag(f.status)} (through the store): ${f.steps.map((st) => `${st.process} ${st.op} ${st.zone}${st.family ? `(${st.family})` : ""}`).join(" → ")}`);
   const pols = live(plan.policies);
   if (pols.length) lines.push(`Planned rules (advice — they block nothing until promoted): ${pols.map((p) => `${p.id}${tag(p.status)} ${p.text} (why: ${p.why})`).join("; ")}`);
-  if (plan.open.length) lines.push(`Open questions: ${plan.open.map((q) => `${q.id} ${q.text}`).join("; ")}`);
+  if (plan.open.length) lines.push(`Open questions: ${plan.open.map((q) => `${q.id} ${q.text}${q.evidence?.some((e) => e.result) ? ` [${assumptionState(q).toUpperCase()}]` : ""}`).join("; ")}`);
+  const assumed = [...new Set(([] as Array<{ assumes?: string[] }>).concat(plan.processes, plan.boundaries, plan.stack, plan.threads, plan.policies, plan.stores ?? [], plan.flows ?? [], plan.modules ?? []).flatMap((x) => x.assumes ?? []))];
+  const refuted = assumed.filter((q) => assumptionState(plan.open.find((x) => x.id === q)) === "refuted");
+  if (refuted.length) lines.push(`REFUTED assumptions (items resting on them are built on something false): ${refuted.join(", ")}`);
   lines.push("`?` = proposed, not yet agreed. Keep work on the objective; propose plan changes with the vibegraph_plan_edit tool or `vibegraph-knowledge plan edit` (a person agrees). Full page: `vibegraph-knowledge plan show`.");
   return lines.join("\n");
 }

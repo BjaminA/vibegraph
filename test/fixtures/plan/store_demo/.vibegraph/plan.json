@@ -1,0 +1,236 @@
+{
+  "version": "1",
+  "revision": 3,
+  "objective": "Requests are decided by the decider and the verdict reaches the requester through the shared store",
+  "processes": [
+    {
+      "id": "requester",
+      "kind": "backend",
+      "label": "Requester",
+      "serves": "requests are submitted and their verdicts seen",
+      "at": "apps/requester",
+      "status": "agreed",
+      "runsAs": "svc-requester"
+    },
+    {
+      "id": "decider",
+      "kind": "backend",
+      "label": "Decider",
+      "serves": "requests are decided",
+      "at": "apps/decider",
+      "status": "agreed",
+      "runsAs": "svc-decider"
+    },
+    {
+      "id": "storedb",
+      "kind": "db",
+      "label": "Shared store",
+      "serves": "requests and verdicts are shared",
+      "status": "dropped"
+    }
+  ],
+  "boundaries": [
+    {
+      "id": "b1",
+      "from": "requester",
+      "to": "docs",
+      "zone": "requests",
+      "protocol": "sync",
+      "carries": [
+        "amount"
+      ],
+      "status": "agreed"
+    },
+    {
+      "id": "b2",
+      "from": "decider",
+      "to": "docs",
+      "zone": "verdicts",
+      "protocol": "sync",
+      "carries": [
+        "verdict"
+      ],
+      "status": "agreed",
+      "assumes": [
+        "q1"
+      ]
+    },
+    {
+      "id": "b3",
+      "from": "decider",
+      "to": "storedb",
+      "status": "agreed"
+    }
+  ],
+  "stack": [
+    {
+      "tool": "yjs",
+      "role": "data",
+      "status": "agreed"
+    }
+  ],
+  "threads": [],
+  "policies": [
+    {
+      "id": "p1",
+      "text": "The decision logic imports nothing: no transport, no store",
+      "why": "decisions must be testable and replayable without the store; a transport import there couples every verdict to the sync service",
+      "check": {
+        "rule": "layer",
+        "files": [
+          "decisions"
+        ],
+        "mayImport": []
+      },
+      "about": "decisions",
+      "status": "agreed"
+    }
+  ],
+  "open": [
+    {
+      "id": "q1",
+      "text": "Does the store itself refuse a write to a zone by a principal its writers do not list?",
+      "evidence": [
+        {
+          "command": "store-cli put verdicts/v1 --as svc-requester",
+          "expect": "403 Forbidden",
+          "at": "2026-09-30",
+          "result": "refuted",
+          "note": "it returned 200: the store accepted the write"
+        }
+      ]
+    },
+    {
+      "id": "q2",
+      "text": "Does a watch see a write within a second?"
+    }
+  ],
+  "changelog": [],
+  "stores": [
+    {
+      "id": "docs",
+      "kind": "document-store",
+      "label": "Document store",
+      "reachedThrough": [
+        "@acme/store-client",
+        "@acme/store-sdk",
+        "yjs"
+      ],
+      "access": {
+        "write": [
+          "writeDoc"
+        ],
+        "watch": [
+          "watchDocs"
+        ]
+      },
+      "zones": [
+        {
+          "id": "requests",
+          "holds": [
+            "request"
+          ],
+          "writers": [
+            "svc-requester"
+          ],
+          "readers": [
+            "svc-decider"
+          ]
+        },
+        {
+          "id": "verdicts",
+          "holds": [
+            "verdict"
+          ],
+          "writers": [
+            "svc-decider"
+          ],
+          "readers": [
+            "svc-requester",
+            "auditor"
+          ]
+        },
+        {
+          "id": "archive",
+          "holds": [
+            "archived-*"
+          ],
+          "routedBy": "router: archiveZone"
+        }
+      ],
+      "status": "agreed",
+      "assumes": [
+        "q2"
+      ]
+    }
+  ],
+  "principals": [
+    {
+      "id": "svc-requester",
+      "kind": "service",
+      "label": "Requester service identity",
+      "status": "agreed"
+    },
+    {
+      "id": "svc-decider",
+      "kind": "service",
+      "label": "Decider service identity",
+      "status": "agreed"
+    },
+    {
+      "id": "auditor",
+      "kind": "human-role",
+      "label": "Auditor",
+      "status": "agreed"
+    }
+  ],
+  "flows": [
+    {
+      "id": "f1",
+      "serves": "a request is decided and its verdict reaches the requester",
+      "steps": [
+        {
+          "process": "requester",
+          "op": "write",
+          "zone": "docs/requests",
+          "family": "request"
+        },
+        {
+          "process": "decider",
+          "op": "watch",
+          "zone": "docs/requests",
+          "family": "request"
+        },
+        {
+          "process": "decider",
+          "op": "write",
+          "zone": "docs/verdicts",
+          "family": "verdict"
+        },
+        {
+          "process": "requester",
+          "op": "watch",
+          "zone": "docs/verdicts",
+          "family": "verdict"
+        }
+      ],
+      "status": "agreed"
+    }
+  ],
+  "modules": [
+    {
+      "id": "decisions",
+      "at": "packages/decisions",
+      "kind": "library",
+      "label": "Decision logic",
+      "status": "agreed"
+    },
+    {
+      "id": "store-client",
+      "at": "packages/store-client",
+      "kind": "library",
+      "label": "Store transport",
+      "status": "agreed"
+    }
+  ]
+}

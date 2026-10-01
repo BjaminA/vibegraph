@@ -1,0 +1,7 @@
+{
+  "name": "requester",
+  "private": true,
+  "scripts": {
+    "start": "tsx src/main.ts"
+  }
+}

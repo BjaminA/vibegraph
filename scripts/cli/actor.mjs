@@ -23,7 +23,8 @@ export function personOnlyStep(command, rest) {
   const [sub] = rest;
   const has = (flag) => rest.includes(flag);
   switch (command) {
-    case "plan": return ["init", "agree", "close", "reopen", "promote"].includes(sub) ? `plan ${sub}` : null;
+    case "plan": return ["init", "agree", "close", "reopen", "promote"].includes(sub) ? `plan ${sub}`
+      : sub === "review" && (has("--agree") || has("--reject")) ? "plan review --agree/--reject" : null;
     case "software": return ["ratify", "remove"].includes(sub) ? `software ${sub}` : null;
     case "constraints": case "constraint": return ["ratify", "remove", "accept", "reject"].includes(sub) ? `constraints ${sub}` : null;
     case "skills": return ["ratify", "reaffirm", "auto-reaffirm"].includes(sub) ? `skills ${sub}` : null;

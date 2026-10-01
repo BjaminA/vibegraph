@@ -27,6 +27,7 @@
 import { createInterface } from "node:readline";
 import { parseFile } from "./builder.mjs";
 import { findTsPaths, resolveAliasTarget } from "./tsconfig.mjs";
+import { resolveWorkspaceTarget } from "./workspace.mjs";
 import { isAbsolute, join, relative } from "node:path";
 
 /** M-CMD.1 — what an incomplete parse stamps onto its own IR. */
@@ -39,7 +40,8 @@ export function degradedNote(dropped) {
 }
 
 /** M-CMD.1 — stamp each bare import that a tsconfig alias resolves to project
- *  code. One fact, read by both the linker and the stack index. */
+ *  code. One fact, read by both the linker and the stack index. 2026-10-01: a
+ *  workspace package imported by name (`@acme/rules`) too. */
 function stampAliases(ir, file) {
   // M-ARCH.2 — the live server hands this parser ABSOLUTE paths from its own
   // directory, so the cwd-relative walk joined the repo's cwd with an
@@ -54,8 +56,7 @@ function stampAliases(ir, file) {
   const rel = absolute ? relative(root, file) : file;
   const base = absolute ? root : process.cwd();
   const tsPaths = findTsPaths(rel, base);
-  if (!tsPaths) return;
-  ir.tsPaths = tsPaths;
+  if (tsPaths) ir.tsPaths = tsPaths;
   for (const n of ir.nodes ?? []) {
     // 2026-09-29: also a dynamic `import("@/x")` bound by an assignment, and a
     // `vi.mock("@/x")` / `jest.mock` — their specifier is the first argument.
@@ -64,7 +65,8 @@ function stampAliases(ir, file) {
     if (n.type !== "import_from" && n.type !== "import" && !dynamic) continue;
     const spec = dynamic ? specifierLiteral(n.args?.[0]) : typeof n.module === "string" ? n.module : "";
     if (!spec || spec.startsWith(".") || spec.startsWith("/")) continue;
-    const target = resolveAliasTarget(spec, tsPaths, base);
+    // A tsconfig alias first; else a WORKSPACE package by name (workspace.mjs).
+    const target = (tsPaths ? resolveAliasTarget(spec, tsPaths, base) : null) ?? resolveWorkspaceTarget(spec, rel, base);
     if (target) n.aliasTarget = absolute ? join(root, target) : target;
   }
 }

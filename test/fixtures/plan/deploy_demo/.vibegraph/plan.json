@@ -1,0 +1,21 @@
+{
+  "version": "1",
+  "revision": 2,
+  "objective": "Inputs are classified the same way by the batch runner and the API",
+  "processes": [
+    { "id": "rules-runner", "kind": "backend", "label": "Rules runner", "serves": "inputs are classified in batch", "entryPoints": ["hosts/rules-runner.ts"], "uses": ["rules"], "status": "agreed" },
+    { "id": "api", "kind": "backend", "label": "API", "serves": "inputs are classified over HTTP", "at": "apps/api", "uses": ["rules"], "status": "agreed" }
+  ],
+  "boundaries": [],
+  "stack": [],
+  "threads": [
+    { "id": "classify batch", "entry": "script", "entryPoint": "hosts/rules-runner.ts", "serves": "inputs are classified in batch", "primary": ["classify", "score"], "status": "agreed" },
+    { "id": "GET /classify", "entry": "route", "serves": "inputs are classified over HTTP", "primary": ["classify"], "status": "agreed" }
+  ],
+  "policies": [],
+  "open": [],
+  "changelog": [],
+  "modules": [
+    { "id": "rules", "at": "packages/rules", "kind": "library", "label": "Scoring rules", "status": "agreed" }
+  ]
+}

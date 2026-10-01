@@ -18,6 +18,17 @@ import type { SubsystemKind, SystemPlan } from "./protocol";
 import type { StackRole } from "./stack_taxonomy.ts";
 
 export type PlanStatus = "proposed" | "agreed" | "dropped";
+
+/** 2026-10-01 — what any plan item may rest on: the open questions it
+ *  ASSUMES the answer to, and the evidence someone recorded for it. */
+export interface PlanGrounding {
+  assumes?: string[];
+  evidence?: PlanEvidence[];
+  /** 2026-10-01 — set when an AGENT changed an agreed item: the version a
+   *  person agreed to, so `plan review` shows the diff and a rejection
+   *  restores it. Cleared when a person agrees. */
+  agreedAs?: Record<string, unknown>;
+}
 /** A planned rule may also be PROMOTED: copied into constraints.json, where it
  *  is real and may gate. A planned rule never blocks anything by itself. */
 export type PlanPolicyStatus = PlanStatus | "promoted";
@@ -37,9 +48,115 @@ export const PLAN_CAPS = {
   /** the user's own words, when the plan came from a description */
   description: 4000,
   changelog: 30,
+  stores: 8,
+  zones: 12,
+  principals: 10,
+  flows: 6,
+  flowSteps: 10,
+  modules: 16,
 } as const;
 
-export interface PlanProcess {
+/** 2026-10-01 — a CODE UNIT (a package, a folder), apart from the deployable
+ *  that runs it: a pure logic library, an app, a tool. */
+export const MODULE_KINDS = ["library", "app", "tool"] as const;
+export interface PlanModule extends PlanGrounding {
+  id: string;
+  /** the folder its code lives in */
+  at: string;
+  kind: typeof MODULE_KINDS[number];
+  label?: string;
+  status: PlanStatus;
+}
+
+/** 2026-10-01 — one step of a planned flow through a store: "the decider
+ *  watches docs/requests (request)". */
+export interface PlanFlowStep {
+  process: string;
+  op: "write" | "read" | "watch";
+  /** "store/zone" */
+  zone: string;
+  family?: string;
+}
+
+/** 2026-10-01 — processes that coordinate only through shared documents (A
+ *  writes a request, B reacts and writes a verdict A watches) have no edge
+ *  between them; the flow that defines the system is these ordered steps. */
+export interface PlanFlow extends PlanGrounding {
+  id: string;
+  serves?: string;
+  steps: PlanFlowStep[];
+  status: PlanStatus;
+}
+
+/** 2026-10-01 — an INDIRECT hop the code shows: one process writes a family
+ *  (or zone) of a store that another process watches or reads. */
+export interface IndirectHop {
+  from: string;
+  to: string;
+  store: string;
+  zone?: string;
+  family?: string;
+  /** "file:line fn" of the write, and of the read/watch */
+  write: string;
+  read: string;
+}
+
+/** 2026-10-01 — who an identity is: a service's own identity, a human role,
+ *  or the owner of a resource. */
+export const PRINCIPAL_KINDS = ["service", "human-role", "owner"] as const;
+export type PrincipalKind = typeof PRINCIPAL_KINDS[number];
+
+/** 2026-10-01 — an identity the system's access rules are about: "only the
+ *  decider service writes verdicts" is `zones[].writers: ["svc-decider"]`
+ *  plus `processes[].runsAs: "svc-decider"`. */
+export interface PlanPrincipal extends PlanGrounding {
+  id: string;
+  kind: PrincipalKind;
+  label?: string;
+  status: PlanStatus;
+}
+
+/** 2026-10-01 — what a planned STORE is: a resource processes share, never
+ *  a process. Any shared store fits one of these; `other` says so. */
+export const STORE_KINDS = ["database", "document-store", "object-store", "queue", "cache", "sync", "kv", "other"] as const;
+export type StoreKind = typeof STORE_KINDS[number];
+
+/** A partition of a store where access is enforced (a database, a schema, a
+ *  bucket, a topic, a document space): which document families live there. */
+export interface PlanZone {
+  id: string;
+  label?: string;
+  /** document families / key patterns that live here ("order", "orders/*") */
+  holds: string[];
+  /** principal ids allowed to write / read it (the plan's `principals`) */
+  writers?: string[];
+  readers?: string[];
+  /** how the code picks this zone: a literal the code names, or the function
+   *  the plan says routes to it (`router: resolveZone`) */
+  routedBy?: string;
+}
+
+/** 2026-10-01 — a shared store (database, sync service, object store,
+ *  queue): a RESOURCE processes reach, not a process. Realised when the code
+ *  uses any of the libraries / project modules it is reached through. */
+export interface PlanStore extends PlanGrounding {
+  id: string;
+  kind: StoreKind;
+  label?: string;
+  serves?: string | null;
+  /** the tools (SDK, data library), project funnels (`lib.store`) or project
+   *  folders (`packages/store-client/`) the code reaches it THROUGH */
+  reachedThrough: string[];
+  /** the client's own functions that write / read / watch it (`writeDoc`,
+   *  `watchDocs`): a call to one, with literal zone or family arguments, is
+   *  where the code touches a zone */
+  access?: { write?: string[]; read?: string[]; watch?: string[] };
+  zones?: PlanZone[];
+  groundedIn?: string | null;
+  status: PlanStatus;
+}
+
+export interface PlanProcess extends PlanGrounding {
   id: string;
   kind: SubsystemKind;
   label: string;
@@ -47,16 +164,25 @@ export interface PlanProcess {
   serves: string | null;
   /** where its code will live (a path prefix) — what lets the plan be checked */
   at?: string;
+  /** 2026-10-01 — the principal (identity) it runs as */
+  runsAs?: string;
+  /** 2026-10-01 — a DEPLOYABLE: the files / entry-point ids it starts from
+   *  (a runtime host script may live far from the logic it runs) */
+  entryPoints?: string[];
+  /** 2026-10-01 — the modules it runs (their files are its files too) */
+  uses?: string[];
   /** a quote from the description it came from (greenfield); null = inferred */
   groundedIn?: string | null;
   status: PlanStatus;
 }
 
-export interface PlanBoundary {
+export interface PlanBoundary extends PlanGrounding {
   id: string;
   from: string;
-  /** a planned process id, or a planned stack tool */
+  /** a planned process id, a planned stack tool, or a planned STORE */
   to: string;
+  /** when `to` is a store: the zone of it this boundary writes / reads */
+  zone?: string;
   protocol?: string;
   /** the payload's key NAMES, never values */
   carries?: string[];
@@ -64,7 +190,7 @@ export interface PlanBoundary {
   status: PlanStatus;
 }
 
-export interface PlanTool {
+export interface PlanTool extends PlanGrounding {
   tool: string;
   role: StackRole;
   /** 2026-10-01 — the client libraries the code reaches it THROUGH: a store
@@ -77,7 +203,7 @@ export interface PlanTool {
   status: PlanStatus;
 }
 
-export interface PlanThread {
+export interface PlanThread extends PlanGrounding {
   /** how the entry point will read: "POST /readings", "cli:nightly", a function name */
   id: string;
   entry: string;
@@ -93,7 +219,7 @@ export interface PlanThread {
   status: PlanStatus;
 }
 
-export interface PlanPolicy {
+export interface PlanPolicy extends PlanGrounding {
   id: string;
   text: string;
   why: string;
@@ -113,7 +239,31 @@ export interface PlanPolicy {
   about?: string;
 }
 
-export interface PlanQuestion { id: string; text: string; /** as PlanPolicy.about */ about?: string }
+/** 2026-10-01 — a check someone RAN that bears on a plan item or an open
+ *  question: the command, what it should show, when, and — once run — what it
+ *  showed. Recorded, never run by VibeGraph (running is a person's step). */
+export interface PlanEvidence {
+  command: string;
+  expect: string;
+  /** when it was run, or recorded (ISO date) */
+  at: string;
+  /** what running it showed; absent = not run yet */
+  result?: "confirmed" | "refuted";
+  note?: string;
+}
+
+export interface PlanQuestion {
+  id: string;
+  text: string;
+  /** as PlanPolicy.about */
+  about?: string;
+  /** 2026-10-01 — what has been run to answer it; the LATEST run decides
+   *  whether it stands confirmed, refuted, or unverified */
+  evidence?: PlanEvidence[];
+}
+
+/** 2026-10-01 — what an assumption (an open question an item `assumes`) stands as. */
+export type AssumptionState = "unverified" | "confirmed" | "refuted";
 
 export interface PlanChange { rev: number; at: string; by: PlanActor; change: string }
 
@@ -134,10 +284,23 @@ export interface Plan {
   policies: PlanPolicy[];
   open: PlanQuestion[];
   changelog: PlanChange[];
+  /** 2026-10-01 — OPTIONAL sections: absent in a plan written before them,
+   *  and left out of the file again while empty (`sectionItems` reads them). */
+  stores?: PlanStore[];
+  principals?: PlanPrincipal[];
+  flows?: PlanFlow[];
+  modules?: PlanModule[];
 }
 
-export type PlanSection = "processes" | "boundaries" | "stack" | "threads" | "policies" | "open";
-export const PLAN_SECTIONS: readonly PlanSection[] = ["processes", "boundaries", "stack", "threads", "policies", "open"];
+export type PlanSection = "processes" | "boundaries" | "stack" | "threads" | "policies" | "open" | "stores" | "principals" | "flows" | "modules";
+export const PLAN_SECTIONS: readonly PlanSection[] = ["processes", "boundaries", "stack", "threads", "policies", "open", "stores", "principals", "flows", "modules"];
+/** Sections a plan may omit (added after plan.json v1 shipped). */
+export const PLAN_OPTIONAL_SECTIONS: readonly PlanSection[] = ["stores", "principals", "flows", "modules"];
+
+/** A section's items; [] for an optional section the plan does not have. */
+export function sectionItems(plan: Plan, section: PlanSection): any[] {
+  return ((plan as any)[section] as any[] | undefined) ?? [];
+}
 
 /** The id an item of a section is addressed by. */
 export function planItemId(section: PlanSection, item: any): string {
@@ -172,10 +335,34 @@ export interface PlanFinding {
   /** a realised process: the entry points in its files (≤ 50) — how the map
    *  finds the real box the planned process became */
   entryPoints?: string[];
+  /** a planned thread: the process it belongs to — named, or found from the
+   *  entry point it starts from */
+  process?: string;
+  /** 2026-10-01 — the assumptions it rests on and where each stands */
+  assumptions?: Array<{ id: string; state: AssumptionState }>;
+  /** a flow: each step's verdict, in order */
+  steps?: Array<{ step: string; found: boolean; at?: string }>;
+}
+
+/** 2026-10-01 — one cell of the derived write matrix: may this principal
+ *  write this zone (the plan's `writers`), and does the code (an access site
+ *  in a process that runs as it)? */
+export interface WriteCell {
+  principal: string;
+  /** "store/zone" */
+  zone: string;
+  /** the plan lets it write (it is in `writers`) */
+  allowed: boolean;
+  /** where the code writes it: "file:line fn" */
+  writes: string[];
 }
 
 export interface PlanReconcile {
   revision: number;
+  /** principal × zone: allowed by the plan, written by the code */
+  writeMatrix?: WriteCell[];
+  /** processes the code joins THROUGH a store (a write one reads/watches) */
+  indirectHops?: IndirectHop[];
   findings: PlanFinding[];
   counts: Partial<Record<PlanVerdict, number>>;
   limits: string[];
