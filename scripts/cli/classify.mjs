@@ -26,6 +26,7 @@ import {
   applyClassifications, buildClassifyPrompt, collectUnknownTools,
   formatDossierReport, formatReplyReport, parseClassifyResponse,
 } from "../../src/server/stack_classify.ts";
+import { cliPath } from "./winpath.mjs";
 
 /** The server's CHAT_DENIED_TOOLS plus Bash: a classifier reads, never runs. */
 export const CLASSIFY_DENIED_TOOLS = ["Edit", "Write", "MultiEdit", "NotebookEdit", "Bash"];
@@ -76,7 +77,7 @@ export function runClassify({
   root, envelope, pipeline, dryRun = false, apply = false, model, fromDossier, dossierOut, replyFile,
   log = () => {}, env = process.env,
 }) {
-  const absRoot = resolve(root);
+  const absRoot = resolve(cliPath(root));
   const messages = [];
   let dossiers;
   let prompt;

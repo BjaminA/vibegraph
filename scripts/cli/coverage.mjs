@@ -10,12 +10,13 @@ import { computeReachability } from "../../src/server/reachability.ts";
 import { buildEnvSurface } from "../../src/shared/env_surface.ts";
 import { coverageFor } from "../../src/server/coverage.ts";
 import { envDeclarations } from "../thread_context.mjs";
+import { cliPath } from "./winpath.mjs";
 
 export const COVERAGE_USAGE = `coverage [<root>] <file>… [--json]   per file: parsed fully?, the threads and tests that reach it, the env vars
                                                it reads, changed since the export?, and what to do before trusting it`;
 
 export function runCoverage({ root, files, envelope, pipeline, cache = false }) {
-  const absRoot = resolve(root);
+  const absRoot = resolve(cliPath(root));
   const rels = files.map((f) => relative(absRoot, isAbsolute(f) ? f : resolve(process.cwd(), f)).split("\\").join("/"));
   const { envelope: env, parseErrors } = loadEnvelope(absRoot, envelope, pipeline ?? {}, { cache });
   const sourcesPath = join(absRoot, ".vibegraph", "knowledge", "sources.json");

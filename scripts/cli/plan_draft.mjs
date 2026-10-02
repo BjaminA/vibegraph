@@ -13,6 +13,7 @@ import { loadPlan, savePlan } from "../../src/server/plan_store.ts";
 import { applyPlanOps } from "../../src/server/plan_ops.ts";
 import { ratifiedSpecs, readSources } from "../../src/server/software_store.ts";
 import { buildPlanDraftPrompt, parsePlanDraftReply, gatePlanDraft } from "../../src/server/plan_draft.ts";
+import { cliPath } from "./winpath.mjs";
 
 export async function runPlanDraft(args) {
   let parsed;
@@ -22,7 +23,7 @@ export async function runPlanDraft(args) {
       model: { type: "string" }, "dry-run": { type: "boolean" }, reply: { type: "string" },
     } });
   } catch (e) { return { exitCode: 2, text: `${e.message}\n` }; }
-  const root = resolve(parsed.values.root ?? ".");
+  const root = resolve(cliPath(parsed.values.root ?? "."));
   const done = (text, exitCode = 0) => ({ exitCode, text: text.endsWith("\n") ? text : `${text}\n` });
   const plan = loadPlan(root);
   if (!plan) return done("no plan yet — start one: vibegraph-knowledge plan init \"<objective>\"", 1);

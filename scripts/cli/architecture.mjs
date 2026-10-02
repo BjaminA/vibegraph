@@ -30,9 +30,10 @@ import { seedArchFromPlan } from "../../src/server/plan_arch_seed.ts";
 import { spawnClassifier } from "./classify.mjs";
 import { repositoryFor, writeArchArtifacts } from "../arch_artifacts.mjs";
 import { deriveThreadCalls } from "../../src/webview/system/threadInteraction.ts";
+import { cliPath } from "./winpath.mjs";
 
 export function runArchitecture({ root, out, envelope, pipeline, commit, tool, action = null, replyFile, dryRun = false, model, guidance, archify = false, force = false, env = process.env }) {
-  const absRoot = resolve(root);
+  const absRoot = resolve(cliPath(root));
   const lines = [];
   const messages = [];
   const { envelope: envl, parseErrors } = loadEnvelope(absRoot, envelope, pipeline ?? {});

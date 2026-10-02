@@ -30,3 +30,14 @@ export function hookInputFromWindows(input) {
   }
   return out;
 }
+
+/** 2026-10-02 — a project path given on the command line. A Windows-side
+ *  caller (Claude Code on Windows, Git Bash, PowerShell) hands the CLI
+ *  `\\wsl.localhost\Ubuntu\…`, `//wsl.localhost/…` or `C:\…`; a CLI running
+ *  in WSL / Linux reads those as relative paths and fails ("/tmp/\\wsl…
+ *  does not exist"). Translated only where Node is NOT on Windows — there
+ *  every one of those forms is already a valid path. */
+export function cliPath(p, platform = process.platform) {
+  if (typeof p !== "string" || platform === "win32") return p;
+  return fromWindowsPath(p);
+}

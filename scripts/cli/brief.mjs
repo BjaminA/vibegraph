@@ -10,12 +10,13 @@ import { threadContexts } from "../thread_context.mjs";
 import { loadConstraints } from "../../src/server/constraint_store.ts";
 import { formatContractBlock } from "../../src/server/thread_contract.ts";
 import { buildThreadBrief } from "../../src/server/thread_brief.ts";
+import { cliPath } from "./winpath.mjs";
 
 export const BRIEF_USAGE = `brief <entry id> [<root>] [--max <chars>]   one thread: its contract, then the verbatim source of its
                                   PRIMARY functions only (ranked as the thread view ranks them); zero tokens`;
 
 export function runBrief({ root, entryPointId, maxChars, pipeline }) {
-  const absRoot = resolve(root);
+  const absRoot = resolve(cliPath(root));
   const loaded = loadEnvelope(absRoot, null, pipeline ?? {}, { cache: true });
   const env = loaded.envelope;
   const thread = env.threads.find((t) => t.entryPointId === entryPointId);

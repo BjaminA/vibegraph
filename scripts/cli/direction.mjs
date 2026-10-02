@@ -33,6 +33,7 @@ import { loadGenericSkills, readSkillsConfig, saveSkillsConfig, HOOK_MODES, skil
 import { evaluatePredicate } from "../../src/server/quality/predicate.ts";
 import { deriveStackProfile } from "../../src/server/quality/profile.ts";
 import { buildStackIndex } from "../../src/server/stack.ts";
+import { cliPath } from "./winpath.mjs";
 
 export { HOOK_MODES };
 
@@ -124,7 +125,7 @@ export function directionForFindings(absRoot, findings, state) {
 export function runDirection(args) {
   const [a, b, c] = args;
   const set = (root, mutate) => {
-    const absRoot = resolve(root ?? ".");
+    const absRoot = resolve(cliPath(root ?? "."));
     const { config } = readSkillsConfig(absRoot);
     const err = mutate(config);
     if (err) return { exitCode: 1, text: `${err}\n` };

@@ -23,6 +23,7 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { join, resolve } from "node:path";
 import { cacheDirFor } from "../envelope_cache.mjs";
+import { cliPath } from "./winpath.mjs";
 
 export const LESSONS_USAGE = `lessons list [<root>] [--json]   what the hooks saw sessions break and put right (zero tokens);
                                   \`skills draft\` hands a thread's lessons to the drafting prompt`;
@@ -89,7 +90,7 @@ export function lessonsBlock(lessons) {
 }
 
 export function runLessons({ root, json = false }) {
-  const absRoot = resolve(root);
+  const absRoot = resolve(cliPath(root));
   const all = readLessons(absRoot);
   if (json) return { text: JSON.stringify(all, null, 2) + "\n", exitCode: 0 };
   if (!all.length) {

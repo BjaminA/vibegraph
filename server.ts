@@ -9,6 +9,7 @@ import { createMcpHttpHandler } from "./src/mcp/server";
 import type { VibegraphMcpContext } from "./src/mcp/context";
 import { selectBackend, type ChatSession } from "./src/server/chat/backend";
 import { ClaudeStdioBackend } from "./src/server/chat/claude_stdio_backend";
+import { posixRel } from "./src/server/posix_rel";
 import { forwardChatEvent } from "./src/server/chat/forward";
 import { buildChatPrompt, buildStagePrompt, buildTurnPreamble, renderRoutedBlock, type ChatNodeContext, type ChatThreadContext, type ChatTurnContext } from "./src/server/chat/prompt";
 import { buildRemitIndex, matchQuestion, matchNode, mergeMatches, applyRoutingBudget, SKILL_INJECTION_BUDGET_CHARS, type ThreadRemit, type RoutedThreadContext, type RoutingCandidate } from "./src/server/thread_remit";
@@ -599,8 +600,8 @@ function parseFile(): Promise<any> {
 // package name). M-LANG1 moved the per-language rule into the registry.
 function fileToModulePath(filePath: string): string {
   const lang = langOf(filePath);
-  const rel = path.relative(inputPath, filePath);
-  if (!lang) return rel.split(path.sep).filter(Boolean).join("/");
+  const rel = posixRel(inputPath, filePath);
+  if (!lang) return rel.split("/").filter(Boolean).join("/");
   return moduleIdentity(lang, rel);
 }
 
@@ -2529,9 +2530,10 @@ async function runPacketWorker(packet: RunPacket): Promise<WorkerOutcome> {
 // in this server expects absolute, but the envelope, MCP tools, and
 // all incoming WS messages talk in paths relative to the project root.
 // Single source of truth at the boundary.
+// Always "/" (src/server/posix_rel.ts): Windows' "\\" missed every key.
 function relativize(absolute: string): string {
   if (!isDirectory) return absolute;
-  return path.relative(inputPath, absolute);
+  return posixRel(inputPath, absolute);
 }
 function resolveProjectPath(maybeRelative: string): string {
   if (!isDirectory) return maybeRelative;
@@ -3207,11 +3209,11 @@ async function changesetProposeCore(raw: unknown, effectConsentToken?: string, t
     // as outside the project, and the check path's effects escape the floor.
     const relIR: Record<string, unknown> = {};
     for (const [fp, ir] of Object.entries(linked) as [string, any][]) {
-      relIR[path.relative(sandbox, fp)] = {
+      relIR[posixRel(sandbox, fp)] = {
         ...ir,
         edges: (ir.edges ?? []).map((e: any) =>
           e.targetFile && path.isAbsolute(e.targetFile)
-            ? { ...e, targetFile: path.relative(sandbox, e.targetFile) }
+            ? { ...e, targetFile: posixRel(sandbox, e.targetFile) }
             : e),
       };
     }

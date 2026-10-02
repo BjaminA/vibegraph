@@ -19,7 +19,7 @@ import { PACKAGE_NAME, gitHead, locate, toolLabel } from "./paths.mjs";
 import { resolvePython } from "./pyenv.mjs";
 import { exportKnowledge } from "../export_knowledge.mjs";
 import { formatCheckReport, runConstraintChecks } from "./check.mjs";
-import { hookInputFromWindows } from "./winpath.mjs";
+import { hookInputFromWindows, cliPath } from "./winpath.mjs";
 import { applyHooks, applyInit, ALL_SKILLS, applySkills, hookCommand, windowsHookCommand, POINTER, skillsFromList } from "./init.mjs";
 import { spawnSync } from "node:child_process";
 import { HOOK_EVENTS, runHook } from "./hooks.mjs";
@@ -153,7 +153,7 @@ function packageVersion(loc) {
 }
 
 function projectRoot(positional) {
-  const abs = resolve(positional ?? ".");
+  const abs = resolve(cliPath(positional ?? "."));
   if (!existsSync(abs) || !statSync(abs).isDirectory()) throw new Error(`${abs} is not a directory`);
   return abs;
 }

@@ -15,7 +15,7 @@
 // is the package's one npm dependency. Nothing here is committed; run
 // `npm run build:cli` (test:cli-pack does) before `npm pack`.
 import * as esbuild from "esbuild";
-import { chmodSync, copyFileSync, cpSync, existsSync, mkdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -98,6 +98,14 @@ export async function buildPackage({ quiet = false } = {}) {
   cpSync(join(ROOT, "scripts", "cli", "claude-skill"), join(PKG, "vendor", "claude-skill"), { recursive: true });
   cpSync(join(ROOT, "scripts", "cli", "claude-skills"), join(PKG, "vendor", "claude-skills"), { recursive: true });
 
+  // 2026-10-02 — a vendored script that imports a sibling the lists above
+  // forgot dies at run time with ERR_MODULE_NOT_FOUND (0.17–0.18 shipped
+  // discover_project.mjs without package_entries.mjs, and project-level
+  // discovery failed in every `view`). Follow every relative import of every
+  // vendored .mjs, copy what is missing from scripts/, and refuse to finish
+  // when one still does not resolve.
+  vendorImportClosure(VENDOR, join(ROOT, "scripts"));
+
   const bundleBytes = statSync(outfile).size;
   if (!quiet) {
     const inputs = Object.entries(result.metafile.outputs[relative(ROOT, outfile).split("\\").join("/")]?.inputs ?? {})
@@ -113,4 +121,34 @@ export async function buildPackage({ quiet = false } = {}) {
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   if (!existsSync(join(ROOT, "node_modules", "esbuild"))) { console.error("npm install first"); process.exit(2); }
   buildPackage().catch((e) => { console.error(e); process.exit(1); });
+}
+
+/** Copy the relative-import closure of every .mjs under `vendor` from
+ *  `source` (the same relative layout), then fail on any import that still
+ *  does not resolve. Exported for test:cli-pack. */
+export function vendorImportClosure(vendor, source) {
+  const walk = (dir) => readdirSync(dir, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? (e.name === "node_modules" ? [] : walk(join(dir, e.name))) : e.name.endsWith(".mjs") ? [join(dir, e.name)] : []));
+  const IMPORT = /(?:^|\n)\s*(?:import|export)\s[^;]*?from\s*["'](\.{1,2}\/[^"']+)["']|import\(\s*["'](\.{1,2}\/[^"']+)["']\s*\)/g;
+  const queue = walk(vendor);
+  const seen = new Set();
+  const dangling = [];
+  while (queue.length) {
+    const file = queue.shift();
+    if (seen.has(file)) continue;
+    seen.add(file);
+    // Comments describe imports too (`// … await import("./x")`): not code.
+    const text = readFileSync(file, "utf-8").replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "").replace(/([;{}),])\s*\/\/.*$/gm, "$1");
+    for (const m of text.matchAll(IMPORT)) {
+      const spec = m[1] ?? m[2];
+      const target = join(dirname(file), spec);
+      if (existsSync(target)) { if (target.endsWith(".mjs")) queue.push(target); continue; }
+      const from = join(source, relative(vendor, target));
+      if (existsSync(from)) {
+        mkdirSync(dirname(target), { recursive: true });
+        copyFileSync(from, target);
+        if (target.endsWith(".mjs")) queue.push(target);
+      } else dangling.push(`${relative(vendor, file)} imports ${spec}`);
+    }
+  }
+  if (dangling.length) throw new Error(`vendored scripts import files that do not exist:\n  ${dangling.join("\n  ")}`);
 }

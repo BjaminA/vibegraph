@@ -3,7 +3,27 @@
 `vibegraph-knowledge` and the VibeGraph app. Newest first. Each entry says what
 changed and, where an existing user would notice, how behaviour differs.
 
-## 0.18.0 — unreleased
+## 0.18.1 — unreleased
+
+### The viewer on Windows (two bugs reported against 0.17 and 0.18)
+
+- **A missing file in the package.** `discover_project.mjs` imports
+  `package_entries.mjs` (new in 0.17), and the build never vendored it, so every
+  `view` logged "project-level entry-point discovery failed" and lost the
+  package.json and program entry points. The build now follows every vendored
+  script's relative imports, copies what is missing, and refuses to finish when
+  an import still does not resolve.
+- **Windows paths.** Under a native Windows Node the viewer keyed files with
+  backslashes (`packages\rules\src\index.ts`), so every manual seed, rule
+  scope, plan folder and Python module identity keyed with `/` missed ("manual
+  seed … not used: no such file"). Project-relative keys are now always `/`.
+  And a Linux-side CLI given a Windows-form path (`\\wsl.localhost\…`,
+  `//wsl.localhost/…`, `C:\…`) translates it; on Windows it is left as is.
+
+Tests: test:windows-paths (4). Checked by hand on Windows (Node 24, project on
+C:, a manual seed) and on WSL with a `\\wsl.localhost` path.
+
+## 0.18.0 — 2026-10-01
 
 ### The proposal backlog (plan-architecture brief, Module 11)
 

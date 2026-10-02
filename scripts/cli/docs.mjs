@@ -3,6 +3,7 @@
 import { resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { docsStatus, loadDocs, saveDocs, validateDoc } from "../../src/server/docs_registry.ts";
+import { cliPath } from "./winpath.mjs";
 
 export const DOCS_USAGE = `docs list | check | add <path> --generator "<cmd>" --inputs <a,b/,c/**> | remove <path>   [--root <dir>] [--json]
                                   generated documents (.vibegraph/docs.json): each one's generator and the inputs it
@@ -16,7 +17,7 @@ export function runDocs(args) {
     parsed = parseArgs({ args, allowPositionals: true, options: { root: { type: "string" }, json: { type: "boolean" }, generator: { type: "string" }, inputs: { type: "string" }, note: { type: "string" } } });
   } catch (e) { return { exitCode: 2, text: `${e.message}\n\nusage: vibegraph-knowledge ${DOCS_USAGE}\n` }; }
   const [sub, target] = parsed.positionals;
-  const root = resolve(parsed.values.root ?? ".");
+  const root = resolve(cliPath(parsed.values.root ?? "."));
   const done = (text, exitCode = 0) => ({ exitCode, text: text.endsWith("\n") ? text : `${text}\n` });
   if (sub === "add") {
     const doc = { path: target, generator: parsed.values.generator, inputs: list(parsed.values.inputs), ...(parsed.values.note ? { note: parsed.values.note } : {}) };

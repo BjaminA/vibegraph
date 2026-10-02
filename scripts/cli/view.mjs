@@ -21,6 +21,7 @@ import { spawn, spawnSync } from "node:child_process";
 import { existsSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { ensureBlack, resolvePython } from "./pyenv.mjs";
+import { cliPath } from "./winpath.mjs";
 
 export const VIEW_USAGE = `view [<path>] [--port <n>] [--open]   THE VISUALISATION: start the web app on a project (or one file)
                                                and serve it at http://localhost:4200; Ctrl-C stops it`;
@@ -49,7 +50,7 @@ function openBrowser(url) {
 
 /** @returns {Promise<number>} the exit code */
 export function runView({ loc, target, port, open, log = (m) => process.stderr.write(`  ${m}\n`) }) {
-  const abs = resolve(target ?? ".");
+  const abs = resolve(cliPath(target ?? "."));
   if (!existsSync(abs)) { log(`${abs} does not exist`); return Promise.resolve(2); }
   const server = serverPath(loc);
   if (!server) {

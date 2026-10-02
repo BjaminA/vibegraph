@@ -24,6 +24,7 @@ import { importGraph, workspacePackages } from "../../src/server/import_graph.ts
 import { promotePolicy } from "../../src/server/plan_promote.ts";
 import { PLAN_SECTIONS } from "../../src/shared/plan_types.ts";
 import { isAgentRun } from "./actor.mjs";
+import { cliPath } from "./winpath.mjs";
 
 export const PLAN_USAGE = `plan init "<objective>" | show | check | edit '<op>' | agree|drop <section> <id> | promote <rule id> | layers [--apply] | affected [--uncommitted] | review | close|reopen
                                   [--root <dir>] [--json] [--as agent]   the HYPOTHETICAL project (.vibegraph/plan.json): objective,
@@ -66,7 +67,7 @@ export function runPlan(args) {
     parsed = parseArgs({ args, allowPositionals: true, options: { root: { type: "string" }, json: { type: "boolean" }, file: { type: "string" }, as: { type: "string" }, apply: { type: "boolean" }, uncommitted: { type: "boolean" }, agree: { type: "string" }, reject: { type: "string" } } });
   } catch (e) { return { exitCode: 2, text: `${e.message}\n\n${HELP}\n` }; }
   const [sub, ...rest] = parsed.positionals;
-  const root = resolve(parsed.values.root ?? ".");
+  const root = resolve(cliPath(parsed.values.root ?? "."));
   // Claude Code running this is a model, whatever it asks for (actor.mjs).
   const by = parsed.values.as === "agent" || isAgentRun() ? "agent" : "human";
   const done = (text, exitCode = 0) => ({ exitCode, text: text.endsWith("\n") ? text : `${text}\n` });

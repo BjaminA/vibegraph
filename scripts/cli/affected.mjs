@@ -10,6 +10,7 @@ import { relative, resolve, isAbsolute } from "node:path";
 import { loadEnvelope } from "../quality_check.mjs";
 import { affectedTests } from "../../src/shared/test_reach.ts";
 import { workingTreeDelta } from "./check.mjs";
+import { cliPath } from "./winpath.mjs";
 
 export const AFFECTED_USAGE = `affected [<root>] [<file>...] [options]   which discovered tests reach the changed files, and which threads they touch
       --uncommitted        the working tree's changes against HEAD are the changed files
@@ -17,7 +18,7 @@ export const AFFECTED_USAGE = `affected [<root>] [<file>...] [options]   which d
       exit 0 always (a report, not a gate) · 2 bad arguments or no files named`;
 
 export function runAffected({ root, files = [], uncommitted = false, envelope, pipeline, cache = false }) {
-  const absRoot = resolve(root);
+  const absRoot = resolve(cliPath(root));
   let changed = files.map((f) => {
     const abs = isAbsolute(f) ? f : resolve(process.cwd(), f);
     return relative(absRoot, abs).split("\\").join("/");

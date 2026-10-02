@@ -18,6 +18,7 @@ import { ratifySpec, specIntoPlan } from "../../src/server/software_server.ts";
 import { formatSpecMd, specUsage } from "../../src/server/software_apply.ts";
 import { runSoftwareEdit, SOFTWARE_EDIT_HELP } from "./software_edit.mjs";
 import { isAgentRun } from "./actor.mjs";
+import { cliPath } from "./winpath.mjs";
 
 export const SOFTWARE_USAGE = `software add <tool> --from <url|file>… | list | show <tool> | edit <tool> | rule … | unknown … | ratify <tool> | plan <tool> | remove <tool>
                                   [--root <dir>] [--json]   a spec for a tool the project builds on, cited from its own docs
@@ -73,7 +74,7 @@ export async function runSoftware(args) {
     } });
   } catch (e) { return { exitCode: 2, text: `${e.message}\n\n${HELP}\n` }; }
   const [sub, second, third] = parsed.positionals;
-  const root = resolve(parsed.values.root ?? ".");
+  const root = resolve(cliPath(parsed.values.root ?? "."));
   const done = (text, exitCode = 0) => ({ exitCode, text: text.endsWith("\n") ? text : `${text}\n` });
   if (!sub || sub === "help") return done(HELP, sub ? 0 : 2);
   // `rule add <tool>` / `unknown remove <tool>`: the action comes before the tool.
