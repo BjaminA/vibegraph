@@ -36,6 +36,7 @@ from typing import Dict, List, Optional, Union
 import libcst as cst
 import libcst.metadata as meta  # noqa: F401  (Optional is re-used by helper signatures)
 import libcst.matchers as m
+from literal_table import literal_table, name_pattern
 
 
 # ─────────────────────────────────────────── graph builder ──────────
@@ -121,6 +122,15 @@ class GraphBuilder(cst.CSTVisitor):
             return self._module.code_for_node(node)
         except Exception:
             return "?"
+
+    def _stamp_table(self, extras: dict, value: cst.BaseExpression) -> None:
+        """Literal tables (scripts/literal_table.py): a module-level constant that
+        holds DATA keeps its rows on its assignment node."""
+        if self._parent_stack or not str(extras.get("name", "")).isidentifier():
+            return
+        table = literal_table(value, self._code, lambda n: self._pos(n)["line"])
+        if table:
+            extras["table"] = table
 
     def _parent_id(self) -> Optional[str]:
         return self._parent_stack[-1] if self._parent_stack else None
@@ -565,6 +575,7 @@ class GraphBuilder(cst.CSTVisitor):
         # inside list/tuple/dict literals are NOT exposed here — that's a parser
         # enhancement out of M4a scope.
         extras: dict = {"name": name, "valueKind": vkind, "preview": preview}
+        self._stamp_table(extras, node.value)
         if isinstance(node.value, cst.Call):
             self._claim(node.value)  # the assignment node IS this call's node
             call_target = self._func_name(node.value.func)
@@ -628,6 +639,7 @@ class GraphBuilder(cst.CSTVisitor):
         if node.value is not None:
             extras["valueKind"] = self._value_kind(node.value)
             extras["preview"] = self._code(node.value)[:PREVIEW_MAX]
+            self._stamp_table(extras, node.value)
             if isinstance(node.value, cst.Call):
                 self._claim(node.value)
                 call_target = self._func_name(node.value.func)
@@ -778,6 +790,10 @@ class GraphBuilder(cst.CSTVisitor):
         # node editor) start here, so what a caller reads is exactly what a
         # whole-node replace writes back; before this, a worker that read a
         # Flask route and wrote it back silently lost its @route.
+        # module 2: the name pattern a small pure builder returns
+        np = name_pattern(node, self._code)
+        if np:
+            fn_extras["returnsPattern"] = np
         if node.decorators:
             fn_extras["decoratorLine"] = self.get_metadata(
                 meta.PositionProvider, node.decorators[0]

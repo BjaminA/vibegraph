@@ -146,24 +146,37 @@ export function sourceStatus(root: string, s: TopologySource): TopologyStatus {
     : { source: s, state: "stale", generatedAt: out.generatedAt, detail: `inputs changed since it was generated (${out.generatedAt.slice(0, 16)}) — re-run: vibegraph-knowledge topology run ${s.id}` };
 }
 
+/** The derived layer as a source (data_arch.ts): never run, never stale — it is the code as parsed. */
+export const DERIVED_SOURCE: TopologySource = { id: "derived-from-code", generator: "(VibeGraph reads the code)", inputs: [] };
+
 const KEYS = ["stores", "zones", "families", "principals", "grants", "routers", "stateMachines", "decisionTrees"] as const;
 const keyOf = (k: string, o: any) => (k === "grants" ? `${o.who}|${o.zone}|${o.access}` : k === "routers" ? o.function : o.id);
 
 /** Every generated source, merged. Two sources declaring one id differently
  *  is a conflict, said — the first is kept. */
-export function loadTopology(root: string): TopologyModel {
+export function loadTopology(root: string, derived?: Topology): TopologyModel {
   const status = loadSources(root).map((s) => sourceStatus(root, s));
   const topology: Topology = { version: TOPOLOGY_VERSION };
   const conflicts: string[] = [];
   const seen = new Map<string, { src: string; json: string }>();
-  for (const st of status) {
-    const out = readOutput(root, st.source.id);
-    if (!out) continue;
+  // 2026-10-02 — the topology DERIVED from the code (data_arch.ts) is one more
+  // source, read LAST: a project's own generator declares, and wins wherever
+  // both speak; the derived layer fills what no generator says.
+  const outputs: Array<{ id: string; topology: Topology | undefined }> = status.map((st) => ({ id: st.source.id, topology: readOutput(root, st.source.id)?.topology }));
+  const hasDerived = derived && KEYS.some((k) => ((derived as any)[k] ?? []).length);
+  if (hasDerived) {
+    outputs.push({ id: DERIVED_SOURCE.id, topology: derived });
+    status.push({ source: DERIVED_SOURCE, state: "fresh", detail: "read from the code's literal tables, names and calls by VibeGraph (data-architecture.md)" });
+  }
+  for (const out of outputs) {
+    if (!out.topology) continue;
+    const st = { source: { id: out.id } };
     for (const k of KEYS) for (const item of (out.topology as any)[k] ?? []) {
       const key = `${k}:${keyOf(k, item)}`;
       const json = JSON.stringify({ ...item, cite: undefined });
       const was = seen.get(key);
-      if (was) { if (was.json !== json) conflicts.push(`${k} ${keyOf(k, item)}: ${was.src} and ${st.source.id} declare it differently — ${was.src}'s is used`); continue; }
+      // a generator's word stands over the derived reading, without a conflict
+      if (was) { if (was.json !== json && st.source.id !== DERIVED_SOURCE.id) conflicts.push(`${k} ${keyOf(k, item)}: ${was.src} and ${st.source.id} declare it differently — ${was.src}'s is used`); continue; }
       seen.set(key, { src: st.source.id, json });
       ((topology as any)[k] ??= []).push(item);
     }

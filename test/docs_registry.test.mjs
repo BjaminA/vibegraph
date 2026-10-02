@@ -83,3 +83,20 @@ test("unknown — never fresh — when git cannot say; a malformed registration 
   assert.match(validateDoc({ path: "../outside.md", generator: "x", inputs: ["a"] }), /path must be/);
   assert.match(validateDoc({ path: "A.md", generator: "x", inputs: [] }), /inputs must list/);
 });
+
+test("a byte-identical regeneration: stale by the history, fresh once stamped — and stale again when an input changes after the stamp", () => {
+  commit("commit the draft input");
+  appendFileSync(join(root, "packages/rules/src/index.ts"), "// a comment the generated document does not show\n");
+  commit("an input change that does not change the output");
+  // the generator runs and writes exactly the same bytes: git has nothing to record
+  assert.equal(docsStatus(root)[0].state, "stale", "by commits, it stays stale for ever");
+  const r = runDocs(["stamp", "docs/RULES.md", "--root", root]);
+  assert.equal(r.exitCode, 0, r.text);
+  const [s] = docsStatus(root);
+  assert.equal(s.state, "fresh");
+  assert.match(s.detail, /by content/);
+  appendFileSync(join(root, "packages/rules/src/index.ts"), "\nexport const MORE = 1;\n");
+  const [t] = docsStatus(root);
+  assert.equal(t.state, "stale");
+  assert.match(t.detail, /inputs changed since it was stamped/);
+});

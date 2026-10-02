@@ -61,7 +61,17 @@
       "endCol": 25,
       "name": "my_list",
       "valueKind": "list",
-      "preview": "[1, 2, 3, 4, 5]"
+      "preview": "[1, 2, 3, 4, 5]",
+      "table": {
+        "shape": "list",
+        "values": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ]
+      }
     },
     {
       "id": "module/names.assign",
@@ -73,7 +83,15 @@
       "endCol": 35,
       "name": "names",
       "valueKind": "list",
-      "preview": "[\"Alice\", \"Bob\", \"Charlie\"]"
+      "preview": "[\"Alice\", \"Bob\", \"Charlie\"]",
+      "table": {
+        "shape": "list",
+        "values": [
+          "Alice",
+          "Bob",
+          "Charlie"
+        ]
+      }
     },
     {
       "id": "module/calculate_area.fn",
@@ -262,7 +280,16 @@
       "docstring": null,
       "decorators": [],
       "isAsync": false,
-      "returns": null
+      "returns": null,
+      "returnsPattern": {
+        "pattern": "{self} with {self} sides",
+        "params": [
+          "self"
+        ],
+        "transformed": [
+          "self"
+        ]
+      }
     },
     {
       "id": "module/Shape.class/describe.fn/return@0",

@@ -452,6 +452,10 @@
         "endCol": 1,
         "name": "UserRow",
         "docstring": "One row of the users table, as callers see it.",
+        "members": [
+          "id",
+          "name"
+        ],
         "isExported": true
       },
       {

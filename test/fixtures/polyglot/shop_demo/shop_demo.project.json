@@ -1288,7 +1288,14 @@
           "endCol": 32,
           "name": "REQUIRED",
           "valueKind": "tuple",
-          "preview": "(\"customer\", \"items\")"
+          "preview": "(\"customer\", \"items\")",
+          "table": {
+            "shape": "list",
+            "values": [
+              "customer",
+              "items"
+            ]
+          }
         },
         {
           "id": "module/validate_order.fn",
@@ -1814,6 +1821,11 @@
           "endCol": 77,
           "name": "OrderSummary",
           "docstring": null,
+          "members": [
+            "id",
+            "customer",
+            "total"
+          ],
           "isExported": true
         },
         {
@@ -1826,6 +1838,10 @@
           "endCol": 92,
           "name": "OrderInput",
           "docstring": null,
+          "members": [
+            "customer",
+            "items"
+          ],
           "isExported": true
         },
         {
@@ -1962,7 +1978,25 @@
           ],
           "effectKind": "http",
           "nestsInnerCalls": true,
-          "nestExtracted": false
+          "nestExtracted": true
+        },
+        {
+          "id": "module/postOrder.fn/res.assign/JSON_stringify.call",
+          "type": "call",
+          "parentId": "module/postOrder.fn/res.assign",
+          "line": 25,
+          "endLine": 25,
+          "col": 10,
+          "endCol": 31,
+          "funcName": "JSON.stringify",
+          "args": [
+            "input"
+          ],
+          "isEffect": false,
+          "callTarget": "JSON.stringify",
+          "preview": "JSON.stringify(input)",
+          "nested": true,
+          "nestedDepth": 1
         },
         {
           "id": "module/postOrder.fn/if@0",
@@ -2022,6 +2056,11 @@
         {
           "source": "module/postOrder.fn",
           "target": "module/postOrder.fn/res.assign",
+          "type": "contains"
+        },
+        {
+          "source": "module/postOrder.fn/res.assign",
+          "target": "module/postOrder.fn/res.assign/JSON_stringify.call",
           "type": "contains"
         },
         {
@@ -6801,8 +6840,17 @@
           "irNodeId": "module/postOrder.fn/res.assign",
           "preview": "fetch(`${API_BASE}/orders`, {\n    method: \"POST\",\n    headers: { \"content-type\":",
           "nestsInnerCalls": true,
-          "nestExtracted": false,
+          "nestExtracted": true,
           "effectKind": "http"
+        },
+        {
+          "id": "external:JSON.stringify",
+          "kind": "external",
+          "label": "JSON.stringify",
+          "file": null,
+          "irNodeId": "module/postOrder.fn/res.assign/JSON_stringify.call",
+          "preview": "JSON.stringify(input)",
+          "nested": true
         },
         {
           "id": "dynamic:res.json",
@@ -6971,6 +7019,12 @@
         },
         {
           "from": "gateway/client.ts:postOrder",
+          "to": "external:JSON.stringify",
+          "kind": "direct",
+          "irSource": "module/postOrder.fn/res.assign/JSON_stringify.call"
+        },
+        {
+          "from": "gateway/client.ts:postOrder",
           "to": "dynamic:res.json",
           "kind": "direct",
           "irSource": "module/postOrder.fn/return@0"
@@ -7084,7 +7138,7 @@
           "irSource": "module/createOrder.fn/if@0"
         },
         {
-          "from": "external:fetch",
+          "from": "external:JSON.stringify",
           "to": "gateway/client.ts:postOrder.fn/if@0#then",
           "kind": "conditional",
           "irSource": "module/postOrder.fn/if@0"

@@ -84,7 +84,7 @@ export function principalFindings(plan: Plan, sitesByStore: Map<string, AccessSi
       const rule = `only ${[...allowed].join(", ") || "no one"} may write ${zone}`;
       if (violations.length) findings.push({ section: "stores", id, verdict: "violated", detail: `${rule}: ${violations.join("; ")}` });
       else if (unplaced.length || maybe.length) findings.push({ section: "stores", id, verdict: "unverifiable", detail: `${rule}: cannot place ${[...unplaced, ...maybe].slice(0, 4).join("; ")}` });
-      else findings.push({ section: "stores", id, verdict: "pass", detail: `${rule}: ${mine.length ? `every write (${mine.length}) is by an allowed principal` : "no write to it in the code yet"}` });
+      else findings.push({ section: "stores", id, verdict: "pass", detail: `${rule}: ${mine.length ? `every write (${mine.length}) is by an allowed principal` : "no write to it that the access sites or the derived data operations show (a write whose name could not be reduced is not seen)"}` });
     }
   }
   return { findings, matrix: [...cells.values()].sort((a, b) => a.zone.localeCompare(b.zone) || a.principal.localeCompare(b.principal)) };

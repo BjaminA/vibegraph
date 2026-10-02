@@ -6,7 +6,7 @@
 
 import * as fs from "fs";
 import * as path from "path";
-import type { TopologyModel } from "../shared/topology_types.ts";
+import type { Topology, TopologyModel } from "../shared/topology_types.ts";
 import { TOPOLOGY_DIR, loadTopology, validateTopology } from "./topology_store.ts";
 import { diffTopology, parseTrace, replayTrace, type TopologyDrift, type TraceStep } from "../shared/topology_analysis.ts";
 
@@ -16,8 +16,9 @@ export interface TopologyReply {
   traces: Array<{ name: string; steps: TraceStep[]; errors: string[] }>;
 }
 
-export function topologyState(root: string): TopologyReply {
-  const model = loadTopology(root);
+/** `derived` — the topology read from the code (data_arch.ts), the lowest-ranked source. */
+export function topologyState(root: string, derived?: Topology): TopologyReply {
+  const model = loadTopology(root, derived);
   let live: TopologyReply["live"] = null;
   try {
     const raw = JSON.parse(fs.readFileSync(path.join(root, TOPOLOGY_DIR, "live.json"), "utf-8"));

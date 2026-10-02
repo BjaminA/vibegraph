@@ -74,7 +74,7 @@ CLI) and says so; everything else is deterministic.
 | `plan promote <rule>` | Copy a planned rule into the stated rules, where it is checked and may block | `.vibegraph/constraints.json`, `plan.json` | — |
 | `plan review [--agree \| --reject <s:id,…>]` | Every pending proposal on one page — a diff against what was agreed, its evidence; decide several at once | `.vibegraph/plan.json` | — |
 | `plan affected [--uncommitted]` / `plan layers [--apply]` | Plan items a change touches (and names now gone) / each module's layer rule from today's imports | nothing / `plan.json` | — |
-| `docs add \| list \| check \| remove` | Generated documents and the commit since which each is stale | `.vibegraph/docs.json` | — |
+| `docs add \| list \| check \| stamp \| remove` | Generated documents and since when each is stale (git, or content once stamped) | `.vibegraph/docs.json` | — |
 | `topology add \| run \| check \| show` | The DECLARED topology — stores, zones, principals, grants, decision structures — from the project's own generator | `.vibegraph/topology/` | — |
 | `topology who-writes \| can-write \| touches \| explain \| live \| trace` | Ask it; diff it against a read-only live inventory; replay a run log against it | nothing (`live`/`trace --save` keep a copy) | — |
 | `plan draft --from <url\|file>…` | Draft plan items from documents and the ratified software specs; a quote not in them drops the item; all proposed | `.vibegraph/plan.json` | **yes** |
@@ -713,12 +713,15 @@ what lets the next reader handle a case the rule did not foresee.
 
 ```bash
 vibegraph-knowledge docs add <path> --generator "<cmd>" --inputs <paths,folders/,globs>
-vibegraph-knowledge docs list | check | remove <path>
+vibegraph-knowledge docs list | check | stamp <path> | remove <path>
 ```
 
 Registers documents a command derives (`.vibegraph/docs.json`). `check` says
 which are stale since which commit, read from git, and exits 1 if any are.
-The session-start hook lists them. See
+After regenerating, `stamp` records the content of the document and of its
+inputs: a regeneration that came out byte-identical gives git nothing to
+record, and from the stamp on staleness is read by content. The session-start
+hook lists stale documents. See
 [PLAN-ARCHITECTURE.md](PLAN-ARCHITECTURE.md#generated-documents-that-go-stale-visibly).
 
 ### `topology` — the architecture a shared platform declares as data

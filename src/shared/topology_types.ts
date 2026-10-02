@@ -42,6 +42,8 @@ export interface TopoTransition {
   roles?: string[];
   /** what must hold first (prose or family ids) */
   requires?: string[];
+  /** its name in the declaration, when it has one */
+  label?: string;
   cite?: Cite;
 }
 export interface TopoStateMachine {
@@ -61,13 +63,19 @@ export interface TopoDecisionNode {
   reads?: string[];
   /** the function that evaluates it */
   evaluatedBy?: string;
+  /** the fields it declares it reads (`Type.field`), as written */
+  evidence?: string[];
   yes?: string;
   no?: string;
   /** a leaf: the decision it reaches */
   outcome?: string;
   cite?: Cite;
 }
-export interface TopoDecisionTree { id: string; root: string; nodes: TopoDecisionNode[]; cite?: Cite }
+export interface TopoDecisionTree {
+  id: string; root: string; nodes: TopoDecisionNode[]; cite?: Cite;
+  /** the record that maps its nodes to their evaluating functions */
+  evaluatedByTable?: string;
+}
 
 export interface Topology {
   version: typeof TOPOLOGY_VERSION;

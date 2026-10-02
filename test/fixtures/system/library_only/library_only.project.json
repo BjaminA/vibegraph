@@ -160,6 +160,16 @@
               "name": "padding",
               "value": "1"
             }
+          ],
+          "argKeys": [
+            [],
+            [],
+            [
+              "kernel_size"
+            ],
+            [
+              "padding"
+            ]
           ]
         },
         {
@@ -187,6 +197,16 @@
               "name": "padding",
               "value": "1"
             }
+          ],
+          "argKeys": [
+            [],
+            [],
+            [
+              "kernel_size"
+            ],
+            [
+              "padding"
+            ]
           ]
         },
         {
@@ -210,6 +230,14 @@
               "name": "stride",
               "value": "2"
             }
+          ],
+          "argKeys": [
+            [
+              "kernel_size"
+            ],
+            [
+              "stride"
+            ]
           ]
         },
         {
@@ -419,6 +447,12 @@
               "name": "start_dim",
               "value": "1"
             }
+          ],
+          "argKeys": [
+            [],
+            [
+              "start_dim"
+            ]
           ]
         },
         {
@@ -744,6 +778,15 @@
               "name": "generator",
               "value": "generator"
             }
+          ],
+          "argKeys": [
+            [],
+            [],
+            [],
+            [],
+            [
+              "generator"
+            ]
           ]
         },
         {
@@ -779,6 +822,23 @@
               "name": "dtype",
               "value": "torch.int64"
             }
+          ],
+          "argKeys": [
+            [
+              "low"
+            ],
+            [
+              "high"
+            ],
+            [
+              "size"
+            ],
+            [
+              "generator"
+            ],
+            [
+              "dtype"
+            ]
           ]
         },
         {
@@ -1346,6 +1406,26 @@
               "name": "generator",
               "value": "generator"
             }
+          ],
+          "argKeys": [
+            [
+              "batch_size"
+            ],
+            [
+              "channels"
+            ],
+            [
+              "height"
+            ],
+            [
+              "width"
+            ],
+            [
+              "num_classes"
+            ],
+            [
+              "generator"
+            ]
           ]
         },
         {
@@ -1592,6 +1672,17 @@
               "name": "image_size",
               "value": "image_size"
             }
+          ],
+          "argKeys": [
+            [
+              "in_channels"
+            ],
+            [
+              "num_classes"
+            ],
+            [
+              "image_size"
+            ]
           ]
         },
         {
@@ -1614,6 +1705,12 @@
               "name": "lr",
               "value": "learning_rate"
             }
+          ],
+          "argKeys": [
+            [],
+            [
+              "lr"
+            ]
           ],
           "nestsInnerCalls": true,
           "nestExtracted": true
@@ -1727,7 +1824,33 @@
           "callTarget": "train_epoch",
           "preview": "train_epoch(\n        model=model,\n        optimizer=optimizer,\n        steps_per_epoch=steps_per_epoch,\n        batch_size=batch_size,\n        in_channels=in_channels,\n        image_size=image_size,\n        num_classes=num_classes,\n        generator=train_gen,\n    )",
           "nested": true,
-          "nestedDepth": 1
+          "nestedDepth": 1,
+          "argKeys": [
+            [
+              "model"
+            ],
+            [
+              "optimizer"
+            ],
+            [
+              "steps_per_epoch"
+            ],
+            [
+              "batch_size"
+            ],
+            [
+              "in_channels"
+            ],
+            [
+              "image_size"
+            ],
+            [
+              "num_classes"
+            ],
+            [
+              "generator"
+            ]
+          ]
         },
         {
           "id": "module/train_model.fn/eval_gen.assign",
@@ -1785,6 +1908,27 @@
               "name": "generator",
               "value": "eval_gen"
             }
+          ],
+          "argKeys": [
+            [],
+            [
+              "num_batches"
+            ],
+            [
+              "batch_size"
+            ],
+            [
+              "num_classes"
+            ],
+            [
+              "image_size"
+            ],
+            [
+              "in_channels"
+            ],
+            [
+              "generator"
+            ]
           ]
         },
         {
@@ -1830,6 +1974,11 @@
               "name": "seed",
               "value": "0"
             }
+          ],
+          "argKeys": [
+            [
+              "seed"
+            ]
           ]
         },
         {
@@ -1845,7 +1994,13 @@
             "report.epoch_losses",
             "1"
           ],
-          "isEffect": false
+          "isEffect": false,
+          "argKeys": [
+            [],
+            [
+              "start"
+            ]
+          ]
         },
         {
           "id": "module/main.fn/for@0",
@@ -2545,6 +2700,12 @@
               "name": "dim",
               "value": "1"
             }
+          ],
+          "argKeys": [
+            [],
+            [
+              "dim"
+            ]
           ]
         },
         {
@@ -2757,6 +2918,26 @@
               "name": "generator",
               "value": "generator"
             }
+          ],
+          "argKeys": [
+            [
+              "batch_size"
+            ],
+            [
+              "channels"
+            ],
+            [
+              "height"
+            ],
+            [
+              "width"
+            ],
+            [
+              "num_classes"
+            ],
+            [
+              "generator"
+            ]
           ]
         },
         {
@@ -2795,6 +2976,12 @@
               "name": "dim",
               "value": "1"
             }
+          ],
+          "argKeys": [
+            [],
+            [
+              "dim"
+            ]
           ]
         },
         {

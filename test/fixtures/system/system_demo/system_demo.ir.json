@@ -82,7 +82,13 @@
           "\"/api/users\"",
           "[\"GET\"]"
         ],
-        "isEffect": false
+        "isEffect": false,
+        "argKeys": [
+          [],
+          [
+            "methods"
+          ]
+        ]
       },
       {
         "id": "module/list_users_route.fn",
@@ -139,7 +145,13 @@
           "\"/api/users/<int:uid>\"",
           "[\"GET\"]"
         ],
-        "isEffect": false
+        "isEffect": false,
+        "argKeys": [
+          [],
+          [
+            "methods"
+          ]
+        ]
       },
       {
         "id": "module/get_user_route.fn",
@@ -296,7 +308,13 @@
           "\"/api/charges\"",
           "[\"POST\"]"
         ],
-        "isEffect": false
+        "isEffect": false,
+        "argKeys": [
+          [],
+          [
+            "methods"
+          ]
+        ]
       },
       {
         "id": "module/create_charge_route.fn",
@@ -852,6 +870,13 @@
             "name": "json",
             "value": "{\"amount\": amount}"
           }
+        ],
+        "argKeys": [
+          [],
+          [
+            "json",
+            "json.amount"
+          ]
         ]
       },
       {

@@ -369,6 +369,23 @@
             "type": "string"
           }
         },
+        "objectProps": {
+          "description": "Injected capabilities (2026-10-02, field-additive): the KEYS of an object literal this node returns or holds — {key, line, fn: true} for a function-valued member, {key, line, value} (short source) for a forwarded one, {key, spread} for a spread; members under a conditional spread carry `conditional`. Keys and shapes, never data.",
+          "type": "array",
+          "items": { "type": "object", "required": ["key", "line"] }
+        },
+        "table": {
+          "description": "Literal tables (2026-10-02, field-additive): a MODULE-LEVEL constant whose value is data keeps it, verbatim and bounded. shape rows = an array of object literals ({line, fields}); record = an object keyed by name ({key, line, fields} or {key, line, value}); list = an array of plain literals (values). A value is a literal, an array, {ref: identifier}, {fields: {...}}, {fn: line} for a function, {spread}, or {expr: source} for anything else. Not interpreted by the parser: what a table means is decided downstream.",
+          "type": "object",
+          "required": ["shape"],
+          "properties": {
+            "shape": { "enum": ["rows", "record", "list"] },
+            "exported": { "type": "boolean" },
+            "truncated": { "type": "integer" },
+            "rows": { "type": "array", "items": { "type": "object", "required": ["line"], "properties": { "key": { "type": "string" }, "line": { "type": "integer" }, "fields": { "type": "object" }, "value": {} } } },
+            "values": { "type": "array" }
+          }
+        },
         "argKeys": {
           "description": "The payload KEYS the call spells, one list per argument: object-literal keys (TS), keyword names and dict-literal keys (Python), one nested level as outer.inner. Spreads (...x, **x) and computed keys ([k]) are recorded as markers. Keys, never values. Absent when no argument spells a key.",
           "type": "array",
@@ -450,6 +467,16 @@
             "string",
             "null"
           ]
+        },
+        "returnsPattern": {
+          "description": "Name patterns (2026-10-02, field-additive): when the function's WHOLE body returns a template literal / f-string / string concatenation of its parameters and literals, the pattern it builds with holes named by parameter (`{env}.invoices.{tenantId}`). `transformed` lists parameters passed through a method chain (still that hole). Absent when the body is anything else: a loop, a lookup, a call on a non-parameter.",
+          "type": "object",
+          "required": ["pattern", "params"],
+          "properties": {
+            "pattern": { "type": "string" },
+            "params": { "type": "array", "items": { "type": "string" } },
+            "transformed": { "type": "array", "items": { "type": "string" } }
+          }
         },
         "decoratorLine": {
           "description": "M-CONTRACT.6 (2026-09-08, field-additive, no version bump): the 1-based line of the FIRST decorator when the def is decorated; absent otherwise. `line` keeps libcst's span start (the `def` keyword) for every consumer keyed on it; line-slicing readers (get_node_source, the node editor) start at `decoratorLine ?? line` so what a caller reads is exactly the decorated node that replace_node replaces.",
@@ -533,6 +560,11 @@
         },
         "name": {
           "type": "string"
+        },
+        "members": {
+          "description": "Injected capabilities (2026-10-02, field-additive): the member names an implementation provides (property and method signatures). Names only.",
+          "type": "array",
+          "items": { "type": "string" }
         },
         "docstring": {
           "type": [
@@ -618,6 +650,11 @@
       "properties": {
         "type": {
           "const": "return_stmt"
+        },
+        "objectProps": {
+          "description": "Injected capabilities (2026-10-02, field-additive): the KEYS of an object literal this node returns or holds — {key, line, fn: true} for a function-valued member, {key, line, value} (short source) for a forwarded one, {key, spread} for a spread; members under a conditional spread carry `conditional`. Keys and shapes, never data.",
+          "type": "array",
+          "items": { "type": "object", "required": ["key", "line"] }
         },
         "value": {
           "type": [

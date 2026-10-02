@@ -5,6 +5,59 @@ changed and, where an existing user would notice, how behaviour differs.
 
 ## 0.19.0 — unreleased
 
+### The data architecture, read from the code (eight modules)
+
+Systems on a shared data platform keep their architecture in data tables,
+computed resource names, SDK verbs, injected I/O and documents two processes
+share. `export` now derives all of it from the IR, with zero tokens, as
+`data-architecture.md` (`data_topology.json` with `--with-ir`); its topology
+joins the declared one as the lowest-ranked source, so the Resources and
+Decisions lenses work without a generator.
+[docs/guide/DATA-ARCHITECTURE.md](docs/guide/DATA-ARCHITECTURE.md).
+
+Measured against a reference architecture a project's own team wrote for a
+sync-document platform (178 facts, scored section by section by
+`scripts/dev/score_reference.mjs`): **14 → 157** found. Each module was built
+against two codebases unlike the reference first (`test/fixtures/declared/`: a
+TypeScript billing service on a broker, a Python object-store pipeline). The
+21 not found are stated: principals (in a local, ignored file), the link from
+records to the fields a fold reads, two SDK calls whose receiver is an untyped
+callback parameter or an array element, and three flow steps that need a zone
+list computed at run time.
+
+- **Literal tables:** a module-level constant holding data keeps its rows in
+  the IR (`table`), in TypeScript and Python.
+- **Name patterns:** a small pure builder is stamped with the pattern it
+  returns (`returnsPattern`). Call sites fill its holes from literal
+  arguments, through locals, agreeing callers and router functions;
+  everything else is "computed at file:line".
+- **SDK effects:** a receiver is tied to its tool through imports, typed
+  parameters, constructors, factory return types and class fields. The verb
+  names the effect (read / write / admin / watch / grant), payload keys are
+  kept, and an untied effect-looking call is listed.
+- **Injected capabilities:** a call through an interface-typed parameter
+  links to every implementation (a returned object literal, a typed constant,
+  a subclass). The TypeScript linker adds `viaInjection` edges, so threads walk
+  into the adapter; test fakes are counted, never walked.
+- **Stores, zones, families:** these come from a catalogue table and a naming
+  record, with writers and readers as grants.
+- **Data-coupled flows:** a family written in one process and watched or read
+  in another, including writes made through a port or a project funnel. The
+  order is never claimed.
+- **Decision structures:** state machines and decision trees are recognised
+  by shape, linked to their evaluating functions and declared evidence.
+- **Library vs deployable** (`plan check`): a process with nothing of its own
+  is not built (it read "realised (0 files)"). An entry point named like the
+  process outside its folder is reported. Derived writes reach the write
+  matrix, which used to pass zones the code writes as "no write to it yet".
+- **TypeScript calls in argument objects** (`send({ topic: topicFor(t) })`)
+  are minted as nodes, as Python mints keyword arguments' calls.
+- **`docs stamp <path>`:** a byte-identical regeneration no longer stays stale
+  for ever.
+- **`constraints.json` round-trips:** unreadable rules and unknown fields are
+  carried through, their ids are never reused, and a file of an unknown
+  version is never rewritten.
+
 ### Fixes from field use
 
 - **Thread view: long block headers wrap; nothing overlaps.** A container

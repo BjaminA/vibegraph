@@ -198,7 +198,7 @@ export const JSTS_TOOLS: Record<string, StackRole> = {
   mongoose: "db", mongodb: "db", "better-sqlite3": "db", mysql2: "db",
   typeorm: "db", drizzle: "db",
   ioredis: "cache", redis: "cache",
-  bullmq: "queue", bull: "queue", amqplib: "queue",
+  bullmq: "queue", bull: "queue", amqplib: "queue", kafkajs: "queue", nats: "queue",
   "aws-sdk": "cloud", "@aws-sdk/client-s3": "cloud", "@google-cloud/storage": "cloud",
   vitest: "test", jest: "test", "@jest/globals": "test", mocha: "test",
   "@playwright/test": "test", chai: "test",

@@ -13,6 +13,8 @@ import { effectKindForCallee } from "./tables.mjs";
 import { docFromComments } from "../doc_comments.mjs";
 import { hasNestedCall, directCallArgs } from "../nests.mjs";
 import { collectEnvReads } from "./env_reads.mjs";
+import { literalTable, objectProps, satisfiedType } from "./literal_table.mjs";
+import { namePattern } from "./name_pattern.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 // TWO dialects, and the file's extension picks one. tree-sitter ships
@@ -356,11 +358,14 @@ export class JstsGraphBuilder {
         this.emit({ id, type: "import_from", parentId: parentId ?? null, ...this.pos(n), module, names: [name] }, parentId, n);
         continue;
       }
-      this.emitAssignment(n, parentId, name, value);
+      // module 4: a typed constant says which interface its object meets
+      const typeNode = decl.childForFieldName("type");
+      const annotation = typeNode ? this.text(typeNode).replace(/^:\s*/, "") : null;
+      this.emitAssignment(n, parentId, name, value, undefined, annotation);
     }
   }
 
-  emitAssignment(posNode, parentId, name, value, augmented) {
+  emitAssignment(posNode, parentId, name, value, augmented, annotation) {
     const id = this.makeId(parentId, `${this.safeName(name)}.assign`);
     const node = {
       id, type: "assignment", parentId: parentId ?? null, ...this.pos(posNode),
@@ -403,6 +408,23 @@ export class JstsGraphBuilder {
       const lits = this.stringLiterals(value);
       if (lits.length) node.literals = lits;
     }
+    // Injected capabilities (module 4): the members an object literal provides,
+    // and the interface it declares it meets (an annotation or `satisfies T`).
+    const ann = annotation ?? (value ? satisfiedType(value, (x) => this.text(x)) : null);
+    if (ann) node.annotation = ann;
+    if (value) {
+      const props = objectProps(value, (x) => this.text(x), (x) => x.startPosition.row + 1);
+      if (props) node.objectProps = props;
+    }
+    // Literal tables (literal_table.mjs): a module-level constant that holds
+    // DATA — a catalogue, a transition table, a lookup — keeps its rows.
+    if (!parentId && value && /^[A-Za-z_$][\w$]*$/.test(name)) {
+      const table = literalTable(value, (x) => this.text(x), (x) => x.startPosition.row + 1);
+      if (table) {
+        if (posNode.parent?.type === "export_statement") table.exported = true;
+        node.table = table;
+      }
+    }
     this.emit(node, parentId, posNode);
     if (node.valueKind === "call" && value) {
       this.stampNests(value, node, id);
@@ -440,6 +462,20 @@ export class JstsGraphBuilder {
       if (recv && CALL_TYPES.has(recv.type)) out.push(recv);
     }
     for (const a of directCallArgs(callNode, CALL_TYPES, (x) => this.unwrap(x))) out.push(a);
+    // 2026-10-02 — a call that is a PROPERTY VALUE of an object-literal
+    // argument is as direct as Python's keyword argument (`put_object(Key=
+    // raw_key(t))`, which parse_cst mints): `send({ topic: topicFor(env, t) })`
+    // left `topicFor` with no node at all, and with it the name the call
+    // sends to. One level, like the keyword.
+    for (const a of callNode.childForFieldName("arguments")?.namedChildren ?? []) {
+      const obj = this.unwrap(a);
+      if (obj?.type !== "object") continue;
+      for (const p of obj.namedChildren) {
+        if (p.type !== "pair") continue;
+        const v = this.unwrap(p.childForFieldName("value"));
+        if (v && CALL_TYPES.has(v.type)) out.push(v);
+      }
+    }
     return out;
   }
 
@@ -522,6 +558,9 @@ export class JstsGraphBuilder {
       isAsync: this.isAsyncNode(n),
     };
     if (retType) node.returns = this.text(retType).replace(/^:\s*/, "");
+    // module 2: the name pattern a small pure builder returns (name_pattern.mjs)
+    const np = namePattern(n, (x) => this.text(x));
+    if (np) node.returnsPattern = np;
     // M-CMD.1 — whether a function is EXPORTED, and whether it is the
     // default export. The IR had no way to say either, so a rule that keys
     // on "an exported function named for an HTTP verb" (Next.js App Router
@@ -604,6 +643,13 @@ export class JstsGraphBuilder {
     const p = this.pos(n);
     const docstring = docFromComments(spanNode, this.source);
     const node = { id, type: "interface_def", parentId: parentId ?? null, ...p, name, docstring };
+    // module 4: the members an implementation must provide (names only)
+    const body = n.childForFieldName("body") ?? n.namedChildren.find((c) => c.type === "interface_body" || c.type === "object_type");
+    const members = (body?.namedChildren ?? [])
+      .filter((c) => c.type === "property_signature" || c.type === "method_signature")
+      .map((c) => this.text(c.childForFieldName("name") ?? c.namedChildren[0]).replace(/[?!]$/, ""))
+      .filter(Boolean);
+    if (members.length) node.members = members;
     // M-CMD.1 parity: whether the type is part of the module's public API.
     if (spanNode !== n && spanNode.type === "export_statement") {
       node.isExported = true;
@@ -1058,6 +1104,9 @@ export class JstsGraphBuilder {
       id, type: "return_stmt", parentId: parentId ?? null, ...this.pos(n),
       value: value ? this.preview(value) : null,
     };
+    // module 4: the members of a returned object (a factory of an interface)
+    const props = value ? objectProps(value, (x) => this.text(x), (x) => x.startPosition.row + 1) : null;
+    if (props) node.objectProps = props;
     if (value && (value.type === "call_expression" || value.type === "new_expression")) {
       const callee = value.type === "new_expression"
         ? this.text(value.childForFieldName("constructor") ?? value.namedChildren[0])

@@ -50,6 +50,8 @@ import { listInvestigations, readInvestigation, readRel, renderHandoff } from ".
 import { formatDataflowMd } from "../src/server/dataflow.ts";
 import { loadPlan } from "../src/server/plan_store.ts";
 import { loadTopology, refreshTopology } from "../src/server/topology_store.ts";
+import { deriveDataArchitecture } from "../src/server/data_arch.ts";
+import { formatDataArchMd, hasDataArch } from "../src/server/data_arch_render.ts";
 import { formatTopologyMd } from "../src/server/topology_render.ts";
 import { formatPlanMd } from "../src/server/plan_render.ts";
 import { reconcilePlan } from "../src/server/plan_reconcile.ts";
@@ -274,7 +276,13 @@ export function exportKnowledge({ root, out, task, envelope: envelopePath, commi
   // 2026-10-02 — the DECLARED topology: its generators re-run first when their
   // inputs changed (topology_store.ts), then written as one page.
   const topoRefreshed = refreshTopology(absRoot);
-  const topo = loadTopology(absRoot);
+  // 2026-10-02 — the DATA ARCHITECTURE derived from the code (data_arch.ts):
+  // literal tables, decision structures, names, SDK effects, injections, hops.
+  // Its topology joins the declared one as the lowest-ranked source.
+  const dataArch = deriveDataArchitecture(env.files ?? {}, stack, env.threads ?? []);
+  if (hasDataArch(dataArch)) write("data-architecture.md", formatDataArchMd(dataArch));
+  if (withIr) write("data_topology.json", json(dataArch));
+  const topo = loadTopology(absRoot, dataArch.topology);
   if (topo.status.length) write("topology.md", formatTopologyMd(topo, env.threads ?? [], env.files ?? {}));
   // 2026-09-30 — SOFTWARE SPECS: each ratified one, every item beside its
   // quote and where this code calls it; drafts are withheld and named.
@@ -474,6 +482,7 @@ export function exportKnowledge({ root, out, task, envelope: envelopePath, commi
       "",
       `**The design plan:** \`design.md\` — a HYPOTHETICAL design (revision ${design.revision}${design.closed ? ", closed" : ""}), not the code: its objective, planned processes, stack, data boundaries, primary threads and rules, and how the code measures up (${Object.entries(designRec.counts).map(([k, n]) => `${n} ${k}`).join(", ") || "nothing to compare"}). Planned rules are advice until promoted into constraints.json.`,
     ] : []),
+    ...(hasDataArch(dataArch) ? ["", `**Data architecture:** \`data-architecture.md\` (DERIVED) — what the code declares as data and names at run time, read from the IR: ${dataArch.tables.length} literal table(s), ${dataArch.namePatterns.length} name builder(s), ${dataArch.sdkCalls.filter((c) => c.effect !== "call").length} SDK call(s) with their effect, ${dataArch.injections.length} injected capabilit${dataArch.injections.length === 1 ? "y" : "ies"}, ${dataArch.topology.zones?.length ?? 0} zone(s), ${dataArch.flows.length} hop(s) where processes meet in data, ${(dataArch.topology.stateMachines?.length ?? 0) + (dataArch.topology.decisionTrees?.length ?? 0)} decision structure(s); and what it could not reduce (${dataArch.computed.length}). A hop's order is not proven by the code.`] : []),
     ...(topo.status.length ? ["", `**Declared topology:** \`topology.md\` — the stores, zones, document families, principals, grants, routers and decision structures this project DECLARES as data (resource names it computes at run time, so the threads cannot show them), from ${topo.status.length} generator(s)${topo.status.some((x) => x.state !== "fresh") ? `, ${topo.status.filter((x) => x.state !== "fresh").length} not fresh` : ""}.${topoRefreshed.length ? ` Regenerated now: ${topoRefreshed.join("; ")}.` : ""}`] : []),
     ...(specs.length ? [
       "",

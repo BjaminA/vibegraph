@@ -28,6 +28,9 @@ import { applyAssumptions } from "./plan_assumptions.ts";
 import { MODULE_LIMITS, entryFiles, moduleFindings, processOwnership, threadProcess } from "./plan_modules.ts";
 import { importGraph, workspacePackages, type ImportEdge, type WorkspacePackage } from "./import_graph.ts";
 import { STORE_LIMITS, storeBoundaryFinding, storeFindings, storeHint } from "./plan_reconcile_stores.ts";
+import { familyMatches, type AccessSite } from "./store_access.ts";
+import { deriveDataArchitecture } from "./data_arch.ts";
+import { covers } from "./data_topology.ts";
 
 export const PLAN_RECONCILE_LIMITS = [
   "matching is by name and path: a planned thread matches the entry point its `entryPoint` names, else one whose label or name reads like its id; a step matches a node on that thread whose label or qualified name contains it; suggestions for an unmatched thread are a word-match guess",
@@ -67,6 +70,44 @@ export function processFiles(p: PlanProcess, files: string[]): { files: string[]
   return { files: found, how: `in a directory named like it (${[...dirs].join(", ")})` };
 }
 
+/** Module 8 (2026-10-02): a process is an entry point plus what its thread
+ *  reaches, not a folder. When an entry point NAMED like the process lives
+ *  outside its `at`, say where it runs from and which folders its thread
+ *  reaches — the deployable in one package driving the logic in another. */
+function runsFrom(p: PlanProcess, env: EnvLike, files: string[]): string {
+  const names = new Set([slug(p.id), ...(p.runsAs ? [slug(p.runsAs)] : [])]);
+  const stem = (f: string) => slug((f.split("/").pop() ?? "").replace(/\.[^.]+$/, ""));
+  const outside = env.entryPoints.filter((e) => names.has(stem(e.id.split(":")[0])) && !(p.at && underPrefix(e.id.split(":")[0], p.at)));
+  if (!outside.length) return "";
+  const reached = new Map<string, number>();
+  for (const e of outside) for (const t of env.threads.filter((x) => x.entryPointId === e.id)) {
+    for (const f of new Set((t.nodes ?? []).map((n: any) => n.file).filter(Boolean) as string[])) {
+      const dir = f.split("/").slice(0, -1).join("/") || ".";
+      if (files.includes(f)) reached.set(dir, (reached.get(dir) ?? 0) + 1);
+    }
+  }
+  const dirs = [...reached.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5).map(([d, n]) => `${d}/ (${n})`);
+  return `; runs from ${outside.map((e) => e.id.split(":")[0]).join(", ")} (an entry point named like it, outside its \`at\`)${dirs.length ? `, whose thread reaches ${dirs.join(", ")}` : ""} — set \`entryPoints\` and \`uses\` to say so`;
+}
+
+/** The data operations the derived layer placed (data_arch.ts) join a planned
+ *  store's access sites when a zone of the store holds their family, so the
+ *  write matrix sees writes made through the project's own funnels and
+ *  injected ports instead of reading "no write to it yet". */
+function mergeDerivedSites(plan: Plan, sites: Map<string, AccessSite[]>, env: EnvLike, stack: StackIndex): void {
+  if (!(plan.stores ?? []).some((s) => (s.zones ?? []).length)) return;
+  const ops = deriveDataArchitecture(env.files, stack as any, env.threads as any).operations;
+  for (const s of plan.stores ?? []) {
+    const list = sites.get(s.id) ?? [];
+    for (const o of ops) {
+      if (!(s.zones ?? []).some((z) => z.holds.some((h) => familyMatches(h, o.family) || covers(h, o.family) || covers(o.family, h)))) continue;
+      if (list.some((x) => x.file === o.file && x.line === o.line)) continue;
+      list.push({ file: o.file, nodeId: "", line: o.line, fn: o.port ? `through ${o.port}` : "(derived)", callee: o.port ?? "(derived data operation)", op: o.op, family: o.family, computed: false });
+    }
+    sites.set(s.id, list);
+  }
+}
+
 export function reconcilePlan(plan: Plan, env: EnvLike, stack: StackIndex, root: string, commit = "plan"): PlanReconcile {
   const findings: PlanFinding[] = [];
   const add = (f: PlanFinding) => findings.push(f);
@@ -90,11 +131,15 @@ export function reconcilePlan(plan: Plan, env: EnvLike, stack: StackIndex, root:
     ].filter(Boolean).join("; ");
     if (all === null) add({ section: "processes", id: p.id, verdict: "unanchored", detail: `no \`at\` and no directory of its name — add \`at\` (where its code will live), or its \`entryPoints\` and the modules it \`uses\`, to check it${hint}` });
     else if (!all.length) add({ section: "processes", id: p.id, verdict: "not-built", detail: deployable ? `no parsed file yet: ${parts}${hint}` : `no parsed file ${m!.how}${hint}` });
-    else {
+    else if (m && !m.files.length && !env.entryPoints.some((e) => own.ownerOf.get(e.id.split(":")[0]) === p.id)) {
+      // 2026-10-02 — the modules it will use exist, but nothing of its own runs
+      // them: "realised (0 files)" said a process was built when only its libraries were.
+      add({ section: "processes", id: p.id, verdict: "not-built", detail: `nothing of its own yet: ${parts} — no file ${m.how} and no entry point runs it${hint}` });
+    } else {
       // Its entry points: the ones in files it owns (never a shared library's).
       const eps = env.entryPoints.filter((e) => own.ownerOf.get(e.id.split(":")[0]) === p.id);
       const head = deployable ? parts : `${m!.files.length} file(s) ${m!.how}`;
-      add({ section: "processes", id: p.id, verdict: "realised", detail: `${head}${eps.length ? `, ${eps.length} entry point(s)` : ", no entry point yet"}${hint}`, ...(eps.length ? { entryPoints: eps.slice(0, 50).map((e) => e.id) } : {}) });
+      add({ section: "processes", id: p.id, verdict: "realised", detail: `${head}${eps.length ? `, ${eps.length} entry point(s)` : ", no entry point yet"}${runsFrom(p, env, files)}${hint}`, ...(eps.length ? { entryPoints: eps.slice(0, 50).map((e) => e.id) } : {}) });
     }
   }
   for (const f of moduleFindings(plan, own, env.entryPoints)) add(f);
@@ -130,6 +175,7 @@ export function reconcilePlan(plan: Plan, env: EnvLike, stack: StackIndex, root:
   const graphOf = () => (graphMemo ??= (() => { const packages = workspacePackages(root); return { graph: importGraph(env.files, packages), packages }; })());
   const st = (plan.stores ?? []).length ? storeFindings(plan, stack, env.files, graphOf().graph, graphOf().packages) : { findings: [], reach: new Map(), sites: new Map() };
   for (const f of st.findings) add(f);
+  mergeDerivedSites(plan, st.sites, env, stack);
   const storeById = new Map((plan.stores ?? []).map((x) => [x.id, x]));
   // ── principals: who runs as whom, and who writes which zone ──
   const who = (plan.principals ?? []).length || (plan.stores ?? []).some((x) => x.zones?.some((z) => z.writers)) ? principalFindings(plan, st.sites, own.ownerOf) : null;

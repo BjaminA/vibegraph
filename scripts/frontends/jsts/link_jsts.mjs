@@ -27,55 +27,10 @@
 // (`unresolved`), unlike bash where an unresolved bare word IS an external
 // command.
 
-function posixDir(p) {
-  const i = p.lastIndexOf("/");
-  return i === -1 ? "" : p.slice(0, i);
-}
+import { injectionIndex } from "../injection_index.mjs";
+import { resolveSpecifier } from "./resolve_spec.mjs";
 
-function normalize(p) {
-  const abs = p.startsWith("/");
-  const parts = [];
-  for (const seg of p.split("/")) {
-    if (!seg || seg === ".") continue;
-    if (seg === "..") { parts.pop(); continue; }
-    parts.push(seg);
-  }
-  return (abs ? "/" : "") + parts.join("/");
-}
-
-const PROBES = ["", ".ts", ".tsx", ".mjs", ".cjs", ".js", ".jsx",
-  "/index.ts", "/index.tsx", "/index.mjs", "/index.cjs", "/index.js", "/index.jsx"];
-
-function probeBase(base, files) {
-  for (const probe of PROBES) {
-    const candidate = base + probe;
-    if (candidate in files) return candidate;
-    // "./db.js" written for ESM output often means db.ts on disk
-    if (probe === "" && /\.[cm]?js$/.test(base)) {
-      const tsish = base.replace(/\.[cm]?js$/, ".ts");
-      if (tsish in files) return tsish;
-    }
-  }
-  return null;
-}
-
-/**
- * @param tsPaths the alias map the PARSER stamped onto this file's IR
- *   (M-CMD.1). A bare specifier is external UNLESS an alias claims it, and
- *   an alias that expands to nothing on disk stays external — resolution is
- *   still by what exists, never by the pattern alone.
- */
-export function resolveSpecifier(fromFile, spec, files, aliasTarget) {
-  if (!spec.startsWith("./") && !spec.startsWith("../")) {
-    // M-CMD.1 — a bare specifier is external UNLESS the PARSER already
-    // resolved it through a tsconfig alias and probed it on disk.
-    return aliasTarget && aliasTarget in files ? aliasTarget : null;
-  }
-  const dir = posixDir(fromFile);
-  // Top-level relative keys have an empty dirname — joining through
-  // "/" would fabricate an absolute path ("/db") that matches nothing.
-  return probeBase(normalize(dir ? `${dir}/${spec}` : spec), files);
-}
+export { resolveSpecifier };
 
 const REEXPORT_HOPS = 5;
 
@@ -256,7 +211,31 @@ export function linkFiles(files) {
       });
     }
   }
+  linkInjections(files);
   return files;
+}
+
+/** 2026-10-02 — calls through a parameter typed by an interface reach every
+ *  production implementation of the member (scripts/frontends/injection_index.mjs),
+ *  marked `viaInjection` with the interface's name. Test fakes are not linked. */
+function linkInjections(files) {
+  const jsts = Object.fromEntries(Object.entries(files).filter(([, ir]) => ir.language === "jsts"));
+  const { entries } = injectionIndex(jsts, (from, imp) => resolveSpecifier(from, imp.module ?? "", files, imp.aliasTarget));
+  for (const e of entries) {
+    for (const c of e.calls) {
+      const ir = files[c.file];
+      if (!ir) continue;
+      ir.edges ??= [];
+      for (const impl of e.implementations) {
+        if (impl.test || !impl.id) continue;
+        if (ir.edges.some((x) => x.source === c.id && x.target === impl.id)) continue;
+        ir.edges.push({
+          source: c.id, target: impl.id, type: "reference", targetFile: impl.file, viaInjection: e.iface,
+          qualifiedTarget: `${files[impl.file].modulePath ?? impl.file}:${e.iface}.${e.property}`,
+        });
+      }
+    }
+  }
 }
 
 /** The function scope a node sits in (its id up to the last `.fn`), or "module". */

@@ -159,16 +159,19 @@ test("FIX 3: nested calls in tree-sitter frontends are minted (M-NEST L1 parity)
   assert.equal(node(applied, "worker/pricing.cpp:price_total").kind, "step");
 });
 
-test("FIX 3 (detected-but-not-extracted): a call inside an object-literal argument is FLAGGED, never silently dropped", () => {
-  // TS: fetch(url, { body: JSON.stringify(input) }) — v1 mints only direct
-  // call-valued args (python parity); the literal-embedded call is badged.
+test("FIX 3: a call that is a property value of an object-literal argument is MINTED, never silently dropped", () => {
+  // TS: fetch(url, { body: JSON.stringify(input) }) — until 2026-10-02 the
+  // literal-embedded call was only badged (nestExtracted false). It is minted
+  // now, as Python mints a keyword argument's call (`put_object(Key=key(t))`):
+  // `send({ topic: topicFor(env, t) })` had left the NAME a call sends to with
+  // no node at all (the data-architecture work found it). One level, like the keyword.
   const post = env.files["gateway/client.ts"].nodes.find((n) => n.id === "module/postOrder.fn/res.assign");
   assert.equal(post.nestsInnerCalls, true);
-  assert.equal(post.nestExtracted, false);
+  assert.equal(post.nestExtracted, true);
+  assert.ok(env.files["gateway/client.ts"].nodes.some((n) => n.parentId === post.id && n.funcName === "JSON.stringify" && n.nested), "JSON.stringify is its own nested node");
   const create = thread("gateway/server.ts:createOrder");
   const fetchNode = create.nodes.find((n) => n.irNodeId === "module/postOrder.fn/res.assign");
-  assert.equal(fetchNode.nestsInnerCalls, true, "the thread terminal carries the honesty flag");
-  assert.equal(fetchNode.nestExtracted, false);
+  assert.equal(fetchNode.nestsInnerCalls, true, "the thread terminal still carries the flag");
   // Python parity: json.dumps(list_orders(...)) minted nested (unchanged behaviour).
   const cli = thread("api/cli.py:main");
   assert.equal(node(cli, "external:json.dumps").nested, true);

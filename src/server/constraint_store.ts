@@ -209,10 +209,41 @@ export function loadConstraints(root: string): Constraint[] {
   }
 }
 
+/** The fields this version understands on a stored constraint. */
+const KNOWN_FIELDS = new Set(["id", "kind", "text", "scope", "note", "policy", "check", "checks", "source", "createdAt", "changes", "proposals"]);
+
+/** 2026-10-02 — refuse to write what this version cannot ROUND-TRIP. An older
+ *  CLI rewrote constraints.json and dropped every rule it did not understand
+ *  (a check verb added later, a field it did not know): loading skipped them,
+ *  and the next save wrote the file without them. Now a save re-reads the file:
+ *  a version this code does not read is refused outright (a fresh file with
+ *  one rule would have replaced it); a rule it could not read is carried
+ *  through verbatim; a field it does not know rides on its rule. */
+export class ConstraintsNotRoundTrippable extends Error {}
+
 export function saveConstraints(root: string, list: Constraint[]): void {
   const file = fileFor(root);
+  let carried: Record<string, unknown>[] = [];
+  const extras = new Map<string, Record<string, unknown>>();
+  if (fs.existsSync(file)) {
+    let raw: { version?: unknown; constraints?: unknown } | null = null;
+    try { raw = JSON.parse(fs.readFileSync(file, "utf-8")); } catch { raw = null; }
+    if (!raw || typeof raw !== "object") throw new ConstraintsNotRoundTrippable(`${CONSTRAINTS_FILE} is not valid JSON — fix or move it; refusing to overwrite it`);
+    if (raw.version !== "1") throw new ConstraintsNotRoundTrippable(`${CONSTRAINTS_FILE} is version ${JSON.stringify(raw.version)} — this VibeGraph reads version "1" and refuses to rewrite a file it cannot round-trip (upgrade vibegraph-knowledge)`);
+    const kept = new Set(list.map((c) => c.id));
+    const readable = new Set(loadConstraints(root).map((c) => c.id));
+    for (const c of Array.isArray(raw.constraints) ? raw.constraints as Record<string, unknown>[] : []) {
+      if (!c || typeof c !== "object") continue;
+      const id = typeof c.id === "string" ? c.id : null;
+      if (!id || !readable.has(id)) { if (!id || !kept.has(id)) carried.push(c); continue; }
+      const unknown = Object.fromEntries(Object.entries(c).filter(([k]) => !KNOWN_FIELDS.has(k)));
+      if (Object.keys(unknown).length) extras.set(id, unknown);
+    }
+  }
+  const out = [...list.map((c) => (extras.has(c.id) ? { ...extras.get(c.id), ...c } : c)), ...carried];
   fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(file, JSON.stringify({ version: "1", constraints: list }, null, 2) + "\n", "utf-8");
+  fs.writeFileSync(`${file}.tmp`, JSON.stringify({ version: "1", constraints: out }, null, 2) + "\n", "utf-8");
+  fs.renameSync(`${file}.tmp`, file);
 }
 
 function nextId(list: Constraint[]): string {
@@ -228,7 +259,10 @@ export function addConstraint(
   root: string, input: ConstraintInput, source: ConstraintSource, now: () => Date = () => new Date(),
 ): Constraint {
   const list = loadConstraints(root);
-  const c: Constraint = { id: nextId(list), ...input, source, createdAt: now().toISOString() };
+  // an id held by a rule this version could not read is still taken
+  let rawIds: Array<{ id: string }> = [];
+  try { rawIds = (JSON.parse(fs.readFileSync(fileFor(root), "utf-8")).constraints ?? []).filter((x: any) => typeof x?.id === "string"); } catch { /* no file yet */ }
+  const c: Constraint = { id: nextId([...list, ...rawIds] as Constraint[]), ...input, source, createdAt: now().toISOString() };
   list.push(c);
   saveConstraints(root, list);
   return c;

@@ -9,10 +9,19 @@
 // an input — or since the working tree, when an input changed and is not yet
 // committed while the document did not. A document git does not track cannot
 // be judged, and says so. Zero tokens; the generator is never run here.
+//
+// 2026-10-02 — and by CONTENT once stamped: a regeneration that comes out
+// byte-identical leaves git nothing to see, so a commit-based reading said
+// "stale" for ever. `docs stamp <path>` (a person, after regenerating) records
+// the hash of the document and of its inputs' content; while both match it is
+// fresh whatever the history says, and an input changed since is stale since
+// the stamp.
 
 import * as fs from "fs";
 import * as path from "path";
 import { execFileSync } from "child_process";
+import { inputsHash } from "./topology_store.ts";
+import { createHash } from "crypto";
 
 export const DOCS_FILE = path.join(".vibegraph", "docs.json");
 
@@ -23,6 +32,8 @@ export interface GeneratedDoc {
   /** what it is derived from: files, folders (trailing /), globs */
   inputs: string[];
   note?: string;
+  /** set by `docs stamp`: the content it was regenerated from */
+  stamp?: { docHash: string; inputsHash: string; at: string };
 }
 
 export interface DocStatus {
@@ -67,7 +78,28 @@ const git = (root: string, args: string[]) => execFileSync("git", args, { cwd: r
 /** A git pathspec for an input: a glob as a glob, a folder as itself. */
 const spec = (i: string) => (/[*?[]/.test(i) ? `:(glob)${i}` : i.replace(/\/$/, ""));
 
+const fileHash = (root: string, rel: string) => {
+  try { return createHash("sha256").update(fs.readFileSync(path.join(root, rel))).digest("hex"); } catch { return null; }
+};
+
+/** The stamp a person records after regenerating a document. */
+export function stampOf(root: string, doc: GeneratedDoc, now: Date = new Date()): GeneratedDoc["stamp"] | null {
+  const docHash = fileHash(root, doc.path);
+  return docHash ? { docHash, inputsHash: inputsHash(root, doc.inputs).hash, at: now.toISOString() } : null;
+}
+
 export function docStatus(root: string, doc: GeneratedDoc): DocStatus {
+  if (doc.stamp) {
+    const docNow = fileHash(root, doc.path);
+    const inNow = inputsHash(root, doc.inputs).hash;
+    if (docNow === doc.stamp.docHash && inNow === doc.stamp.inputsHash) {
+      return { doc, state: "fresh", detail: `stamped ${doc.stamp.at.slice(0, 16)}; neither it nor its inputs changed since (by content)` };
+    }
+    if (docNow === doc.stamp.docHash) {
+      return { doc, state: "stale", since: `the stamp of ${doc.stamp.at.slice(0, 16)}`, detail: `stale: its inputs changed since it was stamped (${doc.stamp.at.slice(0, 16)}) — regenerate (\`${doc.generator}\`), then \`docs stamp ${doc.path}\`` };
+    }
+    // the document itself changed since the stamp: read the history as usual
+  }
   let docCommit = "";
   try { docCommit = git(root, ["log", "-1", "--format=%h", "--", doc.path]); }
   catch { return { doc, state: "unknown", detail: "not a git repository — staleness is read from git history" }; }
