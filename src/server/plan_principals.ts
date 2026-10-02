@@ -27,7 +27,14 @@ const at = (s: AccessSite) => `${s.file}:${s.line} ${s.fn}`;
 /** `ownerOf`: file → the ONE process it belongs to (plan_modules.ts) — a
  *  file in a library several processes use belongs to none, so a write there
  *  is unplaced, never pinned on whichever process came first. */
-export function principalFindings(plan: Plan, sitesByStore: Map<string, AccessSite[]>, ownerOf: Map<string, string>): { findings: PlanFinding[]; matrix: WriteCell[] } {
+/** Where a write runs (2026-10-02, field report): the planned processes whose
+ *  threads reach the FUNCTION holding it. `null` = no thread reaches it (fall
+ *  back to the file's owner); `[]` = reached only by entry points in no planned
+ *  process. A file shared by two processes no longer charges one process with
+ *  the other's write. */
+export type SitePlacer = (s: AccessSite) => Array<{ id: string; runsAs?: string }> | null;
+
+export function principalFindings(plan: Plan, sitesByStore: Map<string, AccessSite[]>, ownerOf: Map<string, string>, placeSite?: SitePlacer): { findings: PlanFinding[]; matrix: WriteCell[] } {
   const findings: PlanFinding[] = [];
   const procs = plan.processes.filter((p) => p.status !== "dropped");
   const byId = new Map(procs.map((p) => [p.id, p]));
@@ -68,17 +75,20 @@ export function principalFindings(plan: Plan, sitesByStore: Map<string, AccessSi
       const violations: string[] = [];
       const unplaced: string[] = [];
       for (const s of mine) {
-        const p = procOf.get(s.file);
-        if (!p) { unplaced.push(`${at(s)} (in no planned process)`); continue; }
-        if (!p.runsAs) { unplaced.push(`${at(s)} (${p.id} has no runsAs)`); continue; }
-        cell(p.runsAs, zone, allowed.has(p.runsAs)).writes.push(at(s));
-        if (z.writers && !allowed.has(p.runsAs)) violations.push(`${p.id} (runs as ${p.runsAs}) writes it at ${at(s)}`);
+        const placed = placeSite?.(s) ?? null;
+        const ps = placed ?? (procOf.get(s.file) ? [procOf.get(s.file)!] : []);
+        if (!ps.length) { unplaced.push(`${at(s)} (${placed ? "reached only from entry points in no planned process" : "in no planned process"})`); continue; }
+        for (const p of ps) {
+          if (!p.runsAs) { unplaced.push(`${at(s)} (${p.id} has no runsAs)`); continue; }
+          cell(p.runsAs, zone, allowed.has(p.runsAs)).writes.push(at(s));
+          if (z.writers && !allowed.has(p.runsAs)) violations.push(`${p.id} (runs as ${p.runsAs}) writes it at ${at(s)}${placed ? " — its thread reaches that function" : ""}`);
+        }
       }
       if (!z.writers) continue;
       // A write with a computed zone, in a process that may NOT write here, could be a write here.
       const maybe = writes.filter((s) => s.computed && !siteZone(st, s)).filter((s) => {
-        const p = procOf.get(s.file);
-        return !p?.runsAs || !allowed.has(p.runsAs);
+        const ps = placeSite?.(s) ?? (procOf.get(s.file) ? [procOf.get(s.file)!] : []);
+        return !ps.length || ps.some((p) => !p.runsAs || !allowed.has(p.runsAs));
       }).map((s) => `${at(s)} (zone computed)`);
       const id = `${zone}:writers`;
       const rule = `only ${[...allowed].join(", ") || "no one"} may write ${zone}`;

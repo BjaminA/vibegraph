@@ -84,7 +84,53 @@ test("module 8: a process is what runs, not a folder — no own code is not buil
   assert.equal(f("processes", "mailer").verdict, "not-built");
   assert.match(f("processes", "mailer").detail, /nothing of its own yet/);
   assert.match(f("processes", "billing").detail, /runs from bin\/billing\.ts \(an entry point named like it, outside its `at`\)/);
-  const w = f("stores", "topics/invoices:writers");
-  assert.equal(w.verdict, "pass");
-  assert.match(w.detail, /every write \(\d+\) is by an allowed principal/, "the derived writes reached the matrix");
+  // billing declares no entry point and no planned process owns bin/billing.ts:
+  // the write is reached only from an entry in no planned process — said, not passed
+  assert.equal(f("stores", "topics/invoices:writers").verdict, "unverifiable");
+  assert.match(f("stores", "topics/invoices:writers").detail, /reached only from entry points in no planned process/);
+});
+
+test("a write is charged to the processes whose threads reach its FUNCTION, not to whoever owns its file", () => {
+  const plan = emptyPlan("Bill tenants and keep the ledger");
+  // the adapter file (src/kafka_ports.ts) lies in ledger's folder, but only billing's thread reaches publishInvoice
+  plan.processes = [
+    { id: "billing", label: "billing", kind: "backend", serves: "bill tenants", at: "bin", entryPoints: ["bin/billing.ts"], runsAs: "billing-svc", status: "agreed" },
+    { id: "ledger", label: "ledger", kind: "backend", serves: "keep the ledger", at: "src", entryPoints: ["bin/ledger.ts"], runsAs: "ledger-svc", status: "agreed" },
+  ];
+  plan.principals = [
+    { id: "billing-svc", label: "billing identity", kind: "service", status: "agreed" },
+    { id: "ledger-svc", label: "ledger identity", kind: "service", status: "agreed" },
+  ];
+  plan.stores = [{ id: "topics", label: "tenant topics", kind: "queue", reachedThrough: ["kafkajs"], status: "agreed",
+    zones: [{ id: "invoices", holds: ["{env}.invoices.{tenantId}"], writers: ["billing-svc"] }] }];
+  const rec = reconcilePlan(plan, ts.env, ts.stack, ts.root);
+  const w = rec.findings.find((x) => x.section === "stores" && x.id === "topics/invoices:writers");
+  assert.equal(w.verdict, "pass", w.detail);
+  assert.match(w.detail, /every write \(\d+\) is by an allowed principal/);
+  const cell = rec.writeMatrix.find((c) => c.zone === "topics/invoices" && c.principal === "billing-svc");
+  assert.ok(cell.writes.some((x) => x.startsWith("src/kafka_ports.ts:")), "the adapter's write is billing's");
+  assert.ok(!rec.writeMatrix.some((c) => c.principal === "ledger-svc" && c.writes.length), "ledger, which owns the file, is charged nothing");
+});
+
+test("a planned tool is realised through what its same-named store is reached through (or its spec's packages), not 'drifted'", () => {
+  const plan = emptyPlan("Bill tenants and keep the ledger");
+  plan.stack = [{ tool: "bus", role: "queue", why: "tenant events", status: "agreed" }];
+  plan.stores = [{ id: "bus", label: "event bus", kind: "queue", reachedThrough: ["kafkajs"], status: "agreed" }];
+  const f = reconcilePlan(plan, ts.env, ts.stack, ts.root).findings.find((x) => x.section === "stack" && x.id === "bus");
+  assert.equal(f.verdict, "realised", f.detail);
+  assert.match(f.detail, /reached through kafkajs .*the store bus is reached through it/);
+});
+
+test("the system map draws each zone the code writes or reads, with the processes as edges — grouped as a plan groups them", async () => {
+  const { archModelForEnvelope } = await import("../src/server/arch_envelope.ts");
+  const { deriveDataZones } = await import("../src/server/arch_data_zones.ts");
+  const m = archModelForEnvelope(py.env, py.stack, null, py.root);
+  const zones = m.nodes.filter((n) => n.id.startsWith("zone:")).map((n) => n.id);
+  assert.deepEqual(zones, ["zone:boto3/curated", "zone:boto3/raw_{team}"], "the zones with an operation; reference has none and is not drawn");
+  const into = m.edges.filter((e) => e.to === "zone:boto3/raw_{team}").map((e) => e.protocol).sort();
+  assert.deepEqual(into, ["read", "write"]);
+  const plan = emptyPlan("Keep the lake");
+  plan.stores = [{ id: "lake", label: "the lake", kind: "object-store", status: "agreed", zones: [{ id: "team-data", holds: ["raw_{team}", "curated"] }] }];
+  const grouped = deriveDataZones({ files: py.env.files, threads: py.env.threads, stack: py.stack, model: m, plan });
+  assert.deepEqual(grouped.nodes.map((n) => [n.id, n.label]), [["zone:lake/team-data", "team-data"]], "one box per planned zone");
 });

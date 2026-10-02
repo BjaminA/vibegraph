@@ -3,7 +3,30 @@
 `vibegraph-knowledge` and the VibeGraph app. Newest first. Each entry says what
 changed and, where an existing user would notice, how behaviour differs.
 
-## 0.20.0 — unreleased
+## 0.20.1 — unreleased
+
+Three findings from running 0.20.0 on a real plan, each fixed generally.
+
+- **A store write is charged to the processes that reach its function, not
+  its file.** The write matrix placed a write by the folder its file lives in,
+  so a file holding one process's write closure and another process's
+  read-only helper charged the write to both. It is now placed through the
+  threads that reach the enclosing function. An entry point maps to a planned
+  process by the plan's `entryPoints`, else by the process that owns the entry
+  file. A write reached only from entry points in no planned process reads
+  unverifiable, saying why. File ownership is the fallback only for code no
+  thread reaches.
+- **A planned tool is realised through its software spec and its store.**
+  `synapse as db` read "drifted: the code uses yjs" while the store of the same
+  name was realised through the platform SDK. A planned tool now also matches
+  the packages its ratified software spec names as its identity, and the tools
+  a same-named planned store is reached through. The finding says which.
+- **The system map draws the store's zones.** Each zone the code writes, reads
+  or watches is a box, grouped the way the plan's store groups families when a
+  plan is open. Every process doing so is an edge labelled write, read or
+  watch. A zone no operation reaches is not drawn.
+
+## 0.20.0 — 2026-10-02
 
 ### The data architecture, read from the code (eight modules)
 

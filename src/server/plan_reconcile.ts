@@ -21,7 +21,8 @@ import { checkConstraint, isConstraintCheck } from "./constraint_grammar.ts";
 import { newRegistry, isRun1Check } from "./quality/verbs/index.ts";
 import { statedScopeFiles } from "./constraint_store.ts";
 import { matchThreadEntry, suggestEntries, whyMissing } from "./plan_thread_match.ts";
-import { PRINCIPAL_LIMITS, principalFindings } from "./plan_principals.ts";
+import { PRINCIPAL_LIMITS, principalFindings, type SitePlacer } from "./plan_principals.ts";
+import { isTestFile } from "../shared/path_match.ts";
 import { FLOW_LIMITS, flowFindings, indirectHops } from "./plan_flows.ts";
 import { expandModuleRefs } from "./plan_layers.ts";
 import { applyAssumptions } from "./plan_assumptions.ts";
@@ -31,6 +32,7 @@ import { STORE_LIMITS, storeBoundaryFinding, storeFindings, storeHint } from "./
 import { familyMatches, type AccessSite } from "./store_access.ts";
 import { deriveDataArchitecture } from "./data_arch.ts";
 import { covers } from "./data_topology.ts";
+import { listSpecs } from "./software_store.ts";
 
 export const PLAN_RECONCILE_LIMITS = [
   "matching is by name and path: a planned thread matches the entry point its `entryPoint` names, else one whose label or name reads like its id; a step matches a node on that thread whose label or qualified name contains it; suggestions for an unmatched thread are a word-match guess",
@@ -88,6 +90,40 @@ function runsFrom(p: PlanProcess, env: EnvLike, files: string[]): string {
   }
   const dirs = [...reached.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5).map(([d, n]) => `${d}/ (${n})`);
   return `; runs from ${outside.map((e) => e.id.split(":")[0]).join(", ")} (an entry point named like it, outside its \`at\`)${dirs.length ? `, whose thread reaches ${dirs.join(", ")}` : ""} — set \`entryPoints\` and \`uses\` to say so`;
+}
+
+/** A write runs in the processes whose threads reach the function holding it
+ *  (an entry point maps to a planned process by the plan's \`entryPoints\`, else
+ *  by the process that owns the entry's file). */
+function sitePlacer(plan: Plan, env: EnvLike, ownerOf: Map<string, string>): SitePlacer {
+  const files = Object.keys(env.files);
+  const procs = plan.processes.filter((p) => p.status !== "dropped");
+  const byId = new Map(procs.map((p) => [p.id, p]));
+  const reach = new Map<string, Set<string>>();
+  for (const t of env.threads) {
+    const ep = t.entryPointId;
+    if (!ep || isTestFile(ep.split(":")[0])) continue;
+    for (const n of t.nodes ?? []) {
+      if (!n?.file || !n?.irNodeId) continue;
+      const k = `${n.file}::${n.irNodeId}`;
+      if (!reach.has(k)) reach.set(k, new Set());
+      reach.get(k)!.add(ep);
+    }
+  }
+  const procOfEntry = (ep: string): string | undefined => {
+    const file = ep.split(":")[0];
+    const declared = procs.find((p) => (p.entryPoints ?? []).some((e) => e === ep || e === file || entryFiles([e], files).includes(file)));
+    return declared?.id ?? ownerOf.get(file);
+  };
+  return (s) => {
+    const nodes = (env.files[s.file]?.nodes ?? []) as Array<{ id: string; type: string; line?: number; endLine?: number }>;
+    const fn = nodes.filter((n) => n.type === "function_def" && (n.line ?? 0) <= s.line && (n.endLine ?? 0) >= s.line)
+      .sort((a, b) => ((a.endLine ?? 0) - (a.line ?? 0)) - ((b.endLine ?? 0) - (b.line ?? 0)))[0];
+    const eps = fn ? reach.get(`${s.file}::${fn.id}`) : undefined;
+    if (!eps?.size) return null;
+    const ids = [...new Set([...eps].map(procOfEntry).filter((x): x is string => !!x))];
+    return ids.map((id) => ({ id, runsAs: byId.get(id)?.runsAs }));
+  };
 }
 
 /** The data operations the derived layer placed (data_arch.ts) join a planned
@@ -149,13 +185,25 @@ export function reconcilePlan(plan: Plan, env: EnvLike, stack: StackIndex, root:
   const toolByName = new Map(realTools.map((t) => [t.tool.toLowerCase(), t]));
   // A planned tool's names: itself, and the client libraries it is reached
   // through (`via`) — code using `yjs` realises a `docstore` reached via yjs.
-  const namesOf = (tool: string) => [tool, ...(plan.stack.find((x) => x.tool === tool)?.via ?? [])];
+  // 2026-10-02 (field report) — and the packages its RATIFIED software spec
+  // names as its identity, and what a planned store of the same name is reached
+  // through: a platform SDK that carries the database realises the database.
+  const specs = listSpecs(root).filter((x) => x.status === "ratified");
+  const viaWhy = new Map<string, string>();
+  const namesOf = (tool: string) => {
+    const spec = specs.find((x) => x.tool.toLowerCase() === tool.toLowerCase());
+    const store = (plan.stores ?? []).find((x) => x.id.toLowerCase() === tool.toLowerCase() && x.status !== "dropped");
+    for (const pkg of spec?.identity.packages ?? []) viaWhy.set(`${tool}|${pkg.toLowerCase()}`, `its software spec names ${pkg}`);
+    for (const r of store?.reachedThrough ?? []) if (!viaWhy.has(`${tool}|${r.toLowerCase()}`)) viaWhy.set(`${tool}|${r.toLowerCase()}`, `the store ${store!.id} is reached through it`);
+    return [tool, ...(plan.stack.find((x) => x.tool === tool)?.via ?? []), ...(spec?.identity.packages ?? []), ...(store?.reachedThrough ?? [])];
+  };
   const realOf = (tool: string) => namesOf(tool).map((n) => toolByName.get(n.toLowerCase())).filter((r): r is NonNullable<typeof r> => !!r);
   for (const t of live(plan.stack)) {
     const real = toolByName.get(t.tool.toLowerCase());
     const through = real ? [] : realOf(t.tool);
     if (through.length) {
-      add({ section: "stack", id: t.tool, verdict: "realised", detail: `reached through ${through.map((r) => r.tool).join(", ")} (used in ${new Set(through.flatMap((r) => r.files)).size} file(s))` });
+      const why = [...new Set(through.map((r) => viaWhy.get(`${t.tool}|${r.tool.toLowerCase()}`)).filter(Boolean))];
+      add({ section: "stack", id: t.tool, verdict: "realised", detail: `reached through ${[...new Set(through.map((r) => r.tool))].join(", ")} (used in ${new Set(through.flatMap((r) => r.files)).size} file(s))${why.length ? ` — ${why.join("; ")}` : ""}` });
     } else if (real) {
       // A role no table knows (`unknown`) is silence, not a contradiction.
       add(real.role === t.role || real.role === "unknown"
@@ -178,7 +226,7 @@ export function reconcilePlan(plan: Plan, env: EnvLike, stack: StackIndex, root:
   mergeDerivedSites(plan, st.sites, env, stack);
   const storeById = new Map((plan.stores ?? []).map((x) => [x.id, x]));
   // ── principals: who runs as whom, and who writes which zone ──
-  const who = (plan.principals ?? []).length || (plan.stores ?? []).some((x) => x.zones?.some((z) => z.writers)) ? principalFindings(plan, st.sites, own.ownerOf) : null;
+  const who = (plan.principals ?? []).length || (plan.stores ?? []).some((x) => x.zones?.some((z) => z.writers)) ? principalFindings(plan, st.sites, own.ownerOf, sitePlacer(plan, env, own.ownerOf)) : null;
   for (const f of who?.findings ?? []) add(f);
   // ── coordination through the stores: the hops the code has, the flows planned ──
   const procOf = own.ownerOf;

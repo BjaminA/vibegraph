@@ -17,6 +17,8 @@ import type { ArchModelRecord, CrossingIndexRecord, EntryPoint } from "../shared
 import { loadConstraints } from "./constraint_store.ts";
 import { readObservations } from "./observations.ts";
 import { observationsForNode } from "../shared/observations.ts";
+import { deriveDataZones } from "./arch_data_zones.ts";
+import { loadPlan } from "./plan_store.ts";
 
 const MANIFESTS = ["package.json", "pyproject.toml", "setup.py", "Cargo.toml", "go.mod", "requirements.txt"];
 
@@ -97,6 +99,10 @@ function derivedArchModel(
   let infra: ReturnType<typeof readInfraManifests>["facts"] = [];
   try { infra = readInfraManifests(root).facts; } catch { infra = []; }
   const stores = deriveFileStores({ files: env.files as never, infra, threads: env.threads, model });
-  if (!stores.nodes.length) return stampHierarchy(model);
-  return stampHierarchy({ ...model, nodes: [...model.nodes, ...stores.nodes], edges: [...model.edges, ...stores.edges], notes: [...model.notes, ...stores.notes] });
+  // 2026-10-02 — the zones of the data stores the code writes, reads and watches
+  let zones: ReturnType<typeof deriveDataZones> = { nodes: [], edges: [], notes: [] };
+  try { zones = deriveDataZones({ files: env.files, threads: env.threads, stack, model, plan: loadPlan(root) }); } catch { /* best effort */ }
+  const extra = { nodes: [...stores.nodes, ...zones.nodes], edges: [...stores.edges, ...zones.edges], notes: [...stores.notes, ...zones.notes] };
+  if (!extra.nodes.length) return stampHierarchy(model);
+  return stampHierarchy({ ...model, nodes: [...model.nodes, ...extra.nodes], edges: [...model.edges, ...extra.edges], notes: [...model.notes, ...extra.notes] });
 }
