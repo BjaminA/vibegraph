@@ -3,7 +3,7 @@
 `vibegraph-knowledge` and the VibeGraph app. Newest first. Each entry says what
 changed and, where an existing user would notice, how behaviour differs.
 
-## 0.19.0 — unreleased
+## 0.20.0 — unreleased
 
 ### The data architecture, read from the code (eight modules)
 
@@ -57,6 +57,8 @@ list computed at run time.
 - **`constraints.json` round-trips:** unreadable rules and unknown fields are
   carried through, their ids are never reused, and a file of an unknown
   version is never rewritten.
+
+## 0.19.0 — 2026-10-02
 
 ### Fixes from field use
 
@@ -121,7 +123,7 @@ Tests: test:topology (7), test:topology-rules (5, a pass / fail /
 unverifiable case per kind), test:e2e-topology (3). Fixture
 `test/fixtures/topology/topo_demo`.
 
-## 0.18.1 — unreleased
+## 0.18.1 — never published on its own; shipped in 0.19.0
 
 ### The viewer on Windows (two bugs reported against 0.17 and 0.18)
 
