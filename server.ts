@@ -187,6 +187,9 @@ import { mergeRelinked, ParseGenerations } from "./src/server/relink";
 
 // When bundled, __dirname = dist/, so go up one level for project root
 const PROJECT_ROOT = path.join(__dirname, "..");
+// 2026-10-02 — every Python child speaks UTF-8 on its pipes, whatever the
+// locale (Windows' cp1252 turned "→" into "â†'" in thread labels).
+process.env.PYTHONUTF8 ??= "1";
 // M-PROVIDER — a tier routed to a local model spawns this shim in place of claude.
 setShimPath(path.join(PROJECT_ROOT, "scripts", "vg_ollama_shim.mjs"));
 // M-SKILLS.2 — the six generic skills ship with VibeGraph (skills/); the

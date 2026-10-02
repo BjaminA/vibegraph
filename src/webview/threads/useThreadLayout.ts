@@ -27,6 +27,7 @@
 // they land in a bottom "floating" row with depth = maxDepth + 1.
 
 import { useMemo } from "react";
+import { CARD_H, rowGapsFor } from "./threadRowGaps";
 import {
   forceSimulation,
   forceLink,
@@ -469,8 +470,10 @@ function sourceOrderLayout(
     //   * a single call continues on its parent's row (M-NA6's flat spine:
     //     a linear chain still reads as one rail).
     // Revisited nodes keep their first position (visited check).
+    const rowOf = new Map<string, number>();
     const dfsH = (nodeId: string, depth: number, row: number): number => {
       visited.add(nodeId);
+      rowOf.set(nodeId, row);
       positions.set(nodeId, place(depth * HORIZONTAL_COL_WIDTH, row));
       let rows = 0;
       for (const { to } of adj.get(nodeId) ?? []) {
@@ -486,9 +489,21 @@ function sourceOrderLayout(
     let row = used;
     for (const n of thread.nodes) {
       if (!visited.has(n.id) && n.kind !== "container") {
+        rowOf.set(n.id, row);
         positions.set(n.id, place(0, row++));
       }
     }
+    // Re-stack the rows: each row at least the fixed stride below the last,
+    // more when container chrome between them needs it (rowGapsFor).
+    const gaps = rowGapsFor(thread, rowOf);
+    const rowY = new Map<number, number>();
+    let y = LANE_PADDING_TOP;
+    const rows = [...new Set(rowOf.values())].sort((a, b) => a - b);
+    rows.forEach((r, i) => {
+      if (i > 0) y += Math.max((r - rows[i - 1]) * HORIZONTAL_LANE_HEIGHT, CARD_H + (gaps.get(r) ?? 0));
+      rowY.set(r, y);
+    });
+    for (const [id, r] of rowOf) { const p = positions.get(id); if (p) positions.set(id, { ...p, y: rowY.get(r)! }); }
     return { positions, width, height, branchOf };
   }
 
@@ -517,6 +532,16 @@ function sourceOrderLayout(
       cursor += step;
     }
   }
+  // 2026-10-02 — the same chrome-aware spacing: each card is its own row;
+  // a gap grows where container boxes open or close between two cards.
+  const order = [...positions.entries()].sort((a, b) => a[1].y - b[1].y).map(([id]) => id);
+  const rowOfV = new Map(order.map((id, i) => [id, i]));
+  const gapsV = rowGapsFor(thread, rowOfV);
+  let yv = Y_PADDING_TOP;
+  order.forEach((id, i) => {
+    if (i > 0) yv += Math.max(step, CARD_H + (gapsV.get(i) ?? 0));
+    positions.set(id, { ...positions.get(id)!, y: yv });
+  });
 
   return { positions, width, height, branchOf };
 }

@@ -7,7 +7,8 @@
 import type { SoftwareSpec } from "../shared/software_types.ts";
 import { listSpecs, loadSpec, saveSpec, readSources } from "./software_store.ts";
 import { verifyQuotes } from "./software_draft.ts";
-import { formatSpecMd, specUsage, specToPlanOps } from "./software_apply.ts";
+import { formatSpecMd, specUsage, specToPlan } from "./software_apply.ts";
+import { PLAN_CAPS } from "../shared/plan_types.ts";
 import { loadPlan, savePlan } from "./plan_store.ts";
 import { applyPlanOps } from "./plan_ops.ts";
 
@@ -25,20 +26,26 @@ export function ratifySpec(root: string, tool: string, now: Date = new Date()): 
   return saved.error ? { error: saved.error } : { message: `ratified ${tool}` };
 }
 
-export function specIntoPlan(root: string, tool: string, params: Record<string, string> = {}, by: "human" | "agent" = "human"): { error?: string; message?: string } {
+export function specIntoPlan(root: string, tool: string, params: Record<string, string> = {}, by: "human" | "agent" = "human", rules?: string[]): { error?: string; message?: string } {
   const spec = loadSpec(root, tool);
   if (!spec) return { error: `no spec for ${tool}` };
   if (spec.status !== "ratified") return { error: `${tool} is a draft — ratify it first` };
   const plan = loadPlan(root);
   if (!plan) return { error: "no plan yet — start one with its objective" };
-  let ops = specToPlanOps(spec, params, { tools: new Set(plan.stack.map((t) => t.tool)), policies: plan.policies });
-  if (!ops.length) return { message: `${tool} and its rules are already in the plan, up to date` };
+  const fit = specToPlan(spec, params, { tools: new Set(plan.stack.map((t) => t.tool)), policies: plan.policies }, { rules });
+  if (fit.unknown.length) return { error: `${tool} has no rule ${fit.unknown.join(", ")} — its rules are ${spec.rules.map((r) => r.id).join(", ")}` };
+  // The plan holds at most PLAN_CAPS.policies rules; what did not fit is named, with the way to choose.
+  const left = fit.omitted.length
+    ? ` ${fit.omitted.length} rule${fit.omitted.length === 1 ? "" : "s"} did not fit (the plan holds ${PLAN_CAPS.policies}): ${fit.omitted.map((r) => r.id).join(", ")} — choose with \`software plan ${tool} --rules ${fit.omitted.slice(0, 2).map((r) => r.id).join(",")}\` after dropping or merging planned rules; the full spec keeps them all.`
+    : "";
+  let ops = fit.ops;
+  if (!ops.length) return fit.omitted.length ? { error: `the plan has no room for ${tool}'s rules.${left}` } : { message: `${tool} and its rules are already in the plan, up to date` };
   // A model may not set a status; its update to an agreed rule makes it proposed anyway.
   if (by === "agent") ops = ops.map((o) => (o.op === "update" ? { ...o, fields: Object.fromEntries(Object.entries(o.fields).filter(([k]) => k !== "status")) } : o));
   const r = applyPlanOps(plan, ops, by);
   if (r.error || !r.plan) return { error: r.error };
   const s = savePlan(root, r.plan);
-  return s.error ? { error: s.error } : { message: `plan rev ${r.plan.revision}: ${r.changes.join("; ")} — all proposed` };
+  return s.error ? { error: s.error } : { message: `plan rev ${r.plan.revision}: ${r.changes.join("; ")} — all proposed.${left}` };
 }
 
 /** WS: software-list | software-ratify {tool} | software-plan {tool}. The sender is a person. */

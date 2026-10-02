@@ -27,6 +27,16 @@ import argparse
 import json
 import re
 import sys
+
+# 2026-10-02 — UTF-8 on the pipes, whatever the locale: on Windows Python
+# reads stdin and writes stdout as cp1252, so the UTF-8 JSON Node pipes in
+# came back as mojibake ("→" read as "â†'") and a character cp1252 lacks
+# crashed the write.
+for _s in (sys.stdin, sys.stdout, sys.stderr):
+    try:
+        _s.reconfigure(encoding="utf-8")
+    except (AttributeError, ValueError):
+        pass
 from pathlib import Path
 from typing import Optional
 
@@ -457,7 +467,7 @@ def merge_manual_seeds(seeds_path: Optional[str], all_files):
     p = Path(seeds_path)
     if not p.exists():
         return []
-    raw = json.loads(p.read_text())
+    raw = json.loads(p.read_text(encoding="utf-8"))
     seeds = raw.get("seeds", []) if isinstance(raw, dict) else raw
     out = []
     for s in seeds:

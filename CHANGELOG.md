@@ -5,6 +5,28 @@ changed and, where an existing user would notice, how behaviour differs.
 
 ## 0.19.0 — unreleased
 
+### Fixes from field use
+
+- **Thread view: long block headers wrap; nothing overlaps.** A container
+  chip such as `FOR [label, sid, doc] of [[ …a long literal… ]]` ran far off
+  its box to the right. A chip is now never wider than its own box, wraps
+  onto at most two lines, and ends in "…" past that (the whole label is its
+  hover title). The layout leaves room for the wrapped chip and for the
+  nested boxes' headers between rows, and an inner box paints above its
+  outer one, so a FINALLY chip is no longer buried under the box above.
+  Pinned in both orientations by `test:e2e-chip-long`.
+- **No more mojibake from Python on Windows.** `→` read as `â†'` because
+  Python decoded and encoded the pipe in the Windows locale (cp1252). Every
+  script now reads and writes UTF-8, and the app and the CLI set
+  `PYTHONUTF8=1` for the interpreters they start.
+- **`software plan` adds what fits, instead of refusing the lot.** A spec
+  with 25 rules was refused whole ("policies: 25 items, over the cap of
+  10") and nothing entered the plan. The rules now go in core first, as many
+  as the plan has room for. The ones that did not fit are named in the
+  reply, and `--rules s1,s4` chooses which. Updates to rules already in the
+  plan take no room. The Plan panel's button behaves the same way.
+  `test:software-plan-cap`.
+
 ### Declared topology (topology brief, Modules 1–6)
 
 On a shared data platform the architecture that matters is declared as data

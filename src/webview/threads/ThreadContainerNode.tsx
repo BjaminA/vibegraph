@@ -28,7 +28,7 @@ import React, { useRef } from "react";
 import { Handle, Position, useStore, type NodeProps } from "@xyflow/react";
 import type { ContainerKind } from "./types";
 import { tierForZoom, lodLabelFontSize } from "./lod";
-import { chipLabel, CHIP_LEFT } from "./chipPlacement";
+import { chipLabel, chipMaxWidth, CHIP_LEFT, CHIP_MAX_LINES, MIN_BOX_W } from "./chipPlacement";
 
 // §5.6 — number of target ports distributed along the container's entry
 // border. Multiple flow/fork edges converging on one container would
@@ -48,6 +48,8 @@ export interface ThreadContainerData {
   alsoIn?: number;
   /** The chip's left offset when a sibling's chip would sit under it (chipPlacement.ts). */
   chipLeft?: number;
+  /** The container's drawn width — the chip never runs past it. */
+  boxWidth?: number;
   accentVar: string;
   /** The container's own identity, so its CHIP can open the same tooltip
    *  every other node opens. A `for`/`if`/`while`/`try` has source and
@@ -78,7 +80,7 @@ export function ThreadContainerNode({ data }: NodeProps) {
   const d = data as unknown as ThreadContainerData;
   const accentVar = d.accentVar ?? "--accent-thread";
   // chipPlacement.ts owns the text and moves a chip clear of a sibling's.
-  const chipText = chipLabel(d.label, d.alsoIn ?? 0);
+  const chipText = chipLabel(d.label, d.alsoIn ?? 0, d.boxWidth);
   // The CHIP is the hover target, not the region: the region spans every
   // child, so a tooltip bound to it would open whenever the cursor
   // crossed a loop. A container with no IR identity (the synthetic
@@ -159,6 +161,7 @@ export function ThreadContainerNode({ data }: NodeProps) {
         onMouseLeave={chipHoverable ? () => emitChip("vg-thread-node-leave") : undefined}
         onClick={chipHoverable ? (e) => { e.stopPropagation(); emitChip("vg-thread-node-click"); } : undefined}
         ref={chipRef}
+        title={d.label}
         style={{
           position: "absolute",
           top: -10,
@@ -177,7 +180,16 @@ export function ThreadContainerNode({ data }: NodeProps) {
           // Letter-spacing widens the chip slightly; keep it readable
           // by mixing uppercase keyword with mixed-case body via the
           // double-space separator in chipLabel (chipPlacement.ts).
-          whiteSpace: "nowrap",
+          // 2026-10-02 — capped and WRAPPED (at most two lines, chipLabel
+          // ends the rest in "…"), never wider than its own container: a
+          // long for-of header used to run far off to the right.
+          whiteSpace: "normal",
+          overflowWrap: "anywhere",
+          maxWidth: Math.min(chipMaxWidth(d.boxWidth), Math.max(80, (d.boxWidth ?? MIN_BOX_W) - (d.chipLeft ?? CHIP_LEFT) - 12)),
+          display: "-webkit-box",
+          WebkitBoxOrient: "vertical",
+          WebkitLineClamp: CHIP_MAX_LINES,
+          overflow: "hidden",
           pointerEvents: "auto",
         }}
       >

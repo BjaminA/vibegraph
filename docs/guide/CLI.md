@@ -81,7 +81,7 @@ CLI) and says so; everything else is deterministic.
 | `software add <tool> --from <url\|file>…` | Draft a spec for a tool from its own documents, behind the citation gate; saved as a draft | `.vibegraph/software/` | **yes** |
 | `software list` / `show <tool> [--usage]` / `ratify <tool>` / `remove <tool>` | The specs; one with every quote and where the code calls it; accept one (quotes re-checked) | `.vibegraph/software/` | — |
 | `software edit <tool>` / `rule add\|update\|remove <tool>` / `unknown add\|remove <tool>` | Change a spec: every quote re-checked, your items marked STATED; your edit keeps it ratified, a model's sends it back to draft | `.vibegraph/software/` | — |
-| `software plan <tool> [--param name=value]` | Put a ratified spec's tool and rules into the plan, proposed, with the project's names filled in | `.vibegraph/plan.json` | — |
+| `software plan <tool> [--param name=value] [--rules s1,s4]` | Put a ratified spec's tool and rules into the plan, proposed, with the project's names filled in — core rules first, as many as the plan's cap leaves room for; the rest are named, `--rules` chooses | `.vibegraph/plan.json` | — |
 | `architecture --propose \| --modify "<text>"` | Deployment / trust groups and a start-here path, every item citing what it saw; stored pending | `.vibegraph/architecture.json` | **yes** |
 | `architecture --ratify \| --reject` | Makes the pending proposal stated / drops it | `.vibegraph/architecture.json` | — |
 | `classify [--dry-run \| --apply]` | The role of tools no table knows; `--apply` stores each as a model-stated policy | `.vibegraph/constraints.json` | **yes** |
@@ -516,7 +516,7 @@ described, with one example each, in [PLAN-ARCHITECTURE.md](PLAN-ARCHITECTURE.md
 ```bash
 vibegraph-knowledge software add <tool> --from <url|file> [--from …] [--hint "…"] [--model m] [--dry-run | --reply <file>]
 vibegraph-knowledge software list | show <tool> [--usage] [--json] | ratify <tool> | remove <tool>
-vibegraph-knowledge software plan <tool> [--param name=value …]
+vibegraph-knowledge software plan <tool> [--param name=value …] [--rules s1,s4]
 vibegraph-knowledge plan draft --from <url|file> … [--dry-run | --reply <file>]
 ```
 

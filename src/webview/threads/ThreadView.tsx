@@ -34,7 +34,7 @@ import { capabilitiesForPath } from "../../shared/languages";
 
 import { ThreadNode } from "./ThreadNode";
 import { ThreadContainerNode, TARGET_PORTS } from "./ThreadContainerNode";
-import { chipLabel, CHIP_LEFT, placeChips } from "./chipPlacement";
+import { CHIP_LEFT, CHIP_LINE_H, MIN_BOX_W, chipLabel, chipLines, placeChips } from "./chipPlacement";
 import { ThreadEdge, type ThreadEdgeData } from "./ThreadEdge";
 import { ThreadNodeTooltip, type AnchorRect } from "./ThreadNodeTooltip";
 import { attributeBoundary, type Attribution } from "../../shared/stack_attribution";
@@ -445,6 +445,22 @@ function ThreadCanvas({ thread: rawThread, width, height, projectIR, entryPoints
     const NEST_MARGIN_TOP = 26;
 
     const containerIds = new Set(containerNodes.map((c) => c.id));
+    // 2026-10-02 — a chip that wraps onto a second line grows down into its
+    // box: the box (and every box around it) starts that much higher.
+    const labelOf = new Map(containerNodes.map((c) => [c.id, String(c.label ?? "")]));
+    // The box's width is its children's span + side padding; a nested box is
+    // wider than its content by its nest margins, so this errs narrow (= more
+    // lines reserved, never fewer).
+    const chipExtra = (id: string) => {
+      const b = boxById.get(id);
+      const w = b ? b.maxX - b.minX + 2 * PAD_X : MIN_BOX_W;
+      return (chipLines(chipLabel(labelOf.get(id) ?? "", 0, w), w) - 1) * CHIP_LINE_H;
+    };
+    // Nesting depth: an inner box paints above its outer one (and its chip
+    // with it — the FINALLY chip was buried under the box above it).
+    const parentOf = new Map<string, string>();
+    for (const [pid, kids] of containsChildren) for (const k of kids) if (containerIds.has(k) && containerIds.has(pid)) parentOf.set(k, pid);
+    const depthOf = (id: string) => { let d = 0; for (let p = parentOf.get(id); p && d < 12; p = parentOf.get(p)) d++; return d; };
     type Box = { minX: number; minY: number; maxX: number; maxY: number };
     const boxById = new Map<string, Box | null>();
     function boxOf(id: string, stack: Set<string>): Box | null {
@@ -458,7 +474,8 @@ function ThreadCanvas({ thread: rawThread, width, height, projectIR, entryPoints
           if (inner) {
             boxes.push({
               minX: inner.minX - NEST_MARGIN,
-              minY: inner.minY - NEST_MARGIN_TOP,
+              // a wrapped (two-line) chip on the inner box needs its room too
+              minY: inner.minY - NEST_MARGIN_TOP - chipExtra(childId),
               maxX: inner.maxX + NEST_MARGIN,
               maxY: inner.maxY + NEST_MARGIN,
             });
@@ -498,7 +515,7 @@ function ThreadCanvas({ thread: rawThread, width, height, projectIR, entryPoints
       if (!box) return [];
       if (firstByBox.get(boxKey(box)) !== c.id) return [];
       const minX = box.minX - PAD_X;
-      const minY = box.minY - PAD_TOP;
+      const minY = box.minY - PAD_TOP - chipExtra(c.id);
       const maxX = box.maxX + PAD_X;
       const maxY = box.maxY + PAD_BOTTOM;
       const { accentVar, kindLabel } = accentForThreadNode(c, projectIR, entryPoints);
@@ -512,13 +529,15 @@ function ThreadCanvas({ thread: rawThread, width, height, projectIR, entryPoints
         style: {
           width: maxX - minX,
           height: maxY - minY,
-          zIndex: -1,
+          // inner boxes above outer ones; every box still below the cards (0)
+          zIndex: -20 + depthOf(c.id),
           ["--vg-enter-delay" as string]: `${enterDelayById.get(c.id) ?? 0}ms`,
         },
         data: {
           containerKind: c.containerKind,
           label: c.label,
           alsoIn: alsoCount.get(c.id) ?? 0,
+          boxWidth: maxX - minX,
           accentVar,
           kindLabel,
           // A container is the only element on the canvas that HAS source
@@ -1075,7 +1094,10 @@ function ThreadCanvas({ thread: rawThread, width, height, projectIR, entryPoints
     // No two container chips on one spot (chipPlacement.ts): a chip that
     // would land on an earlier one moves right of it.
     const boxes = [...containerReactFlowNodes, ...nestContainerNodes];
-    const left = placeChips(boxes.map((n) => ({ id: n.id, x: n.position.x, y: n.position.y, text: chipLabel(String((n.data as { label?: string }).label ?? ""), Number((n.data as { alsoIn?: number }).alsoIn ?? 0)) })));
+    const left = placeChips(boxes.map((n) => {
+      const w = Number((n.style as { width?: number } | undefined)?.width ?? MIN_BOX_W);
+      return { id: n.id, x: n.position.x, y: n.position.y, boxWidth: w, text: chipLabel(String((n.data as { label?: string }).label ?? ""), Number((n.data as { alsoIn?: number }).alsoIn ?? 0), w) };
+    }));
     const placed = boxes.map((n) => (left.get(n.id) === CHIP_LEFT ? n : { ...n, data: { ...n.data, chipLeft: left.get(n.id) } }));
     return [...placed, ...nodes];
   }, [containerReactFlowNodes, nestContainerNodes, nodes]);

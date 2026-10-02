@@ -581,6 +581,8 @@ function cmdView(args) {
 }
 
 export function main(argv) {
+  // Every Python child speaks UTF-8, whatever the locale (Windows: cp1252).
+  process.env.PYTHONUTF8 ??= "1";
   const [command, ...rest] = argv;
   if (!command || command === "--help" || command === "-h" || command === "help") { process.stdout.write(USAGE); return 0; }
   if (command === "--version" || command === "-v" || command === "version") { process.stdout.write(`${toolLabel(locate())}\n`); return 0; }

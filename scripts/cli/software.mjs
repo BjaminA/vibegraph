@@ -32,9 +32,10 @@ const HELP = `usage: vibegraph-knowledge ${SOFTWARE_USAGE}
   list [--json]      every spec, draft or ratified
   show <tool> [--usage] [--json]   the spec with every quote; --usage adds where the code calls it
   ratify <tool>      re-check every quote against the saved sources, then mark it ratified (a person's step)
-  plan <tool> [--param name=value …]   put the tool and its rules into the plan (all proposed); a rule's
-                     {placeholders} are the project's own names, filled from --param; run again after a spec
-                     edit and the planned rules that changed are updated (back to proposed)
+  plan <tool> [--param name=value …] [--rules s1,s4]   put the tool and its rules into the plan (all
+                     proposed) — core rules first, as many as the plan has room for, the rest named; --rules
+                     chooses which; a rule's {placeholders} are the project's own names, filled from --param;
+                     run again after a spec edit and the planned rules that changed are updated (back to proposed)
 ${SOFTWARE_EDIT_HELP}
   remove <tool>`;
 
@@ -67,7 +68,7 @@ export async function runSoftware(args) {
     parsed = parseArgs({ args, allowPositionals: true, options: {
       root: { type: "string" }, json: { type: "boolean" }, from: { type: "string", multiple: true }, hint: { type: "string" },
       model: { type: "string" }, "dry-run": { type: "boolean" }, reply: { type: "string" }, usage: { type: "boolean" },
-      param: { type: "string", multiple: true },
+      param: { type: "string", multiple: true }, rules: { type: "string" },
       id: { type: "string" }, text: { type: "string" }, why: { type: "string" }, check: { type: "string" },
       core: { type: "boolean" }, "not-core": { type: "boolean" }, cite: { type: "string" },
       question: { type: "string" }, matters: { type: "string" },
@@ -147,7 +148,8 @@ export async function runSoftware(args) {
       if (!m) return done(`--param wants name=value (got ${kv})`, 2);
       params[m[1]] = m[2];
     }
-    const r = specIntoPlan(root, tool, params, isAgentRun() ? "agent" : "human");
+    const only = parsed.values.rules ? parsed.values.rules.split(",").map((s) => s.trim()).filter(Boolean) : undefined;
+    const r = specIntoPlan(root, tool, params, isAgentRun() ? "agent" : "human", only);
     return r.error ? done(`refused: ${r.error}`, 1) : done(`${r.message}; agree each in the Plan panel or with \`plan agree\``);
   }
   return done(`unknown software subcommand: ${sub}\n\n${HELP}`, 2);

@@ -4,6 +4,7 @@
 
 import type { SoftwareSpec, SoftwareRule } from "../shared/software_types.ts";
 import { SOFTWARE_CAPS } from "../shared/software_types.ts";
+import { PLAN_CAPS } from "../shared/plan_types.ts";
 import type { PlanOp } from "./plan_ops.ts";
 
 interface FileIr { nodes?: Array<{ type: string; module?: string; names?: string[]; funcName?: string; callTarget?: string; line?: number }> }
@@ -134,12 +135,41 @@ export function specToPlanOps(
   spec: SoftwareSpec, params: Record<string, string> = {},
   have: { tools: Set<string>; policies: PlannedRuleLike[] } = { tools: new Set(), policies: [] },
 ): PlanOp[] {
+  return specToPlan(spec, params, have).ops;
+}
+
+/** The order a spec's rules enter a plan: the chosen ones as given, else the
+ *  core rules first, then the rest in the spec's order. */
+export function rulesInPlanOrder(spec: SoftwareSpec, only?: string[]): { rules: SoftwareRule[]; unknown: string[] } {
+  if (only?.length) {
+    const byId = new Map(spec.rules.map((r) => [r.id, r]));
+    return { rules: only.filter((id) => byId.has(id)).map((id) => byId.get(id)!), unknown: only.filter((id) => !byId.has(id)) };
+  }
+  const { core } = coreRules(spec);
+  const inCore = new Set(core.map((r) => r.id));
+  return { rules: [...core, ...spec.rules.filter((r) => !inCore.has(r.id))], unknown: [] };
+}
+
+/** specToPlanOps, plus what did not fit (2026-10-02, from field use: a spec
+ *  with 25 rules was refused whole — "policies: 25 items, over the cap of
+ *  10" — and nothing entered the plan). New rules are added while the plan
+ *  has room under its policies cap, core first; the rest are NAMED, never
+ *  dropped silently, and `--rules s1,s4` chooses which. Updates to rules
+ *  already in the plan take no room and always apply. */
+export function specToPlan(
+  spec: SoftwareSpec, params: Record<string, string> = {},
+  have: { tools: Set<string>; policies: PlannedRuleLike[] } = { tools: new Set(), policies: [] },
+  opts: { rules?: string[] } = {},
+): { ops: PlanOp[]; omitted: SoftwareRule[]; unknown: string[]; room: number } {
   const ops: PlanOp[] = [];
+  const omitted: SoftwareRule[] = [];
+  let room = Math.max(0, PLAN_CAPS.policies - have.policies.filter((p) => p.status !== "dropped").length);
+  const { rules, unknown } = rulesInPlanOrder(spec, opts.rules);
   if (!have.tools.has(spec.tool)) {
     ops.push({ op: "add", section: "stack", item: { tool: spec.tool, role: spec.role, why: spec.definition.slice(0, 160), groundedIn: spec.definitionCite, status: "proposed" } });
   }
   const bySource = new Map(have.policies.filter((p) => p.source).map((p) => [p.source!, p]));
-  for (const r of spec.rules as SoftwareRule[]) {
+  for (const r of rules) {
     const source = `${spec.tool} ${r.id}`;
     const filled = r.check ? fillCheck(r.check, params) : null;
     const was = bySource.get(source);
@@ -151,6 +181,8 @@ export function specToPlanOps(
     const why = r.why.slice(0, 240);
     const check = kept ?? (filled && !missing.length ? filled : undefined);
     if (!was) {
+      if (room <= 0) { omitted.push(r); continue; }
+      room--;
       ops.push({ op: "add", section: "policies", item: { text, why, ...(check ? { check } : {}), groundedIn: r.cite, source, status: "proposed" } });
       continue;
     }
@@ -163,5 +195,5 @@ export function specToPlanOps(
     const same = was.text === text && was.why === why && JSON.stringify(was.check ?? null) === JSON.stringify(nextCheck ?? null) && (was.groundedIn ?? null) === r.cite;
     if (!same) ops.push({ op: "update", section: "policies", id: was.id, fields: { text, why, check: nextCheck, groundedIn: r.cite, status: "proposed" } });
   }
-  return ops;
+  return { ops, omitted, unknown, room };
 }

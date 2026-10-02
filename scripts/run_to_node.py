@@ -57,6 +57,16 @@ import re
 import subprocess
 import sys
 
+# 2026-10-02 — UTF-8 on the pipes, whatever the locale: on Windows Python
+# reads stdin and writes stdout as cp1252, so the UTF-8 JSON Node pipes in
+# came back as mojibake ("→" read as "â†'") and a character cp1252 lacks
+# crashed the write.
+for _s in (sys.stdin, sys.stdout, sys.stderr):
+    try:
+        _s.reconfigure(encoding="utf-8")
+    except (AttributeError, ValueError):
+        pass
+
 CAPTURE = "__VG__::"
 DONE = "__VG_DONE__"
 OPAQUE_RE = re.compile(r" at 0x[0-9A-Fa-f]+")

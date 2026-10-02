@@ -13,6 +13,16 @@ import re
 import subprocess
 import sys
 
+# 2026-10-02 — UTF-8 on the pipes, whatever the locale: on Windows Python
+# reads stdin and writes stdout as cp1252, so the UTF-8 JSON Node pipes in
+# came back as mojibake ("→" read as "â†'") and a character cp1252 lacks
+# crashed the write.
+for _s in (sys.stdin, sys.stdout, sys.stderr):
+    try:
+        _s.reconfigure(encoding="utf-8")
+    except (AttributeError, ValueError):
+        pass
+
 
 def extract_dependencies(source_lines: list[str], block_text: str, start_line: int) -> str:
     """Gather imports and variable assignments from before the block that are referenced in it."""
@@ -85,7 +95,7 @@ def extract_dependencies(source_lines: list[str], block_text: str, start_line: i
 
 
 def run_block(filepath: str, start_line: int, end_line: int) -> dict:
-    with open(filepath, "r") as f:
+    with open(filepath, "r", encoding="utf-8") as f:
         source_lines = f.read().splitlines()
 
     if start_line < 1 or end_line > len(source_lines):
