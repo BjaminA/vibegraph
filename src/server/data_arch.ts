@@ -12,8 +12,10 @@ import { decisionTreesFrom, stateMachinesFrom } from "./decision_tables.ts";
 import { scanSdkCalls, type StackLike } from "./sdk_effects.ts";
 import { importResolver, injectionsOf } from "./injections.ts";
 import { NameEvaluator } from "./name_patterns.ts";
+import { applyTransforms, fill, transformsOf } from "../shared/name_pattern.ts";
 import { dataOps, familiesFrom, hopsFrom, topologyParts } from "./data_topology.ts";
 import { isTestFile } from "../shared/path_match.ts";
+import { applyWriterOverrides } from "./grant_overrides.ts";
 
 interface IrFile { nodes?: Array<Record<string, any>> }
 export type IrFiles = Record<string, IrFile>;
@@ -77,9 +79,15 @@ export function deriveDataArchitecture(files: IrFiles, stack: StackLike = {}, th
   computed.push(...sdk.untied, ...inj.unresolved);
 
   // 5–6. resources, zones, data operations, hops
-  const { families, catalogue, namingKeys } = familiesFrom(tables, lists);
-  const ops = dataOps(files as any, ev, families, namingKeys, inj.injections, threads);
+  const read = familiesFrom(tables, lists);
+  const { catalogue, namingKeys } = read;
+  // M3: the writers the code's own function decides, not only its input table
+  const ov = applyWriterOverrides(files as any, catalogue, read.families);
+  const families = ov.families;
+  computed.push(...ov.computed);
+  const ops = dataOps(files as any, ev, families, namingKeys, inj.injections, threads, new Set(sdk.calls.map((c) => `${c.file}:${c.line}:${c.callee}`)));
   const flows = hopsFrom(ops);
+  let resourceNaming: ReturnType<NameEvaluator["resourceNaming"]> = null;
   if (families.length) {
     const routers = new Map<string, TopoRouter>();
     for (const o of ops) for (const v of o.via ?? []) {
@@ -92,6 +100,17 @@ export function deriveDataArchitecture(files: IrFiles, stack: StackLike = {}, th
     }
     const roles = Object.fromEntries((stack.tools ?? []).map((t) => [t.tool, t.role]));
     const parts = topologyParts(families, sdk.calls, roles, [...routers.values()]);
+    // M2: each zone's resource name, when a builder names zones from configuration
+    const naming = ev.resourceNaming();
+    if (naming) {
+      const ts = transformsOf(naming.chain ?? "");
+      for (const z of parts.zones) {
+        const typed = applyTransforms(fill(naming.pattern, { [naming.zoneHole]: z.id }), ts);
+        const resolved = typed.replace(/\{[A-Z_][A-Z0-9_]*=([^}]*)\}/g, "$1");
+        z.label = `${resolved} (${typed.replace(/\{([A-Z_][A-Z0-9_]*)=[^}]*\}/g, "{$1}")}, named by ${naming.fn} at ${naming.cite})`;
+      }
+      resourceNaming = naming;
+    }
     Object.assign(topology, parts);
     if (!parts.routers.length) delete (topology as Partial<Topology>).routers;
     const builders = catalogue ? readersOfTable(files, catalogue.name) : [];
@@ -114,10 +133,12 @@ export function deriveDataArchitecture(files: IrFiles, stack: StackLike = {}, th
       fields: [...new Set((t.table.rows ?? []).flatMap((r) => Object.keys(r.fields ?? {})))],
     })),
     namePatterns: ev.patterns(),
+    ...(resourceNaming ? { resourceNaming } : {}),
     sdkCalls: sdk.calls,
     injections: inj.injections,
     topology,
     flows,
+    ...(ov.notes.length ? { writerOverrides: ov.notes } : {}),
     operations: ops.map(({ fnId: _fnId, ...o }) => o),
     computed,
   };

@@ -21,7 +21,8 @@ import { checkConstraint, isConstraintCheck } from "./constraint_grammar.ts";
 import { newRegistry, isRun1Check } from "./quality/verbs/index.ts";
 import { statedScopeFiles } from "./constraint_store.ts";
 import { matchThreadEntry, suggestEntries, whyMissing } from "./plan_thread_match.ts";
-import { PRINCIPAL_LIMITS, principalFindings, type SitePlacer } from "./plan_principals.ts";
+import { PRINCIPAL_LIMITS, principalFindings, type SiteIdentity, type SitePlacer } from "./plan_principals.ts";
+import { IdentityIndex } from "./identities.ts";
 import { isTestFile } from "../shared/path_match.ts";
 import { FLOW_LIMITS, flowFindings, indirectHops } from "./plan_flows.ts";
 import { expandModuleRefs } from "./plan_layers.ts";
@@ -100,9 +101,11 @@ function sitePlacer(plan: Plan, env: EnvLike, ownerOf: Map<string, string>): Sit
   const procs = plan.processes.filter((p) => p.status !== "dropped");
   const byId = new Map(procs.map((p) => [p.id, p]));
   const reach = new Map<string, Set<string>>();
+  const threadOf = new Map<string, any>();
   for (const t of env.threads) {
     const ep = t.entryPointId;
     if (!ep || isTestFile(ep.split(":")[0])) continue;
+    threadOf.set(ep, t);
     for (const n of t.nodes ?? []) {
       if (!n?.file || !n?.irNodeId) continue;
       const k = `${n.file}::${n.irNodeId}`;
@@ -110,6 +113,30 @@ function sitePlacer(plan: Plan, env: EnvLike, ownerOf: Map<string, string>): Sit
       reach.get(k)!.add(ep);
     }
   }
+  /** M4: the call path a thread takes from its seed to a function, for audit. */
+  const pathTo = (ep: string, file: string, fnId: string): string | undefined => {
+    const t = threadOf.get(ep);
+    if (!t) return undefined;
+    const nodes = new Map<string, any>((t.nodes ?? []).map((n: any) => [n.id, n]));
+    const goal = (t.nodes ?? []).find((n: any) => n.file === file && n.irNodeId === fnId);
+    const seed = (t.nodes ?? []).find((n: any) => n.kind === "seed");
+    if (!goal || !seed) return undefined;
+    const prev = new Map<string, string>();
+    const queue = [seed.id];
+    const seen = new Set(queue);
+    while (queue.length) {
+      const cur = queue.shift()!;
+      if (cur === goal.id) break;
+      for (const e of t.edges ?? []) {
+        if (e.from !== cur || seen.has(e.to) || e.kind === "contains") continue;
+        seen.add(e.to); prev.set(e.to, cur); queue.push(e.to);
+      }
+    }
+    if (!prev.has(goal.id) && goal.id !== seed.id) return undefined;
+    const steps: string[] = [];
+    for (let c: string | undefined = goal.id; c; c = prev.get(c)) { const n = nodes.get(c); if (n && n.kind !== "container") steps.unshift(n.label ?? c); }
+    return steps.length > 7 ? [...steps.slice(0, 3), "…", ...steps.slice(-3)].join(" → ") : steps.join(" → ");
+  };
   const procOfEntry = (ep: string): string | undefined => {
     const file = ep.split(":")[0];
     const declared = procs.find((p) => (p.entryPoints ?? []).some((e) => e === ep || e === file || entryFiles([e], files).includes(file)));
@@ -121,8 +148,56 @@ function sitePlacer(plan: Plan, env: EnvLike, ownerOf: Map<string, string>): Sit
       .sort((a, b) => ((a.endLine ?? 0) - (a.line ?? 0)) - ((b.endLine ?? 0) - (b.line ?? 0)))[0];
     const eps = fn ? reach.get(`${s.file}::${fn.id}`) : undefined;
     if (!eps?.size) return null;
-    const ids = [...new Set([...eps].map(procOfEntry).filter((x): x is string => !!x))];
-    return ids.map((id) => ({ id, runsAs: byId.get(id)?.runsAs }));
+    const byProc = new Map<string, string>();
+    // a process's DECLARED entry point speaks for it first
+    const declared = (ep: string) => procs.some((p) => (p.entryPoints ?? []).some((e) => e === ep || e === ep.split(":")[0]));
+    for (const ep of [...eps].sort((a, b) => Number(declared(b)) - Number(declared(a)))) { const id = procOfEntry(ep); if (id && !byProc.has(id)) byProc.set(id, ep); }
+    return [...byProc].map(([id, ep]) => ({ id, runsAs: byId.get(id)?.runsAs, via: pathTo(ep, s.file, fn!.id) }));
+  };
+}
+
+const slugId = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "");
+
+/** M6: the identity a planned process signs in as, read from where its entry
+ *  points build their clients — PROPOSED as runsAs, never applied. */
+function signsInAs(p: PlanProcess, plan: Plan, env: EnvLike, files: string[], ix: IdentityIndex): string {
+  const entries = [...new Set([...entryFiles(p.entryPoints, files), ...(p.entryPoints?.length ? [] : env.entryPoints.map((e) => e.id.split(":")[0]).filter((f) => p.at && underPrefix(f, p.at)))])].filter((f) => !isTestFile(f));
+  if (!entries.length) return "";
+  const ids = new Map<string, string>();
+  const many: string[] = [];
+  for (const f of entries) {
+    const r = ix.entryIdentities(f);
+    for (const i of r.identities) if (!ids.has(i.id)) ids.set(i.id, `${i.source}, ${i.cite}`);
+    many.push(...r.many.map((m) => `${f}: ${m}`));
+  }
+  if (!ids.size && !many.length) return "";
+  if (ids.size === 1 && !many.length) {
+    const [id, why] = [...ids][0];
+    const principal = (plan.principals ?? []).find((x) => slugId(x.id) === slugId(id));
+    const note = p.runsAs ? (principal && principal.id !== p.runsAs ? ` — the plan says runsAs ${p.runsAs}` : "") : principal ? ` — propose runsAs: ${principal.id}` : ` — no planned principal is named ${id}`;
+    return `; signs in as ${id} (${why})${note}`;
+  }
+  return `; signs in as ${ids.size + (many.length ? 1 : 0) > 1 || many.length ? "several identities" : ""}: ${[...ids].map(([id, why]) => `${id} (${why})`).join(", ")}${many.length ? `${ids.size ? "; " : ""}acts as many: ${many.slice(0, 3).join("; ")}` : ""}`;
+}
+
+/** M6: a write's own identity — the client it goes through, or (in an entry
+ *  point's own file) the one identity that entry signs in as. */
+function siteIdentityOf(plan: Plan, ix: IdentityIndex, env: EnvLike): SiteIdentity {
+  const entryFilesSet = new Set(env.entryPoints.map((e) => e.id.split(":")[0]));
+  return (s) => {
+    const entry = entryFilesSet.has(s.file) ? s.file : null;
+    let ans = ix.siteIdentity(s.file, s.line, entry);
+    if (!ans && entry) {
+      const r = ix.entryIdentities(entry);
+      if (r.many.length) ans = { many: r.many[0] };
+      else if (r.identities.length === 1) ans = { identity: r.identities[0] };
+      else if (r.identities.length > 1) return { unplaced: `${entry} signs in as several identities (${r.identities.map((i) => i.id).join(", ")}) and this write's client is not followed` };
+    }
+    if (!ans) return null;
+    if (ans.many) return { unplaced: `acts as many identities — ${ans.many}` };
+    const id = ans.identity!;
+    const principal = (plan.principals ?? []).find((x) => slugId(x.id) === slugId(id.id));
+    return principal ? { principal: principal.id, why: `${id.source}, ${id.cite}` } : { unplaced: `signs in as ${id.id} (${id.source}, ${id.cite}) — no planned principal is named ${id.id}` };
   };
 }
 
@@ -130,9 +205,8 @@ function sitePlacer(plan: Plan, env: EnvLike, ownerOf: Map<string, string>): Sit
  *  store's access sites when a zone of the store holds their family, so the
  *  write matrix sees writes made through the project's own funnels and
  *  injected ports instead of reading "no write to it yet". */
-function mergeDerivedSites(plan: Plan, sites: Map<string, AccessSite[]>, env: EnvLike, stack: StackIndex): void {
+function mergeDerivedSites(plan: Plan, sites: Map<string, AccessSite[]>, ops: Array<{ file: string; line: number; op: "write" | "read" | "watch"; family: string; port?: string }>): void {
   if (!(plan.stores ?? []).some((s) => (s.zones ?? []).length)) return;
-  const ops = deriveDataArchitecture(env.files, stack as any, env.threads as any).operations;
   for (const s of plan.stores ?? []) {
     const list = sites.get(s.id) ?? [];
     for (const o of ops) {
@@ -146,6 +220,8 @@ function mergeDerivedSites(plan: Plan, sites: Map<string, AccessSite[]>, env: En
 
 export function reconcilePlan(plan: Plan, env: EnvLike, stack: StackIndex, root: string, commit = "plan"): PlanReconcile {
   const findings: PlanFinding[] = [];
+  let idMemo: IdentityIndex | null = null;
+  const identities = () => (idMemo ??= new IdentityIndex(env.files, stack as never, root));
   const add = (f: PlanFinding) => findings.push(f);
   const files = Object.keys(env.files);
   const live = <T extends { status?: string }>(xs: T[]) => xs.filter((x) => x.status !== "dropped");
@@ -175,7 +251,7 @@ export function reconcilePlan(plan: Plan, env: EnvLike, stack: StackIndex, root:
       // Its entry points: the ones in files it owns (never a shared library's).
       const eps = env.entryPoints.filter((e) => own.ownerOf.get(e.id.split(":")[0]) === p.id);
       const head = deployable ? parts : `${m!.files.length} file(s) ${m!.how}`;
-      add({ section: "processes", id: p.id, verdict: "realised", detail: `${head}${eps.length ? `, ${eps.length} entry point(s)` : ", no entry point yet"}${runsFrom(p, env, files)}${hint}`, ...(eps.length ? { entryPoints: eps.slice(0, 50).map((e) => e.id) } : {}) });
+      add({ section: "processes", id: p.id, verdict: "realised", detail: `${head}${eps.length ? `, ${eps.length} entry point(s)` : ", no entry point yet"}${runsFrom(p, env, files)}${signsInAs(p, plan, env, files, identities())}${hint}`, ...(eps.length ? { entryPoints: eps.slice(0, 50).map((e) => e.id) } : {}) });
     }
   }
   for (const f of moduleFindings(plan, own, env.entryPoints)) add(f);
@@ -221,12 +297,14 @@ export function reconcilePlan(plan: Plan, env: EnvLike, stack: StackIndex, root:
   // The import graph is built only when a plan section needs it.
   let graphMemo: { graph: ImportEdge[]; packages: WorkspacePackage[] } | null = null;
   const graphOf = () => (graphMemo ??= (() => { const packages = workspacePackages(root); return { graph: importGraph(env.files, packages), packages }; })());
-  const st = (plan.stores ?? []).length ? storeFindings(plan, stack, env.files, graphOf().graph, graphOf().packages) : { findings: [], reach: new Map(), sites: new Map() };
+  // what the code says about stores (data_arch.ts), derived once
+  const da = (plan.stores ?? []).length ? deriveDataArchitecture(env.files, stack as any, env.threads as any) : null;
+  const st = (plan.stores ?? []).length ? storeFindings(plan, stack, env.files, graphOf().graph, graphOf().packages, da ? { zones: da.topology.zones ?? [], ops: da.operations } : undefined) : { findings: [], reach: new Map(), sites: new Map() };
   for (const f of st.findings) add(f);
-  mergeDerivedSites(plan, st.sites, env, stack);
+  if (da) mergeDerivedSites(plan, st.sites, da.operations);
   const storeById = new Map((plan.stores ?? []).map((x) => [x.id, x]));
   // ── principals: who runs as whom, and who writes which zone ──
-  const who = (plan.principals ?? []).length || (plan.stores ?? []).some((x) => x.zones?.some((z) => z.writers)) ? principalFindings(plan, st.sites, own.ownerOf, sitePlacer(plan, env, own.ownerOf)) : null;
+  const who = (plan.principals ?? []).length || (plan.stores ?? []).some((x) => x.zones?.some((z) => z.writers)) ? principalFindings(plan, st.sites, own.ownerOf, sitePlacer(plan, env, own.ownerOf), siteIdentityOf(plan, identities(), env)) : null;
   for (const f of who?.findings ?? []) add(f);
   // ── coordination through the stores: the hops the code has, the flows planned ──
   const procOf = own.ownerOf;

@@ -33,7 +33,7 @@ export function injectionsOf(files: Record<string, IrFile>): { injections: Injec
   const injections: Injection[] = entries.map((e) => ({
     iface: e.iface, property: e.property,
     calls: e.calls.map((c: any) => ({ file: c.file, line: c.line, callee: c.callee })),
-    implementations: e.implementations.map((i: any) => ({ file: i.file, line: i.line, fn: i.id ? fnName(i.id) : `forwarded: ${i.value ?? "?"}`, test: i.test })),
+    implementations: e.implementations.map((i: any) => ({ file: i.file, line: i.line, fn: i.id ? fnName(i.id) : `forwarded: ${i.value ?? "?"}`, test: i.test, ...(i.structural ? { structural: i.structural } : {}) })),
   }));
   const unresolved = injections
     .filter((j) => !j.implementations.some((i) => !i.test))

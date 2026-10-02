@@ -353,6 +353,8 @@ export interface WriteCell {
   zone: string;
   /** the plan lets it write (it is in `writers`) */
   allowed: boolean;
+  /** M4 (2026-10-02): write → the call path a process's thread takes to it (audit) */
+  paths?: Record<string, string>;
   /** where the code writes it: "file:line fn" */
   writes: string[];
 }

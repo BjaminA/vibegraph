@@ -8,14 +8,15 @@
 // code computes is not seen, and every answer says so.
 
 import type { Topology, TopoGrant } from "./topology_types.ts";
+import { covers } from "./name_pattern.ts";
 
 export const TOPOLOGY_QUERY_LIMITS = [
   "who may write / read is the DECLARED grants, roles expanded to the principals that hold them; what the code actually writes is the plan's write matrix (plan check), not this",
   "a thread touches a family when one of its nodes carries the family's id, or a literal matching its pattern, as a literal; a computed name is not seen",
 ];
 
-const patternRe = (p: string) => new RegExp(`^${p.split("*").map((s) => s.replace(/[.+?^${}()|[\]\\]/g, "\\$&")).join(".*")}$`);
-const zoneMatch = (pattern: string, zone: string) => (pattern.includes("*") ? patternRe(pattern).test(zone) : pattern === zone);
+// M1: one pattern type — `*` globs and `{Hole}`s alike (name_pattern.ts)
+const zoneMatch = (pattern: string, zone: string) => covers(pattern, zone);
 
 /** The principals a grant's `who` reaches. */
 export function grantees(t: Topology, who: string): string[] {
@@ -33,7 +34,10 @@ export function whoMay(t: Topology, zone: string, access: "read" | "write"): Acc
   const out: Access[] = [];
   for (const g of t.grants ?? []) {
     if (g.access !== access || !zoneMatch(g.zone, zone)) continue;
-    for (const p of grantees(t, g.who)) out.push({ principal: p, via: g.who === p ? "direct" : g.who, grant: g });
+    const ps = grantees(t, g.who);
+    // a role no declared principal holds is still an answer: the role itself
+    if (!ps.length && g.who.startsWith("role:")) { out.push({ principal: g.who.slice(5), via: `${g.who} (no declared principal holds it)`, grant: g }); continue; }
+    for (const p of ps) out.push({ principal: p, via: g.who === p ? "direct" : g.who, grant: g });
   }
   return out;
 }
@@ -56,7 +60,7 @@ export function mayAccess(t: Topology, principal: string, access: "read" | "writ
 export function zoneOfFamily(t: Topology, family: string): string | undefined {
   const f = (t.families ?? []).find((x) => x.id === family);
   if (f?.zone) return f.zone;
-  const holders = (t.zones ?? []).filter((z) => (z.holds ?? []).some((h) => h === family || (h.includes("*") && patternRe(h).test(family))));
+  const holders = (t.zones ?? []).filter((z) => (z.holds ?? []).some((h) => covers(h, family)));
   return holders.length === 1 ? holders[0].id : undefined;
 }
 
@@ -75,7 +79,7 @@ function literalsOf(n: any): string[] {
  *  carry the family's id, or a literal matching its pattern. */
 export function threadsTouching(t: Topology, family: string, threads: ThreadLike[], files: Record<string, { nodes?: any[] }> = {}): Array<{ entryPointId: string; at: string }> {
   const f = (t.families ?? []).find((x) => x.id === family);
-  const test = (s: string) => s === family || (!!f?.pattern && patternRe(f.pattern).test(s)) || (family.includes("*") && patternRe(family).test(s));
+  const test = (s: string) => s === family || (!!f?.pattern && covers(f.pattern, s)) || covers(family, s);
   const out: Array<{ entryPointId: string; at: string }> = [];
   for (const th of threads) {
     if (!th.entryPointId) continue;

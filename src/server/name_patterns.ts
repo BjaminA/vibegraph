@@ -130,6 +130,15 @@ export class NameEvaluator {
     if (lit !== null) return { pattern: lit };
     const tpl = tplLit(argText);
     if (tpl !== null) return { pattern: tpl };
+    // configuration: `process.env.V ?? "d"` is a typed hole with its default
+    const env = /process\.env\.([A-Z_][A-Z0-9_]*)\s*(?:\?\?|\|\|)\s*(["'`])([^"'`]*)\2/.exec(argText) ?? /os\.environ\.get\(\s*["']([A-Z_][A-Z0-9_]*)["']\s*,\s*(["'])([^"']*)\2/.exec(argText);
+    if (env) return { pattern: `{${env[1]}=${env[3]}}` };
+    // a settings object's field (`settings.alias`) → its value, here or imported
+    const member = /^\s*([A-Za-z_$][\w$]*)\.([A-Za-z_$][\w$]*)\s*$/.exec(argText);
+    if (member) {
+      const v = this.objectProp(file, member[1], member[2]);
+      if (v) return this.ofArg(v.file, v.node, v.value, depth + 1);
+    }
     const call = /^\s*(?:await\s+)?([A-Za-z_$][\w$]*)\s*\(/.exec(argText);
     if (call) {
       const kid = this.kids(file, at.id).find((k) => (k.funcName ?? k.callTarget) === call[1]);
@@ -159,6 +168,45 @@ export class NameEvaluator {
           seen.set(v.pattern.replace(/\{[^}]*\}/g, "{}"), v);
         }
         return seen.size === 1 ? [...seen.values()][0] : null;
+      }
+    }
+    return null;
+  }
+
+  /** `settings.key` → the value text of `key` in the object literal `settings` holds (here or imported). */
+  private objectProp(file: string, obj: string, key: string): { file: string; node: Node; value: string } | null {
+    const look = (f: string) => {
+      const a = (this.files[f]?.nodes ?? []).find((n) => n.type === "assignment" && n.name === obj && !n.parentId && (n as any).objectProps);
+      const p = (a as any)?.objectProps?.find((x: any) => x.key === key && x.value);
+      return a && p ? { file: f, node: a, value: String(p.value) } : null;
+    };
+    const here = look(file);
+    if (here) return here;
+    for (const imp of (this.files[file]?.nodes ?? []).filter((n) => n.type === "import_from")) {
+      if (!((imp as any).names ?? []).some((x: string) => x === obj || x.endsWith(` as ${obj}`))) continue;
+      const target = this.resolveImport(file, imp);
+      const hit = target ? look(target) : null;
+      if (hit) return hit;
+    }
+    return null;
+  }
+
+  /** M2: a builder some call site feeds from configuration and a zone — the
+   *  name each zone's resource carries (`{BUCKET_PREFIX=acme}-{zone}`). */
+  resourceNaming(): { fn: string; file: string; line: number; pattern: string; zoneHole: string; chain?: string; cite: string } | null {
+    for (const [file, ir] of Object.entries(this.files)) for (const def of ir.nodes ?? []) {
+      const rp = def.returnsPattern as (Node["returnsPattern"] & { chains?: Record<string, string> }) | undefined;
+      if (def.type !== "function_def" || !rp || rp.params.length < 2) continue;
+      for (const c of this.callersOf(file, def)) {
+        const holes: Record<string, string> = {};
+        rp.params.forEach((p, i) => {
+          const v = this.ofArg(c.file, c.node, c.node.args?.[i] ?? "");
+          if (v?.pattern && /^\{[A-Z_][A-Z0-9_]*=[^}]*\}$/.test(v.pattern)) holes[p] = v.pattern;
+        });
+        const open = rp.params.filter((p) => !holes[p] && rp.pattern.includes(`{${p}}`));
+        if (!Object.keys(holes).length || open.length !== 1) continue;
+        const pattern = rp.pattern.replace(/\{([^}]+)\}/g, (w, p) => holes[p] ?? w);
+        return { fn: def.name ?? "?", file, line: def.line ?? 0, pattern, zoneHole: open[0], ...(rp.chains?.[open[0]] ? { chain: rp.chains[open[0]] } : {}), cite: `${c.file}:${c.node.line}` };
       }
     }
     return null;

@@ -32,9 +32,12 @@ const at = (s: AccessSite) => `${s.file}:${s.line} ${s.fn}`;
  *  back to the file's owner); `[]` = reached only by entry points in no planned
  *  process. A file shared by two processes no longer charges one process with
  *  the other's write. */
-export type SitePlacer = (s: AccessSite) => Array<{ id: string; runsAs?: string }> | null;
+export type SitePlacer = (s: AccessSite) => Array<{ id: string; runsAs?: string; via?: string }> | null;
+/** M6 (2026-10-02): the identity a write's own client signs in as, when the
+ *  code says — a planned principal (placed directly), or why it cannot be. */
+export type SiteIdentity = (s: AccessSite) => { principal: string; why: string } | { unplaced: string } | null;
 
-export function principalFindings(plan: Plan, sitesByStore: Map<string, AccessSite[]>, ownerOf: Map<string, string>, placeSite?: SitePlacer): { findings: PlanFinding[]; matrix: WriteCell[] } {
+export function principalFindings(plan: Plan, sitesByStore: Map<string, AccessSite[]>, ownerOf: Map<string, string>, placeSite?: SitePlacer, identityOf?: SiteIdentity): { findings: PlanFinding[]; matrix: WriteCell[] } {
   const findings: PlanFinding[] = [];
   const procs = plan.processes.filter((p) => p.status !== "dropped");
   const byId = new Map(procs.map((p) => [p.id, p]));
@@ -75,13 +78,23 @@ export function principalFindings(plan: Plan, sitesByStore: Map<string, AccessSi
       const violations: string[] = [];
       const unplaced: string[] = [];
       for (const s of mine) {
+        const who = identityOf?.(s) ?? null;
+        if (who && "unplaced" in who) { unplaced.push(`${at(s)} (${who.unplaced})`); continue; }
+        if (who) {
+          cell(who.principal, zone, allowed.has(who.principal)).writes.push(at(s));
+          if (z.writers && !allowed.has(who.principal)) violations.push(`${at(s)} signs in as ${who.principal} (${who.why})`);
+          continue;
+        }
         const placed = placeSite?.(s) ?? null;
         const ps = placed ?? (procOf.get(s.file) ? [procOf.get(s.file)!] : []);
         if (!ps.length) { unplaced.push(`${at(s)} (${placed ? "reached only from entry points in no planned process" : "in no planned process"})`); continue; }
         for (const p of ps) {
           if (!p.runsAs) { unplaced.push(`${at(s)} (${p.id} has no runsAs)`); continue; }
-          cell(p.runsAs, zone, allowed.has(p.runsAs)).writes.push(at(s));
-          if (z.writers && !allowed.has(p.runsAs)) violations.push(`${p.id} (runs as ${p.runsAs}) writes it at ${at(s)}${placed ? " — its thread reaches that function" : ""}`);
+          const c = cell(p.runsAs, zone, allowed.has(p.runsAs));
+          c.writes.push(at(s));
+          const via = "via" in p && p.via ? `${p.id} via ${p.via}` : null;
+          if (via) (c.paths ??= {})[at(s)] = via;
+          if (z.writers && !allowed.has(p.runsAs)) violations.push(`${p.id} (runs as ${p.runsAs}) writes it at ${at(s)}${placed ? ` — its thread reaches that function${via ? ` (${via})` : ""}` : ""}`);
         }
       }
       if (!z.writers) continue;

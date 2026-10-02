@@ -475,7 +475,8 @@
           "properties": {
             "pattern": { "type": "string" },
             "params": { "type": "array", "items": { "type": "string" } },
-            "transformed": { "type": "array", "items": { "type": "string" } }
+            "transformed": { "type": "array", "items": { "type": "string" } },
+            "chains": { "type": "object", "description": "per transformed parameter, the call chain applied to it (`.replace(/_/g, \"-\").toLowerCase()`)", "additionalProperties": { "type": "string" } }
           }
         },
         "decoratorLine": {

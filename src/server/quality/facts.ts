@@ -14,7 +14,7 @@ import { flattenArgKeys, type CallSiteFact } from "../payload_check.ts";
 import { computeThreadContract, type ThreadContract, type ContractInputThread } from "../thread_contract.ts";
 import { buildStackIndex, contractStackForFile, type StackIndex } from "../stack.ts";
 import { importGraph, workspacePackages, type ImportEdge } from "../import_graph.ts";
-import { loadTopology } from "../topology_store.ts";
+import { topologyFor } from "../topology_model.ts";
 import type { TopologyModel } from "../../shared/topology_types.ts";
 import { buildCrossingIndex } from "../crossings.ts";
 import type { FactNode, QualityFacts, RunDelta } from "./check_registry.ts";
@@ -201,7 +201,8 @@ export function buildQualityFacts(input: FactsInput): QualityFacts {
     parsedFiles: Object.keys(env.files ?? {}),
     irFiles: env.files as Record<string, any>,
     // 2026-10-02 — the declared topology, read when a topology rule asks.
-    get topology() { return (topologyMemo ??= loadTopology(root)); },
+    // the derived topology too (topology_model.ts): one model everywhere
+    get topology() { return (topologyMemo ??= topologyFor(root, env as never, stack)); },
     get importEdges() { return (importEdgesMemo ??= importGraph(env.files as never, workspacePackages(root))); },
     definedNames: [...definedNames],
     unresolved,

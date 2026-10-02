@@ -3,7 +3,48 @@
 `vibegraph-knowledge` and the VibeGraph app. Newest first. Each entry says what
 changed and, where an existing user would notice, how behaviour differs.
 
-## 0.20.1 — unreleased
+## 0.21.0 — unreleased
+
+### Where data lives, decided at run time ("the location split")
+
+Seven fixes from a field report on a system that builds each resource name at
+run time (configuration plus a key looked up in a table), decides who may
+write each zone in a function, reaches the store through injected functions,
+and chooses each process's identity by configuration. Every piece was already
+in the IR; these join them.
+[docs/guide/DATA-ARCHITECTURE.md](docs/guide/DATA-ARCHITECTURE.md#where-data-lives-decided-at-run-time).
+
+- **M1 — one pattern type.** Catalogue paths, built names, zone names with
+  holes and plan globs are compared as patterns everywhere: `record_{Type}`
+  covers `record_X`, and `request_*` covers `request_{Role}__{Person}`.
+  Transforms (lowercase, `_` to `-`) apply to literal runs only.
+- **M2 — resource names and zones verified by the table.** A builder fed from
+  configuration names each zone's resource, typed and with its default:
+  `acme-ledger`, from `{BUCKET_PREFIX=acme}-{zone}` and its transform chain.
+  `plan check` realises a planned zone when the zones the code declares unify
+  with what it holds, instead of looking for a literal in the router.
+- **M3 — effective writers.** In the function that builds the writer map from
+  the catalogue, later `out.zone = [...]` replaces and `add("zone", [...])`
+  extends, with string constants resolved. A key built at run time is listed
+  with its line.
+- **M4 — the call path behind a write.** A write charged through reach carries
+  the path its process's thread takes to it (`decider via main.ts →
+  onRequest`), preferring the process's declared entry point.
+- **M5 — structural implementations.** A class with every required member of
+  an interface implements it without saying so. It is reported as
+  `structural` and never walked in threads.
+- **M6 — who a process signs in as.** Read from where its entry point builds
+  its client: a literal config, an env variable's default, a settings field,
+  or a documented launch line or `package.json` script that sets the
+  variable. A write's own client is followed back to its identity. A
+  process's `runsAs` is proposed, never applied. A script that signs in once
+  per person acts as many, and says so.
+- **M7 — one topology model.** The derived topology joins every reader: the
+  rule checks (`single-writer` on a derived zone is now checkable), the
+  `topology` commands, `plan check`, the lenses and the export. A role no
+  declared principal holds is still an answer to `who-writes`.
+
+## 0.20.1 — 2026-10-02
 
 Three findings from running 0.20.0 on a real plan, each fixed generally.
 
@@ -17,8 +58,8 @@ Three findings from running 0.20.0 on a real plan, each fixed generally.
   unverifiable, saying why. File ownership is the fallback only for code no
   thread reaches.
 - **A planned tool is realised through its software spec and its store.**
-  `synapse as db` read "drifted: the code uses yjs" while the store of the same
-  name was realised through the platform SDK. A planned tool now also matches
+  A planned database tool read "drifted: the code uses <another db library>"
+  while the store of the same name was realised through the platform SDK. A planned tool now also matches
   the packages its ratified software spec names as its identity, and the tools
   a same-named planned store is reached through. The finding says which.
 - **The system map draws the store's zones.** Each zone the code writes, reads

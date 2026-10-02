@@ -33,7 +33,8 @@ test("the write matrix is derived from the code, and every write is by an allowe
   assert.equal(find(rec, "stores", "docs/requests:writers").verdict, "pass");
   assert.equal(find(rec, "stores", "docs/verdicts:writers").verdict, "pass");
   const cell = (p, z) => rec.writeMatrix.find((c) => c.principal === p && c.zone === z);
-  assert.deepEqual(cell("svc-decider", "docs/verdicts"), { principal: "svc-decider", zone: "docs/verdicts", allowed: true, writes: ["apps/decider/src/main.ts:8 onRequest"] });
+  // 2026-10-02 — each write placed through a thread also carries the call path it was reached by (audit)
+  assert.deepEqual(cell("svc-decider", "docs/verdicts"), { principal: "svc-decider", zone: "docs/verdicts", allowed: true, writes: ["apps/decider/src/main.ts:8 onRequest"], paths: { "apps/decider/src/main.ts:8 onRequest": "decider via main.ts → onRequest" } });
   assert.deepEqual(cell("svc-requester", "docs/requests").writes, ["apps/requester/src/main.ts:6 submit"]);
   assert.equal(find(rec, "principals", "svc-decider").verdict, "realised");
   assert.equal(find(rec, "principals", "auditor").verdict, "unverified", "a human role is outside the code");

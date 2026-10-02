@@ -41,10 +41,10 @@ export function injectionIndex(files, resolveImport) {
     const nodes = ir.nodes ?? [];
     for (const n of nodes) {
       if (n.parentId) continue;
-      if (n.type === "interface_def" && n.members?.length) ifaces.set(`${file}::${n.name}`, { file, name: n.name, line: n.line, members: new Set(n.members) });
+      if (n.type === "interface_def" && n.members?.length) ifaces.set(`${file}::${n.name}`, { file, name: n.name, line: n.line, members: new Set(n.members), optional: new Set(n.optionalMembers ?? []) });
       if (n.type === "class_def" && (n.bases ?? []).some((b) => PROTOCOL_BASES.test(String(b).trim()))) {
         const members = nodes.filter((m) => m.type === "function_def" && m.parentId === n.id && !/^__.*__$/.test(m.name)).map((m) => m.name);
-        if (members.length) ifaces.set(`${file}::${n.name}`, { file, name: n.name, line: n.line, members: new Set(members) });
+        if (members.length) ifaces.set(`${file}::${n.name}`, { file, name: n.name, line: n.line, members: new Set(members), optional: new Set(), protocol: true });
       }
     }
   }
@@ -100,6 +100,26 @@ export function injectionIndex(files, resolveImport) {
             add(iface, { member: m.name, file, line: m.line, id: m.id, test });
           }
         }
+      }
+    }
+  }
+
+  // 2b. STRUCTURAL implementations (2026-10-02, M5): a class with every required
+  // member of an interface implements it, with or without saying so. Marked
+  // `structural` — a name match, weaker than a declaration — and never linked
+  // into threads; it only stops "nothing implements it" from being false.
+  for (const iface of ifaces.values()) {
+    const k = `${iface.file}::${iface.name}`;
+    const required = [...iface.members].filter((m) => !iface.optional.has(m));
+    if (!required.length || (impls.get(k) ?? []).some((i) => !i.test)) continue;
+    for (const [file, ir] of Object.entries(files)) {
+      const nodes = ir.nodes ?? [];
+      for (const cls of nodes.filter((n) => n.type === "class_def" && !n.parentId && !(iface.file === file && iface.name === n.name))) {
+        if ((cls.bases ?? []).some((b) => PROTOCOL_BASES.test(String(b).trim()))) continue; // another interface
+        const methods = nodes.filter((m) => m.type === "function_def" && m.parentId === cls.id);
+        const names = new Set(methods.map((m) => m.name));
+        if (!required.every((m) => names.has(m))) continue;
+        for (const m of methods.filter((x) => iface.members.has(x.name))) add(iface, { member: m.name, file, line: m.line, id: m.id, test: isTestPath(file), structural: cls.name });
       }
     }
   }

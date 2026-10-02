@@ -10,6 +10,7 @@ import { formatTopologyMd } from "../../src/server/topology_render.ts";
 import { mayAccess, threadsTouching, whoMay, TOPOLOGY_QUERY_LIMITS } from "../../src/shared/topology_query.ts";
 import { decisionChain, diffTopology, driftCount, formatChain, parseTrace, replayTrace } from "../../src/shared/topology_analysis.ts";
 import { loadEnvelope } from "../quality_check.mjs";
+import { topologyFor } from "../../src/server/topology_model.ts";
 import { pipelineHere } from "./pipeline.mjs";
 
 export const TOPOLOGY_USAGE = `topology add <id> --generator "<cmd>" --inputs <globs> | remove <id> | list | run [<id>] | show | check
@@ -63,13 +64,14 @@ export function runTopology(args) {
     const text = st.map((s) => `${s.state.padEnd(9)} ${s.source.id} — ${s.detail}`).join("\n");
     return done(text, sub === "check" && st.some((s) => s.state !== "fresh") ? 1 : 0);
   }
-  const model = loadTopology(root);
+  // one model: what the code says (derived) under what a generator declares
+  const model = topologyFor(root, envOf());
   const t = model.topology;
   if (sub === "show") { const env = envOf(); return parsed.values.json ? asJson(model) : done(formatTopologyMd(model, env.threads ?? [], env.files ?? {})); }
   if (sub === "who-writes") {
     const w = whoMay(t, arg ?? "", "write");
     if (parsed.values.json) return asJson(w);
-    if (!(t.zones ?? []).some((z) => z.id === arg)) return done(`zone ${arg} is not in the declared topology`, 1);
+    if (!(t.zones ?? []).some((z) => z.id === arg)) return done(`zone ${arg} is not in the topology (declared or read from the code)`, 1);
     return done(w.length ? w.map((x) => `${x.principal}${x.via !== "direct" ? ` (via ${x.via})` : ""}${x.grant.cite ? ` — ${x.grant.cite}` : ""}`).join("\n") : `no declared grant lets anyone write ${arg}`);
   }
   if (sub === "can-write") {

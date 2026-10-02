@@ -9,6 +9,7 @@
 import type { Plan, PlanBoundary, PlanFinding, PlanStore, PlanZone } from "../shared/plan_types.ts";
 import { ACCESS_LIMITS, siteZone, storeAccessSites, type AccessSite } from "./store_access.ts";
 import type { StackIndex } from "./stack.ts";
+import { unifies } from "../shared/name_pattern.ts";
 import { edgeInto, type ImportEdge, type WorkspacePackage } from "./import_graph.ts";
 
 export const STORE_LIMITS = [
@@ -63,7 +64,11 @@ export function storeReach(store: PlanStore, plan: Plan, stack: StackIndex, file
 
 export interface StoreCheck { findings: PlanFinding[]; reach: Map<string, StoreReach>; sites: Map<string, AccessSite[]> }
 
-export function storeFindings(plan: Plan, stack: StackIndex, irFiles: Record<string, any>, graph: ImportEdge[], packages: WorkspacePackage[]): StoreCheck {
+/** What the code says about the store's zones (data_arch.ts): its declared
+ *  zones and the operations that touch them. */
+export interface DerivedZones { zones: Array<{ id: string; cite?: string }>; ops: Array<{ file: string; line: number; op: "write" | "read" | "watch"; family: string }> }
+
+export function storeFindings(plan: Plan, stack: StackIndex, irFiles: Record<string, any>, graph: ImportEdge[], packages: WorkspacePackage[], derived?: DerivedZones): StoreCheck {
   const files = Object.keys(irFiles);
   const findings: PlanFinding[] = [];
   const reach = new Map<string, StoreReach>();
@@ -76,7 +81,7 @@ export function storeFindings(plan: Plan, stack: StackIndex, irFiles: Record<str
       : { section: "stores", id: s.id, verdict: "not-built", detail: `nothing it is reached through (${s.reachedThrough.join(", ")}) is used yet` });
     const sites = storeAccessSites(s, irFiles);
     sitesBy.set(s.id, sites);
-    for (const z of s.zones ?? []) findings.push(zoneFinding(s, z, sites, irFiles));
+    for (const z of s.zones ?? []) findings.push(zoneFinding(s, z, sites, irFiles, derived));
   }
   return { findings, reach, sites: sitesBy };
 }
@@ -87,10 +92,20 @@ const where = (xs: AccessSite[]) => xs.slice(0, 3).map((x) => `${x.file}:${x.lin
 /** A zone is realised when the code's routing NAMES it: an access call with
  *  its id (or its `routedBy` literal) or one of its families as a literal, or
  *  the router function the plan names, holding its id as a literal. */
-function zoneFinding(s: PlanStore, z: PlanZone, sites: AccessSite[], irFiles: Record<string, any>): PlanFinding {
+function zoneFinding(s: PlanStore, z: PlanZone, sites: AccessSite[], irFiles: Record<string, any>, derived?: DerivedZones): PlanFinding {
   const id = `${s.id}/${z.id}`;
   const mine = sites.filter((x) => siteZone(s, x) === z.id);
   if (mine.length) return { section: "stores", id, verdict: "realised", detail: `named at ${where(mine)}` };
+  // M2 (2026-10-02): the zones the CODE declares (a catalogue + naming table,
+  // routed by a lookup over it) are compared as patterns with what the planned
+  // zone holds — not a literal in the router's body, which a table lookup never has.
+  const wants = [z.id, ...z.holds];
+  const declared = (derived?.zones ?? []).filter((d) => wants.some((w) => unifies(w, d.id)));
+  if (declared.length) {
+    const ops = (derived?.ops ?? []).filter((o) => wants.some((w) => unifies(w, o.family)));
+    const opText = ops.length ? `; the code ${[...new Set(ops.map((o) => VERB[o.op]))].join(" / ")} them at ${ops.slice(0, 3).map((o) => `${o.file}:${o.line}`).join(", ")}${ops.length > 3 ? `, +${ops.length - 3} more` : ""}` : "; no operation on them is seen yet";
+    return { section: "stores", id, verdict: "realised", detail: `the code declares ${declared.length > 4 ? `${declared.slice(0, 4).map((d) => d.id).join(", ")} +${declared.length - 4} more` : declared.map((d) => d.id).join(", ")} (${declared[0].cite ?? "data-architecture.md"})${opText}` };
+  }
   if (z.routedBy?.startsWith("router:")) {
     const fn = z.routedBy.slice("router:".length).trim();
     const r = routerNames(fn, z.id, irFiles);

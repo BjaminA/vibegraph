@@ -15,7 +15,7 @@ import { ArchDispatchList } from "./ArchDispatchList";
 
 const LENS_LABEL: Record<ArchLens | "config" | "journeys" | "resources" | "decisions", string> = { birdseye: "Bird's-eye", overview: "Overview", tools: "Tools", flows: "Flows", payloads: "Payloads", trust: "Trust", config: "Configuration", journeys: "Journeys", resources: "Resources", decisions: "Decisions" };
 const GUI_LENS_TITLE: Record<"config" | "journeys" | "resources" | "decisions", string> = {
-  resources: "The DECLARED topology: stores, zones, document families and principals, with who may read and write each zone (vibegraph-knowledge topology)",
+  resources: "The topology — read from the code (catalogues, names, writers) and any a generator declares: stores, zones, document families and principals, with who may read and write each zone",
   decisions: "The declared decision trees and state machines, each node linked to the evidence it reads, its zone and who may write it",
   config: "Which process reads which environment variables, grouped by prefix; amber groups hold variables declared nowhere",
   journeys: "Which page sends the user to which page: Link href, router.push and redirect literals joined to the page that serves the path",

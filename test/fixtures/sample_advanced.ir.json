@@ -280,16 +280,7 @@
       "docstring": null,
       "decorators": [],
       "isAsync": false,
-      "returns": null,
-      "returnsPattern": {
-        "pattern": "{self} with {self} sides",
-        "params": [
-          "self"
-        ],
-        "transformed": [
-          "self"
-        ]
-      }
+      "returns": null
     },
     {
       "id": "module/Shape.class/describe.fn/return@0",

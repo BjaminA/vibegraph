@@ -227,7 +227,7 @@ function linkInjections(files) {
       if (!ir) continue;
       ir.edges ??= [];
       for (const impl of e.implementations) {
-        if (impl.test || !impl.id) continue;
+        if (impl.test || !impl.id || impl.structural) continue; // a structural match is reported, never walked
         if (ir.edges.some((x) => x.source === c.id && x.target === impl.id)) continue;
         ir.edges.push({
           source: c.id, target: impl.id, type: "reference", targetFile: impl.file, viaInjection: e.iface,

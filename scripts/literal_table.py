@@ -152,7 +152,7 @@ def _root_name(n: cst.BaseExpression) -> Optional[str]:
     return None
 
 
-def _piece(n, params: list, code: Code, transforms: set) -> Optional[str]:
+def _piece(n, params: list, code: Code, transforms: dict) -> Optional[str]:
     s = _string(n, code)
     if s is not None:
         return s.replace("{", "").replace("}", "")
@@ -178,7 +178,7 @@ def _piece(n, params: list, code: Code, transforms: set) -> Optional[str]:
     if isinstance(n, (cst.Call, cst.Attribute)):
         root = _root_name(n)
         if root in params:
-            transforms.add(root)
+            transforms[root] = code(n)[len(root):]
             return "{" + root + "}"
     return None
 
@@ -186,7 +186,7 @@ def _piece(n, params: list, code: Code, transforms: set) -> Optional[str]:
 def name_pattern(fn: cst.FunctionDef, code: Code) -> Optional[dict]:
     """The pattern a function whose whole body returns an f-string, a string
     concatenation or a literal of its parameters builds, or None."""
-    params = [p.name.value for p in fn.params.params]
+    params = [p.name.value for p in fn.params.params if p.name.value not in ("self", "cls")]
     if not params or not isinstance(fn.body, cst.IndentedBlock):
         return None
     stmts = list(fn.body.body)
@@ -199,11 +199,12 @@ def name_pattern(fn: cst.FunctionDef, code: Code) -> Optional[dict]:
         return None
     if not isinstance(ret.value, (cst.FormattedString, cst.BinaryOperation, cst.SimpleString, cst.ConcatenatedString)):
         return None
-    transforms: set = set()
+    transforms: dict = {}
     p = _piece(ret.value, params, code, transforms)
     if p is None or "{" not in p:
         return None
     out = {"pattern": p, "params": params}
     if transforms:
         out["transformed"] = sorted(transforms)
+        out["chains"] = transforms
     return out

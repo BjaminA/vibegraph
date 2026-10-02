@@ -58,7 +58,8 @@ export interface Injection {
   property: string;
   /** every call site through the parameter */
   calls: Array<{ file: string; line: number; callee: string }>;
-  implementations: Array<{ file: string; line: number; fn: string; test: boolean }>;
+  /** `structural`: a class with every required member, not declared as implementing it (the class name) */
+  implementations: Array<{ file: string; line: number; fn: string; test: boolean; structural?: string }>;
 }
 
 /** A process writes a family that another process watches or reads. */
@@ -73,11 +74,15 @@ export interface DataArchitecture {
   version: "1";
   tables: Array<{ file: string; name: string; line: number; shape: string; rows: number; fields: string[] }>;
   namePatterns: NamePattern[];
+  /** M2: the builder that names each zone's resource from configuration (`{ALIAS=ngt}-{boundary}`) */
+  resourceNaming?: { fn: string; file: string; line: number; pattern: string; zoneHole: string; chain?: string; cite: string };
   sdkCalls: SdkCall[];
   injections: Injection[];
   /** stores, zones, families, grants, state machines, decision trees */
   topology: Topology;
   flows: DataHop[];
+  /** writers the code's own grant function changes after reading the catalogue (M3) */
+  writerOverrides?: string[];
   /** every data operation the derivation placed: a write / read / watch of a family, where, by which processes */
   operations: Array<{ file: string; line: number; op: "write" | "read" | "watch"; family: string; via?: string[]; port?: string; entries: string[] }>;
   /** what could not be reduced, and where: never a pass */

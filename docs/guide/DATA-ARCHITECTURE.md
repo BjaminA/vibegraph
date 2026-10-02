@@ -155,3 +155,41 @@ A process is an entry point plus what its thread reaches, not a folder. In
 - **TypeScript calls in argument objects:** a call that is a property value of
   an object-literal argument (`send({ topic: topicFor(t) })`) is minted as its
   own node, as Python mints a keyword argument's call.
+
+## Where data lives, decided at run time
+
+Many systems build a resource name when they run: configuration plus a key
+looked up in a table, a store chosen by the result, writes made through
+injected functions, by a process whose identity its configuration picks. The
+pieces are all in the IR; since 0.21.0 they are joined.
+
+- **One pattern type.** Every computed name is compared as a pattern. A hole
+  `{X}` stands for one run, and a `*` glob for anything, so `record_{Type}`
+  covers `record_Approval` and a plan's `request_*` covers a derived
+  `request_{Role}__{Person}`.
+- **Resource names.** A builder some call site feeds from configuration
+  (`{BUCKET_PREFIX=acme}-{zone}`, through `.replace(/_/g, "-").toLowerCase()`)
+  names every zone's resource. The default is shown; the environment decides.
+- **Effective writers.** The writers are what the code's own writer function
+  returns, not its input table: later literal-keyed replacements and adder
+  calls are applied, and keys built at run time are listed.
+- **Writes are charged by reach.** A process is charged with a write only when
+  its thread reaches the function holding it, through injected ports. The call
+  path is kept with each write (`paths` in the write matrix) for audit.
+- **Structural implementations.** A class with every required member of an
+  interface implements it, even when it does not say so. It is reported, never
+  walked.
+- **Identities.** What a process signs in as is read from where its entry point
+  builds its client, from launch evidence (a `package.json` script, or a
+  documented launch line in a comment, said as such), or from the client a
+  write goes through. `runsAs` is proposed, never applied. A script that signs
+  in once per person acts as many.
+- **One model.** `topology who-writes`, rule checks such as `single-writer`,
+  `plan check`, the Resources and Decisions lenses and the export all read the
+  same model: what the code says, under what a generator declares.
+
+What stays unverifiable is said with its line: a write whose client is not
+followed, a script that signs in as several identities, and a key built at run
+time. A script that deliberately tries a forbidden write, to prove the store
+refuses it, is indistinguishable in code from a breach, so it is reported, not
+passed.

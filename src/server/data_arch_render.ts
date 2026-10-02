@@ -30,15 +30,17 @@ export function formatDataArchMd(d: DataArchitecture): string {
     for (const j of d.injections) {
       const prod = j.implementations.filter((i) => !i.test);
       const fakes = j.implementations.length - prod.length;
-      out.push(`- \`${j.iface}.${j.property}\` — called at ${j.calls.map((c) => `${c.file}:${c.line}`).join(", ")}; implemented by ${prod.length ? prod.map((i) => `\`${i.fn}\` (${i.file}:${i.line})`).join(", ") : "nothing in the project"}${fakes ? `; ${fakes} test fake(s)` : ""}`);
+      out.push(`- \`${j.iface}.${j.property}\` — called at ${j.calls.map((c) => `${c.file}:${c.line}`).join(", ")}; implemented by ${prod.length ? prod.map((i) => `\`${i.fn}\` (${i.file}:${i.line})${i.structural ? " — structurally (its members match; it does not say so)" : ""}`).join(", ") : "nothing in the project"}${fakes ? `; ${fakes} test fake(s)` : ""}`);
     }
     out.push("");
   }
   if (t.stores?.length || t.zones?.length || t.families?.length) {
     out.push("## Stores, zones and families", "");
     for (const s of t.stores ?? []) out.push(`- store **${s.id}**${s.kind ? ` (${s.kind})` : ""}${s.cite ? ` — ${s.cite}` : ""}`);
-    for (const z of t.zones ?? []) out.push(`- zone \`${z.id}\` in ${z.store}${z.holds?.length ? ` — holds ${list(z.holds)}` : ""}${z.cite ? ` — ${z.cite}` : ""}`);
+    if (d.resourceNaming) out.push(`Each zone's resource is named by \`${d.resourceNaming.fn}\` (${d.resourceNaming.file}:${d.resourceNaming.line}): \`${d.resourceNaming.pattern}\` with \`{${d.resourceNaming.zoneHole}}\` the zone${d.resourceNaming.chain ? `, through \`${d.resourceNaming.chain}\`` : ""} (called so at ${d.resourceNaming.cite}). A \`{VAR=default}\` hole is configuration: the default is shown, the environment decides.`, "");
+    for (const z of t.zones ?? []) out.push(`- zone \`${z.id}\`${z.label ? ` — resource \`${z.label.split(" (")[0]}\`` : ""} in ${z.store}${z.holds?.length ? ` — holds ${list(z.holds)}` : ""}${z.cite ? ` — ${z.cite}` : ""}`);
     for (const f of t.families ?? []) out.push(`- family \`${f.id}\`${f.pattern ? ` \`${f.pattern}\`` : ""}${f.zone ? ` → zone ${f.zone}` : ""}${f.cite ? ` — ${f.cite}` : ""}`);
+    if (d.writerOverrides?.length) out.push("", "Writers the code's own function decides (applied over the catalogue):", ...d.writerOverrides.map((x) => `- ${x}`));
     if (t.grants?.length) out.push("", "Grants:", ...t.grants.map((g) => `- ${g.who} may ${g.access} \`${g.zone}\`${g.cite ? ` — ${g.cite}` : ""}`));
     out.push("");
   }

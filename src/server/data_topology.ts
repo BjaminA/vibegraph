@@ -27,6 +27,7 @@ import type { TableDecl, TableRow } from "../shared/data_arch_types.ts";
 import { asNames } from "./decision_tables.ts";
 import { effectOf, verbWords, VERB_EFFECTS } from "../shared/sdk_verbs.ts";
 import { isTestFile } from "../shared/path_match.ts";
+import { covers, holeValues, shapeOf } from "../shared/name_pattern.ts";
 import type { NameEvaluator, NameValue } from "./name_patterns.ts";
 
 export const RESOURCE_FIELDS = {
@@ -36,26 +37,8 @@ export const RESOURCE_FIELDS = {
 } as const;
 
 const fieldOf = (r: TableRow, names: readonly string[]) => { for (const k of names) if (r.fields && k in r.fields) return r.fields[k]; return undefined; };
-const norm = (p: string) => p.replace(/\{[^}]*\}/g, "{}");
-const esc = (s: string) => s.replace(/[.*+?^$()|[\]\\]/g, "\\$&");
-/** Does pattern `general` cover `specific`? A hole matches a hole or a literal run. */
-export function covers(general: string, specific: string): boolean {
-  if (norm(general) === norm(specific)) return true;
-  const re = new RegExp("^" + general.split(/\{[^}]*\}/).map(esc).join("(?:\\{[^}]*\\}|[^/{}]+?)") + "$");
-  return re.test(specific);
-}
-/** The literal a hole in `key` takes in `row`, for each hole: {Type: "CandidateTarget"}. */
-function holeValues(key: string, row: string): Record<string, string> | null {
-  const names: string[] = [];
-  const re = new RegExp("^" + key.split(/(\{[^}]*\})/).map((part) => {
-    const m = /^\{([^}]*)\}$/.exec(part);
-    if (m) { names.push(m[1]); return "(\\{[^}]*\\}|[^/{}]+?)"; }
-    return esc(part);
-  }).join("") + "$");
-  const m = re.exec(row);
-  if (!m) return null;
-  return Object.fromEntries(names.map((n, i) => [n, m[i + 1]]));
-}
+const norm = shapeOf;
+export { covers };
 
 export interface Family { id: string; pattern: string; zone: string; writers: string[]; readers: string[]; cite: string }
 export interface DataOp { file: string; line: number; op: "write" | "read" | "watch"; family: string; via?: string[]; port?: string; entries: string[]; fnId?: string }
@@ -115,7 +98,7 @@ export function zoneOfName(pattern: string, families: Family[], naming: NamingKe
 
 const OP_OF: Record<string, DataOp["op"] | undefined> = { write: "write", admin: "write", read: "read", watch: "watch" };
 
-export function dataOps(files: Files, ev: NameEvaluator, families: Family[], naming: NamingKeys, injections: Injection[], threads: ThreadLike[]): DataOp[] {
+export function dataOps(files: Files, ev: NameEvaluator, families: Family[], naming: NamingKeys, injections: Injection[], threads: ThreadLike[], sdkSites: Set<string> = new Set()): DataOp[] {
   const ops: DataOp[] = [];
   const fnOf = (file: string, n: IrNode): IrNode | undefined => {
     const byId = new Map((files[file]?.nodes ?? []).map((x) => [x.id, x]));
@@ -151,8 +134,16 @@ export function dataOps(files: Files, ev: NameEvaluator, families: Family[], nam
     const callee = String(n.funcName ?? n.callTarget ?? "");
     const op = OP_OF[effectOf(callee.split(".").pop() ?? "")];
     if (!op || !callee.includes(".")) continue;
+    // a DATA operation, not a collection method: an SDK call, or a call through
+    // one of the enclosing functions' own parameters (`boundaries.meta(b).watch`)
+    const root = /^[\s(]*(?:await\s+)?([A-Za-z_$][\w$]*)/.exec(callee)?.[1] ?? "";
+    const isSdk = sdkSites.has(`${file}:${n.line}:${callee}`);
+    const chain: IrNode[] = [];
+    for (let fn = fnOf(file, n), hops = 0; fn && hops < 4; fn = fnOf(file, fn), hops++) chain.push(fn);
+    const viaParam = chain.some((fn) => (fn.params ?? []).some((p) => String(p).replace(/^\.\.\./, "").split(/[?:=\s]/)[0] === root));
+    if (!isSdk && !viaParam) continue;
     // every enclosing function operates (an arrow it returns does the work for it)
-    for (let fn = fnOf(file, n), hops = 0; fn && hops < 4; fn = fnOf(file, fn), hops++) {
+    for (const fn of chain) {
       const k = `${file}::${fn.name}`;
       if (bodyOp.get(k) !== "watch") bodyOp.set(k, op);
     }

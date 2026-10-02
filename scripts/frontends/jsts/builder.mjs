@@ -645,11 +645,12 @@ export class JstsGraphBuilder {
     const node = { id, type: "interface_def", parentId: parentId ?? null, ...p, name, docstring };
     // module 4: the members an implementation must provide (names only)
     const body = n.childForFieldName("body") ?? n.namedChildren.find((c) => c.type === "interface_body" || c.type === "object_type");
-    const members = (body?.namedChildren ?? [])
-      .filter((c) => c.type === "property_signature" || c.type === "method_signature")
-      .map((c) => this.text(c.childForFieldName("name") ?? c.namedChildren[0]).replace(/[?!]$/, ""))
-      .filter(Boolean);
+    const sigs = (body?.namedChildren ?? []).filter((c) => c.type === "property_signature" || c.type === "method_signature");
+    const members = sigs.map((c) => this.text(c.childForFieldName("name") ?? c.namedChildren[0]).replace(/[?!]$/, "")).filter(Boolean);
     if (members.length) node.members = members;
+    // which members an implementation may leave out (`x?: …`) — for structural matching
+    const optional = sigs.filter((c) => c.children.some((k) => k.type === "?")).map((c) => this.text(c.childForFieldName("name") ?? c.namedChildren[0]));
+    if (optional.length) node.optionalMembers = optional;
     // M-CMD.1 parity: whether the type is part of the module's public API.
     if (spanNode !== n && spanNode.type === "export_statement") {
       node.isExported = true;

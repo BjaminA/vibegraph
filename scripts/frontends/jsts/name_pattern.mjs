@@ -58,7 +58,7 @@ function piece(n, params, text, transforms) {
   }
   if (n.type === "call_expression" || n.type === "member_expression") {
     const root = rootIdent(n);
-    if (root && params.includes(text(root))) { transforms.add(text(root)); return `{${text(root)}}`; }
+    if (root && params.includes(text(root))) { transforms.set(text(root), text(n).slice(text(root).length)); return `{${text(root)}}`; }
   }
   return null;
 }
@@ -76,8 +76,8 @@ export function namePattern(fn, text) {
   } else expr = body;
   while (expr && (expr.type === "parenthesized_expression" || expr.type === "as_expression")) expr = expr.namedChildren[0];
   if (!expr || !(STRINGS.has(expr.type) || expr.type === "binary_expression")) return null;
-  const transforms = new Set();
+  const transforms = new Map();
   const p = piece(expr, params, text, transforms);
   if (p === null || !/\{/.test(p)) return null;
-  return { pattern: p, params, ...(transforms.size ? { transformed: [...transforms] } : {}) };
+  return { pattern: p, params, ...(transforms.size ? { transformed: [...transforms.keys()], chains: Object.fromEntries(transforms) } : {}) };
 }

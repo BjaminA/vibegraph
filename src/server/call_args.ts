@@ -7,6 +7,8 @@
 const LITERAL = /^(["'`])([\s\S]*)\1$/;
 
 /** A literal argument's text, or null when the argument is computed. */
+import { covers } from "../shared/name_pattern.ts";
+
 export function literalOf(arg: string): string | null {
   const m = LITERAL.exec(String(arg).trim());
   if (!m || (m[1] === "`" && m[2].includes("${"))) return null;
@@ -15,9 +17,8 @@ export function literalOf(arg: string): string | null {
 
 /** `orders/*`, `order-*`: a family pattern against a literal. */
 export function familyMatches(pattern: string, value: string): boolean {
-  if (!pattern.includes("*")) return pattern === value;
-  const re = new RegExp(`^${pattern.split("*").map((p) => p.replace(/[.+?^${}()|[\]\\]/g, "\\$&")).join(".*")}$`);
-  return re.test(value);
+  // M1 (2026-10-02): `*` globs and `{Hole}`s are one pattern type
+  return covers(pattern, value);
 }
 
 /** Does a call's callee name one of these functions? A plan name matches the
