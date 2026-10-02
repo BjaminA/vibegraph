@@ -1,0 +1,13 @@
+{
+  "version": "1",
+  "sources": [
+    {
+      "id": "catalogue",
+      "generator": "node tools/topology.mjs",
+      "inputs": [
+        "catalogue/",
+        "tools/topology.mjs"
+      ]
+    }
+  ]
+}

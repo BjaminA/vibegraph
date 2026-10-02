@@ -38,6 +38,7 @@ import { runArchitecture } from "./architecture.mjs";
 import { CONSTRAINTS_USAGE, runConstraints } from "./constraints.mjs";
 import { SEEDS_USAGE, runSeeds } from "./seeds.mjs";
 import { DOCS_USAGE, runDocs } from "./docs.mjs";
+import { TOPOLOGY_USAGE, runTopology } from "./topology.mjs";
 import { SKILLS_USAGE, runSkills } from "./skills.mjs";
 import { VIEW_USAGE, runView } from "./view.mjs";
 import { AFFECTED_USAGE, formatAffected, runAffected } from "./affected.mjs";
@@ -131,6 +132,7 @@ The files that shape what export writes — each has a command:
   ${PACKAGE_NAME} ${CONSTRAINTS_USAGE}
   ${PACKAGE_NAME} ${SEEDS_USAGE}
   ${PACKAGE_NAME} ${DOCS_USAGE}
+  ${PACKAGE_NAME} ${TOPOLOGY_USAGE}
   ${PACKAGE_NAME} ${SKILLS_USAGE}
   (the root may come last in any of these; it defaults to the current directory)
 
@@ -593,6 +595,7 @@ export function main(argv) {
   if (command === "architecture") return cmdArchitecture(rest);
   if (command === "constraints" || command === "constraint") return cmdConstraints(rest);
   if (command === "seeds" || command === "seed") return cmdSeeds(rest);
+  if (command === "topology") { const r = runTopology(rest); (r.exitCode === 2 ? process.stderr : process.stdout).write(r.text); return r.exitCode; }
   if (command === "docs") { const r = runDocs(rest); (r.exitCode === 2 ? process.stderr : process.stdout).write(r.text); return r.exitCode; }
   if (command === "skills") return cmdSkills(rest);
   if (command === "affected") return cmdAffected(rest);

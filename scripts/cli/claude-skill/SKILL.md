@@ -124,6 +124,9 @@ enforces it. `vibegraph-knowledge constraints list` shows what is stated.
   argv or await at the top level are found already).
 - `vibegraph-knowledge doctor` — are the hooks installed, runnable from here,
   and firing?
+- `vibegraph-knowledge topology show | who-writes <zone> | explain <tree>:<node>`
+  — the DECLARED topology (zones, grants, decision trees) when the project
+  registered a generator; the code computes those names, so read it here.
 - `vibegraph-knowledge skills draft <entry>` — **spends tokens**: drafts
   per-thread guidance for a person to ratify (`skills ratify`).
 - `vibegraph-knowledge --help` — everything else.

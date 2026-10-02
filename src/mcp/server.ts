@@ -762,6 +762,9 @@ function registerTools(server: McpServer, ctx: VibegraphMcpContext): void {
           z.object({ rule: z.literal("layer"), files: z.array(z.string()), mayImport: z.array(z.string()), allowStdlib: z.boolean().optional() }),
           z.object({ rule: z.literal("single-writer"), writes: z.array(z.string()), zone: z.string().optional(), families: z.array(z.string()).optional(), by: z.array(z.string()).optional(), files: z.array(z.string()).optional() }),
           z.object({ rule: z.literal("always-with"), target: z.string(), with: z.string() }),
+          z.object({ rule: z.literal("single-writer"), zone: z.string(), writer: z.string() }),
+          z.object({ rule: z.literal("writer-subset"), zone: z.string(), roles: z.array(z.string()) }),
+          z.object({ rule: z.literal("no-write"), principal: z.string(), zone: z.string() }),
           z.object({ rule: z.literal("id-scheme"), family: z.string(), producers: z.array(z.string()), writes: z.array(z.string()), idArg: z.number().int().optional() }),
         ]).optional().describe(
           "M-GRAMMAR — the CHECKABLE half, when the rule is one the IR can settle: "

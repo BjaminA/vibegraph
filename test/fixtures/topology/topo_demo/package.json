@@ -1,0 +1,9 @@
+{
+  "name": "topo-demo",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "intake": "tsx src/intake.ts",
+    "decider": "tsx src/decider.ts"
+  }
+}

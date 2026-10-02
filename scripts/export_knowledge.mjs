@@ -49,6 +49,8 @@ import { sha1 } from "../src/server/coverage.ts";
 import { listInvestigations, readInvestigation, readRel, renderHandoff } from "../src/server/investigations.ts";
 import { formatDataflowMd } from "../src/server/dataflow.ts";
 import { loadPlan } from "../src/server/plan_store.ts";
+import { loadTopology, refreshTopology } from "../src/server/topology_store.ts";
+import { formatTopologyMd } from "../src/server/topology_render.ts";
 import { formatPlanMd } from "../src/server/plan_render.ts";
 import { reconcilePlan } from "../src/server/plan_reconcile.ts";
 import { listSpecs } from "../src/server/software_store.ts";
@@ -269,6 +271,11 @@ export function exportKnowledge({ root, out, task, envelope: envelopePath, commi
   const design = loadPlan(absRoot);
   const designRec = design ? reconcilePlan(design, env, stack, absRoot) : null;
   if (design) write("design.md", formatPlanMd(design, designRec));
+  // 2026-10-02 — the DECLARED topology: its generators re-run first when their
+  // inputs changed (topology_store.ts), then written as one page.
+  const topoRefreshed = refreshTopology(absRoot);
+  const topo = loadTopology(absRoot);
+  if (topo.status.length) write("topology.md", formatTopologyMd(topo, env.threads ?? [], env.files ?? {}));
   // 2026-09-30 — SOFTWARE SPECS: each ratified one, every item beside its
   // quote and where this code calls it; drafts are withheld and named.
   const specs = listSpecs(absRoot);
@@ -467,6 +474,7 @@ export function exportKnowledge({ root, out, task, envelope: envelopePath, commi
       "",
       `**The design plan:** \`design.md\` — a HYPOTHETICAL design (revision ${design.revision}${design.closed ? ", closed" : ""}), not the code: its objective, planned processes, stack, data boundaries, primary threads and rules, and how the code measures up (${Object.entries(designRec.counts).map(([k, n]) => `${n} ${k}`).join(", ") || "nothing to compare"}). Planned rules are advice until promoted into constraints.json.`,
     ] : []),
+    ...(topo.status.length ? ["", `**Declared topology:** \`topology.md\` — the stores, zones, document families, principals, grants, routers and decision structures this project DECLARES as data (resource names it computes at run time, so the threads cannot show them), from ${topo.status.length} generator(s)${topo.status.some((x) => x.state !== "fresh") ? `, ${topo.status.filter((x) => x.state !== "fresh").length} not fresh` : ""}.${topoRefreshed.length ? ` Regenerated now: ${topoRefreshed.join("; ")}.` : ""}`] : []),
     ...(specs.length ? [
       "",
       `**Software specs:** ${specs.filter((s) => s.status === "ratified").map((s) => `\`software/${s.tool.replace(/[@/]/g, "_")}.md\``).join(", ") || "none ratified"} — the tools this project builds on, from their own docs: operations, states, permissions and rules, each item beside its quote (INFERRED = not in the docs), and where this code calls them.${specs.some((s) => s.status === "draft") ? ` Withheld as unreviewed drafts: ${specs.filter((s) => s.status === "draft").map((s) => s.tool).join(", ")}.` : ""}`,

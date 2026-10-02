@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibegraph.dev/schemas/topology.schema.json",
+  "title": "VibeGraph declared topology",
+  "description": "What a project's topology generator prints on stdout (vibegraph-knowledge topology add <id> --generator \"<cmd>\" --inputs <globs>): the stores, zones, document families, principals, grants, routers, state machines and decision trees the project DECLARES as data. Every item may cite the file:line of its declaration. Example: test/fixtures/topology/topo_demo/.vibegraph/topology/catalogue.json (its `topology` field), produced by test/fixtures/topology/topo_demo/tools/topology.mjs. The same shape is what `topology live --command` expects from a read-only inventory command.",
+  "type": "object",
+  "required": ["version"],
+  "additionalProperties": false,
+  "$defs": {
+    "Cite": { "type": "string", "pattern": "^[^\\s:][^:]*:\\d+$", "description": "file:line of the declaration" },
+    "Names": { "type": "array", "items": { "type": "string", "minLength": 1 } }
+  },
+  "properties": {
+    "version": { "const": "1" },
+    "stores": { "type": "array", "items": { "type": "object", "required": ["id"], "properties": { "id": { "type": "string", "minLength": 1 }, "kind": { "type": "string" }, "label": { "type": "string" }, "cite": { "$ref": "#/$defs/Cite" } } } },
+    "zones": { "type": "array", "items": { "type": "object", "required": ["id", "store"], "properties": { "id": { "type": "string", "minLength": 1 }, "store": { "type": "string", "minLength": 1 }, "label": { "type": "string" }, "holds": { "$ref": "#/$defs/Names", "description": "document families or key patterns (* a wildcard)" }, "cite": { "$ref": "#/$defs/Cite" } } } },
+    "families": { "type": "array", "items": { "type": "object", "required": ["id"], "properties": { "id": { "type": "string", "minLength": 1 }, "pattern": { "type": "string" }, "zone": { "type": "string" }, "label": { "type": "string" }, "cite": { "$ref": "#/$defs/Cite" } } } },
+    "principals": { "type": "array", "items": { "type": "object", "required": ["id"], "properties": { "id": { "type": "string", "minLength": 1 }, "kind": { "type": "string", "description": "service | human | role-holder | owner, or the platform's own word" }, "roles": { "$ref": "#/$defs/Names" }, "label": { "type": "string" }, "cite": { "$ref": "#/$defs/Cite" } } } },
+    "grants": { "type": "array", "items": { "type": "object", "required": ["who", "zone", "access"], "properties": { "who": { "type": "string", "minLength": 1, "description": "a principal id, or role:<name>" }, "zone": { "type": "string", "minLength": 1, "description": "a declared zone, or a pattern with *" }, "access": { "enum": ["read", "write"] }, "cite": { "$ref": "#/$defs/Cite" } } } },
+    "routers": { "type": "array", "items": { "type": "object", "required": ["function"], "properties": { "function": { "type": "string", "minLength": 1, "description": "the function that maps a document to its zone" }, "file": { "type": "string" }, "zones": { "$ref": "#/$defs/Names" }, "cite": { "$ref": "#/$defs/Cite" } } } },
+    "stateMachines": { "type": "array", "items": { "type": "object", "required": ["id", "transitions"], "properties": {
+      "id": { "type": "string", "minLength": 1 }, "family": { "type": "string" }, "states": { "$ref": "#/$defs/Names" }, "evaluatedBy": { "type": "string" }, "cite": { "$ref": "#/$defs/Cite" },
+      "transitions": { "type": "array", "items": { "type": "object", "required": ["from", "to"], "properties": { "from": { "type": "string" }, "to": { "type": "string" }, "roles": { "$ref": "#/$defs/Names" }, "requires": { "$ref": "#/$defs/Names" }, "cite": { "$ref": "#/$defs/Cite" } } } } } } },
+    "decisionTrees": { "type": "array", "items": { "type": "object", "required": ["id", "root", "nodes"], "properties": {
+      "id": { "type": "string", "minLength": 1 }, "root": { "type": "string", "minLength": 1 }, "cite": { "$ref": "#/$defs/Cite" },
+      "nodes": { "type": "array", "items": { "type": "object", "required": ["id"], "properties": { "id": { "type": "string", "minLength": 1 }, "question": { "type": "string" }, "reads": { "$ref": "#/$defs/Names", "description": "families, or zone:<id>, the node reads its evidence from" }, "evaluatedBy": { "type": "string" }, "yes": { "type": "string" }, "no": { "type": "string" }, "outcome": { "type": "string" }, "cite": { "$ref": "#/$defs/Cite" } } } } } } }
+  }
+}

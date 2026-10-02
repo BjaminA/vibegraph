@@ -13,8 +13,10 @@ import { archVisual } from "./arch_visual";
 import { ARCH_LENSES, edgeLabel, type ArchLens } from "./archLayout";
 import { ArchDispatchList } from "./ArchDispatchList";
 
-const LENS_LABEL: Record<ArchLens | "config" | "journeys", string> = { birdseye: "Bird's-eye", overview: "Overview", tools: "Tools", flows: "Flows", payloads: "Payloads", trust: "Trust", config: "Configuration", journeys: "Journeys" };
-const GUI_LENS_TITLE: Record<"config" | "journeys", string> = {
+const LENS_LABEL: Record<ArchLens | "config" | "journeys" | "resources" | "decisions", string> = { birdseye: "Bird's-eye", overview: "Overview", tools: "Tools", flows: "Flows", payloads: "Payloads", trust: "Trust", config: "Configuration", journeys: "Journeys", resources: "Resources", decisions: "Decisions" };
+const GUI_LENS_TITLE: Record<"config" | "journeys" | "resources" | "decisions", string> = {
+  resources: "The DECLARED topology: stores, zones, document families and principals, with who may read and write each zone (vibegraph-knowledge topology)",
+  decisions: "The declared decision trees and state machines, each node linked to the evidence it reads, its zone and who may write it",
   config: "Which process reads which environment variables, grouped by prefix; amber groups hold variables declared nowhere",
   journeys: "Which page sends the user to which page: Link href, router.push and redirect literals joined to the page that serves the path",
 };
@@ -41,14 +43,14 @@ const traceBtn: React.CSSProperties = {
 
 /** The map's lenses: the shared six, plus the GUI-only Configuration lens
  *  (arch_config.ts) — which process reads which environment variables. */
-export type MapLens = ArchLens | "config" | "journeys";
+export type MapLens = ArchLens | "config" | "journeys" | "resources" | "decisions";
 
-export function ArchLensBar({ lens, onLens, onStory }: { lens: MapLens; onLens: (l: MapLens) => void; onStory?: () => void }) {
+export function ArchLensBar({ lens, onLens, onStory, topology = false }: { lens: MapLens; onLens: (l: MapLens) => void; onStory?: () => void; topology?: boolean }) {
   return (
     <div data-arch-lens-bar style={{ ...panel, position: "absolute", top: "max(84px, calc(var(--vg-toolbar-bottom, 43px) + 8px))", left: 250, zIndex: 30, display: "flex", padding: 4, gap: 4 }}>
-      {[...ARCH_LENSES, "config" as const, "journeys" as const].map((l) => (
+      {[...ARCH_LENSES, "config" as const, "journeys" as const, ...(topology ? ["resources" as const, "decisions" as const] : [])].map((l) => (
         <button key={l} data-arch-lens={l} data-active={l === lens ? "true" : "false"} onClick={() => onLens(l)}
-          title={l === "config" || l === "journeys" ? GUI_LENS_TITLE[l] : undefined}
+          title={l === "config" || l === "journeys" || l === "resources" || l === "decisions" ? GUI_LENS_TITLE[l] : undefined}
           style={{
             border: "none", borderRadius: 4, padding: "4px 8px", cursor: "pointer",
             background: l === lens ? "color-mix(in oklab, var(--accent-thread) 18%, transparent)" : "transparent",

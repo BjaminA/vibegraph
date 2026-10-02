@@ -5,7 +5,7 @@
   "description": "The verbs a checkable half may use: the M-GRAMMAR verbs in constraint_grammar.ts (callers-only, import-only, calls-through, and payload-keys, added 2026-09-28 in src/server/payload_check.ts) and the five Run 1 forced into existence (guards, not-in-loop, handles-failure, annotated, co-changes; reviews/quality-layer/RUN1.md section 3). Operand shapes only. Decision procedures are specified in RUN1.md and implemented in Run 3. A malformed check is refused at the boundary, never coerced (constraint_store.ts precedent).",
   "$defs": {
     "CheckRule": {
-      "enum": ["callers-only", "import-only", "calls-through", "payload-keys", "layer", "single-writer", "always-with", "id-scheme", "guards", "not-in-loop", "handles-failure", "annotated", "co-changes"]
+      "enum": ["callers-only", "import-only", "calls-through", "payload-keys", "layer", "single-writer", "always-with", "id-scheme", "writer-subset", "no-write", "guards", "not-in-loop", "handles-failure", "annotated", "co-changes"]
     },
     "StackRole": {
       "description": "Mirrors STACK_ROLES in src/shared/stack_taxonomy.ts.",
@@ -85,6 +85,21 @@
         "files": { "$ref": "#/$defs/NonEmptyStrings" }
       },
       "allOf": [{ "anyOf": [{ "required": ["zone"] }, { "required": ["families"] }] }, { "anyOf": [{ "required": ["by"] }, { "required": ["files"] }] }]
+    },
+    "TopoSingleWriter": {
+      "description": "2026-10-02 (src/server/topology_checks.ts): the DECLARED-topology form of single-writer — zone is writable by exactly `writer` (a principal, or role:R = every principal holding R) per the project's topology generators. No `writes`. A stale topology is unverifiable, never a pass.",
+      "type": "object", "required": ["rule", "zone", "writer"], "additionalProperties": false,
+      "properties": { "rule": { "const": "single-writer" }, "zone": { "type": "string", "minLength": 1 }, "writer": { "type": "string", "minLength": 1 } }
+    },
+    "WriterSubset": {
+      "description": "2026-10-02: every principal the declared topology lets write `zone` holds one of `roles`.",
+      "type": "object", "required": ["rule", "zone", "roles"], "additionalProperties": false,
+      "properties": { "rule": { "const": "writer-subset" }, "zone": { "type": "string", "minLength": 1 }, "roles": { "$ref": "#/$defs/NonEmptyStrings" } }
+    },
+    "NoWrite": {
+      "description": "2026-10-02: no declared grant lets `principal` write `zone` (directly or through a role it holds).",
+      "type": "object", "required": ["rule", "principal", "zone"], "additionalProperties": false,
+      "properties": { "rule": { "const": "no-write" }, "principal": { "type": "string", "minLength": 1 }, "zone": { "type": "string", "minLength": 1 } }
     },
     "AlwaysWith": {
       "description": "2026-10-01: every path through function target also calls with: a call outside any branch or loop with no return before it (both arms of an if count). An exception thrown before it is not followed. Advice until calibrated.",
@@ -169,6 +184,9 @@
         { "$ref": "#/$defs/PayloadKeys" },
         { "$ref": "#/$defs/Layer" },
         { "$ref": "#/$defs/SingleWriter" },
+        { "$ref": "#/$defs/TopoSingleWriter" },
+        { "$ref": "#/$defs/WriterSubset" },
+        { "$ref": "#/$defs/NoWrite" },
         { "$ref": "#/$defs/AlwaysWith" },
         { "$ref": "#/$defs/IdScheme" },
         { "$ref": "#/$defs/Guards" },

@@ -10,6 +10,7 @@ import type { VibegraphMcpContext } from "./src/mcp/context";
 import { selectBackend, type ChatSession } from "./src/server/chat/backend";
 import { ClaudeStdioBackend } from "./src/server/chat/claude_stdio_backend";
 import { posixRel } from "./src/server/posix_rel";
+import { topologyState } from "./src/server/topology_server";
 import { forwardChatEvent } from "./src/server/chat/forward";
 import { buildChatPrompt, buildStagePrompt, buildTurnPreamble, renderRoutedBlock, type ChatNodeContext, type ChatThreadContext, type ChatTurnContext } from "./src/server/chat/prompt";
 import { buildRemitIndex, matchQuestion, matchNode, mergeMatches, applyRoutingBudget, SKILL_INJECTION_BUDGET_CHARS, type ThreadRemit, type RoutedThreadContext, type RoutingCandidate } from "./src/server/thread_remit";
@@ -8179,6 +8180,9 @@ function setupWebSocket() {
             ws.send(JSON.stringify({ type: "software-state", payload: r.reply }));
             if (r.changed) broadcastProjectUpdate();
           }
+        } else if (msg.type === "topology-get") {
+          // 2026-10-02 — the declared topology, read-only (src/server/topology_server.ts).
+          ws.send(JSON.stringify({ type: "topology-state", payload: isDirectory ? topologyState(analyzedRoot()) : { model: null, live: null, traces: [] } }));
         } else if (msg.type === "plan-get" || msg.type === "plan-op" || msg.type === "plan-promote") {
           // 2026-09-30 — the Plan panel (src/server/plan_server.ts); the sender is a person.
           if (!isDirectory) ws.send(JSON.stringify({ type: "plan-state", payload: { plan: null, reconcile: null, error: "a plan needs a project directory" } }));

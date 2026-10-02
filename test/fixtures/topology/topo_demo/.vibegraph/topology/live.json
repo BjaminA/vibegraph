@@ -1,0 +1,62 @@
+{
+  "at": "2026-10-02T09:22:17.373Z",
+  "command": "node tools/live.mjs",
+  "topology": {
+    "version": "1",
+    "stores": [
+      {
+        "id": "docs"
+      }
+    ],
+    "zones": [
+      {
+        "id": "requests",
+        "store": "docs"
+      },
+      {
+        "id": "verdicts",
+        "store": "docs"
+      },
+      {
+        "id": "evidence",
+        "store": "docs"
+      },
+      {
+        "id": "scratch",
+        "store": "docs"
+      }
+    ],
+    "grants": [
+      {
+        "who": "role:intake",
+        "zone": "requests",
+        "access": "write"
+      },
+      {
+        "who": "svc-decider",
+        "zone": "requests",
+        "access": "read"
+      },
+      {
+        "who": "role:decider",
+        "zone": "verdicts",
+        "access": "write"
+      },
+      {
+        "who": "role:inspector",
+        "zone": "evidence",
+        "access": "write"
+      },
+      {
+        "who": "svc-decider",
+        "zone": "evidence",
+        "access": "read"
+      },
+      {
+        "who": "svc-intake",
+        "zone": "verdicts",
+        "access": "write"
+      }
+    ]
+  }
+}

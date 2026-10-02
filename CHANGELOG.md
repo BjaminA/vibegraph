@@ -3,6 +3,49 @@
 `vibegraph-knowledge` and the VibeGraph app. Newest first. Each entry says what
 changed and, where an existing user would notice, how behaviour differs.
 
+## 0.19.0 — unreleased
+
+### Declared topology (topology brief, Modules 1–6)
+
+On a shared data platform the architecture that matters is declared as data
+and its resource names are computed at run time, so static analysis showed
+none of it. A project now hands it over through a generator it owns. Zero
+tokens, opt-in, and a project with no generator sees no change.
+[docs/guide/TOPOLOGY.md](docs/guide/TOPOLOGY.md).
+
+- **`topology add|remove|list|run|show|check`**: register a generator
+  (command + inputs). Its JSON output is validated against
+  `schemas/topology.schema.json`: stores, zones, families, principals, grants,
+  routers, state machines, decision trees, each item optionally citing
+  `file:line`. Output is stored under `.vibegraph/topology/`, stale when the
+  inputs' content changes, re-run by `export` (which writes `topology.md`) and
+  flagged by the session-start hook.
+- **Resources lens** and **`topology who-writes | can-write | touches`**:
+  stores as boxes of zones, principals with read / write edges (roles
+  expanded, grants cited), each zone with its router's threads. `touches`
+  reads the IR of the functions a thread walks.
+- **Rules over the topology**: `single-writer` (declared form: `zone`,
+  `writer`), `writer-subset`, `no-write`. A missing, undeclared or STALE
+  topology reads unverifiable, never a pass.
+- **Decision structures**: state machines and decision trees in the JSON. The
+  **Decisions lens** links each node to its evaluating function, the families
+  it reads, their zones and who may write them; `topology explain
+  <tree>:<node>` prints the same chain.
+- **`topology live --command`**: a read-only inventory command's output is
+  diffed against the declaration (undeclared zones, missing and extra
+  grants), saved, and drawn on the Resources lens. Nothing is written to the
+  platform.
+- **`topology trace <log.jsonl> [--save]`**: each event is checked against
+  the grants and decision structures, and the app's trace bar steps through a
+  saved run on either lens.
+
+Also: the map's layout gained `keepAll`, so an edge-less card (a zone nobody
+may touch) is drawn in these lenses.
+
+Tests: test:topology (7), test:topology-rules (5, a pass / fail /
+unverifiable case per kind), test:e2e-topology (3). Fixture
+`test/fixtures/topology/topo_demo`.
+
 ## 0.18.1 — unreleased
 
 ### The viewer on Windows (two bugs reported against 0.17 and 0.18)

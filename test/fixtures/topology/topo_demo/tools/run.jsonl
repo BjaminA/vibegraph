@@ -1,0 +1,8 @@
+{"actor":"svc-intake","action":"write","zone":"requests","document":"request/r1"}
+{"actor":"svc-decider","action":"read","zone":"requests","document":"request/r1"}
+{"actor":"svc-decider","action":"transition","decision":"request:submitted>under-review","document":"request/r1"}
+{"actor":"svc-decider","action":"read","zone":"evidence","document":"inspection/i7"}
+{"actor":"svc-decider","action":"decide","decision":"verdict:has-inspection=yes"}
+{"actor":"svc-decider","action":"decide","decision":"verdict:readings-ok=yes"}
+{"actor":"svc-decider","action":"decide","decision":"verdict:approve"}
+{"actor":"svc-intake","action":"write","zone":"verdicts","document":"verdict/r1"}

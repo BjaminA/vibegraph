@@ -8,6 +8,7 @@ import { readStoredThreadSkill } from "../../src/server/thread_skill_store.ts";
 import { derivedPolicyClauses } from "../../src/server/policy_check.ts";
 import { enabledDirection } from "./direction.mjs";
 import { docsStatus } from "../../src/server/docs_registry.ts";
+import { loadSources, sourceStatus } from "../../src/server/topology_store.ts";
 import { loadPlan } from "../../src/server/plan_store.ts";
 import { backlogCount, planBacklog } from "../../src/server/plan_review.ts";
 
@@ -65,6 +66,9 @@ export function orientation(absRoot, loaded, constraints) {
   if (backlog) lines.push("", `Review backlog: ${backlog} proposal${backlog === 1 ? "" : "s"} await a person — \`vibegraph-knowledge plan review\` lists them with their diffs (deciding is the person's, not yours).`);
   // 2026-10-01 — generated documents whose inputs changed since they were generated.
   const stale = docsStatus(absRoot).filter((r) => r.state === "stale");
+  // …and the declared topology, when a generator's inputs moved since it ran.
+  const topoStale = loadSources(absRoot).map((x) => sourceStatus(absRoot, x)).filter((x) => x.state !== "fresh");
+  if (topoStale.length) lines.push("", `Declared topology not fresh: ${topoStale.map((x) => `${x.source.id} (${x.state}; re-run: vibegraph-knowledge topology run ${x.source.id})`).join("; ")} — the zones and grants it lists may no longer match the code.`);
   if (stale.length) lines.push("", `Stale generated documents (${stale.length}) — do not trust them as current: ${stale.slice(0, 6).map((r) => `${r.doc.path} (${r.since === "the working tree" ? "inputs changed in the working tree" : `since ${r.since}`}; regenerate: ${r.doc.generator})`).join("; ")}${stale.length > 6 ? "; …" : ""}.`);
   lines.push("", "How this session is wired: name a function or file in a prompt to get its thread's contract, rules and skill; an edit that breaks a checkable rule is stopped with the rule and its reason.");
   return lines.join("\n");

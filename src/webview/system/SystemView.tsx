@@ -25,6 +25,9 @@ import { ArchEdge } from "./ArchEdge";
 import { ArchTraceBar, useArchTrace } from "./ArchTrace";
 import { ArchInspector, ArchLegend, ArchLensBar, ArchProposalBar, type MapLens } from "./ArchPanel";
 import { configModel } from "./arch_config";
+import { decisionsModel, resourcesModel, styleTopologyEdges, traceIds } from "./arch_topology";
+import { useTopologyState } from "../useTopologyState";
+import { TopologyTraceBar } from "./TopologyTraceBar";
 import { journeysModel } from "./arch_journeys";
 import { planModel, overlayModel, ghostPlannedEdges, type PlanView } from "./arch_plan";
 import { PlanViewToggle } from "./PlanViewToggle";
@@ -157,7 +160,7 @@ export function SystemView({
   const [lens, setLensState] = useState<MapLens>(() => {
     try {
       const l = localStorage.getItem("vg-arch-lens") as MapLens | null;
-      return l && (ARCH_LENSES.includes(l as ArchLens) || l === "config" || l === "journeys") ? l : "overview";
+      return l && (ARCH_LENSES.includes(l as ArchLens) || l === "config" || l === "journeys" || l === "resources" || l === "decisions") ? l : "overview";
     } catch {
       return "overview";
     }
@@ -173,6 +176,16 @@ export function SystemView({
   }, []);
   const [archSelected, setArchSelected] = useState<{ node: ArchNodeRecord } | { edge: ArchEdgeRecord } | { group: ArchGroupRecord } | null>(null);
 
+  // 2026-10-02 — the DECLARED topology (Resources / Decisions lenses, trace overlay).
+  const topo = useTopologyState();
+  const hasTopology = !!topo.model && topo.model.status.length > 0;
+  const topoLens = (lens === "resources" || lens === "decisions") && hasTopology ? lens : null;
+  const [traceName, setTraceName] = useState("");
+  const [traceIndex, setTraceIndex] = useState(0);
+  const topoMapModel = useMemo(() => {
+    if (mode !== "map" || focusEntryPointId || !topoLens || !topo.model) return null;
+    return topoLens === "resources" ? resourcesModel(topo.model, threads, topo.live?.drift) : decisionsModel(topo.model, threads);
+  }, [mode, focusEntryPointId, topoLens, topo, threads]);
   // 2026-09-30 — the hypothetical plan: Real / Plan / Overlay (arch_plan.ts).
   const planState = usePlanState();
   const [planViewRaw, setPlanView] = useState<PlanView>("real");
@@ -189,6 +202,16 @@ export function SystemView({
       : overlayModel(architecture, planState.plan, planState.reconcile, { expanded: planOpen });
   }, [mode, focusEntryPointId, planView, planState, architecture, planOpen]);
   const base = useMemo((): { nodes: Node[]; edges: Edge[]; hiddenTools?: string[]; hiddenClusters?: string[] } => {
+    if (topoMapModel) {
+      // Every edge kept: a grant, a yes / no branch and an evidence read are all drawn.
+      const laid = buildArchLayout(topoMapModel, "payloads", { keepAll: true }); // a zone no one may touch still matters
+      const lit = traceName && topo.model ? traceIds(topo.model.topology, topo.traces.find((t) => t.name === traceName)?.steps[traceIndex]) : null;
+      return {
+        ...laid,
+        edges: styleTopologyEdges(laid.edges, topoMapModel),
+        nodes: lit && lit.size ? laid.nodes.map((n) => ({ ...n, data: { ...n.data, lit: lit.has(n.id), dim: !lit.has(n.id) } })) : laid.nodes,
+      };
+    }
     if (planMapModel) {
       // Every edge kept (the Payloads lens), so a boundary between two planned
       // processes is drawn as well as a call into a planned tool.
@@ -203,7 +226,7 @@ export function SystemView({
       // The Configuration lens draws its own model through the Tools pipeline.
       return lens === "config"
         ? buildArchLayout(configModel(architecture, insight?.env), "tools")
-        : buildArchLayout(architecture, lens);
+        : buildArchLayout(architecture, lens === "resources" || lens === "decisions" ? "overview" : lens);
     }
     if (mode === "threads" || focusEntryPointId) {
       const laid = buildThreadInteractionLayout(threads, entryPoints, crossings);
@@ -222,7 +245,7 @@ export function SystemView({
     // the whole view then.
     if (system || plan) return buildSystemLayout(system ?? { subsystems: [], edges: [] }, plan, cardHeights ?? undefined);
     return { nodes: [], edges: [] };
-  }, [mode, system, plan, threads, entryPoints, crossings, focusEntryPointId, architecture, lens, cardHeights, insight, planMapModel]);
+  }, [mode, system, plan, threads, entryPoints, crossings, focusEntryPointId, architecture, lens, cardHeights, insight, planMapModel, topoMapModel, traceName, traceIndex, topo]);
 
   // Inject the drill-down callback into each node's data (react-flow custom
   // nodes receive only `data`): subsystem endpoint rows AND thread nodes both
@@ -372,8 +395,9 @@ export function SystemView({
         <MapIcon size={14} strokeWidth={1.5} />
         Architecture
       </button>
-      {mode === "map" && <ArchLensBar lens={lens} onLens={(l) => { setLens(l); setArchSelected(null); }} onStory={trace.beats.length ? trace.actions.story : undefined} />}
-      {mode === "map" && architecture && <ArchLegend model={architecture} hiddenTools={base.hiddenTools ?? []} hiddenClusters={base.hiddenClusters ?? []} lens={lens === "config" ? "tools" : lens === "journeys" ? "flows" : lens} fold={!!archSelected} />}
+      {mode === "map" && <ArchLensBar lens={lens} onLens={(l) => { setLens(l); setArchSelected(null); }} onStory={trace.beats.length ? trace.actions.story : undefined} topology={hasTopology} />}
+      {topoMapModel && topo.traces.length > 0 && <TopologyTraceBar traces={topo.traces} trace={traceName} onTrace={setTraceName} index={traceIndex} onIndex={setTraceIndex} />}
+      {mode === "map" && architecture && <ArchLegend model={architecture} hiddenTools={base.hiddenTools ?? []} hiddenClusters={base.hiddenClusters ?? []} lens={lens === "config" ? "tools" : lens === "journeys" ? "flows" : lens === "resources" || lens === "decisions" ? "payloads" : lens} fold={!!archSelected} />}
       {mode === "map" && planState.plan && <PlanViewToggle view={planView} onView={setPlanView} revision={planState.plan.revision} unplaced={planMapModel?.planUnplaced ?? null}
         onSeed={architecture && !architecture.proposal && onArchAction ? () => onArchAction("seed-plan") : undefined} />}
       {mode === "map" && <ArchTraceBar mode={trace.mode} beats={trace.beats} labelOf={labelOf} actions={trace.actions} />}

@@ -75,6 +75,8 @@ CLI) and says so; everything else is deterministic.
 | `plan review [--agree \| --reject <s:id,…>]` | Every pending proposal on one page — a diff against what was agreed, its evidence; decide several at once | `.vibegraph/plan.json` | — |
 | `plan affected [--uncommitted]` / `plan layers [--apply]` | Plan items a change touches (and names now gone) / each module's layer rule from today's imports | nothing / `plan.json` | — |
 | `docs add \| list \| check \| remove` | Generated documents and the commit since which each is stale | `.vibegraph/docs.json` | — |
+| `topology add \| run \| check \| show` | The DECLARED topology — stores, zones, principals, grants, decision structures — from the project's own generator | `.vibegraph/topology/` | — |
+| `topology who-writes \| can-write \| touches \| explain \| live \| trace` | Ask it; diff it against a read-only live inventory; replay a run log against it | nothing (`live`/`trace --save` keep a copy) | — |
 | `plan draft --from <url\|file>…` | Draft plan items from documents and the ratified software specs; a quote not in them drops the item; all proposed | `.vibegraph/plan.json` | **yes** |
 | `software add <tool> --from <url\|file>…` | Draft a spec for a tool from its own documents, behind the citation gate; saved as a draft | `.vibegraph/software/` | **yes** |
 | `software list` / `show <tool> [--usage]` / `ratify <tool>` / `remove <tool>` | The specs; one with every quote and where the code calls it; accept one (quotes re-checked) | `.vibegraph/software/` | — |
@@ -679,6 +681,8 @@ vibegraph-knowledge constraint accept|reject <id> <pN>
   through a function also calls another — an audit event on every decision),
   `id-scheme` (a family's ids come only from its producer functions); see
   [PLAN-ARCHITECTURE.md](PLAN-ARCHITECTURE.md).
+  Over the declared topology ([TOPOLOGY.md](TOPOLOGY.md)): `single-writer` with
+  `zone` + `writer` (no `writes`), `writer-subset`, `no-write`.
   Rules: `callers-only`, `import-only`, `calls-through`, `payload-keys`, `layer`,
   `single-writer`, `always-with`, `id-scheme`, `guards`,
   `not-in-loop`, `handles-failure`, `annotated`, `co-changes`.
@@ -716,6 +720,21 @@ Registers documents a command derives (`.vibegraph/docs.json`). `check` says
 which are stale since which commit, read from git, and exits 1 if any are.
 The session-start hook lists them. See
 [PLAN-ARCHITECTURE.md](PLAN-ARCHITECTURE.md#generated-documents-that-go-stale-visibly).
+
+### `topology` — the architecture a shared platform declares as data
+
+```bash
+vibegraph-knowledge topology add <id> --generator "<cmd>" --inputs <globs>   # run once, validated, stored
+vibegraph-knowledge topology run | check | show | remove <id>
+vibegraph-knowledge topology who-writes <zone> | can-write <principal> | touches <family> | explain <tree>:<node>
+vibegraph-knowledge topology live --command "<read-only cmd>" | trace <events.jsonl> [--save <name>]
+```
+
+For projects whose partitions, grants and decision rules are data and whose
+resource names are computed: the project's generator prints them as JSON
+(`schemas/topology.schema.json`); the app draws them (Resources and Decisions
+lenses); the rules `single-writer` / `writer-subset` / `no-write` check them.
+Every module, with an example: [TOPOLOGY.md](TOPOLOGY.md).
 
 ### `seeds` — entry points discovery cannot see
 

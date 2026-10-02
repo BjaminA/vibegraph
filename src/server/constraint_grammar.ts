@@ -32,6 +32,7 @@ import {
   type CallSiteFact, type PayloadKeysCheck,
 } from "./payload_check.ts";
 import { checkAlwaysWith, checkIdScheme, checkLayer, checkSingleWriter, describeAuthority, describeLayer, isAuthorityCheck, isLayerCheck, type AlwaysWithCheck, type ArchCheckFacts, type IdSchemeCheck, type LayerCheck, type SingleWriterCheck } from "./arch_checks.ts";
+import { checkTopology, describeTopologyCheck, isTopologyCheck, type TopologyCheck } from "./topology_checks.ts";
 import { pathAllowed, describeAllowList } from "../shared/path_match.ts";
 
 /** What a human can say that the IR can check.
@@ -56,9 +57,10 @@ export type ConstraintCheck =
   | LayerCheck
   | SingleWriterCheck
   | AlwaysWithCheck
-  | IdSchemeCheck;
+  | IdSchemeCheck
+  | TopologyCheck;
 
-export const CHECK_RULES = ["callers-only", "import-only", "calls-through", "payload-keys", "layer", "single-writer", "always-with", "id-scheme"] as const;
+export const CHECK_RULES = ["callers-only", "import-only", "calls-through", "payload-keys", "layer", "single-writer", "always-with", "id-scheme", "writer-subset", "no-write"] as const;
 
 /** One resolved call, as the linker recorded it. */
 export interface ReferenceFact {
@@ -219,6 +221,8 @@ export function isConstraintCheck(v: unknown): v is ConstraintCheck {
     && typeof c.through === "string" && !!c.through;
   if (c.rule === "payload-keys") return isPayloadKeysCheck(c);
   if (c.rule === "layer") return isLayerCheck(c);
+  // 2026-10-02 — single-writer WITHOUT `writes` is the declared-topology form.
+  if (c.rule === "writer-subset" || c.rule === "no-write" || (c.rule === "single-writer" && c.writes === undefined)) return isTopologyCheck(c);
   if (c.rule === "single-writer" || c.rule === "always-with" || c.rule === "id-scheme") return isAuthorityCheck(c);
   return false;
 }
@@ -348,7 +352,8 @@ export function checkConstraint(facts: CheckFacts, check: ConstraintCheck): Chec
     case "callers-only": return checkCallersOnly(facts, check);
     case "payload-keys": return checkPayloadKeys(facts.callSites, check);
     case "layer": return checkLayer(facts, check);
-    case "single-writer": return checkSingleWriter(facts, check);
+    case "single-writer": return "writes" in check ? checkSingleWriter(facts, check) : checkTopology(facts.topology, check);
+    case "writer-subset": case "no-write": return checkTopology(facts.topology, check);
     case "always-with": return checkAlwaysWith(facts, check);
     case "id-scheme": return checkIdScheme(facts, check);
   }
@@ -372,7 +377,11 @@ export function describeCheck(check: ConstraintCheck): string {
       return describePayloadKeys(check);
     case "layer":
       return describeLayer(check);
-    case "single-writer": case "always-with": case "id-scheme":
+    case "single-writer":
+      return "writes" in check ? describeAuthority(check) : describeTopologyCheck(check);
+    case "always-with": case "id-scheme":
       return describeAuthority(check);
+    case "writer-subset": case "no-write":
+      return describeTopologyCheck(check);
   }
 }

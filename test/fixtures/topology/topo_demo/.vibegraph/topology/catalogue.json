@@ -1,0 +1,209 @@
+{
+  "generatedAt": "2026-10-02T09:15:53.626Z",
+  "inputsHash": "cc87ab9c22d6628e",
+  "topology": {
+    "version": "1",
+    "stores": [
+      {
+        "id": "docs",
+        "kind": "sync-db",
+        "cite": "catalogue/zones.mjs:2"
+      }
+    ],
+    "zones": [
+      {
+        "id": "requests",
+        "store": "docs",
+        "holds": [
+          "request"
+        ],
+        "cite": "catalogue/zones.mjs:5"
+      },
+      {
+        "id": "verdicts",
+        "store": "docs",
+        "holds": [
+          "verdict"
+        ],
+        "cite": "catalogue/zones.mjs:6"
+      },
+      {
+        "id": "evidence",
+        "store": "docs",
+        "holds": [
+          "inspection",
+          "reading-*"
+        ],
+        "cite": "catalogue/zones.mjs:7"
+      }
+    ],
+    "families": [
+      {
+        "id": "request"
+      },
+      {
+        "id": "verdict"
+      },
+      {
+        "id": "inspection"
+      },
+      {
+        "id": "reading",
+        "pattern": "reading-*"
+      }
+    ],
+    "principals": [
+      {
+        "id": "svc-intake",
+        "kind": "service",
+        "roles": [
+          "intake"
+        ],
+        "cite": "catalogue/principals.mjs:3"
+      },
+      {
+        "id": "svc-decider",
+        "kind": "service",
+        "roles": [
+          "decider"
+        ],
+        "cite": "catalogue/principals.mjs:4"
+      },
+      {
+        "id": "inspector",
+        "kind": "human",
+        "roles": [
+          "inspector"
+        ],
+        "cite": "catalogue/principals.mjs:5"
+      }
+    ],
+    "grants": [
+      {
+        "who": "role:intake",
+        "zone": "requests",
+        "access": "write",
+        "cite": "catalogue/principals.mjs:9"
+      },
+      {
+        "who": "svc-decider",
+        "zone": "requests",
+        "access": "read",
+        "cite": "catalogue/principals.mjs:10"
+      },
+      {
+        "who": "role:decider",
+        "zone": "verdicts",
+        "access": "write",
+        "cite": "catalogue/principals.mjs:11"
+      },
+      {
+        "who": "svc-intake",
+        "zone": "verdicts",
+        "access": "read",
+        "cite": "catalogue/principals.mjs:12"
+      },
+      {
+        "who": "role:inspector",
+        "zone": "evidence",
+        "access": "write",
+        "cite": "catalogue/principals.mjs:13"
+      },
+      {
+        "who": "svc-decider",
+        "zone": "evidence",
+        "access": "read",
+        "cite": "catalogue/principals.mjs:14"
+      }
+    ],
+    "routers": [
+      {
+        "function": "zoneFor",
+        "file": "src/router.ts",
+        "zones": [
+          "requests",
+          "verdicts",
+          "evidence"
+        ],
+        "cite": "src/router.ts:5"
+      }
+    ],
+    "stateMachines": [
+      {
+        "id": "request",
+        "family": "request",
+        "evaluatedBy": "decide",
+        "transitions": [
+          {
+            "from": "submitted",
+            "to": "under-review",
+            "roles": [
+              "role:decider"
+            ],
+            "cite": "catalogue/rules.mjs:3"
+          },
+          {
+            "from": "under-review",
+            "to": "approved",
+            "roles": [
+              "role:decider"
+            ],
+            "requires": [
+              "inspection"
+            ],
+            "cite": "catalogue/rules.mjs:4"
+          },
+          {
+            "from": "under-review",
+            "to": "rejected",
+            "roles": [
+              "role:decider"
+            ],
+            "cite": "catalogue/rules.mjs:5"
+          }
+        ]
+      }
+    ],
+    "decisionTrees": [
+      {
+        "id": "verdict",
+        "root": "has-inspection",
+        "cite": "catalogue/rules.mjs:8",
+        "nodes": [
+          {
+            "id": "has-inspection",
+            "question": "Is there an inspection newer than 30 days?",
+            "reads": [
+              "inspection"
+            ],
+            "evaluatedBy": "hasRecentInspection",
+            "yes": "readings-ok",
+            "no": "reject",
+            "cite": "catalogue/rules.mjs:11"
+          },
+          {
+            "id": "readings-ok",
+            "question": "Are the latest readings within limits?",
+            "reads": [
+              "reading-*"
+            ],
+            "evaluatedBy": "readingsWithinLimits",
+            "yes": "approve",
+            "no": "reject",
+            "cite": "catalogue/rules.mjs:12"
+          },
+          {
+            "id": "approve",
+            "outcome": "approved",
+            "cite": "catalogue/rules.mjs:13"
+          },
+          {
+            "id": "reject",
+            "outcome": "rejected",
+            "cite": "catalogue/rules.mjs:14"
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -43,6 +43,8 @@ export interface ArchCheckFacts {
   importEdges?: ImportEdge[];
   /** the raw IR per file — the authority verbs read call nodes and their arguments */
   irFiles?: Record<string, any>;
+  /** the DECLARED topology (src/server/topology_store.ts) — the topology rules read it */
+  topology?: import("../shared/topology_types.ts").TopologyModel;
   /** every parsed file — a layer with none is unverifiable, one importing nothing passes */
   parsedFiles?: string[];
 }
