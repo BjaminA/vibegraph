@@ -77,6 +77,10 @@ export const VERDICT_STYLE: Record<string, { hue: number; sat: number; dashed?: 
   confirmed:     { hue: 140, sat: 30 },
   ratified:      { hue: 140, sat: 30 },
   draft:         { hue: 166, sat: 70, dashed: true },
+  /** a question's text says it is answered: a passive tag, never a button */
+  answered:      { hue: 140, sat: 70 },
+  partly:        { hue: 45,  sat: 70, label: "partly answered" },
+  closed:        { hue: 140, sat: 30 },
 };
 
 /** The kind a file path is, from its extension: a schema is a type. */

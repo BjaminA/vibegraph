@@ -412,7 +412,15 @@ vibegraph-knowledge plan edit '<op>' | --file ops.json [--as agent]
 vibegraph-knowledge plan agree|drop <section> <id>
 vibegraph-knowledge plan promote <rule id>
 vibegraph-knowledge plan close | reopen
+vibegraph-knowledge plan close open <qN> [--note "…"]   # a question is answered
+vibegraph-knowledge plan drop open <qN> [--note "…"]    # a question is not needed
+vibegraph-knowledge plan reopen open <qN>
 ```
+
+A closed or dropped question is kept under `resolved` in `plan.json` with its
+revision, who, when and the note — `plan show` lists it, and the Plan panel's
+"Closed and dropped" group offers Reopen. Only open questions count against
+the cap of ten.
 
 Designs a project or feature before it exists, in `.vibegraph/plan.json`.
 The plan holds:
@@ -624,7 +632,7 @@ copy for another try.
 **Steps that are yours** (when Claude Code runs a command, it sets
 `CLAUDECODE=1`, and these are refused with where to do them instead):
 
-- `plan init`, `plan agree`, `plan close`, `plan reopen`, `plan promote`;
+- `plan init`, `plan agree`, `plan close`, `plan reopen`, `plan promote`, and closing, dropping or reopening an open question;
 - `software ratify`, `software remove`;
 - `constraints ratify`, `constraints remove`;
 - `skills ratify`, `skills reaffirm`, `skills auto-reaffirm`;

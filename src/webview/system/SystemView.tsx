@@ -399,9 +399,9 @@ export function SystemView({
       </button>
       {mode === "map" && <ArchLensBar lens={lens} onLens={(l) => { setLens(l); setArchSelected(null); }} onStory={trace.beats.length ? trace.actions.story : undefined} topology={hasTopology} />}
       {topoMapModel && topo.traces.length > 0 && <TopologyTraceBar traces={topo.traces} trace={traceName} onTrace={setTraceName} index={traceIndex} onIndex={setTraceIndex} />}
-      {/* One top-right column: the Real / Plan / Overlay switch, the legend opening UNDER it. */}
+      {/* Below the lens bar (its row is the proposal bar's): the Real / Plan / Overlay switch, the legend opening UNDER it. */}
       {mode === "map" && (architecture || planState.plan) && (
-        <div data-arch-top-right style={{ position: "absolute", top: "max(84px, calc(var(--vg-toolbar-bottom, 43px) + 8px))", right: 16, zIndex: 32, display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8, pointerEvents: "none" }}>
+        <div data-arch-top-right style={{ position: "absolute", top: "calc(var(--vg-lens-bar-bottom, 120px) + 8px)", right: 16, zIndex: 32, display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8, pointerEvents: "none" }}>
           {planState.plan && <PlanViewToggle view={planView} onView={setPlanView} revision={planState.plan.revision} unplaced={planMapModel?.planUnplaced ?? null} onSeed={architecture && !architecture.proposal && onArchAction ? () => onArchAction("seed-plan") : undefined} />}
           {architecture && <ArchLegend model={architecture} hiddenTools={base.hiddenTools ?? []} hiddenClusters={base.hiddenClusters ?? []} lens={lens === "config" ? "tools" : lens === "journeys" ? "flows" : lens === "resources" || lens === "decisions" ? "payloads" : lens} fold={!!archSelected} />}
         </div>

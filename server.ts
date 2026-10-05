@@ -8442,10 +8442,39 @@ function guardWatcher(w: fs.FSWatcher): fs.FSWatcher {
   });
 }
 
+let storeBroadcastTimer: ReturnType<typeof setTimeout> | null = null;
+/** plan.json or architecture.json changed on disk: every client gets the
+ *  fresh plan, and the envelope (which re-applies the architecture store). */
+function debounceStoreBroadcast(): void {
+  // Not before the first full parse: the first load reads both files fresh,
+  // and an envelope sent earlier would be an empty project.
+  if (!latestArchDerived) return;
+  if (storeBroadcastTimer) clearTimeout(storeBroadcastTimer);
+  storeBroadcastTimer = setTimeout(() => {
+    storeBroadcastTimer = null;
+    try {
+      const r = handlePlanMessage(analyzedRoot(), { type: "plan-get" }, planEnv(), latestStack);
+      const msg = JSON.stringify({ type: "plan-state", payload: r.reply });
+      for (const c of clients) c.send(msg);
+    } catch (e: any) { console.warn(`  [Plan] reload failed: ${e?.message ?? e}`); }
+    broadcastProjectUpdate();
+  }, 250);
+}
+
 if (isDirectory) {
+  // The two stores are replaced atomically (write a temp file, rename it):
+  // the recursive watcher follows the old inode and misses every later
+  // change, so they are polled by modification time instead.
+  for (const rel of [".vibegraph/plan.json", ".vibegraph/architecture.json"]) {
+    fs.watchFile(path.join(inputPath, rel), { interval: 700 }, (cur, prev) => { if (cur.mtimeMs !== prev.mtimeMs) debounceStoreBroadcast(); });
+  }
   try {
     guardWatcher(fs.watch(inputPath, { recursive: true }, (_, filename) => {
       if (!filename) return;
+      // 2026-10-05 — the plan and the architecture store are edited from the
+      // CLI and other sessions too: an open panel follows them.
+      const rel = filename.split(path.sep).join("/");
+      if (rel === ".vibegraph/plan.json" || rel === ".vibegraph/architecture.json") { debounceStoreBroadcast(); return; }
       if (!isSourceFile(filename, path.join(inputPath, filename))) {
         // Not source in any REGISTERED language (M-LANG1) — but an artifact
         // write still changes what the chip must say (see

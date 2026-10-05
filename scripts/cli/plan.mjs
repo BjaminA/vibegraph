@@ -49,7 +49,10 @@ const HELP = `usage: vibegraph-knowledge ${PLAN_USAGE}
                               sections also: stores (shared resources) — see docs/guide/PLAN-ARCHITECTURE.md
                                 {"op":"set-objective","text":"…"}
   agree <section> <id>        a person agrees to a proposed item
-  drop <section> <id>         drop an item (kept for the record); drop an open question to close it
+  drop <section> <id>         drop an item (kept for the record)
+  close open <qN> [--note "…"]   a person closes an answered question (kept under "Closed and dropped")
+  drop open <qN> [--note "…"]    a person drops a question that is not needed (kept the same way)
+  reopen open <qN>            a closed or dropped question is open again
   promote <rule id>           copy a planned rule into .vibegraph/constraints.json (human-stated), where it is checked and may gate
   review [--agree <s:id,…>] [--reject <s:id,…>]   every pending proposal on one page — a new item in full, a change to an
                               agreed item as a diff, the evidence for each; decide several at once (rejecting a change
@@ -64,7 +67,7 @@ const HELP = `usage: vibegraph-knowledge ${PLAN_USAGE}
 export function runPlan(args) {
   let parsed;
   try {
-    parsed = parseArgs({ args, allowPositionals: true, options: { root: { type: "string" }, json: { type: "boolean" }, file: { type: "string" }, as: { type: "string" }, apply: { type: "boolean" }, uncommitted: { type: "boolean" }, agree: { type: "string" }, reject: { type: "string" } } });
+    parsed = parseArgs({ args, allowPositionals: true, options: { root: { type: "string" }, json: { type: "boolean" }, note: { type: "string" }, file: { type: "string" }, as: { type: "string" }, apply: { type: "boolean" }, uncommitted: { type: "boolean" }, agree: { type: "string" }, reject: { type: "string" } } });
   } catch (e) { return { exitCode: 2, text: `${e.message}\n\n${HELP}\n` }; }
   const [sub, ...rest] = parsed.positionals;
   const root = resolve(cliPath(parsed.values.root ?? "."));
@@ -108,6 +111,14 @@ export function runPlan(args) {
       ops.push(p.op);
     }
     return apply(ops);
+  }
+  // 2026-10-05 — a question is closed (answered) or dropped (not needed) by a
+  // person, with an optional note, and kept on the record; reopen brings it back.
+  if ((sub === "close" || sub === "drop" || sub === "reopen") && rest[0] === "open") {
+    const id = rest[1];
+    if (!id) return done(`${sub} open needs the question's id (q3)`, 2);
+    const note = parsed.values.note;
+    return apply([sub === "reopen" ? { op: "reopen-question", id } : { op: sub === "close" ? "close-question" : "drop-question", id, ...(note ? { note } : {}) }]);
   }
   if (sub === "agree" || sub === "drop") {
     const [section, id] = rest;

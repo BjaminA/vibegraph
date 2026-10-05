@@ -46,8 +46,23 @@ const traceBtn: React.CSSProperties = {
 export type MapLens = ArchLens | "config" | "journeys" | "resources" | "decisions";
 
 export function ArchLensBar({ lens, onLens, onStory, topology = false }: { lens: MapLens; onLens: (l: MapLens) => void; onStory?: () => void; topology?: boolean }) {
+  // 2026-10-05 — the bar publishes its measured bottom edge as
+  // --vg-lens-bar-bottom on the map, so what sits below it (the proposal bar,
+  // the plan switch and legend) starts there whatever the bar's height.
+  const ref = React.useRef<HTMLDivElement | null>(null);
+  React.useLayoutEffect(() => {
+    const el = ref.current;
+    const host = el?.parentElement;
+    if (!el || !host) return;
+    const publish = () => host.style.setProperty("--vg-lens-bar-bottom", `${el.offsetTop + el.offsetHeight}px`);
+    publish();
+    const ro = new ResizeObserver(publish);
+    ro.observe(el);
+    window.addEventListener("resize", publish);
+    return () => { ro.disconnect(); window.removeEventListener("resize", publish); host.style.removeProperty("--vg-lens-bar-bottom"); };
+  }, []);
   return (
-    <div data-arch-lens-bar style={{ ...panel, position: "absolute", top: "max(84px, calc(var(--vg-toolbar-bottom, 43px) + 8px))", left: 250, zIndex: 30, display: "flex", padding: 4, gap: 4 }}>
+    <div ref={ref} data-arch-lens-bar style={{ ...panel, position: "absolute", top: "max(84px, calc(var(--vg-toolbar-bottom, 43px) + 8px))", left: 250, zIndex: 30, display: "flex", padding: 4, gap: 4 }}>
       {[...ARCH_LENSES, "config" as const, "journeys" as const, ...(topology ? ["resources" as const, "decisions" as const] : [])].map((l) => (
         <button key={l} data-arch-lens={l} data-active={l === lens ? "true" : "false"} onClick={() => onLens(l)}
           title={l === "config" || l === "journeys" || l === "resources" || l === "decisions" ? GUI_LENS_TITLE[l] : undefined}
@@ -89,6 +104,8 @@ export function ArchLegend({ model, hiddenTools = [], hiddenClusters = [], lens,
   // The inspector opens in the same top-right corner: the legend folds away
   // for it rather than sit over its close button.
   React.useEffect(() => { if (fold) setOpen(false); }, [fold]);
+  // The inspector opens below the plan switch, where the legend sits: it gives way.
+  if (fold) return null;
   return (
     // TOP-RIGHT, level with the lens bar: above where the map's content
     // starts, so the collapsed pill never sits on a card (bottom-left, it
@@ -169,7 +186,7 @@ export function ArchProposalBar({ model, state, onAction }: {
   const why = p ? [p.narrative ?? "", ...p.refused.map((r) => `refused ${r.item}: ${r.reason}`)].filter(Boolean).join("\n") : "";
   return (
     <div data-arch-proposal-bar data-arch-proposal-state={state.busy ? "busy" : p ? "pending" : model.ratified ? "ratified" : "none"}
-      style={{ ...panel, position: "absolute", top: "max(128px, calc(var(--vg-toolbar-bottom, 43px) + 52px))", left: 250, zIndex: 30, display: "flex", alignItems: "center", gap: 8, padding: 4, maxWidth: 640 }}>
+      style={{ ...panel, position: "absolute", top: "calc(var(--vg-lens-bar-bottom, 120px) + 8px)", left: 250, zIndex: 30, display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8, padding: 4, maxWidth: "max(240px, min(640px, calc(100% - 650px)))" }}>
       {/* Ratified groups are settled: no button spawns another proposal
           (the server's proposalGate refuses it too). Re-proposing is a
           deliberate act — the CLI's --force, or editing the file. */}
@@ -237,7 +254,7 @@ function GroupInspector({ group, model, onClose }: { group: ArchGroupRecord; mod
   const labelOf = (id: string) => model.nodes.find((n) => n.id === id)?.label ?? model.groups.find((g) => g.id === id)?.label ?? id;
   const inferred = group.source === "proposed" && !(group.evidence?.length);
   return (
-    <div data-arch-inspector data-arch-inspector-group={group.id} style={{ ...panel, position: "absolute", top: 172, right: 16, zIndex: 31, width: 360, maxHeight: "60%", overflowY: "auto", padding: 12 }}>
+    <div data-arch-inspector data-arch-inspector-group={group.id} style={{ ...panel, position: "absolute", top: "calc(var(--vg-lens-bar-bottom, 120px) + 64px)", right: 16, zIndex: 31, width: 360, maxHeight: "60%", overflowY: "auto", padding: 12 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
         <div style={{ flex: 1, color: "var(--text-primary)", fontSize: "var(--fs-13)", fontWeight: 600 }}>{group.label}</div>
         <button data-arch-inspector-close onClick={onClose} title="Close" style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer" }}>
@@ -273,7 +290,7 @@ export function ArchInspector({ selected, model, onClose, onOpenThread, onReach,
   const threads = isNode ? selected.node.threads : selected.edge.threads;
   const refs = isNode ? selected.node.refs : selected.edge.refs;
   return (
-    <div data-arch-inspector style={{ ...panel, position: "absolute", top: 172, right: 16, zIndex: 31, width: 360, maxHeight: "60%", overflowY: "auto", padding: 12 }}>
+    <div data-arch-inspector style={{ ...panel, position: "absolute", top: "calc(var(--vg-lens-bar-bottom, 120px) + 64px)", right: 16, zIndex: 31, width: 360, maxHeight: "60%", overflowY: "auto", padding: 12 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
         <div style={{ flex: 1, color: "var(--text-primary)", fontSize: "var(--fs-13)", fontWeight: 600 }}>{title}</div>
         <button data-arch-inspector-close onClick={onClose} title="Close" style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer" }}>

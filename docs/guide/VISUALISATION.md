@@ -352,6 +352,19 @@ plan is kept small on purpose (hard caps on every section), and every process
 and thread must say which part of the objective it serves. **Close the plan**
 when it is done: it stays on disk and stops being sent to sessions.
 
+**Open questions** are shown in full, however long. Each has **Close —
+answered** and **Drop — not needed**; both ask you to confirm and take an
+optional note (the answer, or why it no longer matters), which goes into the
+plan's history. A question whose text starts "ANSWERED" carries a green
+*answered* tag — a tag, not a button. Closed and dropped questions are kept
+under **Closed and dropped**, with who, when and the note, and **Reopen**. Only
+open questions count against the cap of ten; at the cap, the add box lists the
+questions that look answered and offers **Close all answered**. Near the top
+of **Everything**, a summary ("9 open questions (cap 10) · 4 look answered")
+jumps to them. These are your steps: Claude cannot close or drop a question.
+On the command line: `plan close open q3 --note "…"`, `plan drop open q3`,
+`plan reopen open q3`.
+
 The objective is yours alone. If Claude proposes a different one, it
 appears under **Open questions** as "Proposed objective: …" with an **Adopt**
 button. An item whose "serves" shares no word with the objective carries a

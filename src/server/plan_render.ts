@@ -132,6 +132,12 @@ export function formatPlanMd(plan: Plan, rec?: PlanReconcile | null): string {
     }
     out.push("");
   }
+  // 2026-10-05 — closed and dropped questions stay on the record.
+  if (plan.resolved?.length) {
+    out.push("## Closed and dropped questions", "");
+    for (const q of [...plan.resolved].reverse()) out.push(`- **${q.id}** ${q.state} at rev ${q.rev} by ${q.by} (${q.at.slice(0, 10)})${q.note ? ` — ${q.note}` : ""}: ${q.text.split("\n")[0].slice(0, 200)}`);
+    out.push("");
+  }
   if (rec?.offObjective?.length) {
     out.push("## Possibly off the objective (a word-match guess)", "",
       "These say they serve something that shares no word with the objective. Words are not meaning — check each one, and drop it or say how it serves the objective.", "",

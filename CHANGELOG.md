@@ -3,7 +3,47 @@
 `vibegraph-knowledge` and the VibeGraph app. Newest first. Each entry says what
 changed and, where an existing user would notice, how behaviour differs.
 
-## 0.23.1 — unreleased
+## 0.24.0 — unreleased
+
+### The plan's open questions: shown whole, closed on purpose, kept on the record
+
+From a field report (plan revision 205, 9 of 10 questions open): the only
+control on a question was "✓ Answered", which read as a status badge, so the
+operator could not tell how to close one; a dropped question was deleted and
+looked like a broken panel; long questions were clipped to two lines with
+the answer in the clipped part; and in "Everything" the questions sat
+10,000 px down.
+[docs/guide/VISUALISATION.md](docs/guide/VISUALISATION.md#8-planning--a-hypothetical-project-beside-the-real-one).
+
+- **Shown whole.** A question card grows with its text, which wraps; no line
+  clamp, no ellipsis, no inner scroll. A question may now be up to 1,200
+  characters, room for the answer as it is found.
+- **Close and Drop are labelled actions.** "Close — answered" and "Drop — not
+  needed", each confirmed, each with an optional note recorded in the plan
+  history (`close open q3 — <note>`). "ANSWERED …" at the start of a question
+  shows as a passive tag. A person's step: refused from an agent, and from the
+  CLI under Claude Code (`plan close|drop|reopen open qN [--note]`).
+- **Closed and dropped stay on the record.** A collapsed "Closed and dropped
+  (n)" group shows each one's state, revision, who, when and note, with
+  Reopen. Only open questions count against the cap of 10. `plan show` lists
+  them.
+- **Reachable.** A summary near the top of "Everything" ("9 open questions (cap
+  10) · 4 look answered") jumps to the questions; at the cap, adding one more
+  lists those that look answered with "Close all answered" (one confirm naming
+  every id).
+- **The panel follows edits made elsewhere.** A plan or architecture store
+  changed by the CLI or another session reaches an open panel within a second
+  (they are polled by modification time: an atomic save replaces the file, and
+  the directory watcher lost it after the first one).
+
+### The map: the plan switch and legend below the lens bar
+
+The Real / Plan / Overlay switch and the legend sat on the lens bar's row and
+covered its end on narrower windows. The lens bar now publishes its measured
+bottom edge; the proposal bar, the switch with the legend under it, and the
+node inspector all start below it.
+
+## 0.23.1 — 2026-10-05
 
 0.23.0's content, published whole. 0.23.0 (like 0.21.1) went to npm with 3
 files instead of ~93: the package's build output is never committed, and it

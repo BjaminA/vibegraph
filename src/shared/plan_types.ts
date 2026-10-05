@@ -42,6 +42,12 @@ export const PLAN_CAPS = {
   primarySteps: 8,
   policies: 10,
   open: 10,
+  /** 2026-10-05 — a question's text: it may carry its answer as it is found */
+  question: 1200,
+  /** closed and dropped questions kept on the record (oldest go first) */
+  resolved: 100,
+  /** a person's note when closing or dropping a question */
+  note: 300,
   /** one line: labels, `serves`, `why`, a step, a question */
   line: 160,
   objective: 240,
@@ -265,6 +271,26 @@ export interface PlanQuestion {
 /** 2026-10-01 — what an assumption (an open question an item `assumes`) stands as. */
 export type AssumptionState = "unverified" | "confirmed" | "refuted";
 
+/** 2026-10-05 — a question a person closed (answered) or dropped (not
+ *  needed): kept on the record with when, by whom and why, and reopenable.
+ *  It used to be deleted, and a person looking for it thought the panel broken. */
+export interface ResolvedQuestion extends PlanQuestion {
+  state: "closed" | "dropped";
+  rev: number;
+  at: string;
+  by: PlanActor;
+  note?: string;
+}
+
+/** A question whose text says it is answered ("ANSWERED (date): …"): a
+ *  passive tag, and what "Close all answered" offers. Partly answered is not. */
+export function looksAnswered(q: Pick<PlanQuestion, "text">): "answered" | "partly" | null {
+  const t = q.text.trimStart();
+  if (/^partly\s+answered\b/i.test(t)) return "partly";
+  if (/^answered\b/i.test(t)) return "answered";
+  return null;
+}
+
 export interface PlanChange { rev: number; at: string; by: PlanActor; change: string }
 
 export interface Plan {
@@ -290,6 +316,8 @@ export interface Plan {
   principals?: PlanPrincipal[];
   flows?: PlanFlow[];
   modules?: PlanModule[];
+  /** 2026-10-05 — closed and dropped questions, newest last; absent while empty */
+  resolved?: ResolvedQuestion[];
 }
 
 export type PlanSection = "processes" | "boundaries" | "stack" | "threads" | "policies" | "open" | "stores" | "principals" | "flows" | "modules";

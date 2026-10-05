@@ -19,7 +19,8 @@ import { usePlanState, sendPlanOp, useSoftwareState, sendSoftware } from "./useP
 import { SheetPortal, SheetBody, type SheetSlot } from "./panels/PanelSheet";
 import { ItemFrame } from "./panels/ItemFrame";
 import { Verdict } from "./panels/Chip";
-import { PlanItem, QuestionItem, WriteMatrix } from "./plan/planItems";
+import { PlanItem, WriteMatrix } from "./plan/planItems";
+import { QuestionCard, ResolvedQuestions, AddQuestion, QuestionsSummary } from "./plan/planQuestions";
 
 const small: React.CSSProperties = { fontSize: "var(--fs-12)", color: "var(--text-muted)", lineHeight: 1.5 };
 const field: React.CSSProperties = {
@@ -89,7 +90,8 @@ export function PlanPanel({ open, slot }: { open: boolean; slot: SheetSlot | nul
   const subtitle = plan ? `revision ${plan.revision}${plan.closed ? " · closed" : ""} · hypothetical: a plan, not the code` : "no plan yet";
   const navItems: Array<{ id: NavId; label: string; count?: number }> = plan ? [
     { id: "all", label: "Everything" },
-    ...ORDER.filter((s) => live(s).length).map((s) => ({ id: s as NavId, label: SECTION_TITLE[s], count: live(s).length })),
+    ...ORDER.filter((s) => s !== "open" && live(s).length).map((s) => ({ id: s as NavId, label: SECTION_TITLE[s], count: live(s).length })),
+    { id: "open" as NavId, label: SECTION_TITLE.open, count: plan.open.length },
     ...(reconcile?.writeMatrix?.length ? [{ id: "writes" as NavId, label: "Who writes where" }] : []),
     { id: "software", label: "Software specs" },
     ...(plan.changelog.length ? [{ id: "changes" as NavId, label: "Changes", count: plan.changelog.length }] : []),
@@ -121,6 +123,7 @@ export function PlanPanel({ open, slot }: { open: boolean; slot: SheetSlot | nul
             <div style={small}>Objective</div>
             <div style={{ fontSize: "var(--fs-14)", lineHeight: 1.4 }}>{plan.objective}</div>
           </div>
+          {nav === "all" && <QuestionsSummary plan={plan} onJump={() => document.querySelector('[data-plan-section="open"]')?.scrollIntoView({ block: "start" })} />}
           {backlog > 0 && <div data-plan-backlog={backlog} style={{ ...small, color: "var(--accent-warning)" }}>{backlog} proposal{backlog === 1 ? "" : "s"} await review — agree or reject each below (or <code>vibegraph-knowledge plan review</code> for one page with every diff).</div>}
           {reconcile && (
             <div data-plan-counts className="vg-score" title={reconcile.limits.join("\n")}>
@@ -131,17 +134,25 @@ export function PlanPanel({ open, slot }: { open: boolean; slot: SheetSlot | nul
               {only && <button className="vg-sheet-btn" data-plan-filter-clear onClick={() => setOnly(null)}>show all</button>}
             </div>
           )}
-          {ORDER.filter((s) => showSection(s) && shown(s).length).map((s) => (
+          {ORDER.filter((s) => s !== "open" && showSection(s) && shown(s).length).map((s) => (
             <section key={s} data-plan-section={s} data-sheet-section={s} style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               <h3 style={heading}>{SECTION_TITLE[s]}</h3>
               {shown(s).map((it) => {
                 const id = planItemId(s, it);
-                return s === "open"
-                  ? <QuestionItem key={id} q={it} finding={findingOf("open", id)} />
-                  : <PlanItem key={id} plan={plan} section={s} it={it} finding={findingOf(s, id)} off={offSet.has(`${s}:${id}`)} />;
+                return <PlanItem key={id} plan={plan} section={s} it={it} finding={findingOf(s, id)} off={offSet.has(`${s}:${id}`)} />;
               })}
             </section>
           ))}
+          {/* Questions: open ones in full, adding one (the cap said inline),
+              and what was closed or dropped — always reachable. */}
+          {showSection("open") && !only && (
+            <section data-plan-section="open" data-sheet-section="open" style={{ display: "flex", flexDirection: "column", gap: 8, scrollMarginTop: 48 }}>
+              <h3 style={heading}>{`${SECTION_TITLE.open} — ${plan.open.length} open (cap 10)`}</h3>
+              {plan.open.map((q) => <QuestionCard key={q.id} q={q} finding={findingOf("open", q.id)} />)}
+              <AddQuestion plan={plan} />
+              <ResolvedQuestions resolved={plan.resolved ?? []} />
+            </section>
+          )}
           {only && !ORDER.some((s) => showSection(s) && shown(s).length) && <div style={small}>No item in this section is {only}.</div>}
           {showSection("writes") && !only && (reconcile?.writeMatrix?.length ?? 0) > 0 && (
             <section data-sheet-section="writes" style={{ display: "flex", flexDirection: "column", gap: 8 }}>

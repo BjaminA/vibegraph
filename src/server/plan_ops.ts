@@ -31,9 +31,14 @@ export type PlanOp =
   /** 2026-10-01 — a person declines a proposal: a change to an AGREED item
    *  goes back to the agreed version (kept as `agreedAs`); a new item is dropped */
   | { op: "reject"; section: PlanSection; id: string }
-  | { op: "close" } | { op: "reopen" };
+  | { op: "close" } | { op: "reopen" }
+  /** 2026-10-05 — a person closes a question (answered) or drops it (not
+   *  needed), with an optional note; both are kept in `resolved`, reopenable */
+  | { op: "close-question"; id: string; note?: string }
+  | { op: "drop-question"; id: string; note?: string }
+  | { op: "reopen-question"; id: string };
 
-export const PLAN_OP_NAMES = ["set-objective", "add", "update", "drop", "agree", "rename", "to-store", "rename-symbol", "reject", "close", "reopen"] as const;
+export const PLAN_OP_NAMES = ["set-objective", "add", "update", "drop", "agree", "rename", "to-store", "rename-symbol", "reject", "close", "reopen", "close-question", "drop-question", "reopen-question"] as const;
 
 /** Parse an untrusted op (WS, MCP, the CLI). */
 export function parsePlanOp(x: unknown): { ok: true; op: PlanOp } | { ok: false; error: string } {
@@ -42,6 +47,12 @@ export function parsePlanOp(x: unknown): { ok: true; op: PlanOp } | { ok: false;
   if (!PLAN_OP_NAMES.includes(o.op)) return { ok: false, error: `op must be one of ${PLAN_OP_NAMES.join("|")}` };
   if (o.op === "set-objective") return typeof o.text === "string" ? { ok: true, op: { op: o.op, text: o.text } } : { ok: false, error: "set-objective needs text" };
   if (o.op === "close" || o.op === "reopen") return { ok: true, op: { op: o.op } };
+  if (o.op === "close-question" || o.op === "drop-question" || o.op === "reopen-question") {
+    if (typeof o.id !== "string" || !/^[\w.-]{1,40}$/.test(o.id)) return { ok: false, error: `${o.op} needs the question's id (q3)` };
+    if (o.note !== undefined && (typeof o.note !== "string" || o.note.length > 300 || /[\r\n]/.test(o.note))) return { ok: false, error: "a note is one line of at most 300 characters" };
+    if (o.op === "reopen-question") return { ok: true, op: { op: o.op, id: o.id } };
+    return { ok: true, op: { op: o.op, id: o.id, ...(o.note?.trim() ? { note: o.note.trim() } : {}) } };
+  }
   if (o.op === "rename-symbol") {
     return typeof o.from === "string" && o.from && typeof o.to === "string" && o.to && /^[A-Za-z_$][\w$.]*$/.test(o.to)
       ? { ok: true, op: { op: "rename-symbol", from: o.from, to: o.to } }
@@ -67,7 +78,8 @@ export function parsePlanOp(x: unknown): { ok: true; op: PlanOp } | { ok: false;
 /** The next free id in a section ("b3", "p2", "q4"). */
 function nextId(plan: Plan, section: PlanSection): string {
   const prefix = { boundaries: "b", policies: "p", open: "q", flows: "f" }[section as string] ?? "x";
-  const used = new Set((plan[section] as any[]).map((i) => planItemId(section, i)));
+  // A closed question keeps its id: a new one must not reuse it.
+  const used = new Set([...(plan[section] as any[]), ...(section === "open" ? plan.resolved ?? [] : [])].map((i) => planItemId(section, i)));
   let n = (plan[section] as any[]).length + 1;
   while (used.has(`${prefix}${n}`)) n++;
   return `${prefix}${n}`;
@@ -79,6 +91,8 @@ const describe = (op: PlanOp, id?: string) =>
   : op.op === "rename" ? `rename ${op.section} ${op.from} → ${op.to}`
   : op.op === "to-store" ? `process ${op.id} → store ${op.id}`
   : op.op === "rename-symbol" ? `rename function ${op.from} → ${op.to} in the plan`
+  : op.op === "close-question" || op.op === "drop-question" ? `${op.op === "close-question" ? "close" : "drop"} open ${op.id}${op.note ? ` — ${op.note}` : ""}`
+  : op.op === "reopen-question" ? `reopen open ${op.id}`
   : `${op.op} ${op.section} ${id ?? (op as any).id}`;
 
 export interface ApplyResult { plan?: Plan; error?: string; changes: string[] }
@@ -100,7 +114,7 @@ export function applyPlanOps(prior: Plan | null, ops: PlanOp[], by: PlanActor, n
     rest = ops.slice(1);
   } else return { error: "there is no plan yet — start one with an objective (plan init / set-objective)", changes: [] };
   for (const op of rest) {
-    const err = applyOne(plan, op, by, changes);
+    const err = applyOne(plan, op, by, changes, now);
     if (err) return { error: `${describe(op)}: ${err}`, changes: [] };
   }
   plan.revision += 1;
@@ -111,7 +125,37 @@ export function applyPlanOps(prior: Plan | null, ops: PlanOp[], by: PlanActor, n
   return { plan, changes };
 }
 
-function applyOne(plan: Plan, op: PlanOp, by: PlanActor, changes: string[]): string | null {
+/** Close or drop an open question: it moves to `resolved` with when, who
+ *  and why. A question something rests on is answered by its evidence first. */
+function resolveQuestion(plan: Plan, id: string, state: "closed" | "dropped", by: PlanActor, now: Date, note?: string): string | null {
+  if (by !== "human") return "only a person closes or drops a question — record what was found as a note on it, or as plan items, and the person closes it";
+  const idx = plan.open.findIndex((q) => q.id === id);
+  if (idx < 0) return (plan.resolved ?? []).some((q) => q.id === id) ? `${id} is already closed or dropped (reopen it first)` : `no open question ${id}`;
+  const resting = ([] as Array<{ id?: string; tool?: string; assumes?: string[] }>)
+    .concat(plan.processes, plan.boundaries, plan.stack, plan.threads, plan.policies, plan.stores ?? [], plan.principals ?? [], plan.flows ?? [], plan.modules ?? [])
+    .filter((x) => x.assumes?.includes(id)).map((x) => x.id ?? x.tool);
+  if (resting.length) return `${resting.join(", ")} assume${resting.length === 1 ? "s" : ""} ${id} — record its evidence (\`{"op":"update","section":"open","id":"${id}","fields":{"evidence":[…]}}\`), or take it out of their \`assumes\` first`;
+  const [q] = plan.open.splice(idx, 1);
+  plan.resolved = [...(plan.resolved ?? []), { ...q, state, rev: plan.revision + 1, at: now.toISOString(), by, ...(note ? { note } : {}) }].slice(-PLAN_CAPS.resolved);
+  return null;
+}
+
+function applyOne(plan: Plan, op: PlanOp, by: PlanActor, changes: string[], now: Date): string | null {
+  if (op.op === "close-question" || op.op === "drop-question") {
+    const err = resolveQuestion(plan, op.id, op.op === "close-question" ? "closed" : "dropped", by, now, op.note);
+    if (!err) changes.push(describe(op));
+    return err;
+  }
+  if (op.op === "reopen-question") {
+    if (by !== "human") return "only a person reopens a question";
+    const idx = (plan.resolved ?? []).findIndex((q) => q.id === op.id);
+    if (idx < 0) return `no closed or dropped question ${op.id}`;
+    const { state: _s, rev: _r, at: _a, by: _b, note: _n, ...q } = plan.resolved![idx];
+    plan.resolved!.splice(idx, 1);
+    plan.open.push(q);
+    changes.push(describe(op));
+    return null;
+  }
   if (op.op === "set-objective") {
     if (plan.objective === op.text) return null;
     // The objective is what every item is measured against, so it is a
@@ -167,12 +211,9 @@ function applyOne(plan: Plan, op: PlanOp, by: PlanActor, changes: string[]): str
   const item = list[idx];
   if (op.op === "drop") {
     if (op.section === "open") {
-      // A question something rests on is answered by its evidence, not deleted.
-      const resting = ([] as Array<{ id?: string; tool?: string; assumes?: string[] }>)
-        .concat(plan.processes, plan.boundaries, plan.stack, plan.threads, plan.policies, plan.stores ?? [], plan.principals ?? [], plan.flows ?? [], plan.modules ?? [])
-        .filter((x) => x.assumes?.includes(op.id)).map((x) => x.id ?? x.tool);
-      if (resting.length) return `${resting.join(", ")} assume${resting.length === 1 ? "s" : ""} ${op.id} — record its evidence (\`{"op":"update","section":"open","id":"${op.id}","fields":{"evidence":[…]}}\`), or take it out of their \`assumes\` first`;
-      list.splice(idx, 1);
+      // 2026-10-05 — kept on the record as dropped, not deleted.
+      const err = resolveQuestion(plan, op.id, "dropped", by, now);
+      if (err) return err;
     } else {
       if (item.status === "promoted") return `a promoted rule lives in constraints.json now as ${item.constraintId ?? "a constraint"} — remove it with \`vibegraph-knowledge constraint remove ${item.constraintId ?? "<id>"}\``;
       item.status = "dropped";

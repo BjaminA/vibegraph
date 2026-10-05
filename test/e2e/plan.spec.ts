@@ -130,6 +130,24 @@ test.describe("the hypothetical plan", () => {
     const tb = (await toggle.boundingBox())!, lb = (await page.locator("[data-arch-legend]").boundingBox())!;
     expect(lb.y).toBeGreaterThanOrEqual(tb.y + tb.height);
     await page.locator("[data-arch-legend-toggle]").click();
+    // …and the switch sits BELOW the lens bar, clear of the proposal bar beside it.
+    const apart = (a: { x: number; y: number; width: number; height: number }, b: typeof a) =>
+      a.x + a.width <= b.x || b.x + b.width <= a.x || a.y + a.height <= b.y || b.y + b.height <= a.y;
+    for (const width of [1600, 1024]) {
+      await page.setViewportSize({ width, height: 900 });
+      await page.waitForTimeout(200);
+      const t = (await toggle.boundingBox())!;
+      expect(apart(t, (await page.locator("[data-arch-lens-bar]").boundingBox())!), `switch vs lens bar at ${width}`).toBe(true);
+      expect(apart(t, (await page.locator("[data-arch-proposal-bar]").boundingBox())!), `switch vs proposal bar at ${width}`).toBe(true);
+    }
+    await page.setViewportSize({ width: 1600, height: 900 });
+    // A selected card's inspector opens below the switch, not over it.
+    await page.locator("[data-arch-id]").first().click({ force: true });
+    const insp = page.locator("[data-arch-inspector]");
+    await expect(insp).toBeVisible();
+    const t2 = (await toggle.boundingBox())!;
+    expect((await insp.boundingBox())!.y).toBeGreaterThanOrEqual(t2.y + t2.height);
+    await page.locator("[data-arch-inspector-close]").click();
 
     await toggle.locator('[data-plan-view="plan"]').click();
     // 3 processes + 4 tools; every one a dashed ghost.

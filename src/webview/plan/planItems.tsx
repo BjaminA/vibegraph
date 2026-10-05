@@ -10,10 +10,7 @@ import { planItemId } from "../../shared/plan_types";
 import { planItemFacts } from "../../shared/plan_facts";
 import { ItemFrame } from "../panels/ItemFrame";
 import { Chip, Verdict } from "../panels/Chip";
-import { sendPlanOp, sendPlanOps, promotePlanRule } from "../usePlanState";
-
-/** How an agent's proposed objective is spelled as an open question (plan_ops.ts). */
-const PROPOSED_OBJECTIVE = "Proposed objective:";
+import { sendPlanOp, promotePlanRule } from "../usePlanState";
 
 const small: React.CSSProperties = { fontSize: "var(--fs-12)", color: "var(--text-muted)", lineHeight: 1.5 };
 
@@ -92,31 +89,6 @@ export function PlanItem({ plan, section, it, finding, off }: { plan: Plan; sect
             <ExternalLink size={12} strokeWidth={1.5} /> Thread
           </button>
         )}
-      </>}
-    />
-  );
-}
-
-export function QuestionItem({ q, finding }: { q: any; finding?: PlanFinding }) {
-  const state = !finding ? null : finding.verdict === "violated" ? "refuted" : finding.verdict === "pass" ? "confirmed" : "unverified";
-  return (
-    <ItemFrame
-      data-plan-item={`open:${q.id}`}
-      chip={{ kind: "question", id: q.id }}
-      badges={state ? <span data-plan-question-state={state} title={finding!.detail}><Verdict v={state} /></span> : null}
-      facts={[{ label: "asks", text: q.text }, ...(q.about ? [{ label: "scope" as const, text: q.about }] : [])]}
-      details={finding?.detail ? { summary: `Evidence · ${(q.evidence ?? []).length} run${(q.evidence ?? []).length === 1 ? "" : "s"}`, body: <p>{finding.detail}</p> } : null}
-      actions={<>
-        {/* Claude may propose a new objective; only a person adopts it. */}
-        {q.text.startsWith(PROPOSED_OBJECTIVE) && (
-          <button className="vg-btn" data-tone="go" data-plan-adopt-objective title="Make this the plan's objective"
-            onClick={() => sendPlanOps([{ op: "set-objective", text: q.text.slice(PROPOSED_OBJECTIVE.length).trim() }, { op: "drop", section: "open", id: q.id }])}>
-            <ArrowUpRight size={12} strokeWidth={1.5} /> Adopt
-          </button>
-        )}
-        <button className="vg-btn" onClick={() => sendPlanOp({ op: "drop", section: "open", id: q.id })} title="Answered — remove the question">
-          <Check size={12} strokeWidth={1.5} /> Answered
-        </button>
       </>}
     />
   );

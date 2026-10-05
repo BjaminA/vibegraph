@@ -55,6 +55,18 @@ export function validatePlan(x: unknown): string | null {
     if (!Array.isArray(p[s])) return `${s} must be an array`;
   }
   if (!Array.isArray(p.changelog)) return "changelog must be an array";
+  if (p.resolved !== undefined) {
+    if (!Array.isArray(p.resolved)) return "resolved must be an array";
+    if (p.resolved.length > PLAN_CAPS.resolved) return `resolved keeps at most ${PLAN_CAPS.resolved} questions`;
+    const openIds = new Set(((p.open ?? []) as Array<{ id: string }>).map((q) => q.id));
+    for (const [i, r] of (p.resolved as any[]).entries()) {
+      if (!r || typeof r !== "object" || !str(r.id) || !line(r.text, PLAN_CAPS.question)) return `resolved[${i}]: a question with an id and its text`;
+      if (r.state !== "closed" && r.state !== "dropped") return `resolved[${i}]: state is closed or dropped`;
+      if (!Number.isInteger(r.rev) || !str(r.at) || (r.by !== "human" && r.by !== "agent")) return `resolved[${i}]: rev, at and by say when and who`;
+      if (r.note !== undefined && !line(r.note, PLAN_CAPS.note)) return `resolved[${i}]: note is one line of at most ${PLAN_CAPS.note} characters`;
+      if (openIds.has(r.id)) return `resolved[${i}]: ${r.id} is open too`;
+    }
+  }
 
   for (const s of PLAN_SECTIONS) {
     const items = (p[s] ?? []) as unknown[];
@@ -132,8 +144,8 @@ export function validateItem(section: PlanSection, raw: unknown): string | null 
   if ((section === "open" || section === "policies") && o.about !== undefined && !line(o.about, 80)) return "about must name a planned item (a process, thread, boundary or tool id)";
   if (section === "open") {
     if (!str(o.id) || !ID_RE.test(o.id)) return "id must be a short name";
-    // Room for "Proposed objective: <an objective>" (an agent's new objective waits here).
-    return line(o.text, PLAN_CAPS.objective + 40) ? null : `text must be one line of at most ${PLAN_CAPS.objective + 40} characters`;
+    // A question may carry its answer as it is found ("ANSWERED (date): …").
+    return line(o.text, PLAN_CAPS.question) ? null : `text must be at most ${PLAN_CAPS.question} characters`;
   }
   const statuses = section === "policies" ? POLICY_STATUSES : STATUSES;
   if (o.groundedIn !== undefined && o.groundedIn !== null && !(str(o.groundedIn) && o.groundedIn.length <= 400)) return "groundedIn must be a quote (≤ 400) or null";
@@ -233,6 +245,7 @@ export function savePlan(root: string, plan: Plan): { path?: string; error?: str
     // them is byte-for-byte what it was before they existed.
     const out: Record<string, unknown> = { ...plan };
     for (const s of PLAN_OPTIONAL_SECTIONS) if (!(out[s] as unknown[] | undefined)?.length) delete out[s];
+    if (!(out.resolved as unknown[] | undefined)?.length) delete out.resolved;
     fs.writeFileSync(`${file}.tmp`, JSON.stringify(out, null, 2) + "\n", "utf-8");
     fs.renameSync(`${file}.tmp`, file);
     // The converted legacy file is now a second, stale copy: remove it.
