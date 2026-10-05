@@ -3,7 +3,16 @@
 `vibegraph-knowledge` and the VibeGraph app. Newest first. Each entry says what
 changed and, where an existing user would notice, how behaviour differs.
 
-## 0.23.0 — unreleased
+## 0.23.1 — unreleased
+
+0.23.0's content, published whole. 0.23.0 (like 0.21.1) went to npm with 3
+files instead of ~93: the package's build output is never committed, and it
+was published straight after a fresh export with nothing built. `npm
+publish` now builds the package itself (`prepublish.mjs`, run as
+`prepublishOnly`) and refuses to publish if the CLI bundle, the viewer or the
+parser scripts are missing. Use 0.23.1, not 0.23.0.
+
+## 0.23.0 — 2026-10-05 (broken publish: 3 files — use 0.23.1)
 
 ### Architecture groups that stay true as the project grows
 
