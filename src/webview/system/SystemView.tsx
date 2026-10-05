@@ -399,9 +399,13 @@ export function SystemView({
       </button>
       {mode === "map" && <ArchLensBar lens={lens} onLens={(l) => { setLens(l); setArchSelected(null); }} onStory={trace.beats.length ? trace.actions.story : undefined} topology={hasTopology} />}
       {topoMapModel && topo.traces.length > 0 && <TopologyTraceBar traces={topo.traces} trace={traceName} onTrace={setTraceName} index={traceIndex} onIndex={setTraceIndex} />}
-      {mode === "map" && architecture && <ArchLegend model={architecture} hiddenTools={base.hiddenTools ?? []} hiddenClusters={base.hiddenClusters ?? []} lens={lens === "config" ? "tools" : lens === "journeys" ? "flows" : lens === "resources" || lens === "decisions" ? "payloads" : lens} fold={!!archSelected} />}
-      {mode === "map" && planState.plan && <PlanViewToggle view={planView} onView={setPlanView} revision={planState.plan.revision} unplaced={planMapModel?.planUnplaced ?? null}
-        onSeed={architecture && !architecture.proposal && onArchAction ? () => onArchAction("seed-plan") : undefined} />}
+      {/* One top-right column: the Real / Plan / Overlay switch, the legend opening UNDER it. */}
+      {mode === "map" && (architecture || planState.plan) && (
+        <div data-arch-top-right style={{ position: "absolute", top: "max(84px, calc(var(--vg-toolbar-bottom, 43px) + 8px))", right: 16, zIndex: 32, display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8, pointerEvents: "none" }}>
+          {planState.plan && <PlanViewToggle view={planView} onView={setPlanView} revision={planState.plan.revision} unplaced={planMapModel?.planUnplaced ?? null} onSeed={architecture && !architecture.proposal && onArchAction ? () => onArchAction("seed-plan") : undefined} />}
+          {architecture && <ArchLegend model={architecture} hiddenTools={base.hiddenTools ?? []} hiddenClusters={base.hiddenClusters ?? []} lens={lens === "config" ? "tools" : lens === "journeys" ? "flows" : lens === "resources" || lens === "decisions" ? "payloads" : lens} fold={!!archSelected} />}
+        </div>
+      )}
       {mode === "map" && <ArchTraceBar mode={trace.mode} beats={trace.beats} labelOf={labelOf} actions={trace.actions} />}
       {mode === "map" && architecture && (
         <ArchProposalBar model={architecture} state={archPropose ?? { busy: false, error: null }} onAction={onArchAction} />

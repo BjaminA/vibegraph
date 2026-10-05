@@ -94,7 +94,8 @@ export function ArchLegend({ model, hiddenTools = [], hiddenClusters = [], lens,
     // starts, so the collapsed pill never sits on a card (bottom-left, it
     // covered a private production codebase's web app card whenever the map ran taller than the
     // screen). Opens downward, over the map, only when asked.
-    <div data-arch-legend data-open={open ? "true" : "false"} style={{ ...panel, position: "absolute", top: "max(84px, calc(var(--vg-toolbar-bottom, 43px) + 8px))", right: 16, zIndex: 32, padding: open ? 12 : 0, maxWidth: 320 }}>
+    // Placed by SystemView's top-right column, under the plan switch.
+    <div data-arch-legend data-open={open ? "true" : "false"} style={{ ...panel, padding: open ? 12 : 0, maxWidth: 320, pointerEvents: "auto", maxHeight: "60vh", overflowY: "auto" }}>
       <button data-arch-legend-toggle aria-expanded={open} onClick={() => setOpen((o) => !o)}
         title={open ? "Hide the legend" : "Show the legend"}
         style={{

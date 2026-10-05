@@ -123,6 +123,13 @@ test.describe("the hypothetical plan", () => {
     const toggle = page.locator("[data-plan-view-toggle]");
     await expect(toggle).toBeVisible({ timeout: 10_000 });
     await expect(page.locator('[data-arch-source="planned"]')).toHaveCount(0);
+    // 2026-10-05 — the legend sits UNDER the Real / Plan / Overlay switch and,
+    // opened, never covers it.
+    await page.locator("[data-arch-legend-toggle]").click();
+    await expect(page.locator('[data-arch-legend][data-open="true"]')).toBeVisible();
+    const tb = (await toggle.boundingBox())!, lb = (await page.locator("[data-arch-legend]").boundingBox())!;
+    expect(lb.y).toBeGreaterThanOrEqual(tb.y + tb.height);
+    await page.locator("[data-arch-legend-toggle]").click();
 
     await toggle.locator('[data-plan-view="plan"]').click();
     // 3 processes + 4 tools; every one a dashed ghost.

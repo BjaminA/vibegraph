@@ -34,9 +34,9 @@ export function PlanViewToggle({ view, onView, revision, unplaced, onSeed }: {
     ? [...unplaced.rules, ...unplaced.questions.map((q) => `open — ${q}`), ...unplaced.boundaries.map((b) => `not drawn — ${b}`)].join("\n")
     : "";
   return (
+    // Placed by SystemView's top-right column (above the legend).
     <div data-plan-view-toggle style={{
-      position: "absolute", top: "max(128px, calc(var(--vg-toolbar-bottom, 43px) + 52px))", right: 16, zIndex: 30,
-      display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4,
+      display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4, pointerEvents: "auto",
     }}>
       <div style={{
         display: "flex", alignItems: "center", gap: 4, padding: 4,
