@@ -3,7 +3,37 @@
 `vibegraph-knowledge` and the VibeGraph app. Newest first. Each entry says what
 changed and, where an existing user would notice, how behaviour differs.
 
-## 0.21.0 — unreleased
+## 0.21.1 — unreleased
+
+### A large Resources lens stays responsive
+
+On a topology where every principal may read every zone, the lens drew one
+edge per grant. A generated catalogue of ~50 zones and ~24 principals drew
+over 1,500 edges, spent ~0.4 s laying them out on every open, panned slowly,
+and laid out again whenever the project re-derived.
+
+- **Reads that carry no information per edge are folded onto the cards.** A
+  zone every principal may read says "read by all N", and a principal that may
+  read every zone says "reads every zone". If the remaining reads still exceed
+  150 edges, they are summarised on the zone cards too. Writes and drift are
+  always drawn.
+- **Select a zone or principal to draw its reads.** The cards stay where the
+  folded map put them, so nothing moves when you click.
+- **A large map is laid out behind a spinner.** Over 600 cards and connections,
+  the layout runs after a paint, so the click returns at once. Over 200 edges,
+  only what is in the viewport is rendered.
+- **No re-layout when nothing changed.** The app ignores a topology reply
+  identical to the last one, and the server reuses the derived topology until
+  the next derive pass.
+
+Measured on the 1,260-grant fixture (`test/fixtures/topology/scale_demo`):
+60 edges instead of 1,260, layout 31 ms instead of 383 ms. On a real 1,513-grant
+project: 200 edges, no long task while panning.
+
+**Behaviour change:** universal read grants no longer appear as edges. Select
+the zone or principal, or read the card.
+
+## 0.21.0 — 2026-10-02
 
 ### Where data lives, decided at run time ("the location split")
 

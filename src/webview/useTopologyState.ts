@@ -17,9 +17,18 @@ export function useTopologyState(): TopologyState {
   const [state, setState] = useState<TopologyState>({ model: null, live: null, traces: [] });
   useEffect(() => {
     const ask = () => bridge.postMessage({ type: "topology-get" } as never);
+    // Every re-derive asks again; an unchanged reply keeps the same state
+    // object, so nothing downstream (the map's model and layout) recomputes.
+    let last = "";
     const handler = (msg: ExtensionMessage) => {
       const t = (msg as { type: string }).type;
-      if (t === "topology-state") setState((msg as unknown as { payload: TopologyState }).payload);
+      if (t === "topology-state") {
+        const payload = (msg as unknown as { payload: TopologyState }).payload;
+        const text = JSON.stringify(payload);
+        if (text === last) return;
+        last = text;
+        setState(payload);
+      }
       else if (t === "project-update") ask();
     };
     bridge.onMessage(handler);

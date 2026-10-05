@@ -1,0 +1,6837 @@
+{
+  "generatedAt": "2026-10-05T08:51:03.985Z",
+  "inputsHash": "12d5f57ade214522",
+  "topology": {
+    "version": "1",
+    "stores": [
+      {
+        "id": "warehouse",
+        "kind": "document store"
+      }
+    ],
+    "zones": [
+      {
+        "id": "stock_a01",
+        "store": "warehouse",
+        "holds": [
+          "stock"
+        ]
+      },
+      {
+        "id": "picks_a01",
+        "store": "warehouse",
+        "holds": [
+          "picks"
+        ]
+      },
+      {
+        "id": "counts_a01",
+        "store": "warehouse",
+        "holds": [
+          "counts"
+        ]
+      },
+      {
+        "id": "returns_a01",
+        "store": "warehouse",
+        "holds": [
+          "returns"
+        ]
+      },
+      {
+        "id": "audits_a01",
+        "store": "warehouse",
+        "holds": [
+          "audits"
+        ]
+      },
+      {
+        "id": "stock_a02",
+        "store": "warehouse",
+        "holds": [
+          "stock"
+        ]
+      },
+      {
+        "id": "picks_a02",
+        "store": "warehouse",
+        "holds": [
+          "picks"
+        ]
+      },
+      {
+        "id": "counts_a02",
+        "store": "warehouse",
+        "holds": [
+          "counts"
+        ]
+      },
+      {
+        "id": "returns_a02",
+        "store": "warehouse",
+        "holds": [
+          "returns"
+        ]
+      },
+      {
+        "id": "audits_a02",
+        "store": "warehouse",
+        "holds": [
+          "audits"
+        ]
+      },
+      {
+        "id": "stock_a03",
+        "store": "warehouse",
+        "holds": [
+          "stock"
+        ]
+      },
+      {
+        "id": "picks_a03",
+        "store": "warehouse",
+        "holds": [
+          "picks"
+        ]
+      },
+      {
+        "id": "counts_a03",
+        "store": "warehouse",
+        "holds": [
+          "counts"
+        ]
+      },
+      {
+        "id": "returns_a03",
+        "store": "warehouse",
+        "holds": [
+          "returns"
+        ]
+      },
+      {
+        "id": "audits_a03",
+        "store": "warehouse",
+        "holds": [
+          "audits"
+        ]
+      },
+      {
+        "id": "stock_a04",
+        "store": "warehouse",
+        "holds": [
+          "stock"
+        ]
+      },
+      {
+        "id": "picks_a04",
+        "store": "warehouse",
+        "holds": [
+          "picks"
+        ]
+      },
+      {
+        "id": "counts_a04",
+        "store": "warehouse",
+        "holds": [
+          "counts"
+        ]
+      },
+      {
+        "id": "returns_a04",
+        "store": "warehouse",
+        "holds": [
+          "returns"
+        ]
+      },
+      {
+        "id": "audits_a04",
+        "store": "warehouse",
+        "holds": [
+          "audits"
+        ]
+      },
+      {
+        "id": "stock_a05",
+        "store": "warehouse",
+        "holds": [
+          "stock"
+        ]
+      },
+      {
+        "id": "picks_a05",
+        "store": "warehouse",
+        "holds": [
+          "picks"
+        ]
+      },
+      {
+        "id": "counts_a05",
+        "store": "warehouse",
+        "holds": [
+          "counts"
+        ]
+      },
+      {
+        "id": "returns_a05",
+        "store": "warehouse",
+        "holds": [
+          "returns"
+        ]
+      },
+      {
+        "id": "audits_a05",
+        "store": "warehouse",
+        "holds": [
+          "audits"
+        ]
+      },
+      {
+        "id": "stock_a06",
+        "store": "warehouse",
+        "holds": [
+          "stock"
+        ]
+      },
+      {
+        "id": "picks_a06",
+        "store": "warehouse",
+        "holds": [
+          "picks"
+        ]
+      },
+      {
+        "id": "counts_a06",
+        "store": "warehouse",
+        "holds": [
+          "counts"
+        ]
+      },
+      {
+        "id": "returns_a06",
+        "store": "warehouse",
+        "holds": [
+          "returns"
+        ]
+      },
+      {
+        "id": "audits_a06",
+        "store": "warehouse",
+        "holds": [
+          "audits"
+        ]
+      },
+      {
+        "id": "stock_a07",
+        "store": "warehouse",
+        "holds": [
+          "stock"
+        ]
+      },
+      {
+        "id": "picks_a07",
+        "store": "warehouse",
+        "holds": [
+          "picks"
+        ]
+      },
+      {
+        "id": "counts_a07",
+        "store": "warehouse",
+        "holds": [
+          "counts"
+        ]
+      },
+      {
+        "id": "returns_a07",
+        "store": "warehouse",
+        "holds": [
+          "returns"
+        ]
+      },
+      {
+        "id": "audits_a07",
+        "store": "warehouse",
+        "holds": [
+          "audits"
+        ]
+      },
+      {
+        "id": "stock_a08",
+        "store": "warehouse",
+        "holds": [
+          "stock"
+        ]
+      },
+      {
+        "id": "picks_a08",
+        "store": "warehouse",
+        "holds": [
+          "picks"
+        ]
+      },
+      {
+        "id": "counts_a08",
+        "store": "warehouse",
+        "holds": [
+          "counts"
+        ]
+      },
+      {
+        "id": "returns_a08",
+        "store": "warehouse",
+        "holds": [
+          "returns"
+        ]
+      },
+      {
+        "id": "audits_a08",
+        "store": "warehouse",
+        "holds": [
+          "audits"
+        ]
+      },
+      {
+        "id": "stock_a09",
+        "store": "warehouse",
+        "holds": [
+          "stock"
+        ]
+      },
+      {
+        "id": "picks_a09",
+        "store": "warehouse",
+        "holds": [
+          "picks"
+        ]
+      },
+      {
+        "id": "counts_a09",
+        "store": "warehouse",
+        "holds": [
+          "counts"
+        ]
+      },
+      {
+        "id": "returns_a09",
+        "store": "warehouse",
+        "holds": [
+          "returns"
+        ]
+      },
+      {
+        "id": "audits_a09",
+        "store": "warehouse",
+        "holds": [
+          "audits"
+        ]
+      },
+      {
+        "id": "stock_a10",
+        "store": "warehouse",
+        "holds": [
+          "stock"
+        ]
+      },
+      {
+        "id": "picks_a10",
+        "store": "warehouse",
+        "holds": [
+          "picks"
+        ]
+      },
+      {
+        "id": "counts_a10",
+        "store": "warehouse",
+        "holds": [
+          "counts"
+        ]
+      },
+      {
+        "id": "returns_a10",
+        "store": "warehouse",
+        "holds": [
+          "returns"
+        ]
+      },
+      {
+        "id": "audits_a10",
+        "store": "warehouse",
+        "holds": [
+          "audits"
+        ]
+      }
+    ],
+    "principals": [
+      {
+        "id": "picker-a01",
+        "kind": "role-holder",
+        "roles": [
+          "picker-a01"
+        ]
+      },
+      {
+        "id": "picker-a02",
+        "kind": "role-holder",
+        "roles": [
+          "picker-a02"
+        ]
+      },
+      {
+        "id": "picker-a03",
+        "kind": "role-holder",
+        "roles": [
+          "picker-a03"
+        ]
+      },
+      {
+        "id": "picker-a04",
+        "kind": "role-holder",
+        "roles": [
+          "picker-a04"
+        ]
+      },
+      {
+        "id": "picker-a05",
+        "kind": "role-holder",
+        "roles": [
+          "picker-a05"
+        ]
+      },
+      {
+        "id": "picker-a06",
+        "kind": "role-holder",
+        "roles": [
+          "picker-a06"
+        ]
+      },
+      {
+        "id": "picker-a07",
+        "kind": "role-holder",
+        "roles": [
+          "picker-a07"
+        ]
+      },
+      {
+        "id": "picker-a08",
+        "kind": "role-holder",
+        "roles": [
+          "picker-a08"
+        ]
+      },
+      {
+        "id": "picker-a09",
+        "kind": "role-holder",
+        "roles": [
+          "picker-a09"
+        ]
+      },
+      {
+        "id": "picker-a10",
+        "kind": "role-holder",
+        "roles": [
+          "picker-a10"
+        ]
+      },
+      {
+        "id": "counter-a01",
+        "kind": "role-holder",
+        "roles": [
+          "counter-a01"
+        ]
+      },
+      {
+        "id": "counter-a02",
+        "kind": "role-holder",
+        "roles": [
+          "counter-a02"
+        ]
+      },
+      {
+        "id": "counter-a03",
+        "kind": "role-holder",
+        "roles": [
+          "counter-a03"
+        ]
+      },
+      {
+        "id": "counter-a04",
+        "kind": "role-holder",
+        "roles": [
+          "counter-a04"
+        ]
+      },
+      {
+        "id": "counter-a05",
+        "kind": "role-holder",
+        "roles": [
+          "counter-a05"
+        ]
+      },
+      {
+        "id": "counter-a06",
+        "kind": "role-holder",
+        "roles": [
+          "counter-a06"
+        ]
+      },
+      {
+        "id": "counter-a07",
+        "kind": "role-holder",
+        "roles": [
+          "counter-a07"
+        ]
+      },
+      {
+        "id": "counter-a08",
+        "kind": "role-holder",
+        "roles": [
+          "counter-a08"
+        ]
+      },
+      {
+        "id": "counter-a09",
+        "kind": "role-holder",
+        "roles": [
+          "counter-a09"
+        ]
+      },
+      {
+        "id": "counter-a10",
+        "kind": "role-holder",
+        "roles": [
+          "counter-a10"
+        ]
+      },
+      {
+        "id": "returns-desk",
+        "kind": "role-holder",
+        "roles": [
+          "returns-desk"
+        ]
+      },
+      {
+        "id": "auditor",
+        "kind": "role-holder",
+        "roles": [
+          "auditor"
+        ]
+      },
+      {
+        "id": "supervisor",
+        "kind": "role-holder",
+        "roles": [
+          "supervisor"
+        ]
+      },
+      {
+        "id": "inventory-service",
+        "kind": "service",
+        "roles": [
+          "inventory-service"
+        ]
+      }
+    ],
+    "grants": [
+      {
+        "who": "role:inventory-service",
+        "zone": "stock_a01",
+        "access": "write"
+      },
+      {
+        "who": "role:picker-a01",
+        "zone": "picks_a01",
+        "access": "write"
+      },
+      {
+        "who": "role:supervisor",
+        "zone": "picks_a01",
+        "access": "write"
+      },
+      {
+        "who": "role:counter-a01",
+        "zone": "counts_a01",
+        "access": "write"
+      },
+      {
+        "who": "role:returns-desk",
+        "zone": "returns_a01",
+        "access": "write"
+      },
+      {
+        "who": "role:auditor",
+        "zone": "audits_a01",
+        "access": "write"
+      },
+      {
+        "who": "role:inventory-service",
+        "zone": "stock_a02",
+        "access": "write"
+      },
+      {
+        "who": "role:picker-a02",
+        "zone": "picks_a02",
+        "access": "write"
+      },
+      {
+        "who": "role:supervisor",
+        "zone": "picks_a02",
+        "access": "write"
+      },
+      {
+        "who": "role:counter-a02",
+        "zone": "counts_a02",
+        "access": "write"
+      },
+      {
+        "who": "role:returns-desk",
+        "zone": "returns_a02",
+        "access": "write"
+      },
+      {
+        "who": "role:auditor",
+        "zone": "audits_a02",
+        "access": "write"
+      },
+      {
+        "who": "role:inventory-service",
+        "zone": "stock_a03",
+        "access": "write"
+      },
+      {
+        "who": "role:picker-a03",
+        "zone": "picks_a03",
+        "access": "write"
+      },
+      {
+        "who": "role:supervisor",
+        "zone": "picks_a03",
+        "access": "write"
+      },
+      {
+        "who": "role:counter-a03",
+        "zone": "counts_a03",
+        "access": "write"
+      },
+      {
+        "who": "role:returns-desk",
+        "zone": "returns_a03",
+        "access": "write"
+      },
+      {
+        "who": "role:auditor",
+        "zone": "audits_a03",
+        "access": "write"
+      },
+      {
+        "who": "role:inventory-service",
+        "zone": "stock_a04",
+        "access": "write"
+      },
+      {
+        "who": "role:picker-a04",
+        "zone": "picks_a04",
+        "access": "write"
+      },
+      {
+        "who": "role:supervisor",
+        "zone": "picks_a04",
+        "access": "write"
+      },
+      {
+        "who": "role:counter-a04",
+        "zone": "counts_a04",
+        "access": "write"
+      },
+      {
+        "who": "role:returns-desk",
+        "zone": "returns_a04",
+        "access": "write"
+      },
+      {
+        "who": "role:auditor",
+        "zone": "audits_a04",
+        "access": "write"
+      },
+      {
+        "who": "role:inventory-service",
+        "zone": "stock_a05",
+        "access": "write"
+      },
+      {
+        "who": "role:picker-a05",
+        "zone": "picks_a05",
+        "access": "write"
+      },
+      {
+        "who": "role:supervisor",
+        "zone": "picks_a05",
+        "access": "write"
+      },
+      {
+        "who": "role:counter-a05",
+        "zone": "counts_a05",
+        "access": "write"
+      },
+      {
+        "who": "role:returns-desk",
+        "zone": "returns_a05",
+        "access": "write"
+      },
+      {
+        "who": "role:auditor",
+        "zone": "audits_a05",
+        "access": "write"
+      },
+      {
+        "who": "role:inventory-service",
+        "zone": "stock_a06",
+        "access": "write"
+      },
+      {
+        "who": "role:picker-a06",
+        "zone": "picks_a06",
+        "access": "write"
+      },
+      {
+        "who": "role:supervisor",
+        "zone": "picks_a06",
+        "access": "write"
+      },
+      {
+        "who": "role:counter-a06",
+        "zone": "counts_a06",
+        "access": "write"
+      },
+      {
+        "who": "role:returns-desk",
+        "zone": "returns_a06",
+        "access": "write"
+      },
+      {
+        "who": "role:auditor",
+        "zone": "audits_a06",
+        "access": "write"
+      },
+      {
+        "who": "role:inventory-service",
+        "zone": "stock_a07",
+        "access": "write"
+      },
+      {
+        "who": "role:picker-a07",
+        "zone": "picks_a07",
+        "access": "write"
+      },
+      {
+        "who": "role:supervisor",
+        "zone": "picks_a07",
+        "access": "write"
+      },
+      {
+        "who": "role:counter-a07",
+        "zone": "counts_a07",
+        "access": "write"
+      },
+      {
+        "who": "role:returns-desk",
+        "zone": "returns_a07",
+        "access": "write"
+      },
+      {
+        "who": "role:auditor",
+        "zone": "audits_a07",
+        "access": "write"
+      },
+      {
+        "who": "role:inventory-service",
+        "zone": "stock_a08",
+        "access": "write"
+      },
+      {
+        "who": "role:picker-a08",
+        "zone": "picks_a08",
+        "access": "write"
+      },
+      {
+        "who": "role:supervisor",
+        "zone": "picks_a08",
+        "access": "write"
+      },
+      {
+        "who": "role:counter-a08",
+        "zone": "counts_a08",
+        "access": "write"
+      },
+      {
+        "who": "role:returns-desk",
+        "zone": "returns_a08",
+        "access": "write"
+      },
+      {
+        "who": "role:auditor",
+        "zone": "audits_a08",
+        "access": "write"
+      },
+      {
+        "who": "role:inventory-service",
+        "zone": "stock_a09",
+        "access": "write"
+      },
+      {
+        "who": "role:picker-a09",
+        "zone": "picks_a09",
+        "access": "write"
+      },
+      {
+        "who": "role:supervisor",
+        "zone": "picks_a09",
+        "access": "write"
+      },
+      {
+        "who": "role:counter-a09",
+        "zone": "counts_a09",
+        "access": "write"
+      },
+      {
+        "who": "role:returns-desk",
+        "zone": "returns_a09",
+        "access": "write"
+      },
+      {
+        "who": "role:auditor",
+        "zone": "audits_a09",
+        "access": "write"
+      },
+      {
+        "who": "role:inventory-service",
+        "zone": "stock_a10",
+        "access": "write"
+      },
+      {
+        "who": "role:picker-a10",
+        "zone": "picks_a10",
+        "access": "write"
+      },
+      {
+        "who": "role:supervisor",
+        "zone": "picks_a10",
+        "access": "write"
+      },
+      {
+        "who": "role:counter-a10",
+        "zone": "counts_a10",
+        "access": "write"
+      },
+      {
+        "who": "role:returns-desk",
+        "zone": "returns_a10",
+        "access": "write"
+      },
+      {
+        "who": "role:auditor",
+        "zone": "audits_a10",
+        "access": "write"
+      },
+      {
+        "who": "role:picker-a01",
+        "zone": "stock_a01",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a02",
+        "zone": "stock_a01",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a03",
+        "zone": "stock_a01",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a04",
+        "zone": "stock_a01",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a05",
+        "zone": "stock_a01",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a06",
+        "zone": "stock_a01",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a07",
+        "zone": "stock_a01",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a08",
+        "zone": "stock_a01",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a09",
+        "zone": "stock_a01",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a10",
+        "zone": "stock_a01",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a01",
+        "zone": "stock_a01",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a02",
+        "zone": "stock_a01",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a03",
+        "zone": "stock_a01",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a04",
+        "zone": "stock_a01",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a05",
+        "zone": "stock_a01",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a06",
+        "zone": "stock_a01",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a07",
+        "zone": "stock_a01",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a08",
+        "zone": "stock_a01",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a09",
+        "zone": "stock_a01",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a10",
+        "zone": "stock_a01",
+        "access": "read"
+      },
+      {
+        "who": "role:returns-desk",
+        "zone": "stock_a01",
+        "access": "read"
+      },
+      {
+        "who": "role:auditor",
+        "zone": "stock_a01",
+        "access": "read"
+      },
+      {
+        "who": "role:supervisor",
+        "zone": "stock_a01",
+        "access": "read"
+      },
+      {
+        "who": "role:inventory-service",
+        "zone": "stock_a01",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a01",
+        "zone": "picks_a01",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a02",
+        "zone": "picks_a01",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a03",
+        "zone": "picks_a01",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a04",
+        "zone": "picks_a01",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a05",
+        "zone": "picks_a01",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a06",
+        "zone": "picks_a01",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a07",
+        "zone": "picks_a01",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a08",
+        "zone": "picks_a01",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a09",
+        "zone": "picks_a01",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a10",
+        "zone": "picks_a01",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a01",
+        "zone": "picks_a01",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a02",
+        "zone": "picks_a01",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a03",
+        "zone": "picks_a01",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a04",
+        "zone": "picks_a01",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a05",
+        "zone": "picks_a01",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a06",
+        "zone": "picks_a01",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a07",
+        "zone": "picks_a01",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a08",
+        "zone": "picks_a01",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a09",
+        "zone": "picks_a01",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a10",
+        "zone": "picks_a01",
+        "access": "read"
+      },
+      {
+        "who": "role:returns-desk",
+        "zone": "picks_a01",
+        "access": "read"
+      },
+      {
+        "who": "role:auditor",
+        "zone": "picks_a01",
+        "access": "read"
+      },
+      {
+        "who": "role:supervisor",
+        "zone": "picks_a01",
+        "access": "read"
+      },
+      {
+        "who": "role:inventory-service",
+        "zone": "picks_a01",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a01",
+        "zone": "counts_a01",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a02",
+        "zone": "counts_a01",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a03",
+        "zone": "counts_a01",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a04",
+        "zone": "counts_a01",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a05",
+        "zone": "counts_a01",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a06",
+        "zone": "counts_a01",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a07",
+        "zone": "counts_a01",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a08",
+        "zone": "counts_a01",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a09",
+        "zone": "counts_a01",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a10",
+        "zone": "counts_a01",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a01",
+        "zone": "counts_a01",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a02",
+        "zone": "counts_a01",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a03",
+        "zone": "counts_a01",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a04",
+        "zone": "counts_a01",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a05",
+        "zone": "counts_a01",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a06",
+        "zone": "counts_a01",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a07",
+        "zone": "counts_a01",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a08",
+        "zone": "counts_a01",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a09",
+        "zone": "counts_a01",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a10",
+        "zone": "counts_a01",
+        "access": "read"
+      },
+      {
+        "who": "role:returns-desk",
+        "zone": "counts_a01",
+        "access": "read"
+      },
+      {
+        "who": "role:auditor",
+        "zone": "counts_a01",
+        "access": "read"
+      },
+      {
+        "who": "role:supervisor",
+        "zone": "counts_a01",
+        "access": "read"
+      },
+      {
+        "who": "role:inventory-service",
+        "zone": "counts_a01",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a01",
+        "zone": "returns_a01",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a02",
+        "zone": "returns_a01",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a03",
+        "zone": "returns_a01",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a04",
+        "zone": "returns_a01",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a05",
+        "zone": "returns_a01",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a06",
+        "zone": "returns_a01",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a07",
+        "zone": "returns_a01",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a08",
+        "zone": "returns_a01",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a09",
+        "zone": "returns_a01",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a10",
+        "zone": "returns_a01",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a01",
+        "zone": "returns_a01",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a02",
+        "zone": "returns_a01",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a03",
+        "zone": "returns_a01",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a04",
+        "zone": "returns_a01",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a05",
+        "zone": "returns_a01",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a06",
+        "zone": "returns_a01",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a07",
+        "zone": "returns_a01",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a08",
+        "zone": "returns_a01",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a09",
+        "zone": "returns_a01",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a10",
+        "zone": "returns_a01",
+        "access": "read"
+      },
+      {
+        "who": "role:returns-desk",
+        "zone": "returns_a01",
+        "access": "read"
+      },
+      {
+        "who": "role:auditor",
+        "zone": "returns_a01",
+        "access": "read"
+      },
+      {
+        "who": "role:supervisor",
+        "zone": "returns_a01",
+        "access": "read"
+      },
+      {
+        "who": "role:inventory-service",
+        "zone": "returns_a01",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a01",
+        "zone": "audits_a01",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a02",
+        "zone": "audits_a01",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a03",
+        "zone": "audits_a01",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a04",
+        "zone": "audits_a01",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a05",
+        "zone": "audits_a01",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a06",
+        "zone": "audits_a01",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a07",
+        "zone": "audits_a01",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a08",
+        "zone": "audits_a01",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a09",
+        "zone": "audits_a01",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a10",
+        "zone": "audits_a01",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a01",
+        "zone": "audits_a01",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a02",
+        "zone": "audits_a01",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a03",
+        "zone": "audits_a01",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a04",
+        "zone": "audits_a01",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a05",
+        "zone": "audits_a01",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a06",
+        "zone": "audits_a01",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a07",
+        "zone": "audits_a01",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a08",
+        "zone": "audits_a01",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a09",
+        "zone": "audits_a01",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a10",
+        "zone": "audits_a01",
+        "access": "read"
+      },
+      {
+        "who": "role:returns-desk",
+        "zone": "audits_a01",
+        "access": "read"
+      },
+      {
+        "who": "role:auditor",
+        "zone": "audits_a01",
+        "access": "read"
+      },
+      {
+        "who": "role:supervisor",
+        "zone": "audits_a01",
+        "access": "read"
+      },
+      {
+        "who": "role:inventory-service",
+        "zone": "audits_a01",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a01",
+        "zone": "stock_a02",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a02",
+        "zone": "stock_a02",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a03",
+        "zone": "stock_a02",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a04",
+        "zone": "stock_a02",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a05",
+        "zone": "stock_a02",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a06",
+        "zone": "stock_a02",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a07",
+        "zone": "stock_a02",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a08",
+        "zone": "stock_a02",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a09",
+        "zone": "stock_a02",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a10",
+        "zone": "stock_a02",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a01",
+        "zone": "stock_a02",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a02",
+        "zone": "stock_a02",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a03",
+        "zone": "stock_a02",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a04",
+        "zone": "stock_a02",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a05",
+        "zone": "stock_a02",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a06",
+        "zone": "stock_a02",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a07",
+        "zone": "stock_a02",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a08",
+        "zone": "stock_a02",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a09",
+        "zone": "stock_a02",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a10",
+        "zone": "stock_a02",
+        "access": "read"
+      },
+      {
+        "who": "role:returns-desk",
+        "zone": "stock_a02",
+        "access": "read"
+      },
+      {
+        "who": "role:auditor",
+        "zone": "stock_a02",
+        "access": "read"
+      },
+      {
+        "who": "role:supervisor",
+        "zone": "stock_a02",
+        "access": "read"
+      },
+      {
+        "who": "role:inventory-service",
+        "zone": "stock_a02",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a01",
+        "zone": "picks_a02",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a02",
+        "zone": "picks_a02",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a03",
+        "zone": "picks_a02",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a04",
+        "zone": "picks_a02",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a05",
+        "zone": "picks_a02",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a06",
+        "zone": "picks_a02",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a07",
+        "zone": "picks_a02",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a08",
+        "zone": "picks_a02",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a09",
+        "zone": "picks_a02",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a10",
+        "zone": "picks_a02",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a01",
+        "zone": "picks_a02",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a02",
+        "zone": "picks_a02",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a03",
+        "zone": "picks_a02",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a04",
+        "zone": "picks_a02",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a05",
+        "zone": "picks_a02",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a06",
+        "zone": "picks_a02",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a07",
+        "zone": "picks_a02",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a08",
+        "zone": "picks_a02",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a09",
+        "zone": "picks_a02",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a10",
+        "zone": "picks_a02",
+        "access": "read"
+      },
+      {
+        "who": "role:returns-desk",
+        "zone": "picks_a02",
+        "access": "read"
+      },
+      {
+        "who": "role:auditor",
+        "zone": "picks_a02",
+        "access": "read"
+      },
+      {
+        "who": "role:supervisor",
+        "zone": "picks_a02",
+        "access": "read"
+      },
+      {
+        "who": "role:inventory-service",
+        "zone": "picks_a02",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a01",
+        "zone": "counts_a02",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a02",
+        "zone": "counts_a02",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a03",
+        "zone": "counts_a02",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a04",
+        "zone": "counts_a02",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a05",
+        "zone": "counts_a02",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a06",
+        "zone": "counts_a02",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a07",
+        "zone": "counts_a02",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a08",
+        "zone": "counts_a02",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a09",
+        "zone": "counts_a02",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a10",
+        "zone": "counts_a02",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a01",
+        "zone": "counts_a02",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a02",
+        "zone": "counts_a02",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a03",
+        "zone": "counts_a02",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a04",
+        "zone": "counts_a02",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a05",
+        "zone": "counts_a02",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a06",
+        "zone": "counts_a02",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a07",
+        "zone": "counts_a02",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a08",
+        "zone": "counts_a02",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a09",
+        "zone": "counts_a02",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a10",
+        "zone": "counts_a02",
+        "access": "read"
+      },
+      {
+        "who": "role:returns-desk",
+        "zone": "counts_a02",
+        "access": "read"
+      },
+      {
+        "who": "role:auditor",
+        "zone": "counts_a02",
+        "access": "read"
+      },
+      {
+        "who": "role:supervisor",
+        "zone": "counts_a02",
+        "access": "read"
+      },
+      {
+        "who": "role:inventory-service",
+        "zone": "counts_a02",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a01",
+        "zone": "returns_a02",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a02",
+        "zone": "returns_a02",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a03",
+        "zone": "returns_a02",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a04",
+        "zone": "returns_a02",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a05",
+        "zone": "returns_a02",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a06",
+        "zone": "returns_a02",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a07",
+        "zone": "returns_a02",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a08",
+        "zone": "returns_a02",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a09",
+        "zone": "returns_a02",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a10",
+        "zone": "returns_a02",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a01",
+        "zone": "returns_a02",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a02",
+        "zone": "returns_a02",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a03",
+        "zone": "returns_a02",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a04",
+        "zone": "returns_a02",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a05",
+        "zone": "returns_a02",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a06",
+        "zone": "returns_a02",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a07",
+        "zone": "returns_a02",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a08",
+        "zone": "returns_a02",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a09",
+        "zone": "returns_a02",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a10",
+        "zone": "returns_a02",
+        "access": "read"
+      },
+      {
+        "who": "role:returns-desk",
+        "zone": "returns_a02",
+        "access": "read"
+      },
+      {
+        "who": "role:auditor",
+        "zone": "returns_a02",
+        "access": "read"
+      },
+      {
+        "who": "role:supervisor",
+        "zone": "returns_a02",
+        "access": "read"
+      },
+      {
+        "who": "role:inventory-service",
+        "zone": "returns_a02",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a01",
+        "zone": "audits_a02",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a02",
+        "zone": "audits_a02",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a03",
+        "zone": "audits_a02",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a04",
+        "zone": "audits_a02",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a05",
+        "zone": "audits_a02",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a06",
+        "zone": "audits_a02",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a07",
+        "zone": "audits_a02",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a08",
+        "zone": "audits_a02",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a09",
+        "zone": "audits_a02",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a10",
+        "zone": "audits_a02",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a01",
+        "zone": "audits_a02",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a02",
+        "zone": "audits_a02",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a03",
+        "zone": "audits_a02",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a04",
+        "zone": "audits_a02",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a05",
+        "zone": "audits_a02",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a06",
+        "zone": "audits_a02",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a07",
+        "zone": "audits_a02",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a08",
+        "zone": "audits_a02",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a09",
+        "zone": "audits_a02",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a10",
+        "zone": "audits_a02",
+        "access": "read"
+      },
+      {
+        "who": "role:returns-desk",
+        "zone": "audits_a02",
+        "access": "read"
+      },
+      {
+        "who": "role:auditor",
+        "zone": "audits_a02",
+        "access": "read"
+      },
+      {
+        "who": "role:supervisor",
+        "zone": "audits_a02",
+        "access": "read"
+      },
+      {
+        "who": "role:inventory-service",
+        "zone": "audits_a02",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a01",
+        "zone": "stock_a03",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a02",
+        "zone": "stock_a03",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a03",
+        "zone": "stock_a03",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a04",
+        "zone": "stock_a03",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a05",
+        "zone": "stock_a03",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a06",
+        "zone": "stock_a03",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a07",
+        "zone": "stock_a03",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a08",
+        "zone": "stock_a03",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a09",
+        "zone": "stock_a03",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a10",
+        "zone": "stock_a03",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a01",
+        "zone": "stock_a03",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a02",
+        "zone": "stock_a03",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a03",
+        "zone": "stock_a03",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a04",
+        "zone": "stock_a03",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a05",
+        "zone": "stock_a03",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a06",
+        "zone": "stock_a03",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a07",
+        "zone": "stock_a03",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a08",
+        "zone": "stock_a03",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a09",
+        "zone": "stock_a03",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a10",
+        "zone": "stock_a03",
+        "access": "read"
+      },
+      {
+        "who": "role:returns-desk",
+        "zone": "stock_a03",
+        "access": "read"
+      },
+      {
+        "who": "role:auditor",
+        "zone": "stock_a03",
+        "access": "read"
+      },
+      {
+        "who": "role:supervisor",
+        "zone": "stock_a03",
+        "access": "read"
+      },
+      {
+        "who": "role:inventory-service",
+        "zone": "stock_a03",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a01",
+        "zone": "picks_a03",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a02",
+        "zone": "picks_a03",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a03",
+        "zone": "picks_a03",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a04",
+        "zone": "picks_a03",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a05",
+        "zone": "picks_a03",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a06",
+        "zone": "picks_a03",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a07",
+        "zone": "picks_a03",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a08",
+        "zone": "picks_a03",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a09",
+        "zone": "picks_a03",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a10",
+        "zone": "picks_a03",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a01",
+        "zone": "picks_a03",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a02",
+        "zone": "picks_a03",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a03",
+        "zone": "picks_a03",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a04",
+        "zone": "picks_a03",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a05",
+        "zone": "picks_a03",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a06",
+        "zone": "picks_a03",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a07",
+        "zone": "picks_a03",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a08",
+        "zone": "picks_a03",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a09",
+        "zone": "picks_a03",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a10",
+        "zone": "picks_a03",
+        "access": "read"
+      },
+      {
+        "who": "role:returns-desk",
+        "zone": "picks_a03",
+        "access": "read"
+      },
+      {
+        "who": "role:auditor",
+        "zone": "picks_a03",
+        "access": "read"
+      },
+      {
+        "who": "role:supervisor",
+        "zone": "picks_a03",
+        "access": "read"
+      },
+      {
+        "who": "role:inventory-service",
+        "zone": "picks_a03",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a01",
+        "zone": "counts_a03",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a02",
+        "zone": "counts_a03",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a03",
+        "zone": "counts_a03",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a04",
+        "zone": "counts_a03",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a05",
+        "zone": "counts_a03",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a06",
+        "zone": "counts_a03",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a07",
+        "zone": "counts_a03",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a08",
+        "zone": "counts_a03",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a09",
+        "zone": "counts_a03",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a10",
+        "zone": "counts_a03",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a01",
+        "zone": "counts_a03",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a02",
+        "zone": "counts_a03",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a03",
+        "zone": "counts_a03",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a04",
+        "zone": "counts_a03",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a05",
+        "zone": "counts_a03",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a06",
+        "zone": "counts_a03",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a07",
+        "zone": "counts_a03",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a08",
+        "zone": "counts_a03",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a09",
+        "zone": "counts_a03",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a10",
+        "zone": "counts_a03",
+        "access": "read"
+      },
+      {
+        "who": "role:returns-desk",
+        "zone": "counts_a03",
+        "access": "read"
+      },
+      {
+        "who": "role:auditor",
+        "zone": "counts_a03",
+        "access": "read"
+      },
+      {
+        "who": "role:supervisor",
+        "zone": "counts_a03",
+        "access": "read"
+      },
+      {
+        "who": "role:inventory-service",
+        "zone": "counts_a03",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a01",
+        "zone": "returns_a03",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a02",
+        "zone": "returns_a03",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a03",
+        "zone": "returns_a03",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a04",
+        "zone": "returns_a03",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a05",
+        "zone": "returns_a03",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a06",
+        "zone": "returns_a03",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a07",
+        "zone": "returns_a03",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a08",
+        "zone": "returns_a03",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a09",
+        "zone": "returns_a03",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a10",
+        "zone": "returns_a03",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a01",
+        "zone": "returns_a03",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a02",
+        "zone": "returns_a03",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a03",
+        "zone": "returns_a03",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a04",
+        "zone": "returns_a03",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a05",
+        "zone": "returns_a03",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a06",
+        "zone": "returns_a03",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a07",
+        "zone": "returns_a03",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a08",
+        "zone": "returns_a03",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a09",
+        "zone": "returns_a03",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a10",
+        "zone": "returns_a03",
+        "access": "read"
+      },
+      {
+        "who": "role:returns-desk",
+        "zone": "returns_a03",
+        "access": "read"
+      },
+      {
+        "who": "role:auditor",
+        "zone": "returns_a03",
+        "access": "read"
+      },
+      {
+        "who": "role:supervisor",
+        "zone": "returns_a03",
+        "access": "read"
+      },
+      {
+        "who": "role:inventory-service",
+        "zone": "returns_a03",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a01",
+        "zone": "audits_a03",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a02",
+        "zone": "audits_a03",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a03",
+        "zone": "audits_a03",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a04",
+        "zone": "audits_a03",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a05",
+        "zone": "audits_a03",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a06",
+        "zone": "audits_a03",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a07",
+        "zone": "audits_a03",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a08",
+        "zone": "audits_a03",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a09",
+        "zone": "audits_a03",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a10",
+        "zone": "audits_a03",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a01",
+        "zone": "audits_a03",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a02",
+        "zone": "audits_a03",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a03",
+        "zone": "audits_a03",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a04",
+        "zone": "audits_a03",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a05",
+        "zone": "audits_a03",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a06",
+        "zone": "audits_a03",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a07",
+        "zone": "audits_a03",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a08",
+        "zone": "audits_a03",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a09",
+        "zone": "audits_a03",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a10",
+        "zone": "audits_a03",
+        "access": "read"
+      },
+      {
+        "who": "role:returns-desk",
+        "zone": "audits_a03",
+        "access": "read"
+      },
+      {
+        "who": "role:auditor",
+        "zone": "audits_a03",
+        "access": "read"
+      },
+      {
+        "who": "role:supervisor",
+        "zone": "audits_a03",
+        "access": "read"
+      },
+      {
+        "who": "role:inventory-service",
+        "zone": "audits_a03",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a01",
+        "zone": "stock_a04",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a02",
+        "zone": "stock_a04",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a03",
+        "zone": "stock_a04",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a04",
+        "zone": "stock_a04",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a05",
+        "zone": "stock_a04",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a06",
+        "zone": "stock_a04",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a07",
+        "zone": "stock_a04",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a08",
+        "zone": "stock_a04",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a09",
+        "zone": "stock_a04",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a10",
+        "zone": "stock_a04",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a01",
+        "zone": "stock_a04",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a02",
+        "zone": "stock_a04",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a03",
+        "zone": "stock_a04",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a04",
+        "zone": "stock_a04",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a05",
+        "zone": "stock_a04",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a06",
+        "zone": "stock_a04",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a07",
+        "zone": "stock_a04",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a08",
+        "zone": "stock_a04",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a09",
+        "zone": "stock_a04",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a10",
+        "zone": "stock_a04",
+        "access": "read"
+      },
+      {
+        "who": "role:returns-desk",
+        "zone": "stock_a04",
+        "access": "read"
+      },
+      {
+        "who": "role:auditor",
+        "zone": "stock_a04",
+        "access": "read"
+      },
+      {
+        "who": "role:supervisor",
+        "zone": "stock_a04",
+        "access": "read"
+      },
+      {
+        "who": "role:inventory-service",
+        "zone": "stock_a04",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a01",
+        "zone": "picks_a04",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a02",
+        "zone": "picks_a04",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a03",
+        "zone": "picks_a04",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a04",
+        "zone": "picks_a04",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a05",
+        "zone": "picks_a04",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a06",
+        "zone": "picks_a04",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a07",
+        "zone": "picks_a04",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a08",
+        "zone": "picks_a04",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a09",
+        "zone": "picks_a04",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a10",
+        "zone": "picks_a04",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a01",
+        "zone": "picks_a04",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a02",
+        "zone": "picks_a04",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a03",
+        "zone": "picks_a04",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a04",
+        "zone": "picks_a04",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a05",
+        "zone": "picks_a04",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a06",
+        "zone": "picks_a04",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a07",
+        "zone": "picks_a04",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a08",
+        "zone": "picks_a04",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a09",
+        "zone": "picks_a04",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a10",
+        "zone": "picks_a04",
+        "access": "read"
+      },
+      {
+        "who": "role:returns-desk",
+        "zone": "picks_a04",
+        "access": "read"
+      },
+      {
+        "who": "role:auditor",
+        "zone": "picks_a04",
+        "access": "read"
+      },
+      {
+        "who": "role:supervisor",
+        "zone": "picks_a04",
+        "access": "read"
+      },
+      {
+        "who": "role:inventory-service",
+        "zone": "picks_a04",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a01",
+        "zone": "counts_a04",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a02",
+        "zone": "counts_a04",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a03",
+        "zone": "counts_a04",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a04",
+        "zone": "counts_a04",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a05",
+        "zone": "counts_a04",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a06",
+        "zone": "counts_a04",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a07",
+        "zone": "counts_a04",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a08",
+        "zone": "counts_a04",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a09",
+        "zone": "counts_a04",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a10",
+        "zone": "counts_a04",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a01",
+        "zone": "counts_a04",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a02",
+        "zone": "counts_a04",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a03",
+        "zone": "counts_a04",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a04",
+        "zone": "counts_a04",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a05",
+        "zone": "counts_a04",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a06",
+        "zone": "counts_a04",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a07",
+        "zone": "counts_a04",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a08",
+        "zone": "counts_a04",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a09",
+        "zone": "counts_a04",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a10",
+        "zone": "counts_a04",
+        "access": "read"
+      },
+      {
+        "who": "role:returns-desk",
+        "zone": "counts_a04",
+        "access": "read"
+      },
+      {
+        "who": "role:auditor",
+        "zone": "counts_a04",
+        "access": "read"
+      },
+      {
+        "who": "role:supervisor",
+        "zone": "counts_a04",
+        "access": "read"
+      },
+      {
+        "who": "role:inventory-service",
+        "zone": "counts_a04",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a01",
+        "zone": "returns_a04",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a02",
+        "zone": "returns_a04",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a03",
+        "zone": "returns_a04",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a04",
+        "zone": "returns_a04",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a05",
+        "zone": "returns_a04",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a06",
+        "zone": "returns_a04",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a07",
+        "zone": "returns_a04",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a08",
+        "zone": "returns_a04",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a09",
+        "zone": "returns_a04",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a10",
+        "zone": "returns_a04",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a01",
+        "zone": "returns_a04",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a02",
+        "zone": "returns_a04",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a03",
+        "zone": "returns_a04",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a04",
+        "zone": "returns_a04",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a05",
+        "zone": "returns_a04",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a06",
+        "zone": "returns_a04",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a07",
+        "zone": "returns_a04",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a08",
+        "zone": "returns_a04",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a09",
+        "zone": "returns_a04",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a10",
+        "zone": "returns_a04",
+        "access": "read"
+      },
+      {
+        "who": "role:returns-desk",
+        "zone": "returns_a04",
+        "access": "read"
+      },
+      {
+        "who": "role:auditor",
+        "zone": "returns_a04",
+        "access": "read"
+      },
+      {
+        "who": "role:supervisor",
+        "zone": "returns_a04",
+        "access": "read"
+      },
+      {
+        "who": "role:inventory-service",
+        "zone": "returns_a04",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a01",
+        "zone": "audits_a04",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a02",
+        "zone": "audits_a04",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a03",
+        "zone": "audits_a04",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a04",
+        "zone": "audits_a04",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a05",
+        "zone": "audits_a04",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a06",
+        "zone": "audits_a04",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a07",
+        "zone": "audits_a04",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a08",
+        "zone": "audits_a04",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a09",
+        "zone": "audits_a04",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a10",
+        "zone": "audits_a04",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a01",
+        "zone": "audits_a04",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a02",
+        "zone": "audits_a04",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a03",
+        "zone": "audits_a04",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a04",
+        "zone": "audits_a04",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a05",
+        "zone": "audits_a04",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a06",
+        "zone": "audits_a04",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a07",
+        "zone": "audits_a04",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a08",
+        "zone": "audits_a04",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a09",
+        "zone": "audits_a04",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a10",
+        "zone": "audits_a04",
+        "access": "read"
+      },
+      {
+        "who": "role:returns-desk",
+        "zone": "audits_a04",
+        "access": "read"
+      },
+      {
+        "who": "role:auditor",
+        "zone": "audits_a04",
+        "access": "read"
+      },
+      {
+        "who": "role:supervisor",
+        "zone": "audits_a04",
+        "access": "read"
+      },
+      {
+        "who": "role:inventory-service",
+        "zone": "audits_a04",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a01",
+        "zone": "stock_a05",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a02",
+        "zone": "stock_a05",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a03",
+        "zone": "stock_a05",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a04",
+        "zone": "stock_a05",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a05",
+        "zone": "stock_a05",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a06",
+        "zone": "stock_a05",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a07",
+        "zone": "stock_a05",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a08",
+        "zone": "stock_a05",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a09",
+        "zone": "stock_a05",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a10",
+        "zone": "stock_a05",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a01",
+        "zone": "stock_a05",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a02",
+        "zone": "stock_a05",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a03",
+        "zone": "stock_a05",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a04",
+        "zone": "stock_a05",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a05",
+        "zone": "stock_a05",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a06",
+        "zone": "stock_a05",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a07",
+        "zone": "stock_a05",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a08",
+        "zone": "stock_a05",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a09",
+        "zone": "stock_a05",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a10",
+        "zone": "stock_a05",
+        "access": "read"
+      },
+      {
+        "who": "role:returns-desk",
+        "zone": "stock_a05",
+        "access": "read"
+      },
+      {
+        "who": "role:auditor",
+        "zone": "stock_a05",
+        "access": "read"
+      },
+      {
+        "who": "role:supervisor",
+        "zone": "stock_a05",
+        "access": "read"
+      },
+      {
+        "who": "role:inventory-service",
+        "zone": "stock_a05",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a01",
+        "zone": "picks_a05",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a02",
+        "zone": "picks_a05",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a03",
+        "zone": "picks_a05",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a04",
+        "zone": "picks_a05",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a05",
+        "zone": "picks_a05",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a06",
+        "zone": "picks_a05",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a07",
+        "zone": "picks_a05",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a08",
+        "zone": "picks_a05",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a09",
+        "zone": "picks_a05",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a10",
+        "zone": "picks_a05",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a01",
+        "zone": "picks_a05",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a02",
+        "zone": "picks_a05",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a03",
+        "zone": "picks_a05",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a04",
+        "zone": "picks_a05",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a05",
+        "zone": "picks_a05",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a06",
+        "zone": "picks_a05",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a07",
+        "zone": "picks_a05",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a08",
+        "zone": "picks_a05",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a09",
+        "zone": "picks_a05",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a10",
+        "zone": "picks_a05",
+        "access": "read"
+      },
+      {
+        "who": "role:returns-desk",
+        "zone": "picks_a05",
+        "access": "read"
+      },
+      {
+        "who": "role:auditor",
+        "zone": "picks_a05",
+        "access": "read"
+      },
+      {
+        "who": "role:supervisor",
+        "zone": "picks_a05",
+        "access": "read"
+      },
+      {
+        "who": "role:inventory-service",
+        "zone": "picks_a05",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a01",
+        "zone": "counts_a05",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a02",
+        "zone": "counts_a05",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a03",
+        "zone": "counts_a05",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a04",
+        "zone": "counts_a05",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a05",
+        "zone": "counts_a05",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a06",
+        "zone": "counts_a05",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a07",
+        "zone": "counts_a05",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a08",
+        "zone": "counts_a05",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a09",
+        "zone": "counts_a05",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a10",
+        "zone": "counts_a05",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a01",
+        "zone": "counts_a05",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a02",
+        "zone": "counts_a05",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a03",
+        "zone": "counts_a05",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a04",
+        "zone": "counts_a05",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a05",
+        "zone": "counts_a05",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a06",
+        "zone": "counts_a05",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a07",
+        "zone": "counts_a05",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a08",
+        "zone": "counts_a05",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a09",
+        "zone": "counts_a05",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a10",
+        "zone": "counts_a05",
+        "access": "read"
+      },
+      {
+        "who": "role:returns-desk",
+        "zone": "counts_a05",
+        "access": "read"
+      },
+      {
+        "who": "role:auditor",
+        "zone": "counts_a05",
+        "access": "read"
+      },
+      {
+        "who": "role:supervisor",
+        "zone": "counts_a05",
+        "access": "read"
+      },
+      {
+        "who": "role:inventory-service",
+        "zone": "counts_a05",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a01",
+        "zone": "returns_a05",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a02",
+        "zone": "returns_a05",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a03",
+        "zone": "returns_a05",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a04",
+        "zone": "returns_a05",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a05",
+        "zone": "returns_a05",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a06",
+        "zone": "returns_a05",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a07",
+        "zone": "returns_a05",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a08",
+        "zone": "returns_a05",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a09",
+        "zone": "returns_a05",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a10",
+        "zone": "returns_a05",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a01",
+        "zone": "returns_a05",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a02",
+        "zone": "returns_a05",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a03",
+        "zone": "returns_a05",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a04",
+        "zone": "returns_a05",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a05",
+        "zone": "returns_a05",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a06",
+        "zone": "returns_a05",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a07",
+        "zone": "returns_a05",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a08",
+        "zone": "returns_a05",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a09",
+        "zone": "returns_a05",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a10",
+        "zone": "returns_a05",
+        "access": "read"
+      },
+      {
+        "who": "role:returns-desk",
+        "zone": "returns_a05",
+        "access": "read"
+      },
+      {
+        "who": "role:auditor",
+        "zone": "returns_a05",
+        "access": "read"
+      },
+      {
+        "who": "role:supervisor",
+        "zone": "returns_a05",
+        "access": "read"
+      },
+      {
+        "who": "role:inventory-service",
+        "zone": "returns_a05",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a01",
+        "zone": "audits_a05",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a02",
+        "zone": "audits_a05",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a03",
+        "zone": "audits_a05",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a04",
+        "zone": "audits_a05",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a05",
+        "zone": "audits_a05",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a06",
+        "zone": "audits_a05",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a07",
+        "zone": "audits_a05",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a08",
+        "zone": "audits_a05",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a09",
+        "zone": "audits_a05",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a10",
+        "zone": "audits_a05",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a01",
+        "zone": "audits_a05",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a02",
+        "zone": "audits_a05",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a03",
+        "zone": "audits_a05",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a04",
+        "zone": "audits_a05",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a05",
+        "zone": "audits_a05",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a06",
+        "zone": "audits_a05",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a07",
+        "zone": "audits_a05",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a08",
+        "zone": "audits_a05",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a09",
+        "zone": "audits_a05",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a10",
+        "zone": "audits_a05",
+        "access": "read"
+      },
+      {
+        "who": "role:returns-desk",
+        "zone": "audits_a05",
+        "access": "read"
+      },
+      {
+        "who": "role:auditor",
+        "zone": "audits_a05",
+        "access": "read"
+      },
+      {
+        "who": "role:supervisor",
+        "zone": "audits_a05",
+        "access": "read"
+      },
+      {
+        "who": "role:inventory-service",
+        "zone": "audits_a05",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a01",
+        "zone": "stock_a06",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a02",
+        "zone": "stock_a06",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a03",
+        "zone": "stock_a06",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a04",
+        "zone": "stock_a06",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a05",
+        "zone": "stock_a06",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a06",
+        "zone": "stock_a06",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a07",
+        "zone": "stock_a06",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a08",
+        "zone": "stock_a06",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a09",
+        "zone": "stock_a06",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a10",
+        "zone": "stock_a06",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a01",
+        "zone": "stock_a06",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a02",
+        "zone": "stock_a06",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a03",
+        "zone": "stock_a06",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a04",
+        "zone": "stock_a06",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a05",
+        "zone": "stock_a06",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a06",
+        "zone": "stock_a06",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a07",
+        "zone": "stock_a06",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a08",
+        "zone": "stock_a06",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a09",
+        "zone": "stock_a06",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a10",
+        "zone": "stock_a06",
+        "access": "read"
+      },
+      {
+        "who": "role:returns-desk",
+        "zone": "stock_a06",
+        "access": "read"
+      },
+      {
+        "who": "role:auditor",
+        "zone": "stock_a06",
+        "access": "read"
+      },
+      {
+        "who": "role:supervisor",
+        "zone": "stock_a06",
+        "access": "read"
+      },
+      {
+        "who": "role:inventory-service",
+        "zone": "stock_a06",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a01",
+        "zone": "picks_a06",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a02",
+        "zone": "picks_a06",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a03",
+        "zone": "picks_a06",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a04",
+        "zone": "picks_a06",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a05",
+        "zone": "picks_a06",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a06",
+        "zone": "picks_a06",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a07",
+        "zone": "picks_a06",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a08",
+        "zone": "picks_a06",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a09",
+        "zone": "picks_a06",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a10",
+        "zone": "picks_a06",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a01",
+        "zone": "picks_a06",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a02",
+        "zone": "picks_a06",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a03",
+        "zone": "picks_a06",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a04",
+        "zone": "picks_a06",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a05",
+        "zone": "picks_a06",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a06",
+        "zone": "picks_a06",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a07",
+        "zone": "picks_a06",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a08",
+        "zone": "picks_a06",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a09",
+        "zone": "picks_a06",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a10",
+        "zone": "picks_a06",
+        "access": "read"
+      },
+      {
+        "who": "role:returns-desk",
+        "zone": "picks_a06",
+        "access": "read"
+      },
+      {
+        "who": "role:auditor",
+        "zone": "picks_a06",
+        "access": "read"
+      },
+      {
+        "who": "role:supervisor",
+        "zone": "picks_a06",
+        "access": "read"
+      },
+      {
+        "who": "role:inventory-service",
+        "zone": "picks_a06",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a01",
+        "zone": "counts_a06",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a02",
+        "zone": "counts_a06",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a03",
+        "zone": "counts_a06",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a04",
+        "zone": "counts_a06",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a05",
+        "zone": "counts_a06",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a06",
+        "zone": "counts_a06",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a07",
+        "zone": "counts_a06",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a08",
+        "zone": "counts_a06",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a09",
+        "zone": "counts_a06",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a10",
+        "zone": "counts_a06",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a01",
+        "zone": "counts_a06",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a02",
+        "zone": "counts_a06",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a03",
+        "zone": "counts_a06",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a04",
+        "zone": "counts_a06",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a05",
+        "zone": "counts_a06",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a06",
+        "zone": "counts_a06",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a07",
+        "zone": "counts_a06",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a08",
+        "zone": "counts_a06",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a09",
+        "zone": "counts_a06",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a10",
+        "zone": "counts_a06",
+        "access": "read"
+      },
+      {
+        "who": "role:returns-desk",
+        "zone": "counts_a06",
+        "access": "read"
+      },
+      {
+        "who": "role:auditor",
+        "zone": "counts_a06",
+        "access": "read"
+      },
+      {
+        "who": "role:supervisor",
+        "zone": "counts_a06",
+        "access": "read"
+      },
+      {
+        "who": "role:inventory-service",
+        "zone": "counts_a06",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a01",
+        "zone": "returns_a06",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a02",
+        "zone": "returns_a06",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a03",
+        "zone": "returns_a06",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a04",
+        "zone": "returns_a06",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a05",
+        "zone": "returns_a06",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a06",
+        "zone": "returns_a06",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a07",
+        "zone": "returns_a06",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a08",
+        "zone": "returns_a06",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a09",
+        "zone": "returns_a06",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a10",
+        "zone": "returns_a06",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a01",
+        "zone": "returns_a06",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a02",
+        "zone": "returns_a06",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a03",
+        "zone": "returns_a06",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a04",
+        "zone": "returns_a06",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a05",
+        "zone": "returns_a06",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a06",
+        "zone": "returns_a06",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a07",
+        "zone": "returns_a06",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a08",
+        "zone": "returns_a06",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a09",
+        "zone": "returns_a06",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a10",
+        "zone": "returns_a06",
+        "access": "read"
+      },
+      {
+        "who": "role:returns-desk",
+        "zone": "returns_a06",
+        "access": "read"
+      },
+      {
+        "who": "role:auditor",
+        "zone": "returns_a06",
+        "access": "read"
+      },
+      {
+        "who": "role:supervisor",
+        "zone": "returns_a06",
+        "access": "read"
+      },
+      {
+        "who": "role:inventory-service",
+        "zone": "returns_a06",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a01",
+        "zone": "audits_a06",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a02",
+        "zone": "audits_a06",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a03",
+        "zone": "audits_a06",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a04",
+        "zone": "audits_a06",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a05",
+        "zone": "audits_a06",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a06",
+        "zone": "audits_a06",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a07",
+        "zone": "audits_a06",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a08",
+        "zone": "audits_a06",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a09",
+        "zone": "audits_a06",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a10",
+        "zone": "audits_a06",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a01",
+        "zone": "audits_a06",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a02",
+        "zone": "audits_a06",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a03",
+        "zone": "audits_a06",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a04",
+        "zone": "audits_a06",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a05",
+        "zone": "audits_a06",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a06",
+        "zone": "audits_a06",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a07",
+        "zone": "audits_a06",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a08",
+        "zone": "audits_a06",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a09",
+        "zone": "audits_a06",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a10",
+        "zone": "audits_a06",
+        "access": "read"
+      },
+      {
+        "who": "role:returns-desk",
+        "zone": "audits_a06",
+        "access": "read"
+      },
+      {
+        "who": "role:auditor",
+        "zone": "audits_a06",
+        "access": "read"
+      },
+      {
+        "who": "role:supervisor",
+        "zone": "audits_a06",
+        "access": "read"
+      },
+      {
+        "who": "role:inventory-service",
+        "zone": "audits_a06",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a01",
+        "zone": "stock_a07",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a02",
+        "zone": "stock_a07",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a03",
+        "zone": "stock_a07",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a04",
+        "zone": "stock_a07",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a05",
+        "zone": "stock_a07",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a06",
+        "zone": "stock_a07",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a07",
+        "zone": "stock_a07",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a08",
+        "zone": "stock_a07",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a09",
+        "zone": "stock_a07",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a10",
+        "zone": "stock_a07",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a01",
+        "zone": "stock_a07",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a02",
+        "zone": "stock_a07",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a03",
+        "zone": "stock_a07",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a04",
+        "zone": "stock_a07",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a05",
+        "zone": "stock_a07",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a06",
+        "zone": "stock_a07",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a07",
+        "zone": "stock_a07",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a08",
+        "zone": "stock_a07",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a09",
+        "zone": "stock_a07",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a10",
+        "zone": "stock_a07",
+        "access": "read"
+      },
+      {
+        "who": "role:returns-desk",
+        "zone": "stock_a07",
+        "access": "read"
+      },
+      {
+        "who": "role:auditor",
+        "zone": "stock_a07",
+        "access": "read"
+      },
+      {
+        "who": "role:supervisor",
+        "zone": "stock_a07",
+        "access": "read"
+      },
+      {
+        "who": "role:inventory-service",
+        "zone": "stock_a07",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a01",
+        "zone": "picks_a07",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a02",
+        "zone": "picks_a07",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a03",
+        "zone": "picks_a07",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a04",
+        "zone": "picks_a07",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a05",
+        "zone": "picks_a07",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a06",
+        "zone": "picks_a07",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a07",
+        "zone": "picks_a07",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a08",
+        "zone": "picks_a07",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a09",
+        "zone": "picks_a07",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a10",
+        "zone": "picks_a07",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a01",
+        "zone": "picks_a07",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a02",
+        "zone": "picks_a07",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a03",
+        "zone": "picks_a07",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a04",
+        "zone": "picks_a07",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a05",
+        "zone": "picks_a07",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a06",
+        "zone": "picks_a07",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a07",
+        "zone": "picks_a07",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a08",
+        "zone": "picks_a07",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a09",
+        "zone": "picks_a07",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a10",
+        "zone": "picks_a07",
+        "access": "read"
+      },
+      {
+        "who": "role:returns-desk",
+        "zone": "picks_a07",
+        "access": "read"
+      },
+      {
+        "who": "role:auditor",
+        "zone": "picks_a07",
+        "access": "read"
+      },
+      {
+        "who": "role:supervisor",
+        "zone": "picks_a07",
+        "access": "read"
+      },
+      {
+        "who": "role:inventory-service",
+        "zone": "picks_a07",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a01",
+        "zone": "counts_a07",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a02",
+        "zone": "counts_a07",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a03",
+        "zone": "counts_a07",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a04",
+        "zone": "counts_a07",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a05",
+        "zone": "counts_a07",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a06",
+        "zone": "counts_a07",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a07",
+        "zone": "counts_a07",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a08",
+        "zone": "counts_a07",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a09",
+        "zone": "counts_a07",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a10",
+        "zone": "counts_a07",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a01",
+        "zone": "counts_a07",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a02",
+        "zone": "counts_a07",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a03",
+        "zone": "counts_a07",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a04",
+        "zone": "counts_a07",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a05",
+        "zone": "counts_a07",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a06",
+        "zone": "counts_a07",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a07",
+        "zone": "counts_a07",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a08",
+        "zone": "counts_a07",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a09",
+        "zone": "counts_a07",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a10",
+        "zone": "counts_a07",
+        "access": "read"
+      },
+      {
+        "who": "role:returns-desk",
+        "zone": "counts_a07",
+        "access": "read"
+      },
+      {
+        "who": "role:auditor",
+        "zone": "counts_a07",
+        "access": "read"
+      },
+      {
+        "who": "role:supervisor",
+        "zone": "counts_a07",
+        "access": "read"
+      },
+      {
+        "who": "role:inventory-service",
+        "zone": "counts_a07",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a01",
+        "zone": "returns_a07",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a02",
+        "zone": "returns_a07",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a03",
+        "zone": "returns_a07",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a04",
+        "zone": "returns_a07",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a05",
+        "zone": "returns_a07",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a06",
+        "zone": "returns_a07",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a07",
+        "zone": "returns_a07",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a08",
+        "zone": "returns_a07",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a09",
+        "zone": "returns_a07",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a10",
+        "zone": "returns_a07",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a01",
+        "zone": "returns_a07",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a02",
+        "zone": "returns_a07",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a03",
+        "zone": "returns_a07",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a04",
+        "zone": "returns_a07",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a05",
+        "zone": "returns_a07",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a06",
+        "zone": "returns_a07",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a07",
+        "zone": "returns_a07",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a08",
+        "zone": "returns_a07",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a09",
+        "zone": "returns_a07",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a10",
+        "zone": "returns_a07",
+        "access": "read"
+      },
+      {
+        "who": "role:returns-desk",
+        "zone": "returns_a07",
+        "access": "read"
+      },
+      {
+        "who": "role:auditor",
+        "zone": "returns_a07",
+        "access": "read"
+      },
+      {
+        "who": "role:supervisor",
+        "zone": "returns_a07",
+        "access": "read"
+      },
+      {
+        "who": "role:inventory-service",
+        "zone": "returns_a07",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a01",
+        "zone": "audits_a07",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a02",
+        "zone": "audits_a07",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a03",
+        "zone": "audits_a07",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a04",
+        "zone": "audits_a07",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a05",
+        "zone": "audits_a07",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a06",
+        "zone": "audits_a07",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a07",
+        "zone": "audits_a07",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a08",
+        "zone": "audits_a07",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a09",
+        "zone": "audits_a07",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a10",
+        "zone": "audits_a07",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a01",
+        "zone": "audits_a07",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a02",
+        "zone": "audits_a07",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a03",
+        "zone": "audits_a07",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a04",
+        "zone": "audits_a07",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a05",
+        "zone": "audits_a07",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a06",
+        "zone": "audits_a07",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a07",
+        "zone": "audits_a07",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a08",
+        "zone": "audits_a07",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a09",
+        "zone": "audits_a07",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a10",
+        "zone": "audits_a07",
+        "access": "read"
+      },
+      {
+        "who": "role:returns-desk",
+        "zone": "audits_a07",
+        "access": "read"
+      },
+      {
+        "who": "role:auditor",
+        "zone": "audits_a07",
+        "access": "read"
+      },
+      {
+        "who": "role:supervisor",
+        "zone": "audits_a07",
+        "access": "read"
+      },
+      {
+        "who": "role:inventory-service",
+        "zone": "audits_a07",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a01",
+        "zone": "stock_a08",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a02",
+        "zone": "stock_a08",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a03",
+        "zone": "stock_a08",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a04",
+        "zone": "stock_a08",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a05",
+        "zone": "stock_a08",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a06",
+        "zone": "stock_a08",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a07",
+        "zone": "stock_a08",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a08",
+        "zone": "stock_a08",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a09",
+        "zone": "stock_a08",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a10",
+        "zone": "stock_a08",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a01",
+        "zone": "stock_a08",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a02",
+        "zone": "stock_a08",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a03",
+        "zone": "stock_a08",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a04",
+        "zone": "stock_a08",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a05",
+        "zone": "stock_a08",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a06",
+        "zone": "stock_a08",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a07",
+        "zone": "stock_a08",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a08",
+        "zone": "stock_a08",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a09",
+        "zone": "stock_a08",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a10",
+        "zone": "stock_a08",
+        "access": "read"
+      },
+      {
+        "who": "role:returns-desk",
+        "zone": "stock_a08",
+        "access": "read"
+      },
+      {
+        "who": "role:auditor",
+        "zone": "stock_a08",
+        "access": "read"
+      },
+      {
+        "who": "role:supervisor",
+        "zone": "stock_a08",
+        "access": "read"
+      },
+      {
+        "who": "role:inventory-service",
+        "zone": "stock_a08",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a01",
+        "zone": "picks_a08",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a02",
+        "zone": "picks_a08",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a03",
+        "zone": "picks_a08",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a04",
+        "zone": "picks_a08",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a05",
+        "zone": "picks_a08",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a06",
+        "zone": "picks_a08",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a07",
+        "zone": "picks_a08",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a08",
+        "zone": "picks_a08",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a09",
+        "zone": "picks_a08",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a10",
+        "zone": "picks_a08",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a01",
+        "zone": "picks_a08",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a02",
+        "zone": "picks_a08",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a03",
+        "zone": "picks_a08",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a04",
+        "zone": "picks_a08",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a05",
+        "zone": "picks_a08",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a06",
+        "zone": "picks_a08",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a07",
+        "zone": "picks_a08",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a08",
+        "zone": "picks_a08",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a09",
+        "zone": "picks_a08",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a10",
+        "zone": "picks_a08",
+        "access": "read"
+      },
+      {
+        "who": "role:returns-desk",
+        "zone": "picks_a08",
+        "access": "read"
+      },
+      {
+        "who": "role:auditor",
+        "zone": "picks_a08",
+        "access": "read"
+      },
+      {
+        "who": "role:supervisor",
+        "zone": "picks_a08",
+        "access": "read"
+      },
+      {
+        "who": "role:inventory-service",
+        "zone": "picks_a08",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a01",
+        "zone": "counts_a08",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a02",
+        "zone": "counts_a08",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a03",
+        "zone": "counts_a08",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a04",
+        "zone": "counts_a08",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a05",
+        "zone": "counts_a08",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a06",
+        "zone": "counts_a08",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a07",
+        "zone": "counts_a08",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a08",
+        "zone": "counts_a08",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a09",
+        "zone": "counts_a08",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a10",
+        "zone": "counts_a08",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a01",
+        "zone": "counts_a08",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a02",
+        "zone": "counts_a08",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a03",
+        "zone": "counts_a08",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a04",
+        "zone": "counts_a08",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a05",
+        "zone": "counts_a08",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a06",
+        "zone": "counts_a08",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a07",
+        "zone": "counts_a08",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a08",
+        "zone": "counts_a08",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a09",
+        "zone": "counts_a08",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a10",
+        "zone": "counts_a08",
+        "access": "read"
+      },
+      {
+        "who": "role:returns-desk",
+        "zone": "counts_a08",
+        "access": "read"
+      },
+      {
+        "who": "role:auditor",
+        "zone": "counts_a08",
+        "access": "read"
+      },
+      {
+        "who": "role:supervisor",
+        "zone": "counts_a08",
+        "access": "read"
+      },
+      {
+        "who": "role:inventory-service",
+        "zone": "counts_a08",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a01",
+        "zone": "returns_a08",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a02",
+        "zone": "returns_a08",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a03",
+        "zone": "returns_a08",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a04",
+        "zone": "returns_a08",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a05",
+        "zone": "returns_a08",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a06",
+        "zone": "returns_a08",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a07",
+        "zone": "returns_a08",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a08",
+        "zone": "returns_a08",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a09",
+        "zone": "returns_a08",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a10",
+        "zone": "returns_a08",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a01",
+        "zone": "returns_a08",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a02",
+        "zone": "returns_a08",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a03",
+        "zone": "returns_a08",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a04",
+        "zone": "returns_a08",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a05",
+        "zone": "returns_a08",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a06",
+        "zone": "returns_a08",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a07",
+        "zone": "returns_a08",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a08",
+        "zone": "returns_a08",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a09",
+        "zone": "returns_a08",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a10",
+        "zone": "returns_a08",
+        "access": "read"
+      },
+      {
+        "who": "role:returns-desk",
+        "zone": "returns_a08",
+        "access": "read"
+      },
+      {
+        "who": "role:auditor",
+        "zone": "returns_a08",
+        "access": "read"
+      },
+      {
+        "who": "role:supervisor",
+        "zone": "returns_a08",
+        "access": "read"
+      },
+      {
+        "who": "role:inventory-service",
+        "zone": "returns_a08",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a01",
+        "zone": "audits_a08",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a02",
+        "zone": "audits_a08",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a03",
+        "zone": "audits_a08",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a04",
+        "zone": "audits_a08",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a05",
+        "zone": "audits_a08",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a06",
+        "zone": "audits_a08",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a07",
+        "zone": "audits_a08",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a08",
+        "zone": "audits_a08",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a09",
+        "zone": "audits_a08",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a10",
+        "zone": "audits_a08",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a01",
+        "zone": "audits_a08",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a02",
+        "zone": "audits_a08",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a03",
+        "zone": "audits_a08",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a04",
+        "zone": "audits_a08",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a05",
+        "zone": "audits_a08",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a06",
+        "zone": "audits_a08",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a07",
+        "zone": "audits_a08",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a08",
+        "zone": "audits_a08",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a09",
+        "zone": "audits_a08",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a10",
+        "zone": "audits_a08",
+        "access": "read"
+      },
+      {
+        "who": "role:returns-desk",
+        "zone": "audits_a08",
+        "access": "read"
+      },
+      {
+        "who": "role:auditor",
+        "zone": "audits_a08",
+        "access": "read"
+      },
+      {
+        "who": "role:supervisor",
+        "zone": "audits_a08",
+        "access": "read"
+      },
+      {
+        "who": "role:inventory-service",
+        "zone": "audits_a08",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a01",
+        "zone": "stock_a09",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a02",
+        "zone": "stock_a09",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a03",
+        "zone": "stock_a09",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a04",
+        "zone": "stock_a09",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a05",
+        "zone": "stock_a09",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a06",
+        "zone": "stock_a09",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a07",
+        "zone": "stock_a09",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a08",
+        "zone": "stock_a09",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a09",
+        "zone": "stock_a09",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a10",
+        "zone": "stock_a09",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a01",
+        "zone": "stock_a09",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a02",
+        "zone": "stock_a09",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a03",
+        "zone": "stock_a09",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a04",
+        "zone": "stock_a09",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a05",
+        "zone": "stock_a09",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a06",
+        "zone": "stock_a09",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a07",
+        "zone": "stock_a09",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a08",
+        "zone": "stock_a09",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a09",
+        "zone": "stock_a09",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a10",
+        "zone": "stock_a09",
+        "access": "read"
+      },
+      {
+        "who": "role:returns-desk",
+        "zone": "stock_a09",
+        "access": "read"
+      },
+      {
+        "who": "role:auditor",
+        "zone": "stock_a09",
+        "access": "read"
+      },
+      {
+        "who": "role:supervisor",
+        "zone": "stock_a09",
+        "access": "read"
+      },
+      {
+        "who": "role:inventory-service",
+        "zone": "stock_a09",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a01",
+        "zone": "picks_a09",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a02",
+        "zone": "picks_a09",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a03",
+        "zone": "picks_a09",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a04",
+        "zone": "picks_a09",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a05",
+        "zone": "picks_a09",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a06",
+        "zone": "picks_a09",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a07",
+        "zone": "picks_a09",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a08",
+        "zone": "picks_a09",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a09",
+        "zone": "picks_a09",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a10",
+        "zone": "picks_a09",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a01",
+        "zone": "picks_a09",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a02",
+        "zone": "picks_a09",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a03",
+        "zone": "picks_a09",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a04",
+        "zone": "picks_a09",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a05",
+        "zone": "picks_a09",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a06",
+        "zone": "picks_a09",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a07",
+        "zone": "picks_a09",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a08",
+        "zone": "picks_a09",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a09",
+        "zone": "picks_a09",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a10",
+        "zone": "picks_a09",
+        "access": "read"
+      },
+      {
+        "who": "role:returns-desk",
+        "zone": "picks_a09",
+        "access": "read"
+      },
+      {
+        "who": "role:auditor",
+        "zone": "picks_a09",
+        "access": "read"
+      },
+      {
+        "who": "role:supervisor",
+        "zone": "picks_a09",
+        "access": "read"
+      },
+      {
+        "who": "role:inventory-service",
+        "zone": "picks_a09",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a01",
+        "zone": "counts_a09",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a02",
+        "zone": "counts_a09",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a03",
+        "zone": "counts_a09",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a04",
+        "zone": "counts_a09",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a05",
+        "zone": "counts_a09",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a06",
+        "zone": "counts_a09",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a07",
+        "zone": "counts_a09",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a08",
+        "zone": "counts_a09",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a09",
+        "zone": "counts_a09",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a10",
+        "zone": "counts_a09",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a01",
+        "zone": "counts_a09",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a02",
+        "zone": "counts_a09",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a03",
+        "zone": "counts_a09",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a04",
+        "zone": "counts_a09",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a05",
+        "zone": "counts_a09",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a06",
+        "zone": "counts_a09",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a07",
+        "zone": "counts_a09",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a08",
+        "zone": "counts_a09",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a09",
+        "zone": "counts_a09",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a10",
+        "zone": "counts_a09",
+        "access": "read"
+      },
+      {
+        "who": "role:returns-desk",
+        "zone": "counts_a09",
+        "access": "read"
+      },
+      {
+        "who": "role:auditor",
+        "zone": "counts_a09",
+        "access": "read"
+      },
+      {
+        "who": "role:supervisor",
+        "zone": "counts_a09",
+        "access": "read"
+      },
+      {
+        "who": "role:inventory-service",
+        "zone": "counts_a09",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a01",
+        "zone": "returns_a09",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a02",
+        "zone": "returns_a09",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a03",
+        "zone": "returns_a09",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a04",
+        "zone": "returns_a09",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a05",
+        "zone": "returns_a09",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a06",
+        "zone": "returns_a09",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a07",
+        "zone": "returns_a09",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a08",
+        "zone": "returns_a09",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a09",
+        "zone": "returns_a09",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a10",
+        "zone": "returns_a09",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a01",
+        "zone": "returns_a09",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a02",
+        "zone": "returns_a09",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a03",
+        "zone": "returns_a09",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a04",
+        "zone": "returns_a09",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a05",
+        "zone": "returns_a09",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a06",
+        "zone": "returns_a09",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a07",
+        "zone": "returns_a09",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a08",
+        "zone": "returns_a09",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a09",
+        "zone": "returns_a09",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a10",
+        "zone": "returns_a09",
+        "access": "read"
+      },
+      {
+        "who": "role:returns-desk",
+        "zone": "returns_a09",
+        "access": "read"
+      },
+      {
+        "who": "role:auditor",
+        "zone": "returns_a09",
+        "access": "read"
+      },
+      {
+        "who": "role:supervisor",
+        "zone": "returns_a09",
+        "access": "read"
+      },
+      {
+        "who": "role:inventory-service",
+        "zone": "returns_a09",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a01",
+        "zone": "audits_a09",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a02",
+        "zone": "audits_a09",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a03",
+        "zone": "audits_a09",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a04",
+        "zone": "audits_a09",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a05",
+        "zone": "audits_a09",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a06",
+        "zone": "audits_a09",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a07",
+        "zone": "audits_a09",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a08",
+        "zone": "audits_a09",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a09",
+        "zone": "audits_a09",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a10",
+        "zone": "audits_a09",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a01",
+        "zone": "audits_a09",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a02",
+        "zone": "audits_a09",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a03",
+        "zone": "audits_a09",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a04",
+        "zone": "audits_a09",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a05",
+        "zone": "audits_a09",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a06",
+        "zone": "audits_a09",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a07",
+        "zone": "audits_a09",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a08",
+        "zone": "audits_a09",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a09",
+        "zone": "audits_a09",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a10",
+        "zone": "audits_a09",
+        "access": "read"
+      },
+      {
+        "who": "role:returns-desk",
+        "zone": "audits_a09",
+        "access": "read"
+      },
+      {
+        "who": "role:auditor",
+        "zone": "audits_a09",
+        "access": "read"
+      },
+      {
+        "who": "role:supervisor",
+        "zone": "audits_a09",
+        "access": "read"
+      },
+      {
+        "who": "role:inventory-service",
+        "zone": "audits_a09",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a01",
+        "zone": "stock_a10",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a02",
+        "zone": "stock_a10",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a03",
+        "zone": "stock_a10",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a04",
+        "zone": "stock_a10",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a05",
+        "zone": "stock_a10",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a06",
+        "zone": "stock_a10",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a07",
+        "zone": "stock_a10",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a08",
+        "zone": "stock_a10",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a09",
+        "zone": "stock_a10",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a10",
+        "zone": "stock_a10",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a01",
+        "zone": "stock_a10",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a02",
+        "zone": "stock_a10",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a03",
+        "zone": "stock_a10",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a04",
+        "zone": "stock_a10",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a05",
+        "zone": "stock_a10",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a06",
+        "zone": "stock_a10",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a07",
+        "zone": "stock_a10",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a08",
+        "zone": "stock_a10",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a09",
+        "zone": "stock_a10",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a10",
+        "zone": "stock_a10",
+        "access": "read"
+      },
+      {
+        "who": "role:returns-desk",
+        "zone": "stock_a10",
+        "access": "read"
+      },
+      {
+        "who": "role:auditor",
+        "zone": "stock_a10",
+        "access": "read"
+      },
+      {
+        "who": "role:supervisor",
+        "zone": "stock_a10",
+        "access": "read"
+      },
+      {
+        "who": "role:inventory-service",
+        "zone": "stock_a10",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a01",
+        "zone": "picks_a10",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a02",
+        "zone": "picks_a10",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a03",
+        "zone": "picks_a10",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a04",
+        "zone": "picks_a10",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a05",
+        "zone": "picks_a10",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a06",
+        "zone": "picks_a10",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a07",
+        "zone": "picks_a10",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a08",
+        "zone": "picks_a10",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a09",
+        "zone": "picks_a10",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a10",
+        "zone": "picks_a10",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a01",
+        "zone": "picks_a10",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a02",
+        "zone": "picks_a10",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a03",
+        "zone": "picks_a10",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a04",
+        "zone": "picks_a10",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a05",
+        "zone": "picks_a10",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a06",
+        "zone": "picks_a10",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a07",
+        "zone": "picks_a10",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a08",
+        "zone": "picks_a10",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a09",
+        "zone": "picks_a10",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a10",
+        "zone": "picks_a10",
+        "access": "read"
+      },
+      {
+        "who": "role:returns-desk",
+        "zone": "picks_a10",
+        "access": "read"
+      },
+      {
+        "who": "role:auditor",
+        "zone": "picks_a10",
+        "access": "read"
+      },
+      {
+        "who": "role:supervisor",
+        "zone": "picks_a10",
+        "access": "read"
+      },
+      {
+        "who": "role:inventory-service",
+        "zone": "picks_a10",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a01",
+        "zone": "counts_a10",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a02",
+        "zone": "counts_a10",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a03",
+        "zone": "counts_a10",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a04",
+        "zone": "counts_a10",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a05",
+        "zone": "counts_a10",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a06",
+        "zone": "counts_a10",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a07",
+        "zone": "counts_a10",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a08",
+        "zone": "counts_a10",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a09",
+        "zone": "counts_a10",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a10",
+        "zone": "counts_a10",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a01",
+        "zone": "counts_a10",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a02",
+        "zone": "counts_a10",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a03",
+        "zone": "counts_a10",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a04",
+        "zone": "counts_a10",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a05",
+        "zone": "counts_a10",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a06",
+        "zone": "counts_a10",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a07",
+        "zone": "counts_a10",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a08",
+        "zone": "counts_a10",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a09",
+        "zone": "counts_a10",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a10",
+        "zone": "counts_a10",
+        "access": "read"
+      },
+      {
+        "who": "role:returns-desk",
+        "zone": "counts_a10",
+        "access": "read"
+      },
+      {
+        "who": "role:auditor",
+        "zone": "counts_a10",
+        "access": "read"
+      },
+      {
+        "who": "role:supervisor",
+        "zone": "counts_a10",
+        "access": "read"
+      },
+      {
+        "who": "role:inventory-service",
+        "zone": "counts_a10",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a01",
+        "zone": "returns_a10",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a02",
+        "zone": "returns_a10",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a03",
+        "zone": "returns_a10",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a04",
+        "zone": "returns_a10",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a05",
+        "zone": "returns_a10",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a06",
+        "zone": "returns_a10",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a07",
+        "zone": "returns_a10",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a08",
+        "zone": "returns_a10",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a09",
+        "zone": "returns_a10",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a10",
+        "zone": "returns_a10",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a01",
+        "zone": "returns_a10",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a02",
+        "zone": "returns_a10",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a03",
+        "zone": "returns_a10",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a04",
+        "zone": "returns_a10",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a05",
+        "zone": "returns_a10",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a06",
+        "zone": "returns_a10",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a07",
+        "zone": "returns_a10",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a08",
+        "zone": "returns_a10",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a09",
+        "zone": "returns_a10",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a10",
+        "zone": "returns_a10",
+        "access": "read"
+      },
+      {
+        "who": "role:returns-desk",
+        "zone": "returns_a10",
+        "access": "read"
+      },
+      {
+        "who": "role:auditor",
+        "zone": "returns_a10",
+        "access": "read"
+      },
+      {
+        "who": "role:supervisor",
+        "zone": "returns_a10",
+        "access": "read"
+      },
+      {
+        "who": "role:inventory-service",
+        "zone": "returns_a10",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a01",
+        "zone": "audits_a10",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a02",
+        "zone": "audits_a10",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a03",
+        "zone": "audits_a10",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a04",
+        "zone": "audits_a10",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a05",
+        "zone": "audits_a10",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a06",
+        "zone": "audits_a10",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a07",
+        "zone": "audits_a10",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a08",
+        "zone": "audits_a10",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a09",
+        "zone": "audits_a10",
+        "access": "read"
+      },
+      {
+        "who": "role:picker-a10",
+        "zone": "audits_a10",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a01",
+        "zone": "audits_a10",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a02",
+        "zone": "audits_a10",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a03",
+        "zone": "audits_a10",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a04",
+        "zone": "audits_a10",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a05",
+        "zone": "audits_a10",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a06",
+        "zone": "audits_a10",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a07",
+        "zone": "audits_a10",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a08",
+        "zone": "audits_a10",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a09",
+        "zone": "audits_a10",
+        "access": "read"
+      },
+      {
+        "who": "role:counter-a10",
+        "zone": "audits_a10",
+        "access": "read"
+      },
+      {
+        "who": "role:returns-desk",
+        "zone": "audits_a10",
+        "access": "read"
+      },
+      {
+        "who": "role:auditor",
+        "zone": "audits_a10",
+        "access": "read"
+      },
+      {
+        "who": "role:supervisor",
+        "zone": "audits_a10",
+        "access": "read"
+      },
+      {
+        "who": "role:inventory-service",
+        "zone": "audits_a10",
+        "access": "read"
+      }
+    ]
+  }
+}

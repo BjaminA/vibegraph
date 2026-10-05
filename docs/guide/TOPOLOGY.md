@@ -68,7 +68,16 @@ registered.
 - **Each principal** has a write edge (solid) or read edge (dashed) to the
   zones its grants reach. A role is expanded to the principals that hold it,
   and the grant's `file:line` shows on hover.
+- **Reads that say nothing per edge are folded.** A zone every principal may
+  read reads "read by all N" on its card instead of drawing N edges, and a
+  principal that may read every zone says "reads every zone". If the reads
+  left still exceed 150 edges, those are said on the zone cards too ("read by
+  N", the names in the inspector). Select a zone or principal to draw its
+  reads; no card moves when you do. Writes and drift are always drawn.
 - **Each family** has an edge to its zone.
+
+A large map (over 600 cards and connections) is laid out after a paint,
+behind a "Laying out…" spinner, instead of freezing the click that opened it.
 
 The same questions from the command line:
 

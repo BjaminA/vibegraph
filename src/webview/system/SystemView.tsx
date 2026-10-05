@@ -33,6 +33,8 @@ import { planModel, overlayModel, ghostPlannedEdges, type PlanView } from "./arc
 import { PlanViewToggle } from "./PlanViewToggle";
 import { usePlanState } from "../usePlanState";
 import { ArchProposingCard } from "./ArchProposingCard";
+import { useDeferredLayout } from "./useDeferredLayout";
+import { LayoutSpinner } from "./LayoutSpinner";
 import type { ArchModelRecord, ArchNodeRecord, ArchEdgeRecord, ArchGroupRecord } from "../../shared/protocol";
 
 const nodeTypes = {
@@ -43,6 +45,9 @@ const nodeTypes = {
   archGroup: ArchGroupBox,
 };
 const edgeTypes = { archEdge: ArchEdge };
+const EMPTY_LAYOUT: { nodes: Node[]; edges: Edge[]; hiddenTools?: string[]; hiddenClusters?: string[] } = { nodes: [], edges: [] };
+/** Above this many edges react-flow draws only what is in the viewport. */
+const VISIBLE_ONLY_AT = 200;
 
 /** Reports the subsystem cards' MEASURED heights (inside the canvas, where
  *  react-flow's store is), so the layout can stack them by their real size;
@@ -186,6 +191,12 @@ export function SystemView({
     if (mode !== "map" || focusEntryPointId || !topoLens || !topo.model) return null;
     return topoLens === "resources" ? resourcesModel(topo.model, threads, topo.live?.drift) : decisionsModel(topo.model, threads);
   }, [mode, focusEntryPointId, topoLens, topo, threads]);
+  // A selected card draws the reads the Resources lens folded; the cards stay
+  // where the unfocused model placed them (placeEdges below).
+  const topoFocus = topoLens === "resources" && archSelected && "node" in archSelected ? archSelected.node.id : null;
+  const topoDrawn = useMemo(() => (topoMapModel && topoFocus && topo.model
+    ? resourcesModel(topo.model, threads, topo.live?.drift, { focus: topoFocus })
+    : topoMapModel), [topoMapModel, topoFocus, topo, threads]);
   // 2026-09-30 — the hypothetical plan: Real / Plan / Overlay (arch_plan.ts).
   const planState = usePlanState();
   const [planViewRaw, setPlanView] = useState<PlanView>("real");
@@ -201,14 +212,25 @@ export function SystemView({
       ? planModel(planState.plan, planState.reconcile, { expanded: planOpen })
       : overlayModel(architecture, planState.plan, planState.reconcile, { expanded: planOpen });
   }, [mode, focusEntryPointId, planView, planState, architecture, planOpen]);
-  const base = useMemo((): { nodes: Node[]; edges: Edge[]; hiddenTools?: string[]; hiddenClusters?: string[] } => {
-    if (topoMapModel) {
-      // Every edge kept: a grant, a yes / no branch and an evidence read are all drawn.
-      const laid = buildArchLayout(topoMapModel, "payloads", { keepAll: true }); // a zone no one may touch still matters
+  // What is on screen. The canvas remounts when it changes, so fitView re-runs
+  // for the new graph's coordinates (fitView only fits on mount, and the
+  // subsystem vs thread layouts occupy different coordinate spaces). PLAN-v7
+  // Stage 3: the ghost count joins it so a plan arriving / clearing also
+  // re-fits — ghosts land in view, not off-canvas.
+  const flowView = `${mode}:${mode === "map" ? `${lens}:${planView}` : ""}:${plan ? plan.subsystems.length : 0}`;
+  // The size the next layout will be — above LAYOUT_DEFER_AT it is computed
+  // after a paint, behind a spinner (useDeferredLayout).
+  const layoutSize = topoDrawn ? topoDrawn.nodes.length + topoDrawn.edges.length
+    : planMapModel ? planMapModel.nodes.length + planMapModel.edges.length
+    : mode === "map" && !focusEntryPointId && architecture ? architecture.nodes.length + architecture.edges.length : 0;
+  const laidOut = useDeferredLayout((): { nodes: Node[]; edges: Edge[]; hiddenTools?: string[]; hiddenClusters?: string[] } => {
+    if (topoMapModel && topoDrawn) {
+      // Every drawn edge kept: a grant, a yes / no branch and an evidence read.
+      const laid = buildArchLayout(topoDrawn, "payloads", { keepAll: true, placeEdges: topoMapModel.edges }); // a zone no one may touch still matters
       const lit = traceName && topo.model ? traceIds(topo.model.topology, topo.traces.find((t) => t.name === traceName)?.steps[traceIndex]) : null;
       return {
         ...laid,
-        edges: styleTopologyEdges(laid.edges, topoMapModel),
+        edges: styleTopologyEdges(laid.edges, topoDrawn),
         nodes: lit && lit.size ? laid.nodes.map((n) => ({ ...n, data: { ...n.data, lit: lit.has(n.id), dim: !lit.has(n.id) } })) : laid.nodes,
       };
     }
@@ -245,7 +267,8 @@ export function SystemView({
     // the whole view then.
     if (system || plan) return buildSystemLayout(system ?? { subsystems: [], edges: [] }, plan, cardHeights ?? undefined);
     return { nodes: [], edges: [] };
-  }, [mode, system, plan, threads, entryPoints, crossings, focusEntryPointId, architecture, lens, cardHeights, insight, planMapModel, topoMapModel, traceName, traceIndex, topo]);
+  }, [mode, system, plan, threads, entryPoints, crossings, focusEntryPointId, architecture, lens, cardHeights, insight, planMapModel, topoMapModel, topoDrawn, traceName, traceIndex, topo], layoutSize, flowView);
+  const base = laidOut.value ?? EMPTY_LAYOUT;
 
   // Inject the drill-down callback into each node's data (react-flow custom
   // nodes receive only `data`): subsystem endpoint rows AND thread nodes both
@@ -423,7 +446,8 @@ export function SystemView({
         </div>
       )}
 
-      {nodes.length === 0 && (
+      {laidOut.pending && <LayoutSpinner size={layoutSize} />}
+      {nodes.length === 0 && !laidOut.pending && (
         <div
           data-system-mode-empty
           style={{
@@ -453,14 +477,12 @@ export function SystemView({
             onOpenThread?.(focusEntryPointId);
           }
         }}
-        // Remount on mode switch so fitView re-runs for the new graph's
-        // coordinates (fitView only fits on mount, and the subsystem vs
-        // thread layouts occupy different coordinate spaces). PLAN-v7
-        // Stage 3: the ghost count joins the key so a plan arriving /
-        // clearing also re-fits — ghosts land in view, not off-canvas.
-        key={`${mode}:${mode === "map" ? `${lens}:${planView}` : ""}:${plan ? plan.subsystems.length : 0}`}
+        // Remount when the view changes (flowView), and once more when a
+        // deferred layout first arrives, so the map is fitted to it.
+        key={`${flowView}:${laidOut.value ? "laid" : "none"}`}
         nodes={nodes}
         edges={edges}
+        onlyRenderVisibleElements={edges.length > VISIBLE_ONLY_AT}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         // The map starts READABLE (fit all, else fit width, else the label

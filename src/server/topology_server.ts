@@ -16,6 +16,20 @@ export interface TopologyReply {
   traces: Array<{ name: string; steps: TraceStep[]; errors: string[] }>;
 }
 
+let derivedMemo: { stack: unknown; threads: unknown; value: Topology | undefined } | null = null;
+
+/** The derived topology costs ~0.3 s on a large project and every re-derive
+ *  makes every open client ask for it again. It reads the parse, the stack and
+ *  the threads; the stack index is rebuilt (a new object) on every derived
+ *  pass, so the identity of stack + threads says when to recompute. A config
+ *  file no derived pass watches is re-read at the next pass, not before. */
+export function derivedTopologyOnce(stack: unknown, threads: unknown, compute: () => Topology | undefined): Topology | undefined {
+  if (derivedMemo && derivedMemo.stack === stack && derivedMemo.threads === threads) return derivedMemo.value;
+  const value = compute();
+  derivedMemo = { stack, threads, value };
+  return value;
+}
+
 /** `derived` — the topology read from the code (data_arch.ts), the lowest-ranked source. */
 export function topologyState(root: string, derived?: Topology): TopologyReply {
   const model = loadTopology(root, derived);

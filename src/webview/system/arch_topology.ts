@@ -63,8 +63,15 @@ function zoneCards(t: Topology, threads: ThreadLike[], nodes: ArchNodeRecord[], 
   }
 }
 
-/** The Resources lens. */
-export function resourcesModel(m: TopologyModel, threads: ThreadLike[] = [], drift?: TopologyDrift | null): ArchModelRecord {
+/** Above this many read edges (after the universal ones are folded), reads are
+ *  said on the cards and drawn only for the focused zone or principal: every
+ *  edge is an SVG path and a label, and past this the map stops being readable
+ *  and stops panning smoothly. */
+export const READ_EDGE_CAP = 150;
+
+/** The Resources lens. `focus` — the selected card's id: its reads are drawn
+ *  even where the others are folded. */
+export function resourcesModel(m: TopologyModel, threads: ThreadLike[] = [], drift?: TopologyDrift | null, opts: { focus?: string | null } = {}): ArchModelRecord {
   const t = m.topology;
   const nodes: ArchNodeRecord[] = [];
   const edges: ArchEdgeRecord[] = [];
@@ -76,12 +83,20 @@ export function resourcesModel(m: TopologyModel, threads: ThreadLike[] = [], dri
   }
   const live = new Set([...(drift?.extraGrants ?? [])]);
   const missing = new Set(drift?.missingGrants ?? []);
+  // Plain reads (no drift) are collected per zone; foldReads decides which to draw.
+  const reads = new Map<string, ArchEdgeRecord[]>();
   for (const g of t.grants ?? []) {
     for (const who of grantees(t, g.who)) {
       const flag = missing.has(`${g.who} ${g.access} ${g.zone}`) ? " · declared, NOT on the platform" : "";
-      edges.push(edge(prId(who), zoneId(g.zone), `${g.access}${flag}`, `${g.who} ${g.access} ${g.zone}${g.who !== who ? ` (${who} holds ${g.who})` : ""}${g.cite ? ` — ${g.cite}` : ""}`, { topoAccess: g.access, ...(flag ? { topoDrift: "missing" } : {}) } as never));
+      const e = edge(prId(who), zoneId(g.zone), `${g.access}${flag}`, `${g.who} ${g.access} ${g.zone}${g.who !== who ? ` (${who} holds ${g.who})` : ""}${g.cite ? ` — ${g.cite}` : ""}`, { topoAccess: g.access, ...(flag ? { topoDrift: "missing" } : {}) } as never);
+      if (g.access !== "read" || flag) { edges.push(e); continue; }
+      const list = reads.get(g.zone) ?? [];
+      if (!list.some((x) => x.id === e.id)) list.push(e);
+      reads.set(g.zone, list);
     }
   }
+  const folded = foldReads(t, reads, nodes, opts.focus ?? null);
+  edges.push(...folded.drawn);
   for (const k of live) {
     const [who, access, zone] = k.split(" ");
     for (const p of grantees(t, who).length ? grantees(t, who) : [who]) {
@@ -90,8 +105,49 @@ export function resourcesModel(m: TopologyModel, threads: ThreadLike[] = [], dri
     }
   }
   const notes = [`declared topology — ${m.status.map((s) => `${s.source.id}: ${s.state}`).join(", ")}`];
+  if (folded.note) notes.push(folded.note);
   if (drift) notes.push("live drift drawn: zones / grants only the platform has, declared grants it lacks");
   return { version: "1", nodes, edges, groups, unplaced: EMPTY, notes };
+}
+
+/** Which read edges to draw. A zone every principal may read says so on its
+ *  card ("read by all N") instead of N edges; if the reads left still exceed
+ *  READ_EDGE_CAP they are said on the cards too. The focused zone or principal
+ *  keeps its reads drawn. Writes and drift are never folded: each one says
+ *  something different. */
+function foldReads(t: Topology, reads: Map<string, ArchEdgeRecord[]>, nodes: ArchNodeRecord[], focus: string | null): { drawn: ArchEdgeRecord[]; note: string | null } {
+  const principals = nodes.filter((n) => n.id.startsWith(`${TOPO}pr:`)).map((n) => n.id);
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  const universal = new Set<string>();
+  for (const [z, list] of reads) {
+    const from = new Set(list.map((e) => e.from));
+    if (principals.length >= 3 && principals.every((p) => from.has(p))) universal.add(z);
+  }
+  const rest = [...reads].filter(([z]) => !universal.has(z)).reduce((s, [, l]) => s + l.length, 0);
+  const said = (z: string) => universal.has(z) || rest > READ_EDGE_CAP;
+  const drawn: ArchEdgeRecord[] = [];
+  let total = 0, hidden = 0;
+  for (const [z, list] of reads) {
+    total += list.length;
+    if (!said(z)) { drawn.push(...list); continue; }
+    for (const e of list) if (focus === zoneId(z) || e.from === focus) drawn.push(e); else hidden++;
+    const zc = byId.get(zoneId(z));
+    if (!zc) continue;
+    const names = list.map((e) => e.from.slice(`${TOPO}pr:`.length));
+    zc.sublabel = `${zc.sublabel} · read by ${universal.has(z) ? `all ${principals.length}` : names.length}`;
+    zc.notes = [...(zc.notes ?? []), universal.has(z)
+      ? `readable by every principal (${principals.length}) — select the zone to draw them`
+      : `readable by ${names.slice(0, 6).join(", ")}${names.length > 6 ? ` +${names.length - 6}` : ""} — select the zone to draw them`];
+  }
+  // A principal that may read every zone says it once, on its own card.
+  const zoneCount = (t.zones ?? []).length;
+  if (universal.size) for (const p of principals) {
+    const n = [...reads.values()].filter((l) => l.some((e) => e.from === p)).length;
+    const pc = byId.get(p);
+    if (pc && zoneCount && n === zoneCount) pc.sublabel = `${pc.sublabel} · reads every zone`;
+  }
+  if (!hidden) return { drawn, note: null };
+  return { drawn, note: `${hidden} of ${total} read grants are said on the cards, not drawn${universal.size ? ` (${universal.size} zones every principal may read)` : ""} — select a zone or principal to draw its reads; writes are always drawn` };
 }
 
 /** The Decisions lens. */
