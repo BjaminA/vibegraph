@@ -151,9 +151,10 @@ type Selected = { node: ArchNodeRecord } | { edge: ArchEdgeRecord } | { group: A
 export function ArchProposalBar({ model, state, onAction }: {
   model: ArchModelRecord;
   state: { busy: boolean; error: string | null };
-  onAction?: (action: "propose" | "ratify" | "reject", guidance?: string) => void;
+  onAction?: (action: "propose" | "update" | "ratify" | "reject", guidance?: string) => void;
 }) {
   const p = model.proposal;
+  const drift = model.drift;
   const [modifying, setModifying] = React.useState(false);
   const [guidance, setGuidance] = React.useState("");
   React.useEffect(() => { if (!p) { setModifying(false); setGuidance(""); } }, [p]);
@@ -178,6 +179,24 @@ export function ArchProposalBar({ model, state, onAction }: {
           {`groups ratified from ${model.ratified.model}${model.ratified.at ? ` · ${model.ratified.at.slice(0, 10)}` : ""}`}
         </span>
       )}
+      {/* 2026-10-05 — the map moved since the groups were ratified
+          (arch_drift.ts). Minor drift is counted; substantial drift asks for
+          an UPDATE: the model extends the ratified groups, a person decides. */}
+      {!p && model.ratified && drift && drift.level !== "none" && (
+        <span data-arch-drift={drift.level} title={drift.reasons.join("\n")}
+          style={{ display: "flex", alignItems: "center", gap: 4, padding: "4px 8px", color: drift.level === "substantial" ? "var(--accent-warning)" : "var(--text-muted)" }}>
+          {drift.level === "substantial" ? "changed since ratified: " : "since ratified: "}
+          {[drift.unplaced.length ? `${drift.unplaced.length} ungrouped` : "", drift.deployAdded.length ? `${drift.deployAdded.length} new deploy unit${drift.deployAdded.length === 1 ? "" : "s"}` : "",
+            drift.plannedAdded.length ? `${drift.plannedAdded.length} new planned` : "", drift.emptied.length ? `${drift.emptied.length} empty group${drift.emptied.length === 1 ? "" : "s"}` : "",
+            drift.added.length && !drift.unplaced.length ? `${drift.added.length} new, all grouped by rule` : ""].filter(Boolean).join(" · ") || "moved"}
+        </span>
+      )}
+      {!p && model.ratified && drift && drift.level !== "none" && !state.busy && (
+        <button data-arch-update disabled={!onAction} onClick={() => onAction?.("update")} style={btn}
+          title={`Ask a model to extend the ratified groups for what changed (they stay fixed; it may only add) — spends tokens; nothing applies until you ratify.\n${drift.reasons.join("\n")}`}>
+          <Sparkles size={16} strokeWidth={1.5} />Update groups
+        </button>
+      )}
       {!p && (!model.ratified || state.busy) && (
         <button data-arch-propose disabled={state.busy || !onAction} onClick={() => onAction?.("propose")} style={btn}
           title="Ask a model for deployment / trust groups, names and a primary path — every item must cite a manifest line, a doc line or a node; spends tokens; nothing applies until you ratify">
@@ -187,7 +206,7 @@ export function ArchProposalBar({ model, state, onAction }: {
       {p && (
         <>
           <span data-arch-proposal-summary title={why} style={{ padding: "0 4px" }}>
-            {`proposal from ${p.model}: ${proposedGroups} groups · ${proposedNames} names${p.refused.length ? ` · ${p.refused.length} refused` : ""}`}
+            {`${p.mode === "update" ? "update" : "proposal"} from ${p.model}: ${proposedGroups} groups · ${proposedNames} names${p.refused.length ? ` · ${p.refused.length} refused` : ""}`}
           </span>
           <button data-arch-ratify disabled={state.busy || !onAction} onClick={() => onAction?.("ratify")} style={btn} title="Make this proposal stated (.vibegraph/architecture.json)">
             <Check size={16} strokeWidth={1.5} />Ratify

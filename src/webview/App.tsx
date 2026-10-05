@@ -295,9 +295,11 @@ function Graph() {
   // `working` says a MODEL is drafting (propose / revise) — what the map animates;
   // ratify and reject are local writes and only set `busy`.
   const [archPropose, setArchPropose] = useState<{ busy: boolean; error: string | null; working?: "propose" | "revise" | null }>({ busy: false, error: null, working: null });
-  const handleArchAction = useCallback((action: "propose" | "ratify" | "reject" | "seed-plan", guidance?: string) => {
-    setArchPropose({ busy: true, error: null, working: action === "propose" ? (guidance ? "revise" : "propose") : null });
+  const handleArchAction = useCallback((action: "propose" | "update" | "ratify" | "reject" | "seed-plan", guidance?: string) => {
+    setArchPropose({ busy: true, error: null, working: action === "propose" || action === "update" ? (guidance ? "revise" : "propose") : null });
     if (action === "propose") bridge.postMessage({ type: "arch-propose", payload: guidance ? { guidance } : {} });
+    // 2026-10-05 — extend the ratified groups for what drifted (arch_drift.ts).
+    else if (action === "update") bridge.postMessage({ type: "arch-propose", payload: { update: true } });
     else if (action === "seed-plan") bridge.postMessage({ type: "arch-seed-plan", payload: {} });
     else bridge.postMessage({ type: action === "ratify" ? "arch-ratify" : "arch-reject" });
   }, [bridge]);

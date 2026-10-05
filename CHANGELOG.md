@@ -3,7 +3,39 @@
 `vibegraph-knowledge` and the VibeGraph app. Newest first. Each entry says what
 changed and, where an existing user would notice, how behaviour differs.
 
-## 0.22.0 — unreleased
+## 0.23.0 — unreleased
+
+### Architecture groups that stay true as the project grows
+
+A ratified group used to name exactly the boxes it wrapped, so every cluster
+added later fell outside every group without a word, the proposing model
+never saw the plan, and a ratified map was never re-checked.
+[docs/guide/VISUALISATION.md](docs/guide/VISUALISATION.md#3-start-with-the-architecture-map).
+
+- **Membership by rule.** A group carries `match` rules over facts the map
+  already holds (folder, package root, family, framework, tool role or name;
+  `src/shared/arch_rules.ts`) beside the boxes it names. Code that fits a rule
+  joins the group on the next change, with no model. A named box stays put;
+  otherwise the most specific rule wins; `exclude` keeps a box out.
+- **The plan in the proposal.** Claude sees the objective and the planned
+  processes, modules and stores with their folders, is asked for rules that
+  will hold as the plan is built, and may anchor a group to a planned item
+  (`planned`, citable as `plan:processes:<id>`) before its code exists. The
+  zero-token **Seed groups** gives every planned process a rule on its `at`
+  folder; one not built yet waits instead of being refused.
+- **Drift since ratification.** Ratifying stores a baseline. On every change
+  the map compares against it (`src/server/arch_drift.ts`): new clusters the
+  rules placed are counted; clusters no group holds, a new deployment unit, a
+  new planned process or an emptied group are *substantial* and the bar offers
+  **Update groups** — a model extends the ratified groups (fixed: it may only
+  add), a person ratifies. CLI `architecture --drift` (exit 0/1/2) and
+  `--update`.
+
+**Behaviour changes:** `--seed-plan` seeds unbuilt planned processes as
+waiting groups; the map re-reads `architecture.json` and the plan when they
+change on disk, not only on a re-derive.
+
+## 0.22.0 — 2026-10-05
 
 ### Rules you can review, one panel frame, one colour per kind of thing
 

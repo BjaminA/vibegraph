@@ -818,6 +818,10 @@ export interface ArchGroupRecord {
   source: ArchSource;
   /** proposed: the evidence it cites; empty = INFERRED (ghosted). */
   evidence?: string[];
+  /** 2026-10-05 — the members its rules brought in (not named by it), and
+   *  its rules in words (src/shared/arch_rules.ts). */
+  byRule?: string[];
+  rules?: string[];
 }
 
 export interface ArchModelRecord {
@@ -839,11 +843,33 @@ export interface ArchModelRecord {
   primaryPath?: { entryPoints: string[]; source: "stated" | "proposed"; evidence?: string[] };
   /** M-ARCH.4 — a pending model proposal (its items are in groups/labels
    *  with source "proposed"); what the validator refused, named. */
-  proposal?: { at: string; model: string; narrative: string | null; refused: Array<{ item: string; reason: string }> };
+  proposal?: { at: string; model: string; narrative: string | null; refused: Array<{ item: string; reason: string }>; mode?: "update" };
   /** 2026-09-28 — the groups were ratified by a person (arch_store
    *  `ratifiedAt`): the GUI shows this instead of a Propose button, and no
    *  path spawns another proposal unless a person forces it. */
   ratified?: { at: string; model: string };
+  /** 2026-10-05 — how far the map has moved since the groups were ratified
+   *  (src/server/arch_drift.ts); absent until something is ratified. */
+  drift?: ArchDrift;
+}
+
+/** What changed since the groups were ratified. `substantial` asks for an
+ *  update pass; `minor` is only counted. Every list names what moved. */
+export interface ArchDrift {
+  level: "none" | "minor" | "substantial";
+  /** clusters no group holds, by rule or by name */
+  unplaced: string[];
+  /** clusters that did not exist at ratification / that are gone since */
+  added: string[];
+  removed: string[];
+  /** deployment units (compose services, Dockerfiles, pm2 apps …) new since */
+  deployAdded: string[];
+  /** planned processes / modules new since (the plan's revision moved) */
+  plannedAdded: string[];
+  /** groups that hold nothing any more */
+  emptied: string[];
+  reasons: string[];
+  since: string;
 }
 
 export interface StackIndexRecord {

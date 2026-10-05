@@ -28,6 +28,7 @@ import { hostAllowed, originAllowed, jsonContentType, staticPath, ensurePrivateI
 import { computeDataflow, findingsByThread, formatDataflowMd, type DataflowReport } from "./src/server/dataflow";
 import { archModelForEnvelope } from "./src/server/arch_envelope";
 import { applyArchStore, loadArchStore, saveArchStore, ratifyProposal, rejectProposal, proposalGate } from "./src/server/arch_store";
+import { archBaseline, archDrift } from "./src/server/arch_drift";
 import { testReach, affectedTests } from "./src/shared/test_reach";
 import { buildEnvSurface, configuredByFor, type EnvSurface } from "./src/shared/env_surface";
 import { coverageFor } from "./src/server/coverage";
@@ -320,10 +321,30 @@ function rebuildArch(relFiles: typeof projectParse): void {
   }
 }
 
+// 2026-10-05 — `.vibegraph/architecture.json` and the plan are edited by
+// hand and by the CLI as well as here: the stated layer (and its drift) is
+// re-applied whenever either file changed on disk, not only on a re-derive.
+// A deployment-manifest change is picked up on the next re-derive.
+let archFilesKey = "";
+function archFresh(): true {
+  if (!isDirectory || !latestArchDerived) return true;
+  let key = "";
+  try { key = String(fs.statSync(path.join(inputPath, ".vibegraph", "architecture.json")).mtimeMs); } catch { key = "none"; }
+  key += `|${planMtime(inputPath)}`;
+  if (key !== archFilesKey) { archFilesKey = key; reapplyArchStore(); }
+  return true;
+}
+
 function reapplyArchStore(): void {
   if (!latestArchDerived) { latestArch = null; return; }
   try {
-    latestArch = isDirectory ? applyArchStore(latestArchDerived, loadArchStore(inputPath)) : latestArchDerived;
+    if (!isDirectory) { latestArch = latestArchDerived; return; }
+    const store = loadArchStore(inputPath);
+    const applied = applyArchStore(latestArchDerived, store);
+    // 2026-10-05 — how far the map moved since the groups were ratified
+    // (src/server/arch_drift.ts): zero tokens, on every re-derive.
+    const drift = archDrift(applied, store, readInfraManifests(inputPath).facts, loadPlan(inputPath));
+    latestArch = drift ? { ...applied, drift } : applied;
   } catch (e: any) {
     console.warn(`  [Architecture] stated layer failed to apply: ${e?.message ?? e}`);
     latestArch = latestArchDerived;
@@ -335,7 +356,7 @@ function reapplyArchStore(): void {
 // may propose groups / names / a primary path / a narrative; the reply is
 // grounded against what it was shown and stored PENDING. Nothing it says
 // becomes stated until a human ratifies (arch-ratify, GUI only).
-async function archProposeCore(guidance?: string): Promise<{ ok: boolean; error?: string; refused?: number; groups?: number; names?: number }> {
+async function archProposeCore(guidance?: string, opts: { update?: boolean } = {}): Promise<{ ok: boolean; error?: string; refused?: number; groups?: number; names?: number }> {
   if (!isDirectory) return { ok: false, error: "the architecture layer needs a project directory" };
   if (!latestArchDerived || !latestArchDerived.nodes.length) return { ok: false, error: "no derived architecture yet — the project has not finished parsing" };
   if (!claudeCliAvailable) return { ok: false, error: "the claude CLI is unavailable — can't propose an architecture" };
@@ -348,12 +369,17 @@ async function archProposeCore(guidance?: string): Promise<{ ok: boolean; error?
   const current = loadArchStore(inputPath);
   const pending = current.proposal;
   const g = typeof guidance === "string" ? guidance.trim() : "";
-  const gate = proposalGate(current, { modify: !!g });
+  // 2026-10-05 — an UPDATE extends the ratified groups for what drifted
+  // (arch_drift.ts); the plan rides every proposal so groups follow it.
+  const plan = loadPlan(inputPath);
+  const drift = opts.update ? (latestArch?.drift ?? null) : null;
+  const gate = proposalGate(current, opts.update ? { update: { drifted: !!drift && drift.level !== "none" } } : { modify: !!g });
   if (!gate.allowed) return { ok: false, error: gate.reason };
-  const prompt = buildProposePrompt(latestArchDerived, facts, docs, g && pending ? { previous: pending, guidance: g } : undefined);
+  const update = opts.update && drift ? { groups: current.groups, drift } : undefined;
+  const prompt = buildProposePrompt(latestArchDerived, facts, docs, g && pending ? { previous: pending, guidance: g } : undefined, { plan, update });
   const text = await _runReadmeLlm(prompt, "thinking", "gen");
   if (text === null) return { ok: false, error: `the model returned nothing${genFailureSuffix()}` };
-  const parsed = parseProposal(text, latestArchDerived, facts, docs, { model: tierLabel("thinking") });
+  const parsed = parseProposal(text, latestArchDerived, facts, docs, { model: tierLabel("thinking"), plan, ...(update ? { update } : {}) });
   if (!parsed.proposal) return { ok: false, error: parsed.error ?? "the reply was not a usable proposal" };
   const store = loadArchStore(inputPath);
   store.proposal = parsed.proposal;
@@ -386,7 +412,14 @@ function archDecide(decision: "ratify" | "reject"): { ok: boolean; error?: strin
   if (!isDirectory) return { ok: false, error: "the architecture layer needs a project directory" };
   const store = loadArchStore(inputPath);
   if (!store.proposal) return { ok: false, error: "there is no pending architecture proposal" };
-  saveArchStore(inputPath, decision === "ratify" ? ratifyProposal(store) : rejectProposal(store));
+  if (decision === "ratify") {
+    // The baseline the drift check measures from: the map with the
+    // just-ratified groups on it (who is grouped is part of it).
+    const next = ratifyProposal(store);
+    const facts = readInfraManifests(inputPath).facts;
+    next.baseline = archBaseline(applyArchStore(latestArchDerived ?? { version: "1", nodes: [], edges: [], groups: [], notes: [] } as any, next), facts, loadPlan(inputPath));
+    saveArchStore(inputPath, next);
+  } else saveArchStore(inputPath, rejectProposal(store));
   reapplyArchStore();
   broadcastProjectUpdate();
   refreshArchDocs();
@@ -1174,7 +1207,7 @@ function buildProjectEnvelope(): {
     // M-XLANG.1 - the cross-language crossings, when any were found.
     ...(latestCrossings.all.length || latestCrossings.navigation?.length ? { crossings: latestCrossings } : {}),
     // M-ARCH.1 - the derived architecture, when it has anything to draw.
-    ...(latestArch && latestArch.nodes.length ? { architecture: latestArch } : {}),
+    ...(archFresh() && latestArch && latestArch.nodes.length ? { architecture: latestArch } : {}),
     // 2026-09-28 - reachability, env surface, freshness (src/server/insight.ts).
     ...(latestInsight ? { insight: latestInsight } : {}),
     // PLAN-M-RUNTIME phase 3 - the TRACE OVERLAY, when a run has produced
@@ -8224,7 +8257,7 @@ function setupWebSocket() {
           // ratify / reject are the human's. Reply: arch-proposal.
           const t = msg.type;
           const reply = (payload: unknown) => ws.send(JSON.stringify({ type: "arch-proposal", payload: { action: t.slice(5), ...(payload as object) } }));
-          if (t === "arch-propose") archProposeCore(typeof msg.payload?.guidance === "string" ? msg.payload.guidance : undefined).then(reply, (e) => reply({ ok: false, error: String(e?.message ?? e) }));
+          if (t === "arch-propose") archProposeCore(typeof msg.payload?.guidance === "string" ? msg.payload.guidance : undefined, { update: msg.payload?.update === true }).then(reply, (e) => reply({ ok: false, error: String(e?.message ?? e) }));
           else reply(archDecide(t === "arch-ratify" ? "ratify" : "reject"));
         } else if (msg.type === "system-propose-intent") {
           // PLAN-v7 Stage 3b — describe → claude -p architecture draft →

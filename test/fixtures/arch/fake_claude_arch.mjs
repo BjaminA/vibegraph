@@ -43,6 +43,14 @@ const reply = {
 };
 // A revision (Modify) is marked visibly, so the gate's Modify is proven to re-draft.
 if (prompt.includes("The person asked you to revise")) reply.groups[0].label = "public network (revised)";
-const text = prompt.includes("DEPLOYMENT and TRUST grouping") ? "```json\n" + JSON.stringify(reply, null, 2) + "\n```" : "";
+// 2026-10-05 — an UPDATE after drift: EXTEND the ratified g-mine with a rule
+// for the clusters no group holds (and try to rename it — the merge must keep
+// the ratified label).
+const update = {
+  groups: [{ id: "g-mine", kind: "host", label: "renamed by the model", match: [{ kind: "cluster", family: ["mcp", "scripts"] }], evidence: ["docker-compose.yml:2"] }],
+  names: {},
+};
+const body = prompt.includes("These groups are FIXED") ? update : reply;
+const text = prompt.includes("DEPLOYMENT and TRUST grouping") ? "```json\n" + JSON.stringify(body, null, 2) + "\n```" : "";
 process.stdout.write(JSON.stringify({ result: text, is_error: false, session_id: "fake-arch" }));
 process.exit(0);

@@ -93,6 +93,27 @@ until you **Ratify** (**Modify** re-drafts with your words; **Reject** drops
 it). Ratified groups are saved to `.vibegraph/architecture.json` and appear in
 every export.
 
+**Groups that stay true as the project grows.** A group says *who belongs* by
+rule as well as by name: everything under `services/`, every cluster of the
+`mcp` family, every `@acme/` package. Code added later that fits a rule joins
+its group on the next change, with no model. Claude is shown the plan too
+(the objective, and where each planned process's code will live), so it can
+draw a group for a planned process before its code exists; the group waits
+(said in the map's notes) and fills the day its code lands. **Seed groups**
+(from the plan, no model) gives every planned process a rule on its `at`
+folder in the same way.
+
+When the map outgrows the ratified groups, the bar says so: *since ratified:
+1 new, all grouped by rule* is counted and left alone; clusters no rule
+fits, a new deployment unit (a compose service, a Dockerfile, a pm2 app), a
+new planned process or a group that holds nothing turn it amber —
+*changed since ratified* — with **Update groups**. That asks Claude to EXTEND
+the ratified groups for what changed: they stay fixed (an update cannot
+rename, move or remove anything), and you ratify the additions like any
+proposal. Note the map's grain: a box is one framework family per package,
+so a new folder inside an existing package joins that package's box; a new
+package is a new box.
+
 ## 4. Threads — one execution path across files
 
 Pick an entry point in **Threads** (or a box on the map) to open the

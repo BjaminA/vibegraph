@@ -91,7 +91,7 @@ interface Props {
   architecture?: ArchModelRecord | null;
   /** M-ARCH.4 — the proposal round trip, and the three actions. */
   archPropose?: { busy: boolean; error: string | null; working?: "propose" | "revise" | null };
-  onArchAction?: (action: "propose" | "ratify" | "reject" | "seed-plan", guidance?: string) => void;
+  onArchAction?: (action: "propose" | "update" | "ratify" | "reject" | "seed-plan", guidance?: string) => void;
   /** 2026-10-05 — a chip asked for a card on the map (a zone, store or
    *  identity → `topo:…`): open the map on it and select it. `n` makes a
    *  repeated click on the same chip a new request. */

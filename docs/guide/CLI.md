@@ -83,7 +83,9 @@ CLI) and says so; everything else is deterministic.
 | `software edit <tool>` / `rule add\|update\|remove <tool>` / `unknown add\|remove <tool>` | Change a spec: every quote re-checked, your items marked STATED; your edit keeps it ratified, a model's sends it back to draft | `.vibegraph/software/` | — |
 | `software plan <tool> [--param name=value] [--rules s1,s4]` | Put a ratified spec's tool and rules into the plan, proposed, with the project's names filled in — core rules first, as many as the plan's cap leaves room for; the rest are named, `--rules` chooses | `.vibegraph/plan.json` | — |
 | `architecture --propose \| --modify "<text>"` | Deployment / trust groups and a start-here path, every item citing what it saw; stored pending | `.vibegraph/architecture.json` | **yes** |
-| `architecture --ratify \| --reject` | Makes the pending proposal stated / drops it | `.vibegraph/architecture.json` | — |
+| `architecture --ratify \| --reject` | Makes the pending proposal stated / drops it (ratifying stores the drift baseline) | `.vibegraph/architecture.json` | — |
+| `architecture --drift` | What changed since the groups were ratified; exit 0 none · 1 minor · 2 substantial | nothing | — |
+| `architecture --update` | Extend the ratified groups for what changed (they stay fixed); stored pending | `.vibegraph/architecture.json` | **yes** |
 | `classify [--dry-run \| --apply]` | The role of tools no table knows; `--apply` stores each as a model-stated policy | `.vibegraph/constraints.json` | **yes** |
 | `--version` / `--help` | The version / every command and option | nothing | — |
 
@@ -790,15 +792,32 @@ vibegraph-knowledge architecture [<root>] [--out <dir>] [--archify]
 vibegraph-knowledge architecture [<root>] --propose            # spends tokens
 vibegraph-knowledge architecture [<root>] --modify "<what should change>"   # spends tokens
 vibegraph-knowledge architecture [<root>] --seed-plan [--force] # zero tokens: groups read off the plan
+vibegraph-knowledge architecture [<root>] --drift              # zero tokens: what changed since ratifying
+vibegraph-knowledge architecture [<root>] --update             # spends tokens: extend the ratified groups
 vibegraph-knowledge architecture [<root>] --ratify | --reject
 ```
 
+A group carries `match` rules beside the boxes it names (`{"kind":"cluster",
+"rootPrefix":"services/"}`, `{"family":["mcp"]}`, `{"tool":["@acme/"]}`; fields
+`kind`, `rootPrefix`, `pathPrefix`, `family`, `framework`, `role`, `tool`, all
+of a rule must hold, any rule admits a box; `exclude` keeps a box out), so
+code added later joins it on the next run with no model. A box a group names
+stays there; otherwise the most specific rule wins. `planned` anchors a group
+to a plan item (`plan:processes:billing`) whose code may not exist yet.
+Ratifying stores a baseline. `--drift` compares the map with it — clusters no
+group holds, new deployment units, new planned processes, emptied groups —
+and exits 0 (none), 1 (minor: counted) or 2 (substantial: run `--update`),
+so a hook or CI job can ask. `--update` shows the model the ratified groups
+as fixed and what changed; it may only extend them or add groups, and the
+result is pending like any proposal.
+
 `--seed-plan` proposes the same kind of groups without a model, read off
-`.vibegraph/plan.json`: one `process` group per planned process the code has
-realised (placed on its real box), and two `trust` zones — the project, and
-the services the plan names (tools with a db / cache / queue / model-api /
+`.vibegraph/plan.json`: one `process` group per planned process, with a rule
+on its `at` folder and entry files (realised ones also name their real box;
+one not built yet waits for its code), and two `trust` zones — the project,
+and the services the plan names (tools with a db / cache / queue / model-api /
 http-client / cloud / platform role, processes of kind db / cache /
-external_http). What is not built yet has no box to wrap and is listed as not
+external_http). A planned process with no `at` and no code is listed as not
 seeded, with the reason. It is stored pending like a model's draft and
 decided with `--ratify` / `--reject`; the GUI's **Seed groups** button (on the
 Plan / Overlay switch) does the same.

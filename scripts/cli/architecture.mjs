@@ -23,6 +23,7 @@ import { buildCrossingIndex } from "../../src/server/crossings.ts";
 import { archModelForEnvelope } from "../../src/server/arch_envelope.ts";
 import { applyArchStore, loadArchStore, ratifyProposal, rejectProposal, saveArchStore, proposalGate } from "../../src/server/arch_store.ts";
 import { buildProposePrompt, docExcerpts, parseProposal } from "../../src/server/arch_propose.ts";
+import { archBaseline, archDrift } from "../../src/server/arch_drift.ts";
 import { readInfraManifests } from "../../src/server/infra_manifests.ts";
 import { loadPlan } from "../../src/server/plan_store.ts";
 import { reconcilePlan } from "../../src/server/plan_reconcile.ts";
@@ -42,17 +43,32 @@ export function runArchitecture({ root, out, envelope, pipeline, commit, tool, a
   const crossings = buildCrossingIndex(envl);
   const derived = archModelForEnvelope(envl, stack, crossings, absRoot, undefined, { applyStore: false });
   let exitCode = 0;
+  const plan = loadPlan(absRoot);
+  const driftNow = () => archDrift(applyArchStore(derived, loadArchStore(absRoot)), loadArchStore(absRoot), readInfraManifests(absRoot).facts, plan);
 
-  if (action === "propose") {
+  if (action === "drift") {
+    // 2026-10-05 — zero tokens: what moved since the groups were ratified.
+    const d = driftNow();
+    if (!d) { lines.push("no groups are ratified yet — there is nothing to drift from"); return { lines, messages, exitCode: 0 }; }
+    lines.push(`drift since ${d.since}: ${d.level}`);
+    for (const r of d.reasons) lines.push(`  ${r}`);
+    if (d.level === "substantial") lines.push("update the groups: vibegraph-knowledge architecture --update (spends tokens; extends the ratified groups, a person ratifies)");
+    return { lines, messages, exitCode: d.level === "substantial" ? 2 : d.level === "minor" ? 1 : 0 };
+  }
+
+  if (action === "propose" || action === "update") {
     const facts = readInfraManifests(absRoot).facts;
     const docs = docExcerpts(absRoot, derived);
     // The same gate as the live server (arch_store proposalGate): a pending
-    // draft is only revised, and ratified groups need --force to re-propose.
+    // draft is only revised, ratified groups need --force to re-propose, and
+    // an update needs ratified groups and a map that moved from them.
     const current = loadArchStore(absRoot);
     const pending = current.proposal;
-    const gate = proposalGate(current, { modify: !!guidance, force });
+    const drift = action === "update" ? driftNow() : null;
+    const gate = proposalGate(current, action === "update" ? { update: { drifted: !!drift && drift.level !== "none" } } : { modify: !!guidance, force });
     if (!gate.allowed) return { lines, messages: [...messages, gate.reason], exitCode: 1 };
-    const prompt = buildProposePrompt(derived, facts, docs, guidance ? { previous: pending, guidance } : undefined);
+    const update = action === "update" && drift ? { groups: current.groups, drift } : undefined;
+    const prompt = buildProposePrompt(derived, facts, docs, guidance ? { previous: pending, guidance } : undefined, { plan, update });
     if (dryRun) {
       lines.push(prompt);
       return { lines, messages, exitCode: 0 };
@@ -67,14 +83,14 @@ export function runArchitecture({ root, out, envelope, pipeline, commit, tool, a
       text = r.text;
       label = r.model;
     }
-    const parsed = parseProposal(text, derived, facts, docs, { model: label });
+    const parsed = parseProposal(text, derived, facts, docs, { model: label, plan, ...(update ? { update } : {}) });
     if (!parsed.proposal) return { lines, messages: [...messages, parsed.error ?? "the reply was not a usable proposal"], exitCode: 3 };
     const store = loadArchStore(absRoot);
     store.proposal = parsed.proposal;
     saveArchStore(absRoot, store);
     const p = parsed.proposal;
     lines.push(`proposal from ${p.model}, PENDING in .vibegraph/architecture.json:`);
-    for (const g of p.groups) lines.push(`  group ${g.id} (${g.kind}) "${g.label}" wraps ${g.wraps.join(", ")} — ${g.evidence.length ? `evidence ${g.evidence.join(", ")}` : "INFERRED, no evidence"}`);
+    for (const g of p.groups) lines.push(`  group ${g.id} (${g.kind}) "${g.label}"${g.wraps.length ? ` wraps ${g.wraps.join(", ")}` : ""}${g.match?.length ? ` · rules: ${JSON.stringify(g.match)}` : ""}${g.planned ? ` · planned: ${g.planned}` : ""} — ${g.evidence.length ? `evidence ${g.evidence.join(", ")}` : "INFERRED, no evidence"}`);
     for (const [id, n] of Object.entries(p.names)) lines.push(`  name ${id} → "${n.label}" — ${n.evidence.length ? `evidence ${n.evidence.join(", ")}` : "INFERRED"}`);
     if (p.primaryPath) lines.push(`  start here: ${p.primaryPath.entryPoints.join(", ")}`);
     if (p.narrative) lines.push(`  ${p.narrative}`);
@@ -95,7 +111,12 @@ export function runArchitecture({ root, out, envelope, pipeline, commit, tool, a
       messages.push("there is no pending architecture proposal to decide");
       exitCode = 1;
     } else {
-      saveArchStore(absRoot, action === "ratify" ? ratifyProposal(store) : rejectProposal(store));
+      if (action === "ratify") {
+        // The drift baseline: the map with the just-ratified groups on it.
+        const next = ratifyProposal(store);
+        next.baseline = archBaseline(applyArchStore(derived, next), readInfraManifests(absRoot).facts, plan);
+        saveArchStore(absRoot, next);
+      } else saveArchStore(absRoot, rejectProposal(store));
       lines.push(action === "ratify"
         ? `ratified: the proposal from ${store.proposal.model} is now STATED in .vibegraph/architecture.json (by whoever ran this command)`
         : `rejected: the proposal from ${store.proposal.model} is dropped`);

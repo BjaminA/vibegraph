@@ -380,7 +380,7 @@ export type WebviewMessage =
   // with the SAME system-proposal shape as the canned path.
   | { type: "system-propose-intent"; payload: { description: string } }
   // M-ARCH.4 — propose spends tokens; ratify / reject are the human's.
-  | { type: "arch-propose"; payload?: { guidance?: string } }
+  | { type: "arch-propose"; payload?: { guidance?: string; update?: boolean } }
   | { type: "arch-ratify"; payload?: Record<string, never> }
   | { type: "arch-reject"; payload?: Record<string, never> }
   // 2026-10-01 — a zero-token proposal read off the plan (src/server/plan_arch_seed.ts).

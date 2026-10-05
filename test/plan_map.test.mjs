@@ -105,9 +105,17 @@ test("seed: groups read off the plan as a PENDING proposal — no model; what is
   const byId = Object.fromEntries(p.groups.map((g) => [g.id, g]));
   assert.equal(byId["plan-api"].kind, "process");
   assert.equal(byId["plan-forecaster"].kind, "process");
-  assert.deepEqual(byId["plan-trust-project"].wraps.sort(), ["plan-api", "plan-forecaster"]);
+  // 2026-10-05 — the waiting dashboard group is inside the project zone too,
+  // so its code lands there; the drawn zone shows only drawn groups.
+  assert.deepEqual(byId["plan-trust-project"].wraps.sort(), ["plan-api", "plan-dashboard", "plan-forecaster"]);
   assert.ok(byId["plan-trust-outside"].wraps.some((w) => w.startsWith("tool:sqlite3")), "the db the plan names is outside");
-  assert.ok(p.refused.some((x) => x.item === "process dashboard" && /nothing in the code to wrap/.test(x.reason)));
+  // 2026-10-05 — an unbuilt planned process WITH an `at` is no longer refused:
+  // it is seeded as a group that waits for its code, found by the rule its
+  // folder gives (arch_rules.ts), and drawn the day code lands under web/.
+  assert.deepEqual(byId["plan-dashboard"].wraps, []);
+  assert.equal(byId["plan-dashboard"].planned, "plan:processes:dashboard");
+  assert.deepEqual(byId["plan-dashboard"].match, [{ kind: "cluster", pathPrefix: "web/" }]);
+  assert.deepEqual(byId["plan-api"].match.map((r) => r.pathPrefix), ["api/"], "a realised process carries its folder's rule too");
   assert.match(seedArchFromPlan(plan, rec, derived, r.store).error, /already pending/, "a pending proposal is not replaced");
   assert.match(seedArchFromPlan(plan, rec, derived, ratifyProposal(r.store)).error, /already ratified/, "ratified groups need --force");
   assert.equal(seedArchFromPlan(plan, rec, derived, ratifyProposal(r.store), { force: true }).error, undefined);

@@ -122,6 +122,10 @@ usage:
       --seed-plan          zero tokens: propose groups read off the plan (.vibegraph/plan.json) — one per realised
                            planned process, and trust zones between the project and the services it names;
                            PENDING like a model's draft, decided with --ratify / --reject
+      --update             SPENDS TOKENS: the map moved since the groups were ratified (see --drift): ask a model to
+                           EXTEND the ratified groups (they stay fixed; it may only add members, rules or groups)
+      --drift              zero tokens: what changed since the groups were ratified, and whether it is substantial
+                           (exit 0 none · 1 minor · 2 substantial — a hook or CI can ask)
       --ratify | --reject  decide the pending proposal (running this is the human's decision)
       --force              with --propose / --seed-plan: draft again although the groups were already ratified
       --reply <f>          use a saved model reply instead of spawning · --dry-run print the prompt, spawn nothing
@@ -374,6 +378,7 @@ function cmdArchitecture(args) {
         out: { type: "string" }, envelope: { type: "string" }, propose: { type: "boolean" }, ratify: { type: "boolean" },
         reject: { type: "boolean" }, reply: { type: "string" }, "dry-run": { type: "boolean" }, model: { type: "string" },
         modify: { type: "string" }, archify: { type: "boolean" }, force: { type: "boolean" }, "seed-plan": { type: "boolean" },
+        update: { type: "boolean" }, drift: { type: "boolean" },
       },
       allowPositionals: true,
     });
@@ -381,7 +386,7 @@ function cmdArchitecture(args) {
     return fail(`${e.message}\n\n${USAGE}`);
   }
   const v = parsed.values;
-  if ([v.propose, v.ratify, v.reject, v.modify !== undefined, v["seed-plan"]].filter(Boolean).length > 1) return fail("choose one of --propose, --modify, --seed-plan, --ratify, --reject");
+  if ([v.propose, v.ratify, v.reject, v.modify !== undefined, v["seed-plan"], v.update, v.drift].filter(Boolean).length > 1) return fail("choose one of --propose, --modify, --update, --drift, --seed-plan, --ratify, --reject");
   const loc = locate();
   let absRoot;
   try { absRoot = projectRoot(parsed.positionals[0]); } catch (e) { return fail(e.message); }
@@ -391,7 +396,7 @@ function cmdArchitecture(args) {
   }
   const r = runArchitecture({
     root: absRoot, out: v.out, envelope: v.envelope, pipeline, commit: gitHead(absRoot) ?? "no-git", tool: toolLabel(loc),
-    action: v.propose || v.modify !== undefined ? "propose" : v["seed-plan"] ? "seed-plan" : v.ratify ? "ratify" : v.reject ? "reject" : null,
+    action: v.propose || v.modify !== undefined ? "propose" : v.update ? "update" : v.drift ? "drift" : v["seed-plan"] ? "seed-plan" : v.ratify ? "ratify" : v.reject ? "reject" : null,
     replyFile: v.reply, dryRun: v["dry-run"] === true, model: v.model, guidance: v.modify, archify: v.archify === true, force: v.force === true,
   });
   for (const line of r.lines) process.stdout.write(`${line}\n`);

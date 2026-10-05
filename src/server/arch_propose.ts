@@ -15,11 +15,22 @@
 //
 // Pure except `docExcerpts` (reads the project's markdown). No spawn here:
 // the server and the CLI run the model their own way.
+//
+// 2026-10-05 — a group states WHO BELONGS by rule (`match`, src/shared/
+// arch_rules.ts), so code added later joins it with no model; the model is
+// shown the PLAN (objective, planned processes and modules, where their code
+// will live) and may anchor a group to a planned item before its code exists
+// (`planned`, cited as `plan:processes:<id>`); and an UPDATE pass, offered
+// when the map drifted from the ratified groups (arch_drift.ts), is shown
+// those groups as fixed and extends them for what changed.
 
 import * as fs from "fs";
 import * as path from "path";
 import type { ArchModelRecord } from "../shared/protocol.ts";
-import { GROUP_KINDS, type ArchProposal, type ProposedGroup, type ProposedName } from "./arch_store.ts";
+import { GROUP_KINDS, type ArchProposal, type ProposedGroup, type ProposedName, type StatedGroup } from "./arch_store.ts";
+import type { ArchDrift } from "../shared/protocol.ts";
+import type { Plan } from "../shared/plan_types.ts";
+import { describeRule, resolveMembers, validateRule, type GroupRule } from "../shared/arch_rules.ts";
 import { factCitation, type InfraFact } from "./infra_manifests.ts";
 import { docFiles } from "./stack_classify.ts";
 
@@ -76,7 +87,20 @@ export interface ReviseInput {
   guidance: string;
 }
 
-export function buildProposePrompt(model: ArchModelRecord, facts: InfraFact[], docs: DocExcerpt[], revise?: ReviseInput): string {
+/** An UPDATE after drift: the ratified groups (fixed) and what changed. */
+export interface UpdateInput { groups: readonly StatedGroup[]; drift: ArchDrift }
+
+/** The plan items a group may anchor to, as citations (`plan:processes:api`). */
+export function planCitations(plan: Plan | null | undefined): Map<string, string> {
+  const out = new Map<string, string>();
+  if (!plan || plan.closed) return out;
+  for (const pr of plan.processes) if (pr.status !== "dropped") out.set(`plan:processes:${pr.id}`, `process ${pr.id} "${pr.label}"${pr.at ? ` — code at ${pr.at}` : ""}${pr.serves ? ` — serves: ${pr.serves}` : ""} (${pr.status})`);
+  for (const m of plan.modules ?? []) if (m.status !== "dropped") out.set(`plan:modules:${m.id}`, `module ${m.id} (${m.kind}) — code at ${m.at} (${m.status})`);
+  for (const st of plan.stores ?? []) if (st.status !== "dropped") out.set(`plan:stores:${st.id}`, `store ${st.id} (${st.kind}) reached through ${(st.reachedThrough ?? []).join(", ")} (${st.status})`);
+  return out;
+}
+
+export function buildProposePrompt(model: ArchModelRecord, facts: InfraFact[], docs: DocExcerpt[], revise?: ReviseInput, opts: { plan?: Plan | null; update?: UpdateInput } = {}): string {
   const L: string[] = [];
   L.push(
     "You are proposing the DEPLOYMENT and TRUST grouping of a software architecture that was derived from code.",
@@ -84,12 +108,15 @@ export function buildProposePrompt(model: ArchModelRecord, facts: InfraFact[], d
     "You propose ONLY: (1) groups — deployment/trust boundaries (kinds: " + GROUP_KINDS.join(", ") + ") that wrap existing node ids, nestable by `parent`; (2) display names for existing nodes, when the evidence names them better; (3) the primary path — the entry points a newcomer should walk first; (4) a narrative of at most two sentences.",
     "EVERY group, name and path must cite evidence: `file:line` of a deployment fact or doc line listed below, or a node / edge id listed below. Cite only what is listed. If nothing listed supports an item, leave its evidence empty — it will be shown as INFERRED, which is better than a citation that does not hold.",
     "",
+    "GROUPS MUST OUTLAST THE CODE THEY SEE TODAY. The project will grow; a group that only lists today's boxes holds nothing that is added later. So give each group a `match`: rules a box joins it by, checked by code on every change. A rule is an object whose fields must ALL hold; a group's `match` is a list of rules, ANY of which admits a box. Fields: `kind` (cluster | tool | hub), `rootPrefix` (the package root starts with this folder; \"\" = the project root), `pathPrefix` (an entry point's file starts with this), `family` (list: web, api, mcp, scripts, cli, model, library), `framework` (list), `role` (a tool's role, list), `tool` (tool names; \"@scope/\" matches a package scope). Prefer folder- and package-shaped rules (`rootPrefix`, `pathPrefix`, `tool` scopes) that describe WHY a box belongs, not a list of today's ids. Keep `wraps` for a box no rule describes. `exclude` lists box ids a rule must not bring in.",
+    "",
     "## Nodes (derived)",
   );
   for (const n of model.nodes) {
     const bits = [n.label, n.sublabel];
     if (n.kind === "cluster" && n.entryPoints?.length) bits.push(`e.g. ${n.entryPoints.slice(0, 3).join(", ")}`);
-    L.push(`- ${n.id}: ${bits.join(" — ")}`);
+    const facts2 = [n.root !== undefined ? `root ${n.root === "." ? "\"\"" : n.root}` : "", n.family ? `family ${n.family}` : "", n.frameworks?.length ? `frameworks ${n.frameworks.join("|")}` : "", n.tool ? `tool ${n.tool}` : "", n.role ? `role ${n.role}` : ""].filter(Boolean).join(", ");
+    L.push(`- ${n.id}: ${bits.join(" — ")}${facts2 ? ` [${facts2}]` : ""}`);
   }
   L.push("", "## Edges (derived)");
   for (const e of model.edges) L.push(`- ${e.id}: ${e.from} → ${e.to} (${e.protocol}${e.count > 1 ? ` ×${e.count}` : ""})`);
@@ -99,6 +126,25 @@ export function buildProposePrompt(model: ArchModelRecord, facts: InfraFact[], d
   L.push("", "## The project's own documentation (lines about where things run)");
   if (!docs.length) L.push("(none)");
   for (const d of docs) L.push(`- ${d.file}:${d.line}: ${d.text}`);
+  const planned = planCitations(opts.plan);
+  if (opts.plan && planned.size) {
+    L.push(
+      "", "## The project's plan (where it is heading — hypothetical, agreed or proposed by a person; not the code)",
+      `Objective: ${opts.plan.objective}`,
+      "Organise the groups so they stay true as this plan is built: a planned process's code will appear under its `at` folder, so a rule on that folder groups it the day it lands. A group may be anchored to a planned item with `planned` (its citation below) even when no code exists yet; it is drawn once a box matches its rules. Cite a plan item as evidence only for what the plan says.",
+    );
+    for (const [cite, text] of planned) L.push(`- ${cite}: ${text}`);
+  }
+  if (opts.update) {
+    L.push(
+      "", "## UPDATE — a person ratified the groups below; the map has moved since",
+      "These groups are FIXED: do not rename, re-kind, re-parent or remove them, and do not move a box out of one. You may EXTEND a group (repeat its id with the members or rules to ADD) or propose a NEW group for what no group fits. Propose nothing for what did not change. Names and a primary path are optional here.",
+    );
+    for (const g of opts.update.groups) L.push(`- ${g.id} (${g.kind}) "${g.label}"${g.parent ? ` in ${g.parent}` : ""}: names ${g.wraps.join(", ") || "nothing"}${g.match?.length ? `; rules: ${g.match.map(describeRule).join(" OR ")}` : ""}${g.planned ? `; planned: ${g.planned}` : ""}`);
+    L.push("", "What changed:");
+    for (const r of opts.update.drift.reasons) L.push(`- ${r}`);
+    if (opts.update.drift.unplaced.length) L.push(`Clusters in no group: ${opts.update.drift.unplaced.join(", ")}`);
+  }
   if (revise) {
     L.push(
       "",
@@ -111,7 +157,7 @@ export function buildProposePrompt(model: ArchModelRecord, facts: InfraFact[], d
   L.push(
     "",
     "Reply with JSON only:",
-    '{"groups":[{"id":"g-<slug>","kind":"host|region|subnet|trust|network|process|account|zone","label":"<≤60 chars>","wraps":["<node id or group id>"],"parent":"<group id, optional>","evidence":["<file:line or node/edge id>"]}],"names":{"<node id>":{"label":"<≤60 chars>","evidence":["..."]}},"primaryPath":{"entryPoints":["<entry point id>"],"evidence":["..."]},"narrative":"<≤2 sentences>"}',
+    '{"groups":[{"id":"g-<slug>","kind":"host|region|subnet|trust|network|process|account|zone","label":"<≤60 chars>","match":[{"rootPrefix":"<folder>","kind":"cluster"}],"wraps":["<node id or group id, for boxes no rule describes>"],"exclude":["<node id, optional>"],"parent":"<group id, optional>","planned":"<plan:processes:<id>, optional>","evidence":["<file:line, node/edge id or plan citation>"]}],"names":{"<node id>":{"label":"<≤60 chars>","evidence":["..."]}},"primaryPath":{"entryPoints":["<entry point id>"],"evidence":["..."]},"narrative":"<≤2 sentences>"}',
   );
   return L.join("\n");
 }
@@ -129,14 +175,17 @@ function jsonOf(text: string): Record<string, unknown> | null {
 /** Validate a reply against what the model was shown. Nothing is coerced:
  *  an unknown id is refused and named; an unsupported citation is dropped. */
 export function parseProposal(
-  text: string, model: ArchModelRecord, facts: InfraFact[], docs: DocExcerpt[], meta: { model: string; now?: () => Date },
+  text: string, model: ArchModelRecord, facts: InfraFact[], docs: DocExcerpt[],
+  meta: { model: string; now?: () => Date; plan?: Plan | null; update?: { groups: readonly StatedGroup[] } },
 ): { proposal: ArchProposal | null; error?: string } {
   const obj = jsonOf(text);
   if (!obj) return { proposal: null, error: "the reply contained no JSON object" };
   const nodeIds = new Set(model.nodes.map((n) => n.id));
   const edgeIds = new Set(model.edges.map((e) => e.id));
   const entryIds = new Set(model.nodes.flatMap((n) => n.entryPoints ?? []));
-  const cites = new Set<string>([...facts.map(factCitation), ...docs.map((d) => `${d.file}:${d.line}`), ...nodeIds, ...edgeIds]);
+  const planned = planCitations(meta.plan);
+  const cites = new Set<string>([...facts.map(factCitation), ...docs.map((d) => `${d.file}:${d.line}`), ...nodeIds, ...edgeIds, ...planned.keys()]);
+  const statedIds = new Set((meta.update?.groups ?? []).map((g) => g.id));
   const refused: ArchProposal["refused"] = [];
   // CIRCULAR citations are dropped too (found on a private production codebase, the first real
   // run: three names cited only the node they named). A node's own id proves
@@ -162,12 +211,31 @@ export function parseProposal(
     if (!/^[A-Za-z][\w.:-]{0,79}$/.test(id) || !label) { refused.push({ item: `group ${id || "?"}`, reason: "needs an id and a label" }); continue; }
     if (!(GROUP_KINDS as readonly string[]).includes(kind)) { refused.push({ item: `group ${id}`, reason: `kind "${kind}" is not one of ${GROUP_KINDS.join(", ")}` }); continue; }
     const wrapsRaw = Array.isArray(g.wraps) ? g.wraps.filter((w): w is string => typeof w === "string") : [];
-    const wraps = wrapsRaw.filter((w) => nodeIds.has(w) || (proposedIds.has(w) && w !== id));
+    const wraps = wrapsRaw.filter((w) => nodeIds.has(w) || ((proposedIds.has(w) || statedIds.has(w)) && w !== id));
     const unknown = wrapsRaw.filter((w) => !wraps.includes(w));
     if (unknown.length) refused.push({ item: `group ${id}`, reason: `wraps id(s) the model was not shown — a model may not add nodes: ${unknown.slice(0, 4).join(", ")}` });
-    if (!wraps.length) { refused.push({ item: `group ${id}`, reason: "wraps nothing that exists" }); continue; }
-    const parent = typeof g.parent === "string" && proposedIds.has(g.parent) && g.parent !== id ? g.parent : undefined;
-    groups.push({ id, kind, label, wraps, ...(parent ? { parent } : {}), evidence: keepEvidence(g.evidence, `group ${id}`, new Set(wraps)) });
+    // Rules: each validated as written; a malformed one is refused, never coerced.
+    const match: GroupRule[] = [];
+    for (const raw of Array.isArray(g.match) ? g.match : []) {
+      const v = validateRule(raw);
+      if (v.rule) match.push(v.rule);
+      else refused.push({ item: `group ${id}`, reason: `rule refused: ${v.error}` });
+    }
+    const exclude = (Array.isArray(g.exclude) ? g.exclude : []).filter((w): w is string => typeof w === "string" && nodeIds.has(w));
+    const plannedRaw = typeof g.planned === "string" ? g.planned.trim() : "";
+    const plannedAt = plannedRaw && planned.has(plannedRaw) ? plannedRaw : undefined;
+    if (plannedRaw && !plannedAt) refused.push({ item: `group ${id}`, reason: `planned "${plannedRaw}" is not a plan item that was shown` });
+    const byRule = match.length ? resolveMembers([{ id, wraps: [], match, exclude }], model).get(id)!.byRule : [];
+    if (!wraps.length && !byRule.length && !plannedAt && !(meta.update && statedIds.has(id) && match.length)) {
+      refused.push({ item: `group ${id}`, reason: match.length ? "its rules match nothing in the map and it anchors to no planned item" : "wraps nothing that exists" });
+      continue;
+    }
+    const parent = typeof g.parent === "string" && (proposedIds.has(g.parent) || statedIds.has(g.parent)) && g.parent !== id ? g.parent : undefined;
+    groups.push({
+      id, kind, label, wraps, ...(parent ? { parent } : {}),
+      ...(match.length ? { match } : {}), ...(exclude.length ? { exclude } : {}), ...(plannedAt ? { planned: plannedAt } : {}),
+      evidence: keepEvidence(g.evidence, `group ${id}`, new Set([...wraps, ...byRule])),
+    });
   }
 
   const names: Record<string, ProposedName> = {};
@@ -194,6 +262,7 @@ export function parseProposal(
       at: (meta.now ?? (() => new Date()))().toISOString(),
       model: meta.model,
       groups, names, ...(primaryPath ? { primaryPath } : {}), ...(narrative ? { narrative } : {}), refused,
+      ...(meta.update ? { mode: "update" as const } : {}),
     },
   };
 }

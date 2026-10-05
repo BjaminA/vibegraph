@@ -14,7 +14,11 @@
 // agree); a planned tool the code uses. What is not built has nothing to wrap
 // yet, and is listed as refused with that reason rather than invented.
 //
-//   process   one per placed process: wraps its real cluster.
+//   process   one per placed process: wraps its real cluster, and carries
+//             RULES from the plan (2026-10-05): its `at` folder and entry
+//             files, so code added there later joins it with no model. A
+//             planned process with an `at` and no code yet is seeded too, as
+//             a group that waits for its code (`planned`), not refused.
 //   trust     "<project>" around the process groups, and "Outside the
 //             project" around the real boxes of the services the plan names
 //             (tools with an outside role, processes of kind db / cache /
@@ -25,6 +29,13 @@ import type { ArchModelRecord } from "../shared/protocol.ts";
 import type { Plan, PlanReconcile } from "../shared/plan_types.ts";
 import { realisedTargets } from "../webview/system/arch_plan.ts";
 import { proposalGate, type ArchStore, type ProposedGroup } from "./arch_store.ts";
+import { validateRule, type GroupRule } from "../shared/arch_rules.ts";
+
+/** The rules a planned process's code is found by: its folder and entry files. */
+function rulesOf(p: Plan["processes"][number]): GroupRule[] {
+  const prefixes = [...new Set([...(p.at ? [p.at] : []), ...(p.entryPoints ?? []).filter((e) => !e.includes(":"))])];
+  return prefixes.map((pathPrefix) => validateRule({ kind: "cluster", pathPrefix }).rule).filter((r): r is GroupRule => !!r);
+}
 
 const OUTSIDE_ROLES = new Set(["db", "cache", "queue", "model-api", "http-client", "cloud", "platform"]);
 const OUTSIDE_KINDS = new Set(["db", "cache", "external_http"]);
@@ -44,14 +55,19 @@ export function seedArchFromPlan(plan: Plan, rec: PlanReconcile, derived: ArchMo
   for (const p of plan.processes.filter((x) => x.status !== "dropped")) {
     const box = targets.get(`processes:${p.id}`);
     const v = verdictOf("processes", p.id);
-    if (!box) {
-      refused.push({ item: `process ${p.id}`, reason: v?.verdict === "realised" ? "realised, but no entry point places it on a box of the map" : `${v?.verdict ?? "not checked"} — nothing in the code to wrap yet` });
+    const match = rulesOf(p);
+    if (!box && !(match.length && !OUTSIDE_KINDS.has(p.kind))) {
+      refused.push({ item: `process ${p.id}`, reason: v?.verdict === "realised" ? "realised, but no entry point places it on a box of the map" : `${v?.verdict ?? "not checked"} — nothing in the code to wrap yet, and no \`at\` to find it by later` });
       continue;
     }
-    if (OUTSIDE_KINDS.has(p.kind)) { outside.push({ box, why: `plan process ${p.id} is a ${p.kind}` }); continue; }
-    const g: ProposedGroup = { id: gid(p.id), kind: "process", label: p.label.slice(0, 80), wraps: [box], evidence: [`plan rev ${plan.revision}: process ${p.id} (${p.kind}) — plan check: ${v?.verdict}: ${v?.detail ?? ""}`.slice(0, 240)] };
+    if (box && OUTSIDE_KINDS.has(p.kind)) { outside.push({ box, why: `plan process ${p.id} is a ${p.kind}` }); continue; }
+    const g: ProposedGroup = {
+      id: gid(p.id), kind: "process", label: p.label.slice(0, 80), wraps: box ? [box] : [],
+      ...(match.length ? { match } : {}), planned: `plan:processes:${p.id}`,
+      evidence: [`plan rev ${plan.revision}: process ${p.id} (${p.kind}) — plan check: ${v?.verdict}: ${v?.detail ?? ""}`.slice(0, 240)],
+    };
     groups.push(g);
-    inside.push(g.id);
+    inside.push(g.id); // a planned group too: its code lands inside the project zone
   }
   for (const t of plan.stack.filter((x) => x.status !== "dropped")) {
     if (!OUTSIDE_ROLES.has(t.role)) continue;
@@ -76,7 +92,7 @@ export function seedArchFromPlan(plan: Plan, rec: PlanReconcile, derived: ArchMo
   };
   const lines = [
     `seeded from the plan (rev ${plan.revision}), PENDING in .vibegraph/architecture.json — no model, no tokens:`,
-    ...groups.map((g) => `  group ${g.id} (${g.kind}) "${g.label}" wraps ${g.wraps.join(", ")}`),
+    ...groups.map((g) => `  group ${g.id} (${g.kind}) "${g.label}"${g.wraps.length ? ` wraps ${g.wraps.join(", ")}` : " — no code yet"}${g.match?.length ? `; joins code under ${g.match.map((r) => r.pathPrefix).join(", ")}` : ""}`),
     ...refused.map((r) => `  not seeded — ${r.item}: ${r.reason}`),
     "decide it: --ratify makes it stated, --reject drops it",
   ];
