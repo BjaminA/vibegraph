@@ -1,0 +1,56 @@
+{
+  "generatedAt": "2026-10-05T10:19:22.729Z",
+  "inputsHash": "9d48f817cfa91b38",
+  "topology": {
+    "version": "1",
+    "stores": [
+      {
+        "id": "ledger",
+        "kind": "document store"
+      }
+    ],
+    "zones": [
+      {
+        "id": "status",
+        "store": "ledger",
+        "holds": [
+          "status"
+        ]
+      },
+      {
+        "id": "approver",
+        "store": "ledger",
+        "holds": [
+          "approver"
+        ]
+      }
+    ],
+    "principals": [
+      {
+        "id": "order-service",
+        "kind": "service"
+      },
+      {
+        "id": "admin",
+        "kind": "role-holder"
+      }
+    ],
+    "grants": [
+      {
+        "who": "order-service",
+        "zone": "status",
+        "access": "write"
+      },
+      {
+        "who": "order-service",
+        "zone": "approver",
+        "access": "read"
+      },
+      {
+        "who": "admin",
+        "zone": "approver",
+        "access": "write"
+      }
+    ]
+  }
+}

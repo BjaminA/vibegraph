@@ -30,7 +30,8 @@ export interface ConstraintPatch {
   check?: unknown;
   checks?: unknown[];
 }
-export interface ConstraintChange { at: string; by: ConstraintActor; field: string; before: unknown; after: unknown; why?: string; fromProposal?: string }
+/** `who` (2026-10-05) — the person's name (src/server/person.ts), when a person made it. */
+export interface ConstraintChange { at: string; by: ConstraintActor; who?: string; field: string; before: unknown; after: unknown; why?: string; fromProposal?: string }
 export interface ConstraintProposal { id: string; at: string; by: ConstraintActor; patch: ConstraintPatch; why: string }
 
 export const CHANGES_KEPT = 20;
@@ -53,7 +54,7 @@ function patched(c: Constraint, patch: ConstraintPatch): { next?: ConstraintInpu
 const same = (a: unknown, b: unknown) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
 
 /** A PERSON's change, applied now and recorded. An agent is refused here — it proposes. */
-export function editConstraint(root: string, id: string, patch: ConstraintPatch, opts: { by: ConstraintActor; why?: string; fromProposal?: string; now?: () => Date }):
+export function editConstraint(root: string, id: string, patch: ConstraintPatch, opts: { by: ConstraintActor; who?: string; why?: string; fromProposal?: string; now?: () => Date }):
   { constraint?: Constraint; changed?: string[]; error?: string } {
   if (opts.by !== "human") return { error: "an agent does not change a stated rule — it proposes the change (`constraint propose`), and a person accepts it" };
   const list = loadConstraints(root);
@@ -66,7 +67,7 @@ export function editConstraint(root: string, id: string, patch: ConstraintPatch,
   const next = r.next as unknown as Record<string, unknown>;
   const cur = c as unknown as Record<string, unknown>;
   for (const f of ["text", "scope", "note", "check", "checks"]) {
-    if (!same(cur[f], next[f])) changes.push({ at, by: "human", field: f, before: cur[f] ?? null, after: next[f] ?? null, ...(opts.why ? { why: opts.why } : {}), ...(opts.fromProposal ? { fromProposal: opts.fromProposal } : {}) });
+    if (!same(cur[f], next[f])) changes.push({ at, by: "human", ...(opts.who ? { who: opts.who } : {}), field: f, before: cur[f] ?? null, after: next[f] ?? null, ...(opts.why ? { why: opts.why } : {}), ...(opts.fromProposal ? { fromProposal: opts.fromProposal } : {}) });
   }
   if (!changes.length) return { error: `no change: ${id} already reads that way` };
   const updated: Constraint = { ...c, ...r.next, id: c.id, source: c.source, createdAt: c.createdAt };
@@ -97,7 +98,7 @@ export function proposeConstraintEdit(root: string, id: string, patch: Constrain
 }
 
 /** A person decides a proposal: accept applies it (recorded with its id), reject drops it. */
-export function decideConstraintProposal(root: string, id: string, pid: string, accept: boolean, opts: { now?: () => Date } = {}):
+export function decideConstraintProposal(root: string, id: string, pid: string, accept: boolean, opts: { now?: () => Date; who?: string } = {}):
   { constraint?: Constraint; error?: string } {
   const list = loadConstraints(root);
   const c = list.find((x) => x.id === id);
@@ -105,13 +106,35 @@ export function decideConstraintProposal(root: string, id: string, pid: string, 
   const p = (c.proposals ?? []).find((x) => x.id === pid);
   if (!p) return { error: `${id} has no open proposal ${pid} (constraint show ${id})` };
   if (accept) {
-    const r = editConstraint(root, id, p.patch, { by: "human", why: `accepted ${pid} (proposed by ${p.by}): ${p.why}`, fromProposal: pid, now: opts.now });
+    const r = editConstraint(root, id, p.patch, { by: "human", who: opts.who, why: `accepted ${pid} (proposed by ${p.by}): ${p.why}`, fromProposal: pid, now: opts.now });
     if (r.error) return { error: r.error };
   }
   const fresh = loadConstraints(root);
   const cur = fresh.find((x) => x.id === id)!;
   cur.proposals = (cur.proposals ?? []).filter((x) => x.id !== pid);
   if (!cur.proposals.length) delete cur.proposals;
+  // A rejection is a person's decision too: it is recorded, so the history
+  // says who turned the change down and why it was offered.
+  if (!accept) {
+    const at = (opts.now?.() ?? new Date()).toISOString();
+    cur.changes = [...(cur.changes ?? []), { at, by: "human" as const, ...(opts.who ? { who: opts.who } : {}), field: "proposal", before: p.patch, after: null, why: `rejected ${pid} (proposed by ${p.by}): ${p.why}`, fromProposal: pid }].slice(-CHANGES_KEPT);
+  }
   saveConstraints(root, fresh);
   return { constraint: cur };
+}
+
+/** A person ratifies an agent- or orchestrator-stated rule: it becomes
+ *  human-stated, and the history says who reviewed it. */
+export function ratifyConstraint(root: string, id: string, opts: { who?: string; now?: () => Date } = {}):
+  { constraint?: Constraint; was?: string; error?: string } {
+  const list = loadConstraints(root);
+  const c = list.find((x) => x.id === id);
+  if (!c) return { error: `no constraint ${id}` };
+  if (c.source === "human") return { error: `${id} is already human-stated` };
+  const was = c.source;
+  c.source = "human";
+  const at = (opts.now?.() ?? new Date()).toISOString();
+  c.changes = [...(c.changes ?? []), { at, by: "human" as const, ...(opts.who ? { who: opts.who } : {}), field: "source", before: was, after: "human", why: "ratified" }].slice(-CHANGES_KEPT);
+  saveConstraints(root, list);
+  return { constraint: c, was };
 }

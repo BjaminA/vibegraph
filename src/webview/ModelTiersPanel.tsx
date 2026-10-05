@@ -21,7 +21,7 @@ import {
   DEFAULT_LOCAL, isSafeEndpoint, isSafeModelName, isSafeCommand,
   type ModelTier, type TierOption, type TierSettings, type TierRoute, type ProviderKind,
 } from "../shared/model_tiers";
-import { belowToolbar, heightBelowToolbar } from "./TopToolbar";
+import { SheetPortal, SheetBody, type SheetSlot } from "./panels/PanelSheet";
 
 export interface EndpointProbeResult {
   endpoint: string;
@@ -37,7 +37,7 @@ export interface EndpointProbeResult {
 interface Props {
   tiers: TierSettings;
   onChange: (next: TierSettings) => void;
-  onClose: () => void;
+  slot: SheetSlot | null;
   /** M-PROVIDER — ask the server to probe an endpoint (and optionally a model). */
   onProbe?: (endpoint: string, model?: string) => void;
   probe?: EndpointProbeResult | null;
@@ -163,13 +163,9 @@ function TierRow({ tier, tiers, onChange, probe }: {
   );
 }
 
-export function ModelTiersPanel({ tiers, onChange, onClose, onProbe, probe, probing }: Props) {
-  React.useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
-
+/** Rendered into the panel sheet (PanelSheet), which owns the frame,
+ *  the close button and Esc. */
+export function ModelTiersPanel({ tiers, onChange, slot, onProbe, probe, probing }: Props) {
   const local = tiers.local ?? DEFAULT_LOCAL;
   const [endpointDraft, setEndpointDraft] = useState(local.endpoint);
   const [modelDraft, setModelDraft] = useState(local.model);
@@ -180,39 +176,12 @@ export function ModelTiersPanel({ tiers, onChange, onClose, onProbe, probe, prob
     onChange({ ...tiers, local: { endpoint: endpointDraft.replace(/\/+$/, ""), model: modelDraft } });
   };
   const anyLocal = TIERS.some((t) => tiers.routes?.[t]?.provider === "ollama");
+  if (!slot) return null;
 
   return (
-    <div
-      data-model-tiers-panel
-      style={{
-        // Was `var(--vg-chipstrip-h, 56px)` — a HEIGHT used as a top offset,
-        // which ignored the toolbar band and slid under it once the band
-        // wrapped. See belowToolbar's note.
-        position: "absolute", top: belowToolbar(16), right: 16,
-        // --bg-node is the canonical opaque panel surface (hsl(220 12% 12%)),
-        // the same one FiltersPanel uses. An earlier --bg-panel here was not
-        // a real token, so it resolved to nothing and the canvas showed
-        // straight through the panel.
-        // border-box: padding and border sit outside maxHeight otherwise.
-        width: 360, boxSizing: "border-box",
-        maxHeight: heightBelowToolbar(16), overflowY: "auto", background: "var(--bg-node)",
-        border: "1px solid var(--border-edge)", borderRadius: 6,
-        padding: 16, zIndex: 60,
-        boxShadow: "0 8px 24px rgba(0,0,0,0.35)",
-      }}
-    >
-      <div style={{ display: "flex", alignItems: "center", marginBottom: 12 }}>
-        <span style={{ fontSize: 12, fontWeight: 600, color: "var(--text-primary)" }}>Models</span>
-        <div style={{ flex: 1 }} />
-        <button
-          onClick={onClose}
-          title="Close"
-          style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: 14, lineHeight: 1, padding: 0 }}
-        >
-          ×
-        </button>
-      </div>
-
+    <SheetPortal slot={slot} subtitle={`${TIERS.length} tiers${anyLocal ? " · a local server in use" : ""}`}>
+    <SheetBody>
+    <div data-model-tiers-panel style={{ maxWidth: 640 }}>
       {TIERS.map((tier) => (
         <TierRow key={tier} tier={tier} tiers={tiers} onChange={onChange} probe={probe} />
       ))}
@@ -286,5 +255,7 @@ export function ModelTiersPanel({ tiers, onChange, onClose, onProbe, probe, prob
         mid-conversation would drop the cached history. Its “Local” option uses the server above.
       </div>
     </div>
+    </SheetBody>
+    </SheetPortal>
   );
 }

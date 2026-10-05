@@ -3,7 +3,70 @@
 `vibegraph-knowledge` and the VibeGraph app. Newest first. Each entry says what
 changed and, where an existing user would notice, how behaviour differs.
 
-## 0.21.1 — unreleased
+## 0.22.0 — unreleased
+
+### Rules you can review, one panel frame, one colour per kind of thing
+
+From a field inspection of the viewer: the stated rules were reachable only
+half-way down the Agent Manager's legacy run form, with no id, no verdict, no
+proposals and no Accept button; every panel was a different shape in the same
+grey; a plan's verdicts were walls of italic prose. Six changes,
+[docs/guide/VISUALISATION.md](docs/guide/VISUALISATION.md#7-knowledge-that-survives-rules-skills-stack).
+
+- **One colour per kind.** A single table (`src/shared/kinds.ts`) gives each
+  kind of code object a hue and an icon — process, function, module, store,
+  zone (dashed), path, type, JSON, XML, identity, setting, external service,
+  rule, open question (dashed). Every chip and the legend (**Key** in any
+  panel) derive from it; adding a kind is one row. A kind comes from a fact
+  the analysis holds, never from the words. Clicking a chip goes to the object.
+  Verdicts are a different shape (a pill with a dot).
+- **A light theme.** The toolbar's theme button: dark (the default, as
+  before), light, or follow the system. The code view stays dark.
+- **One panel sheet.** Plan, Rules, Stack, Agent Manager, Direction, Models and
+  the Board open in the same centred sheet (`min(1100px, 92vw)` ×
+  `min(820px, 88vh)`), each with its own faint tint, a tab row to switch
+  without closing, a section column, Esc to close, and **Dock** to keep it at
+  the side. A pin opens the Board docked, so the graph stays usable.
+- **Concise plan items.** A header line and at most three labelled bullets of
+  chips, longer lists cut to three and "+N", the verdict prose folded under
+  "Why realised · 14 files · 9 entry points", a scorecard that filters.
+  `plan check --json` findings carry `facts` (the bullets, typed chips) and
+  `numbers` beside `detail`.
+- **A Rules panel.** Its own toolbar button, with a badge counting reviews that
+  wait for a person (agent-stated rules plus open proposals). Each rule shows
+  its id, who stated it and its live verdict from the same function
+  `vibegraph-knowledge check` prints (`src/server/constraint_report.ts`, now
+  shared). **Awaiting you**: Ratify / Remove an agent's rule; Accept / Reject a
+  proposal shown before and after. The thread view gains a **rules** chip
+  listing the rules on that thread.
+- **History names the person.** Accept, reject, edit and ratify — from the
+  panel or the CLI — record `who` (git `user.name`, else the account name);
+  a rejection and a ratification are recorded too (they were not).
+
+### Thread view: `if` and `try` boxes no longer cover cards
+
+On a script thread whose functions call the same helper from many `if`
+blocks, a box stretched from its own call site to wherever the shared card was
+drawn, over every card between (one 276-card thread: 99 cards straddling a box
+edge, sibling boxes overlapping, chips on cards). Four causes, all fixed:
+
+- A card several calls reach is drawn once; a box now wraps only the members
+  placed by a call written inside it (the call site's structural id starts
+  with the box's). A block whose calls are all drawn elsewhere keeps its old
+  box only if that covers no other card.
+- A box hugs the column of its own calls; a call nested in another call's
+  arguments, drawn one column right, no longer widens it over other callees.
+- Boxes are sized from the cards' measured size, not a 200×75 guess; rows are
+  spaced by their tallest measured card on threads up to 400 cards.
+- The row spacing that reserves room for box chrome never saw the boxes in the
+  live view (the drawn thread carries none); it is now given them.
+
+**Behaviour changes:** panels no longer open as right-hand drawers (use Dock);
+opening one panel closes another; the Stack panel's "state a policy" opens the
+Rules panel's form; the brief's light-theme chip lightness (30%) failed its own
+4.5:1 test on teal, so light chips use 25%.
+
+## 0.21.1 — 2026-10-05
 
 ### A large Resources lens stays responsive
 

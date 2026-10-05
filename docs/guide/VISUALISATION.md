@@ -233,13 +233,41 @@ Work on a clean git tree and review with `git diff`.
 
 ## 7. Knowledge that survives: rules, skills, stack
 
-- **Constraints** (Agent Manager → constraints) — rules the code cannot show:
-  "every outbound HTTP call leaves through `http_client.py`", "the export's
-  first four columns never move". Write the **reason** into the rule. A rule
-  can carry a **check** VibeGraph verifies against the code (`callers-only`,
-  `import-only`, `calls-through`, `payload-keys`, `guards`, `not-in-loop`…), which reports
-  *pass*, *violated* (naming the offending call) or *unverifiable* — never a
-  silent pass. Saved to `.vibegraph/constraints.json`.
+**Every panel opens in one sheet** — Plan, Rules, Stack, Agent Manager,
+Direction, Models and the investigation Board — centred over the graph, each
+with its own faint tint, and a row of tabs to move between them without
+closing. **Dock** (the side-panel icon in the sheet's header) keeps the sheet
+at the side with the graph in view, and is remembered; **Key** shows what each
+colour and icon stands for. Esc closes it.
+
+**One colour per kind of thing.** A reference the analysis resolved is drawn
+as a chip: processes teal, functions green, modules indigo, stores and zones
+cyan (a zone dashed), file paths slate, types violet, JSON lime, XML magenta,
+identities pink, settings amber, external services coral, rules gold, open
+questions amber and dashed — each with its own icon, so colour is never the
+only signal. A chip's kind comes from a fact (a plan's `at` is a path, its
+`runsAs` an identity), never from the words. Click a chip to go to it: a file
+opens, a process opens its thread, a zone or identity opens its card on the
+map's Resources lens, a rule opens the Rules panel. A judgement (*pass*,
+*realised*, *drifted*, *proposed*…) is a different shape — a pill with a dot.
+The theme button in the toolbar switches dark (the default), light, or
+follow-the-system.
+
+- **Rules** (toolbar, the scales icon; the badge counts what waits for you) —
+  the stated rules the code cannot show: "every outbound HTTP call leaves
+  through `http_client.py`", "the export's first four columns never move".
+  Write the **reason** into the rule. A rule can carry a **check** VibeGraph
+  verifies against the code (`callers-only`, `import-only`, `calls-through`,
+  `payload-keys`, `guards`, `not-in-loop`…), and each rule shows its **live
+  verdict** — the one `vibegraph-knowledge check` prints: *pass*, *violated*
+  (naming the offending call) or *unverifiable*, never a silent pass. **Awaiting
+  you** lists a rule an agent stated (*Ratify* or *Remove*) and a change an agent
+  proposed, before and after side by side (*Accept* or *Reject*) — the same
+  person steps as `constraints ratify` and `constraint accept|reject`, recorded
+  in the rule's history with your name (your git `user.name`). Also: all rules,
+  violated, unverifiable, by thread, history; the form to state a new one. A
+  thread shows the rules routed to it as a **rules** chip beside its tests and
+  env chips. Saved to `.vibegraph/constraints.json`.
 - **Thread skills** — on a thread, **draft** a skill: Claude writes guidance
   for that thread, citing real node ids (a draft citing an id that does not
   exist is refused). You read it and **ratify** it; only ratified skills are
@@ -286,7 +314,17 @@ The panel shows, for every item:
   - **not built**: nothing yet;
   - **unanchored**: give the process an `at` path so it can be checked.
 
-Planned threads show their primary chain. A realised one has a **Thread**
+Each item is one header line (its chip, its name, its status and verdict) and
+at most three labelled bullets — **does**, **where**, **runs as** for a process
+— drawn as chips: its folder, the file it starts from, the module it uses, the
+identity it runs as and the zones it writes and reads. A list longer than three
+shows three and "+N"; the full reading of the verdict is folded under **Why
+realised · 14 files · 9 entry points**. The verdict counts at the top are a
+scorecard: click **4 drifted** to see only those four; the left column jumps
+to a section. `plan check --json` carries the same bullets (`facts`) beside
+the prose (`detail`).
+
+Planned threads show their primary steps as chips. A realised one has a **Thread**
 button that opens the real thread it matched. A planned rule is checked as
 advice and blocks nothing until you **Promote** it into the stated rules. The
 plan is kept small on purpose (hard caps on every section), and every process

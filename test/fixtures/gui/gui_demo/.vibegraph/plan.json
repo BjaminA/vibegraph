@@ -1,0 +1,36 @@
+{
+  "version": "1",
+  "revision": 4,
+  "objective": "Orders are decided only by the appointed approver",
+  "processes": [
+    { "id": "order-service", "kind": "backend", "label": "Order service", "serves": "decides orders on recorded evidence, only as the appointed approver", "at": "order_service/", "runsAs": "order-service", "entryPoints": ["bin/order-service.ts"], "uses": ["store-lib"], "status": "agreed" },
+    { "id": "approver-tool", "kind": "backend", "label": "Admin approver tool", "serves": "appoints the approver in the ledger", "at": "tools/", "runsAs": "admin", "status": "agreed" },
+    { "id": "audit-feed", "kind": "backend", "label": "Audit feed", "serves": "streams decided orders to auditors", "at": "audit/", "status": "proposed" }
+  ],
+  "modules": [
+    { "id": "store-lib", "kind": "library", "label": "Ledger client", "at": "lib/", "status": "agreed" }
+  ],
+  "stores": [
+    { "id": "ledger", "kind": "document-store", "label": "Ledger", "reachedThrough": ["lib/"], "access": { "write": ["writeDoc"], "read": ["readDoc"] },
+      "zones": [
+        { "id": "status", "holds": ["status"], "writers": ["order-service"] },
+        { "id": "approver", "holds": ["approver"], "writers": ["admin"], "readers": ["order-service"] }
+      ], "status": "agreed" }
+  ],
+  "principals": [
+    { "id": "order-service", "kind": "service", "status": "agreed" },
+    { "id": "admin", "kind": "human-role", "status": "agreed" }
+  ],
+  "stack": [],
+  "boundaries": [],
+  "threads": [],
+  "policies": [
+    { "id": "p1", "text": "Only the admin's tool appoints an approver", "why": "the approver pointer decides who may decide", "check": { "rule": "callers-only", "target": "appoint", "files": ["tools/assign-approver.ts"] }, "status": "agreed" }
+  ],
+  "open": [
+    { "id": "q1", "text": "Does a removed approver's pending decision still count?" }
+  ],
+  "changelog": [
+    { "rev": 1, "at": "2026-10-05T09:00:00.000Z", "by": "human", "change": "objective set" }
+  ]
+}

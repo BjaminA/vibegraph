@@ -72,12 +72,15 @@ export interface PolicyPrefill {
   role?: string;
 }
 
-export function ConstraintsPanel({ constraints, stack, prefill, onPrefillConsumed }: {
+export function ConstraintsPanel({ constraints, stack, prefill, onPrefillConsumed, formOnly = false }: {
   constraints: ConstraintRecord[];
   /** M-STACK.1 facts — feeds the tool multi-select. Absent = no index yet. */
   stack?: StackIndexRecord;
   prefill?: PolicyPrefill | null;
   onPrefillConsumed?: () => void;
+  /** 2026-10-05 — the Rules panel lists the rules itself (ItemFrame); it
+   *  takes only the "state one" form from here. */
+  formOnly?: boolean;
 }) {
   const [kind, setKind] = useState<ConstraintKind>("invariant");
   const [text, setText] = useState("");
@@ -154,13 +157,13 @@ export function ConstraintsPanel({ constraints, stack, prefill, onPrefillConsume
         </button>
       </div>
 
-      {constraints.length === 0 && !formOpen && (
+      {!formOnly && constraints.length === 0 && !formOpen && (
         <span style={{ fontSize: "var(--fs-11)", color: "var(--text-muted)" }}>
           None stated. Workers still receive each thread's IR-derived contract (data in/out, calls, round trips).
         </span>
       )}
 
-      {constraints.map((c) => (
+      {!formOnly && constraints.map((c) => (
         <div key={c.id} data-constraint-row={c.id} data-constraint-source={c.source}
           style={{ display: "flex", alignItems: "flex-start", gap: 8, fontSize: "var(--fs-12)", lineHeight: 1.5 }}>
           <Chip>{c.kind}</Chip>

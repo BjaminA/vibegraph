@@ -1,6 +1,8 @@
 // The vertical room container chrome needs between thread rows (2026-10-02).
 import { chipLabel, chipLines, CHIP_LINE_H } from "./chipPlacement";
 import type { Thread } from "./types";
+import { homeMembers } from "./containerHome";
+import type { Placement } from "./useThreadLayout";
 
 // 2026-10-02 — room for container chrome BETWEEN rows. A fixed lane stride
 // (140) assumed one container level; a try > for > finally nest, or a chip
@@ -17,11 +19,16 @@ const BOX_NEST_TOP = 26;
 const BOX_NEST = 10;
 const CHIP_OVERHANG = 10;
 const CHROME_CLEAR = 12;
-export function rowGapsFor(thread: Thread, rowOf: Map<string, number>): Map<number, number> {
+/** `placedBy` — the layout's placer per card: a container's chrome is reserved
+ *  around the members drawn at its own call site only (containerHome.ts), and
+ *  `xOf` — only those in the column of its own calls, the same cards
+ *  ThreadView draws the box around. */
+export function rowGapsFor(thread: Thread, rowOf: Map<string, number>, placedBy?: Map<string, Placement>, xOf?: (id: string) => number | undefined): Map<number, number> {
   const kids = new Map<string, string[]>();
   for (const e of thread.edges) if (e.kind === "contains") { if (!kids.has(e.from)) kids.set(e.from, []); kids.get(e.from)!.push(e.to); }
   const containers = thread.nodes.filter((n) => n.kind === "container");
   const isContainer = new Set(containers.map((c) => c.id));
+  const home = homeMembers(thread.nodes, placedBy, kids);
   const leavesMemo = new Map<string, string[]>();
   const leaves = (id: string, seen: Set<string> = new Set()): string[] => {
     const memo = leavesMemo.get(id);
@@ -38,7 +45,9 @@ export function rowGapsFor(thread: Thread, rowOf: Map<string, number>): Map<numb
   const startChain = new Map<string, { n: number; extra: number }>();
   const endChain = new Map<string, number>();
   for (const c of containers) {
-    const ls = leaves(c.id);
+    const homeLs = leaves(c.id).filter((l) => home(c.id, l));
+    const column = xOf ? Math.min(...homeLs.map((l) => xOf(l) ?? Infinity)) : 0;
+    const ls = xOf ? homeLs.filter((l) => (xOf(l) ?? Infinity) === column) : homeLs;
     if (!ls.length) continue;
     const rows = ls.map((l) => rowOf.get(l)!);
     const first = Math.min(...rows), last = Math.max(...rows);

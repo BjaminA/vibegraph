@@ -55,7 +55,11 @@ test.describe("the hypothetical plan", () => {
     await expect(dash).toHaveAttribute("data-plan-verdict", "not-built");
     await expect(panel.locator('[data-plan-item="stack:postgres"]')).toHaveAttribute("data-plan-verdict", "drifted");
     await expect(panel.locator('[data-plan-item="policies:p1"]')).toHaveAttribute("data-plan-verdict", "violated");
-    await expect(panel.locator('[data-plan-item="threads:POST /readings"] [data-plan-chain]')).toHaveText("validate  →  b1:insert  →  insert_reading");
+    // 2026-10-05 — the primary chain is a `steps` bullet of chips now: a
+    // function per step, and `b1:insert` (a boundary it crosses) its own kind.
+    const steps = panel.locator('[data-plan-item="threads:POST /readings"] [data-item-bullet="steps"]');
+    await expect(steps.locator('[data-chip="function"]')).toHaveText(["validate", "insert_reading"]);
+    await expect(steps.locator('[data-chip="external"]')).toHaveText("b1:insert");
     await page.screenshot({ path: join(REVIEW, "1-panel.png") });
 
     await dash.locator("[data-plan-agree]").click();

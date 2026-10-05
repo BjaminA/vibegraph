@@ -18,6 +18,7 @@
 import { loadConstraints } from "../../src/server/constraint_store.ts";
 import { editConstraint, proposeConstraintEdit, decideConstraintProposal } from "../../src/server/constraint_edit.ts";
 import { isAgentRun } from "./actor.mjs";
+import { personName } from "../../src/server/person.ts";
 
 export const AMEND_SUBS = ["show", "edit", "propose", "accept", "reject"];
 
@@ -46,7 +47,7 @@ const show = (v) => JSON.stringify(v ?? null);
 
 export function formatHistory(c) {
   const out = [];
-  for (const ch of c.changes ?? []) out.push(`    ${ch.at}  ${ch.by}  ${ch.field}: ${show(ch.before)} → ${show(ch.after)}${ch.why ? `  — ${ch.why}` : ""}`);
+  for (const ch of c.changes ?? []) out.push(`    ${ch.at}  ${ch.who ? `${ch.who} (${ch.by})` : ch.by}  ${ch.field}: ${show(ch.before)} → ${show(ch.after)}${ch.why ? `  — ${ch.why}` : ""}`);
   return out;
 }
 
@@ -72,7 +73,7 @@ export function runConstraintAmend({ root, sub, id, pid, values, formatConstrain
   }
   if (sub === "accept" || sub === "reject") {
     if (!pid) return { lines, messages: [`${sub} needs the proposal id: constraint ${sub} ${id} p1`], exitCode: 2 };
-    const r = decideConstraintProposal(root, id, pid, sub === "accept");
+    const r = decideConstraintProposal(root, id, pid, sub === "accept", { who: personName(root) });
     if (r.error) return { lines, messages: [r.error], exitCode: 1 };
     lines.push(sub === "accept" ? `accepted ${pid}: ${id} now reads` : `rejected ${pid}; ${id} unchanged`, formatConstraint(r.constraint));
     return { lines, messages: [], exitCode: 0 };
@@ -85,7 +86,7 @@ export function runConstraintAmend({ root, sub, id, pid, values, formatConstrain
     lines.push(`proposed ${r.proposal.id} for ${id}${sub === "edit" ? " (an edit by an agent is recorded as a proposal)" : ""} — the rule is unchanged until a person runs: vibegraph-knowledge constraint accept ${id} ${r.proposal.id}`);
     return { lines, messages: [], exitCode: 0 };
   }
-  const r = editConstraint(root, id, patch, { by: "human", why: values.why });
+  const r = editConstraint(root, id, patch, { by: "human", who: personName(root), why: values.why });
   if (r.error) return { lines, messages: [r.error], exitCode: r.error.startsWith("no constraint") ? 1 : 2 };
   lines.push(`${id} changed (${r.changed.join(", ")}) — recorded in its history:`, formatConstraint(r.constraint));
   return { lines, messages: [], exitCode: 0 };

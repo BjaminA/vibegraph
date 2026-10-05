@@ -97,6 +97,8 @@ import { planMtime, loadPlan } from "./src/server/plan_store";
 import { reconcilePlan } from "./src/server/plan_reconcile";
 import { seedArchFromPlan } from "./src/server/plan_arch_seed";
 import { handlePlanMessage, planToolText, planToolEdit } from "./src/server/plan_server";
+import { rulesState, handleRulesOp } from "./src/server/rules_server";
+import { personName } from "./src/server/person";
 import { handleSoftwareMessage, softwareToolText } from "./src/server/software_server";
 import { draftSystemPlan } from "./src/server/system_draft";
 import { validateChangeset, changesetConsentScope, CHECK_MODULE, CHECK_FN_ID } from "./src/server/changeset";
@@ -8187,6 +8189,18 @@ function setupWebSocket() {
         } else if (msg.type === "topology-get") {
           // 2026-10-02 — the declared topology, read-only (src/server/topology_server.ts).
           ws.send(JSON.stringify({ type: "topology-state", payload: isDirectory ? topologyState(analyzedRoot(), derivedTopologyOnce(latestStack, latestThreads, () => deriveDataArchitecture(relativeProjectFiles() as any, latestStack as any, latestThreads as any).topology)) : { model: null, live: null, traces: [] } }));
+        } else if (msg.type === "rules-get" || msg.type === "rules-op") {
+          // 2026-10-05 — the Rules panel (src/server/rules_server.ts): live
+          // verdicts from the function `check` prints; the ops are a person's.
+          if (!isDirectory) ws.send(JSON.stringify({ type: "rules-state", payload: { rules: [], pending: 0, summary: { checked: 0, violated: 0, unverifiable: 0, pass: 0 }, person: "", error: "rules need a project directory" } }));
+          else {
+            const root = readmeRootDir();
+            const who = personName(root);
+            const r = msg.type === "rules-op" ? handleRulesOp(root, msg, who) : { changed: false };
+            const env = { files: relativeProjectFiles() as any, threads: latestThreads as any[], entryPoints: latestEntryPoints as any[] };
+            ws.send(JSON.stringify({ type: "rules-state", payload: { ...rulesState(root, env, latestStack, who), ...("error" in r && r.error ? { error: r.error } : {}), ...("message" in r && r.message ? { message: r.message } : {}) } }));
+            if (r.changed) broadcastProjectUpdate();
+          }
         } else if (msg.type === "plan-get" || msg.type === "plan-op" || msg.type === "plan-promote") {
           // 2026-09-30 — the Plan panel (src/server/plan_server.ts); the sender is a person.
           if (!isDirectory) ws.send(JSON.stringify({ type: "plan-state", payload: { plan: null, reconcile: null, error: "a plan needs a project directory" } }));

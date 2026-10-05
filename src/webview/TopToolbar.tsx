@@ -1,5 +1,6 @@
 import React, { useState } from "react";
-import { Cpu, Spline, GitBranch, FileText, Pencil, Network, Boxes, Layers, Sparkles, DraftingCompass, Hammer, Bot, Compass, ClipboardList } from "lucide-react";
+import { Cpu, Spline, GitBranch, FileText, Pencil, Network, Boxes, Layers, Sparkles, DraftingCompass, Hammer, Bot, Compass, ClipboardList, Scale } from "lucide-react";
+import { ThemeButton } from "./ThemeButton";
 
 interface Props {
   filtersOpen: boolean;
@@ -59,6 +60,10 @@ interface Props {
   /** 2026-09-30 — the hypothetical plan (PlanPanel). */
   planOpen?: boolean;
   onTogglePlan?: () => void;
+  /** 2026-10-05 — the Rules panel, with the count of reviews waiting for a person. */
+  rulesOpen?: boolean;
+  rulesPending?: number;
+  onToggleRules?: () => void;
   // M-SKILLS.2 — the Skills panel: generic direction, enabled per project.
   // Directory mode only (the enable file lives under the project).
   skillsOpen: boolean;
@@ -108,7 +113,7 @@ function ToolGroup({
   );
 }
 
-function ToolButton({
+export function ToolButton({
   active,
   disabled,
   onClick,
@@ -200,7 +205,7 @@ export function TopToolbar({
   describeAvailable, describeOpen, describing, onToggleDescribe,
   buildAvailable, buildOpen, building, onToggleBuild,
   onToggleFilters, onToggleModels, stackOpen, stackAvailable, onToggleStack,
-  investigateOpen, onToggleInvestigate, planOpen, onTogglePlan,
+  investigateOpen, onToggleInvestigate, planOpen, onTogglePlan, rulesOpen, rulesPending = 0, onToggleRules,
   skillsOpen, skillsAvailable, onToggleSkills,
   workRunOpen, workRunAvailable, onToggleWorkRun,
   onToggleAnalysis, onToggleCode, onToggleThread,
@@ -456,6 +461,23 @@ export function TopToolbar({
           Plan
         </ToolButton>
       )}
+      {/* 2026-10-05 — the stated rules, where a person reviews them; the
+          badge counts what waits for a person (agent-stated rules + open
+          proposals). */}
+      {stackAvailable && onToggleRules && (
+        <ToolButton data-rules-toggle active={!!rulesOpen} onClick={onToggleRules}
+          title={`Rules — the stated rules with their live verdicts${rulesPending ? `; ${rulesPending} await${rulesPending === 1 ? "s" : ""} you` : ""}`}
+          accent="var(--accent-warning)">
+          <Scale size={16} strokeWidth={1.5} />
+          Rules
+          {rulesPending > 0 && (
+            <span data-rules-badge={rulesPending} style={{
+              minWidth: 16, padding: "0 4px", borderRadius: 8, fontSize: "var(--fs-11)", fontWeight: 600, lineHeight: "16px", textAlign: "center",
+              background: "var(--accent-warning)", color: "var(--bg-canvas)",
+            }}>{rulesPending}</span>
+          )}
+        </ToolButton>
+      )}
       {/* M-SKILLS.2 — generic direction: the prose half of each quality
           dimension, enabled per project. Chat accent: it shapes what the
           agents are told, not what the code is. */}
@@ -473,6 +495,7 @@ export function TopToolbar({
       )}
       </ToolGroup>
 
+      <ThemeButton />
       {/* Group 3 — Claude actions: delegated work, all accent-chat. */}
       <ToolGroup name="claude" divider>
       {/* M-AGENT2 — the Agent Manager: task → thread packets → gated
@@ -546,3 +569,4 @@ export function TopToolbar({
     </div>
   );
 }
+

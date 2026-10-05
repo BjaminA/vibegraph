@@ -12,14 +12,14 @@
 // accent state the next envelope will move.
 
 import React, { useLayoutEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
 import {
-  X, Bot, CircleDashed, CircleDot, ShieldQuestion, CheckCircle2,
-  XCircle, AlertTriangle, MinusCircle, Play, Pause,
+  CircleDashed, CircleDot, ShieldQuestion, CheckCircle2,
+  XCircle, AlertTriangle, MinusCircle, Play, Pause, ChevronRight,
 } from "lucide-react";
 import type { WorkRun, WorkRunPacket, WorkRunMode, ConstraintRecord, StackIndexRecord } from "../shared/protocol";
 import { bridge } from "./types";
 // M-CONTRACT.3 / M-ORCH — split out to keep this file under the 500-line rule.
+import { SheetPortal, SheetBody, type SheetSlot } from "./panels/PanelSheet";
 import { ConstraintsPanel } from "./ConstraintsPanel";
 import { OrchestrationGate } from "./OrchestrationGate";
 // 2026-09-29 — the default engine is one Claude Code session with the hooks.
@@ -213,13 +213,13 @@ function PacketCard({ packet, orderIdx }: { packet: WorkRunPacket; orderIdx: num
   );
 }
 
-export function WorkRunPanel({ open, onClose, run, constraints = [], stack, policyPrefill, onPolicyPrefillConsumed }: {
-  open: boolean; onClose: () => void; run: WorkRun | null; constraints?: ConstraintRecord[];
-  // M-STACK.2 — the facts feed the constraint form's tool scope; the
-  // prefill is the Stack panel's "state a policy" handoff.
+/** Rendered into the panel sheet (PanelSheet), which owns the frame, the
+ *  close button and Esc. The stated rules are reviewed in the Rules panel;
+ *  a run still lists the ones its brief reads, and links there. */
+export function WorkRunPanel({ open, slot, run, constraints = [], stack, onOpenRules }: {
+  open: boolean; slot: SheetSlot | null; run: WorkRun | null; constraints?: ConstraintRecord[];
   stack?: StackIndexRecord | null;
-  policyPrefill?: { tool: string; role?: string } | null;
-  onPolicyPrefillConsumed?: () => void;
+  onOpenRules: () => void;
 }) {
   const [task, setTask] = useState("");
   const [newRunForm, setNewRunForm] = useState(false);
@@ -234,7 +234,7 @@ export function WorkRunPanel({ open, onClose, run, constraints = [], stack, poli
   // when the brief lands and resolves escalations as failed packets.
   const [autonomous, setAutonomous] = useState(false);
   const [engine, setEngine] = useAgentEngine(!!run && ["draft", "running", "paused"].includes(run.status));
-  if (!open) return null;
+  if (!open || !slot) return null;
 
   const finished = run && (run.status === "done" || run.status === "failed");
   const showForm = !run || (finished && newRunForm);
@@ -250,65 +250,37 @@ export function WorkRunPanel({ open, onClose, run, constraints = [], stack, poli
     setNewRunForm(false);
   };
 
-  return createPortal(
-    <>
-      <div
-        data-work-run-backdrop
-        onClick={onClose}
-        style={{
-          position: "fixed", inset: 0, zIndex: 1149,
-          background: "color-mix(in oklab, var(--bg-canvas) 35%, transparent)",
-          backdropFilter: "blur(2px)", WebkitBackdropFilter: "blur(2px)",
-        }}
-      />
-      <div
-        role="dialog"
-        aria-label="Agent Manager"
-        data-work-run-panel
-        data-run-status={run?.status ?? "none"}
-        style={{
-          position: "fixed", left: "50%", top: "50%", transform: "translate(-50%, -50%)",
-          width: "min(880px, 92vw)", maxHeight: "86vh", zIndex: 1150,
-          background: "var(--bg-node)", border: "1px solid var(--border-edge)",
-          borderRadius: 12, boxShadow: "var(--shadow-panel)",
-          display: "flex", flexDirection: "column", overflow: "hidden",
-          fontFamily: "var(--font-ui)", color: "var(--text-primary)",
-        }}
-      >
-        {/* Header */}
-        <div style={{
-          padding: "12px 20px", borderBottom: "1px solid var(--border-edge)",
-          display: "flex", alignItems: "center", gap: 8,
-        }}>
-          <Bot size={16} strokeWidth={1.5} color="var(--accent-thread)" />
-          <span style={{ fontSize: "var(--fs-13)", fontWeight: 700 }}>Agent Manager</span>
-          {run && engine === "orchestrated" && (
-            <span data-run-status-label style={{ fontSize: "var(--fs-11)", color: "var(--text-muted)", fontFamily: mono }}>
-              {run.status} · {run.packets.filter((p) => p.status === "done").length}/{run.packets.length} packets
-            </span>
-          )}
-          <span style={{ marginLeft: "auto" }} />
-          {run?.status === "running" && (
-            <button data-work-run-pause title="Pause between packets"
-              onClick={() => bridge.postMessage({ type: "work-run-pause", payload: {} })}
-              style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", padding: 2 }}>
-              <Pause size={15} strokeWidth={1.5} />
+  const statusLine = run && engine === "orchestrated"
+    ? `${run.status} · ${run.packets.filter((p) => p.status === "done").length}/${run.packets.length} packets`
+    : engine === "hooked" ? "Claude Code with hooks" : "no run";
+  return (
+    <SheetPortal slot={slot} subtitle={statusLine}>
+    <SheetBody>
+        <div data-work-run-panel data-run-status={run?.status ?? "none"} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            {run && engine === "orchestrated" && (
+              <span data-run-status-label style={{ fontSize: "var(--fs-11)", color: "var(--text-muted)", fontFamily: mono }}>{statusLine}</span>
+            )}
+            <span style={{ marginLeft: "auto" }} />
+            <button type="button" data-work-run-rules className="vg-sheet-btn" onClick={onOpenRules}
+              title="The stated rules every worker, review and check reads">
+              Rules ({constraints.length}) <ChevronRight size={12} strokeWidth={1.5} />
             </button>
-          )}
-          {run?.status === "paused" && (
-            <button data-work-run-resume title="Resume"
-              onClick={() => bridge.postMessage({ type: "work-run-resume", payload: {} })}
-              style={{ background: "none", border: "none", color: "var(--accent-thread)", cursor: "pointer", padding: 2 }}>
-              <Play size={15} strokeWidth={1.5} />
-            </button>
-          )}
-          <button data-work-run-close onClick={onClose} title="Close"
-            style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", padding: 2 }}>
-            <X size={16} strokeWidth={1.5} />
-          </button>
-        </div>
-
-        <div style={{ padding: 20, overflowY: "auto", display: "flex", flexDirection: "column", gap: 12 }}>
+            {run?.status === "running" && (
+              <button data-work-run-pause title="Pause between packets"
+                onClick={() => bridge.postMessage({ type: "work-run-pause", payload: {} })}
+                style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", padding: 2 }}>
+                <Pause size={15} strokeWidth={1.5} />
+              </button>
+            )}
+            {run?.status === "paused" && (
+              <button data-work-run-resume title="Resume"
+                onClick={() => bridge.postMessage({ type: "work-run-resume", payload: {} })}
+                style={{ background: "none", border: "none", color: "var(--accent-thread)", cursor: "pointer", padding: 2 }}>
+                <Play size={15} strokeWidth={1.5} />
+              </button>
+            )}
+          </div>
           <AgentEngineToggle engine={engine} onChange={setEngine} />
           {engine === "hooked" ? (
             <HookedRunView taskInput={(v, c) => <TaskInput value={v} onChange={c} />} />
@@ -354,8 +326,7 @@ export function WorkRunPanel({ open, onClose, run, constraints = [], stack, poli
                   </div>
                 </>
               )}
-              <ConstraintsPanel constraints={constraints} stack={stack ?? undefined}
-                prefill={policyPrefill} onPrefillConsumed={onPolicyPrefillConsumed} />
+              <ConstraintsPanel constraints={constraints} stack={stack ?? undefined} />
               <TaskInput value={task} onChange={setTask} />
               <div>
                 <GateButton label="Plan the run" dataAttr="data-work-run-start"
@@ -415,8 +386,7 @@ export function WorkRunPanel({ open, onClose, run, constraints = [], stack, poli
                 </div>
               )}
 
-              <ConstraintsPanel constraints={constraints} stack={stack ?? undefined}
-                prefill={policyPrefill} onPrefillConsumed={onPolicyPrefillConsumed} />
+              <ConstraintsPanel constraints={constraints} stack={stack ?? undefined} />
 
               {[...run.packets]
                 .sort((a, b) => a.plan.order - b.plan.order)
@@ -451,9 +421,8 @@ export function WorkRunPanel({ open, onClose, run, constraints = [], stack, poli
             </>
           )}
         </div>
-      </div>
-    </>,
-    document.body,
+    </SheetBody>
+    </SheetPortal>
   );
 }
 

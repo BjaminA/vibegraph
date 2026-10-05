@@ -1,0 +1,143 @@
+/* Kinds, verdicts, the panel sheet and the item frame (2026-10-05, GUI brief).
+   A chip or a pill sets only --h and --s from a table row (src/shared/kinds.ts,
+   src/webview/panels/panels.ts); every colour below is derived from them and
+   from the theme's lightness tokens, so a new kind or panel is one row. */
+
+:root {
+  /* text, fill and border lightness for chips and pills, dark theme */
+  --l-fg: 78%; --l-fill: 50%; --a-fill: 0.14; --l-bd: 60%; --a-bd: 0.45; --l-vfg: 76%;
+}
+/* Light: both the explicit attribute and the OS preference (with no
+   attribute) set them. Scoping the override to only one of the two left
+   chips unreadable in the brief's first mock. Text at 25%, not the brief's
+   30%: at 30% the teal process chip measured 4.09:1 on its fill, under the
+   4.5:1 its own acceptance test asks (test/e2e/gui-design.spec.ts). */
+:root[data-theme="light"] { --l-fg: 25%; --l-fill: 50%; --a-fill: 0.12; --l-bd: 40%; --a-bd: 0.45; --l-vfg: 27%; }
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme]) { --l-fg: 25%; --l-fill: 50%; --a-fill: 0.12; --l-bd: 40%; --a-bd: 0.45; --l-vfg: 27%; }
+}
+
+/* ── chip: a reference to a code object ─────────────────────────────────── */
+.vg-chip {
+  --h: 220; --s: 22%;
+  display: inline-flex; align-items: center; gap: 4px; padding: 0 8px 0 4px;
+  border-radius: 6px; font: var(--fs-12)/1.7 var(--font-mono); white-space: nowrap;
+  vertical-align: baseline; max-width: 100%; overflow: hidden; text-overflow: ellipsis;
+  color: hsl(var(--h) var(--s) var(--l-fg));
+  background: hsl(var(--h) var(--s) var(--l-fill) / var(--a-fill));
+  border: 1px solid hsl(var(--h) var(--s) var(--l-bd) / var(--a-bd));
+  cursor: default;
+}
+.vg-chip[data-dashed="true"] { border-style: dashed; }
+.vg-chip[role="button"] { cursor: pointer; }
+.vg-chip[role="button"]:hover { border-color: hsl(var(--h) var(--s) var(--l-fg)); }
+.vg-chip[role="button"]:focus-visible { outline: 2px solid hsl(var(--h) var(--s) var(--l-fg)); outline-offset: 1px; }
+.vg-chip svg { flex: none; opacity: 0.9; }
+
+/* ── verdict: a judgement, a different shape ────────────────────────────── */
+.vg-verdict {
+  --h: 220; --s: 15%;
+  display: inline-flex; align-items: center; gap: 4px; padding: 0 8px; border-radius: 999px;
+  font: 600 var(--fs-11)/1.8 var(--font-ui); letter-spacing: 0.02em; white-space: nowrap;
+  color: hsl(var(--h) var(--s) var(--l-vfg));
+  background: hsl(var(--h) var(--s) var(--l-fill) / var(--a-fill));
+  border: 1px solid transparent;
+}
+.vg-verdict::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex: none; }
+.vg-verdict[data-dashed="true"] { background: none; border: 1px dashed hsl(var(--h) var(--s) var(--l-bd) / 0.7); }
+button.vg-verdict { cursor: pointer; }
+button.vg-verdict[aria-pressed="true"] { border-color: hsl(var(--h) var(--s) var(--l-vfg)); }
+
+/* ── the panel sheet ────────────────────────────────────────────────────── */
+.vg-sheet-scrim { position: fixed; inset: 0; z-index: 1148; background: hsl(222 40% 2% / 0.5); }
+.vg-sheet {
+  --p: 210;
+  position: fixed; z-index: 1149; box-sizing: border-box;
+  left: 50%; top: 50%; transform: translate(-50%, -50%);
+  width: min(1100px, 92vw); height: min(820px, 88vh);
+  display: flex; flex-direction: column; overflow: hidden; border-radius: 14px;
+  background: color-mix(in oklab, hsl(var(--p) 60% 55%) 6%, var(--bg-node));
+  border: 1px solid color-mix(in oklab, hsl(var(--p) 60% 60%) 30%, var(--border-edge));
+  box-shadow: 0 24px 80px hsl(222 40% 2% / 0.55);
+  color: var(--text-primary); font-family: var(--font-ui);
+}
+/* Docked: beside the graph, at the old drawers' layer, so a node's tooltip
+   and the canvas's own popovers still draw over it. */
+.vg-sheet[data-docked="true"] {
+  left: auto; right: 16px; transform: none; top: var(--vg-toolbar-bottom, 56px); z-index: 60;
+  width: min(520px, 92vw); height: calc(100vh - var(--vg-toolbar-bottom, 56px) - 16px);
+}
+.vg-sheet-head {
+  display: flex; align-items: center; gap: 8px; padding: 12px 20px;
+  border-bottom: 1px solid var(--border-edge); border-top: 3px solid hsl(var(--p) 60% 62%);
+  background: color-mix(in oklab, hsl(var(--p) 60% 55%) 13%, var(--bg-node));
+}
+.vg-sheet-head b { font-size: var(--fs-16); }
+.vg-sheet-head .vg-sheet-sub { color: var(--text-muted); font-size: var(--fs-12); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vg-sheet-head .vg-grow { flex: 1; }
+.vg-sheet-btn {
+  display: inline-flex; align-items: center; gap: 4px; background: none; border: 1px solid transparent;
+  color: var(--text-muted); cursor: pointer; padding: 4px; border-radius: 6px; font: var(--fs-12) var(--font-ui);
+}
+.vg-sheet-btn:hover { color: var(--text-primary); border-color: var(--border-edge); }
+.vg-switcher { display: flex; gap: 4px; padding: 8px 20px; border-bottom: 1px solid var(--border-edge); flex-wrap: wrap; }
+.vg-switcher button {
+  --p: 210; display: inline-flex; align-items: center; gap: 4px;
+  padding: 4px 12px; border-radius: 8px; font: var(--fs-12) var(--font-ui); cursor: pointer;
+  color: var(--text-secondary); background: hsl(var(--p) 60% 55% / 0.10); border: 1px solid hsl(var(--p) 60% 60% / 0.25);
+}
+.vg-switcher button[aria-selected="true"] { color: var(--text-primary); background: hsl(var(--p) 60% 55% / 0.24); border-color: hsl(var(--p) 60% 62% / 0.7); }
+.vg-switcher .vg-badge { font-weight: 600; color: var(--text-primary); }
+.vg-sheet-body { display: grid; grid-template-columns: 200px minmax(0, 1fr); min-height: 0; }
+.vg-sheet-body[data-nav="none"] { grid-template-columns: minmax(0, 1fr); }
+.vg-sheet-nav { border-right: 1px solid var(--border-edge); padding: 12px 8px; display: flex; flex-direction: column; gap: 4px; overflow: auto; }
+.vg-sheet-nav button {
+  display: flex; justify-content: space-between; gap: 8px; text-align: left; background: none; border: none; cursor: pointer;
+  color: var(--text-secondary); padding: 4px 12px; border-radius: 6px; font: var(--fs-13) var(--font-ui);
+}
+.vg-sheet-nav button[aria-current="true"] { background: color-mix(in oklab, hsl(var(--p) 60% 55%) 16%, transparent); color: var(--text-primary); }
+.vg-sheet-nav button i { font-style: normal; color: var(--text-muted); font-size: var(--fs-12); }
+.vg-sheet-content { padding: 16px 20px; display: flex; flex-direction: column; gap: 12px; overflow: auto; min-width: 0; }
+@media (max-width: 760px) {
+  .vg-sheet-body { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
+  .vg-sheet-nav { flex-direction: row; flex-wrap: wrap; border-right: 0; border-bottom: 1px solid var(--border-edge); }
+  .vg-sheet-head { flex-wrap: wrap; padding: 12px 16px; }
+  .vg-switcher { padding: 8px 16px; }
+  .vg-sheet-content { padding: 12px 16px; }
+}
+
+/* ── the item frame ─────────────────────────────────────────────────────── */
+.vg-item { border: 1px solid var(--border-edge); border-radius: 10px; background: color-mix(in oklab, var(--bg-canvas) 35%, var(--bg-node)); min-width: 0; }
+.vg-item-head { display: flex; align-items: center; gap: 8px; padding: 8px 12px; flex-wrap: wrap; }
+.vg-item-head .vg-item-name { font-weight: 600; font-size: var(--fs-13); }
+.vg-item-head .vg-grow { flex: 1; }
+.vg-item ul { margin: 0; padding: 0 12px 8px; list-style: none; display: grid; gap: 4px; }
+.vg-item li {
+  display: grid; grid-template-columns: 76px minmax(0, 1fr); gap: 8px; align-items: baseline;
+  font-size: var(--fs-13); color: var(--text-secondary); line-height: 1.6;
+}
+.vg-item li > b { font: 600 var(--fs-11)/1.9 var(--font-ui); text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); }
+.vg-item li > span { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+.vg-item details { border-top: 1px dashed var(--border-edge); padding: 8px 12px; font-size: var(--fs-12); color: var(--text-muted); }
+.vg-item details summary { cursor: pointer; color: var(--text-secondary); }
+.vg-item details p { margin: 4px 0 0; overflow-wrap: anywhere; }
+.vg-item-acts { display: flex; gap: 8px; padding: 0 12px 12px; flex-wrap: wrap; }
+.vg-btn {
+  font: 600 var(--fs-12)/1 var(--font-ui); padding: 8px 12px; border-radius: 8px; cursor: pointer;
+  border: 1px solid var(--border-edge); color: var(--text-primary); background: var(--bg-node);
+}
+.vg-btn:disabled { opacity: 0.5; cursor: default; }
+.vg-btn[data-tone="go"] { border-color: hsl(140 60% 50% / 0.6); background: hsl(140 60% 45% / 0.16); }
+.vg-btn[data-tone="no"] { border-color: hsl(356 70% 60% / 0.5); }
+.vg-queue { border: 1px solid hsl(var(--p) 60% 60% / 0.5); border-radius: 10px; padding: 12px; background: hsl(var(--p) 60% 55% / 0.07); display: grid; gap: 12px; }
+.vg-queue > b { font-size: var(--fs-13); }
+.vg-diff { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font: var(--fs-12)/1.5 var(--font-mono); padding: 0 12px 8px; }
+.vg-diff > div { padding: 8px; border-radius: 6px; overflow-wrap: anywhere; min-width: 0; }
+.vg-diff > div > small { display: block; font: 600 var(--fs-11) var(--font-ui); color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
+.vg-diff .vg-was { background: hsl(356 70% 50% / 0.10); }
+.vg-diff .vg-now { background: hsl(140 60% 45% / 0.12); }
+.vg-score { display: flex; gap: 8px; flex-wrap: wrap; }
+@media (max-width: 760px) {
+  .vg-item li { grid-template-columns: minmax(0, 1fr); gap: 0; }
+  .vg-diff { grid-template-columns: minmax(0, 1fr); }
+}

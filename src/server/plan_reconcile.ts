@@ -15,6 +15,8 @@
 // `limits` on every result, never implied away.
 
 import type { Plan, PlanFinding, PlanReconcile, PlanVerdict, PlanProcess } from "../shared/plan_types.ts";
+import { sectionItems, planItemId } from "../shared/plan_types.ts";
+import { planItemFacts } from "../shared/plan_facts.ts";
 import type { StackIndex } from "./stack.ts";
 import { buildQualityFacts } from "./quality/facts.ts";
 import { checkConstraint, isConstraintCheck } from "./constraint_grammar.ts";
@@ -428,6 +430,16 @@ export function reconcilePlan(plan: Plan, env: EnvLike, stack: StackIndex, root:
 
   const counts: Partial<Record<PlanVerdict, number>> = {};
   for (const f of findings) counts[f.verdict] = (counts[f.verdict] ?? 0) + 1;
+  // 2026-10-05 — each verdict as structure too (src/shared/plan_facts.ts):
+  // the item's bullets as chips and the numbers its summary states. The
+  // prose stays in `detail`.
+  for (const f of findings) {
+    const it = sectionItems(plan, f.section).find((i) => planItemId(f.section, i) === f.id);
+    if (!it) continue;
+    const v = planItemFacts(plan, f.section, it, f);
+    f.facts = v.facts.filter((x) => x.text || x.parts?.length);
+    if (Object.keys(v.numbers).length) f.numbers = v.numbers;
+  }
   return { revision: plan.revision, findings, counts, limits: PLAN_RECONCILE_LIMITS, offObjective: offObjective(plan), ...(who?.matrix.length ? { writeMatrix: who.matrix } : {}), ...(hops.length ? { indirectHops: hops } : {}) };
 }
 

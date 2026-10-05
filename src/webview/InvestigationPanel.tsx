@@ -9,9 +9,9 @@
 // `vibegraph_investigation`.
 
 import React, { useEffect, useRef, useState } from "react";
-import { ClipboardList, ExternalLink, Plus, Trash2, X, Send, Copy } from "lucide-react";
+import { ExternalLink, Plus, Trash2, Send, Copy } from "lucide-react";
 import { bridge, type ExtensionMessage } from "./types";
-import { belowToolbar, heightBelowToolbar } from "./TopToolbar";
+import { SheetPortal, SheetBody, type SheetSlot } from "./panels/PanelSheet";
 
 interface Pin {
   file: string; irNodeId: string; label: string; kind?: string;
@@ -45,7 +45,8 @@ function blank(name: string): Investigation {
   return { version: 1, name, question: "", pins: [], createdAt: now, updatedAt: now };
 }
 
-export function InvestigationPanel({ open, onOpen, onClose }: { open: boolean; onOpen: () => void; onClose: () => void }) {
+/** Rendered into the panel sheet (PanelSheet) while open; mounted always. */
+export function InvestigationPanel({ open, onOpen, slot }: { open: boolean; onOpen: () => void; slot: SheetSlot | null }) {
   const [list, setList] = useState<Listed[]>([]);
   const [current, setCurrent] = useState<Investigation | null>(null);
   const [handoff, setHandoff] = useState<State["handoff"] | null>(null);
@@ -105,7 +106,7 @@ export function InvestigationPanel({ open, onOpen, onClose }: { open: boolean; o
     return () => document.removeEventListener("vg-investigation-pin", onPin);
   }, [onOpen]);
 
-  if (!open) return null;
+  if (!open || !slot) return null;
 
   const patchPin = (i: number, patch: Partial<Pin>) => {
     if (!current) return;
@@ -114,14 +115,10 @@ export function InvestigationPanel({ open, onOpen, onClose }: { open: boolean; o
   const commit = () => { if (current) save(current); };
 
   return (
-    <div data-investigation-panel style={{
-      position: "absolute", top: belowToolbar(16), right: 16, width: 460, boxSizing: "border-box",
-      maxHeight: heightBelowToolbar(16), overflowY: "auto", background: "var(--bg-node)",
-      border: "1px solid var(--border-edge)", borderRadius: 6, padding: 16, zIndex: 60,
-      boxShadow: "0 8px 24px rgba(0,0,0,0.35)", display: "flex", flexDirection: "column", gap: 12,
-    }}>
+    <SheetPortal slot={slot} subtitle={current ? `${current.name} · ${current.pins.length} pin${current.pins.length === 1 ? "" : "s"}` : "nothing pinned yet"}>
+    <SheetBody>
+    <div data-investigation-panel style={{ display: "flex", flexDirection: "column", gap: 12, maxWidth: 820 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-        <ClipboardList size={14} strokeWidth={1.5} color="var(--text-muted)" />
         <span style={{ fontSize: "var(--fs-12)", fontWeight: 600, color: "var(--text-primary)" }}>Investigation</span>
         <select
           data-investigation-select
@@ -136,10 +133,6 @@ export function InvestigationPanel({ open, onOpen, onClose }: { open: boolean; o
         <button data-investigation-new title="Start a new investigation" style={iconBtn}
           onClick={() => { setHandoff(null); save(blank(freshName(list))); }}>
           <Plus size={12} strokeWidth={1.5} />
-        </button>
-        <button onClick={onClose} title="Close" aria-label="Close investigation board"
-          style={{ ...iconBtn, border: "none" }}>
-          <X size={14} strokeWidth={1.5} />
         </button>
       </div>
 
@@ -220,5 +213,7 @@ export function InvestigationPanel({ open, onOpen, onClose }: { open: boolean; o
       )}
       {error && <div data-investigation-error style={{ ...small, color: "var(--accent-error)" }}>{error}</div>}
     </div>
+    </SheetBody>
+    </SheetPortal>
   );
 }

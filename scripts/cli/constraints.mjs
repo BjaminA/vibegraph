@@ -22,6 +22,8 @@ import {
 import { describeCheck, isConstraintCheck } from "../../src/server/constraint_grammar.ts";
 import { describeRun1Check, isRun1Check } from "../../src/server/quality/verbs/index.ts";
 import { isAgentRun } from "./actor.mjs";
+import { ratifyConstraint } from "../../src/server/constraint_edit.ts";
+import { personName } from "../../src/server/person.ts";
 import { AMEND_SUBS, runConstraintAmend } from "./constraint_amend.mjs";
 
 export const CONSTRAINTS_USAGE = `constraint(s) list|add|remove|ratify|show|edit|propose|accept|reject [...]   the stated rules (.vibegraph/constraints.json); zero tokens
@@ -111,14 +113,10 @@ export function runConstraints({ root, sub, id, values }) {
   }
   if (sub === "ratify") {
     if (!id) return { lines, messages: ["ratify needs an id (see `constraints list`)"], exitCode: 2 };
-    const all = loadConstraints(root);
-    const c = all.find((x) => x.id === id);
-    if (!c) return { lines, messages: [`no constraint ${id}`], exitCode: 1 };
-    if (c.source === "human") return { lines, messages: [`${id} is already human-stated`], exitCode: 1 };
-    const was = c.source;
-    c.source = "human";
-    saveConstraints(root, all);
-    lines.push(`${id} is now human-stated (was ${was}-stated) — whoever ran this command reviewed it`, formatConstraint(c));
+    // One function for the CLI and the GUI's Rules panel; the history names who.
+    const r = ratifyConstraint(root, id, { who: personName(root) });
+    if (r.error) return { lines, messages: [r.error], exitCode: 1 };
+    lines.push(`${id} is now human-stated (was ${r.was}-stated) — whoever ran this command reviewed it`, formatConstraint(r.constraint));
     return { lines, messages, exitCode: 0 };
   }
   if (AMEND_SUBS.includes(sub)) return runConstraintAmend({ root, sub, id, pid: values.pid, values, formatConstraint });

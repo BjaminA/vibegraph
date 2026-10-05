@@ -56,6 +56,8 @@ import { accentForThreadNode } from "./colour_for_node";
 import { iconForNode } from "./icon_for_node";
 import { resolveEdgeLabel } from "./edge_args";
 import { computeFileGroups } from "./depthCues";
+import { homeMembers } from "./containerHome";
+import { MeasuredCards, sameSizes, type CardSizes } from "./MeasuredCards";
 import {
   ExternalEffectsPanel,
   PANEL_W_EXPANDED,
@@ -197,6 +199,18 @@ function ThreadCanvas({ thread: rawThread, width, height, projectIR, entryPoints
   // M-NEST L2 — nest parentage, derived view-side from IR-id structure (no
   // extractor change). Drives the collapse projection + the outer-node badge.
   const nests = useMemo(() => deriveNests(rawThread.nodes), [rawThread.nodes]);
+  // 2026-10-05 — measured card sizes, for the container boxes (MeasuredCards).
+  const [cardSizes, setCardSizesRaw] = useState<CardSizes>(() => new Map());
+  // MERGED by maximum, never replaced: a re-laid-out card loses react-flow's
+  // measurement until it is measured again (dropping its size re-spaced the
+  // rows, which re-laid the cards out, round and round), and zoomed far out a
+  // card draws compact (lod.ts) — a smaller size must not shrink its box or
+  // move the rows while the person zooms.
+  const setCardSizes = useCallback((m: CardSizes) => setCardSizesRaw((prev) => {
+    const next = new Map(prev);
+    for (const [k, v] of m) { const o = prev.get(k); next.set(k, o ? { w: Math.max(o.w, v.w), h: Math.max(o.h, v.h) } : v); }
+    return sameSizes(prev, next) ? prev : next;
+  }), []);
   const isNestExpanded = useCallback(
     (outerId: string) => expandAll || expandedNests.has(outerId),
     [expandAll, expandedNests],
@@ -291,7 +305,18 @@ function ThreadCanvas({ thread: rawThread, width, height, projectIR, entryPoints
   // M17.3-polish — projectIR is consulted by useThreadLayout for the
   // vertical source-order pass (call-site line lookups). When absent
   // the hook falls back to the legacy d3-force BFS layout.
-  const layout = useThreadLayout(thread, width, height, fileGroups, projectIR, undefined, orientation);
+  // The containers drawn, with their `contains` edges: the layout makes room
+  // for their boxes between rows.
+  const containment = useMemo(() => ({
+    nodes: containerNodes,
+    edges: rawThread.edges.filter((e) => e.kind === "contains"),
+  }), [containerNodes, rawThread.edges]);
+  // Measured heights space the rows — only where every card is drawn: a big
+  // thread draws what is on screen, and re-spacing as cards scroll into view
+  // would move the canvas under the person panning it.
+  const heights = useMemo(() => (rawThread.nodes.length > FOLD_ABOVE || !cardSizes.size ? undefined
+    : new Map([...cardSizes].map(([id, s]) => [id, s.h]))), [cardSizes, rawThread.nodes.length]);
+  const layout = useThreadLayout(thread, width, height, fileGroups, projectIR, undefined, orientation, containment, heights);
   const rf = useReactFlow();
 
   // Thread hierarchy (2026-09-29) — entry-point heads by where they live, so
@@ -463,11 +488,17 @@ function ThreadCanvas({ thread: rawThread, width, height, projectIR, entryPoints
     const depthOf = (id: string) => { let d = 0; for (let p = parentOf.get(id); p && d < 12; p = parentOf.get(p)) d++; return d; };
     type Box = { minX: number; minY: number; maxX: number; maxY: number };
     const boxById = new Map<string, Box | null>();
+    // 2026-10-05 — a card several calls reach is drawn ONCE (layout.placedBy);
+    // a container wraps only the members placed by a call written inside it
+    // (containerHome.ts). A shared card used to stretch the box across
+    // everything between its call sites.
+    const home = homeMembers(rawThread.nodes, layout.placedBy, containsChildren);
     function boxOf(id: string, stack: Set<string>): Box | null {
       if (boxById.has(id)) return boxById.get(id) ?? null;
       if (stack.has(id)) return null; // defensive: contains cycles
       stack.add(id);
       const boxes: Box[] = [];
+      const cards: Box[] = [];
       for (const childId of containsChildren.get(id) ?? []) {
         if (containerIds.has(childId)) {
           const inner = boxOf(childId, stack);
@@ -481,16 +512,38 @@ function ThreadCanvas({ thread: rawThread, width, height, projectIR, entryPoints
             });
           }
         } else {
+          if (!home(id, childId)) continue;
           const p = layout.positions.get(childId);
-          if (p) boxes.push({ minX: p.x, minY: p.y, maxX: p.x + APPROX_NODE_W, maxY: p.y + APPROX_NODE_H });
+          const size = cardSizes.get(childId);
+          if (p) cards.push({ minX: p.x, minY: p.y, maxX: p.x + (size?.w ?? APPROX_NODE_W), maxY: p.y + (size?.h ?? APPROX_NODE_H) });
         }
       }
-      const box = boxes.length === 0 ? null : {
+      // The box hugs the column of the block's own calls. A call nested in
+      // another's arguments is drawn one column right of its outer call, and
+      // taking it in widened the box over other calls' callees.
+      const column = Math.min(...cards.map((b) => b.minX));
+      boxes.push(...cards.filter((b) => b.minX === column));
+      let box = boxes.length === 0 ? null : {
         minX: Math.min(...boxes.map((b) => b.minX)),
         minY: Math.min(...boxes.map((b) => b.minY)),
         maxX: Math.max(...boxes.map((b) => b.maxX)),
         maxY: Math.max(...boxes.map((b) => b.maxY)),
       };
+      // A box that fell back to members drawn elsewhere is drawn only if it
+      // then covers no other card; otherwise the block is not boxed (its
+      // calls keep their edges) rather than boxed over cards it does not hold.
+      if (box && home.fallback(id)) {
+        const own = new Set<string>();
+        const walk = (c: string) => { for (const k of containsChildren.get(c) ?? []) { if (containerIds.has(k)) walk(k); else own.add(k); } };
+        walk(id);
+        const b = box;
+        for (const [nid, p] of layout.positions) {
+          if (own.has(nid)) continue;
+          const sz = cardSizes.get(nid);
+          const x1 = p.x + (sz?.w ?? APPROX_NODE_W), y1 = p.y + (sz?.h ?? APPROX_NODE_H);
+          if (p.x < b.maxX + PAD_X && x1 > b.minX - PAD_X && p.y < b.maxY + PAD_BOTTOM && y1 > b.minY - PAD_TOP) { box = null; break; }
+        }
+      }
       boxById.set(id, box);
       return box;
     }
@@ -558,7 +611,7 @@ function ThreadCanvas({ thread: rawThread, width, height, projectIR, entryPoints
         draggable: false,
       } satisfies Node];
     });
-  }, [containerNodes, containsChildren, layout.positions, projectIR, entryPoints, enterDelayById, orientation]);
+  }, [containerNodes, containsChildren, layout.positions, layout.placedBy, cardSizes, rawThread.nodes, projectIR, entryPoints, enterDelayById, orientation]);
 
   // M-NEST L2d — bordered backdrop around each EXPANDED nest (outer step + its
   // revealed inner calls), reusing the same bounding-box pass + ThreadContainer
@@ -761,8 +814,10 @@ function ThreadCanvas({ thread: rawThread, width, height, projectIR, entryPoints
       return out;
     };
     const m = new Map<string, { x: number; y: number }>();
+    const home = homeMembers(rawThread.nodes, layout.placedBy, containsChildren);
     for (const c of containerNodes) {
       const pts = leaves(c.id, new Set<string>())
+        .filter((id) => home(c.id, id))
         .map((id) => layout.positions.get(id))
         .filter((p): p is { x: number; y: number } => !!p);
       if (!pts.length) continue;
@@ -773,7 +828,7 @@ function ThreadCanvas({ thread: rawThread, width, height, projectIR, entryPoints
       });
     }
     return m;
-  }, [containerNodes, containsChildren, layout.positions]);
+  }, [containerNodes, containsChildren, layout.positions, layout.placedBy, rawThread.nodes]);
 
   const edges = useMemo<Edge[]>(() => {
     // Pre-compute the per-render lookups the ThreadEdge data shape
@@ -1226,6 +1281,7 @@ function ThreadCanvas({ thread: rawThread, width, height, projectIR, entryPoints
           keep zooming out for the system view
         </div>
       )}
+      <MeasuredCards onSizes={setCardSizes} />
     </ReactFlow>
     </div>
   );

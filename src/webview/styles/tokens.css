@@ -179,6 +179,51 @@
   --thread-branch-hue-7: hsl(228 86% 72%);
 }
 
+/* ── Light theme (2026-10-05, GUI brief M1) ───────────────────────────────
+   The same token names, re-valued: surfaces light, text dark, accents
+   darkened so they hold contrast on white. The app sets data-theme="dark"
+   by default (today's look) and "light" when chosen; with the attribute
+   absent ("follow the system") the OS preference decides. The code view's
+   Monaco theme (vibegraph-dark) stays dark: it is not driven by tokens. */
+:root[data-theme="light"] {
+  --bg-canvas: hsl(220 20% 97%); --bg-node: hsl(0 0% 100%); --bg-node-hover: hsl(220 20% 94%);
+  --border-edge: hsl(220 14% 82%);
+  --text-primary: hsl(222 30% 12%); --text-secondary: hsl(222 14% 30%); --text-muted: hsl(222 10% 42%);
+  --accent-thread: hsl(166 80% 28%); --accent-warning: hsl(35 92% 34%); --accent-error: hsl(356 72% 44%);
+  --accent-io: hsl(212 78% 40%); --accent-io-write: hsl(208 90% 34%); --accent-io-muted: hsl(214 35% 44%);
+  --accent-config: hsl(38 60% 33%); --accent-chat: hsl(267 55% 48%); --accent-compose: hsl(20 78% 42%);
+  --type-float: hsl(20 85% 40%); --type-list: hsl(160 64% 30%); --type-tuple: hsl(141 60% 30%);
+  --type-dict: hsl(257 60% 48%); --type-set: hsl(272 60% 48%); --type-call: hsl(213 80% 42%);
+  --thread-file-hue-0: hsl(166 80% 28%); --thread-file-hue-1: hsl(188 74% 32%); --thread-file-hue-2: hsl(208 74% 38%);
+  --thread-file-hue-3: hsl(228 64% 44%); --thread-file-hue-4: hsl(248 56% 48%); --thread-file-hue-5: hsl(268 56% 46%);
+  --thread-file-hue-6: hsl(288 52% 42%); --thread-file-hue-7: hsl(308 52% 40%);
+  --thread-branch-hue-0: hsl(166 80% 28%); --thread-branch-hue-1: hsl(268 56% 46%); --thread-branch-hue-2: hsl(208 80% 38%);
+  --thread-branch-hue-3: hsl(318 60% 42%); --thread-branch-hue-4: hsl(188 80% 30%); --thread-branch-hue-5: hsl(248 56% 48%);
+  --thread-branch-hue-6: hsl(288 52% 42%); --thread-branch-hue-7: hsl(228 64% 44%);
+  --shadow-panel: 0 12px 32px hsl(222 30% 20% / 0.18); --shadow-control: 0 2px 10px hsl(222 30% 20% / 0.14);
+  color-scheme: light;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme]) {
+    --bg-canvas: hsl(220 20% 97%); --bg-node: hsl(0 0% 100%); --bg-node-hover: hsl(220 20% 94%);
+    --border-edge: hsl(220 14% 82%);
+    --text-primary: hsl(222 30% 12%); --text-secondary: hsl(222 14% 30%); --text-muted: hsl(222 10% 42%);
+    --accent-thread: hsl(166 80% 28%); --accent-warning: hsl(35 92% 34%); --accent-error: hsl(356 72% 44%);
+    --accent-io: hsl(212 78% 40%); --accent-io-write: hsl(208 90% 34%); --accent-io-muted: hsl(214 35% 44%);
+    --accent-config: hsl(38 60% 33%); --accent-chat: hsl(267 55% 48%); --accent-compose: hsl(20 78% 42%);
+    --type-float: hsl(20 85% 40%); --type-list: hsl(160 64% 30%); --type-tuple: hsl(141 60% 30%);
+    --type-dict: hsl(257 60% 48%); --type-set: hsl(272 60% 48%); --type-call: hsl(213 80% 42%);
+    --thread-file-hue-0: hsl(166 80% 28%); --thread-file-hue-1: hsl(188 74% 32%); --thread-file-hue-2: hsl(208 74% 38%);
+    --thread-file-hue-3: hsl(228 64% 44%); --thread-file-hue-4: hsl(248 56% 48%); --thread-file-hue-5: hsl(268 56% 46%);
+    --thread-file-hue-6: hsl(288 52% 42%); --thread-file-hue-7: hsl(308 52% 40%);
+    --thread-branch-hue-0: hsl(166 80% 28%); --thread-branch-hue-1: hsl(268 56% 46%); --thread-branch-hue-2: hsl(208 80% 38%);
+    --thread-branch-hue-3: hsl(318 60% 42%); --thread-branch-hue-4: hsl(188 80% 30%); --thread-branch-hue-5: hsl(248 56% 48%);
+    --thread-branch-hue-6: hsl(288 52% 42%); --thread-branch-hue-7: hsl(228 64% 44%);
+    --shadow-panel: 0 12px 32px hsl(222 30% 20% / 0.18); --shadow-control: 0 2px 10px hsl(222 30% 20% / 0.14);
+    color-scheme: light;
+  }
+}
+
 /* ── Document defaults ─────────────────────────────────────────────────────
    Replaces the inline system-font fallback chain that was in server.ts. */
 

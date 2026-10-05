@@ -85,6 +85,12 @@ import { ArchitectureView, deriveModels, type ArchModel } from "./architecture";
 import { type ReadmeStatus } from "./ReadmeBadge";
 import { ReadmePanel } from "./ReadmePanel";
 import { ChipStrip } from "./ChipStrip";
+import { PanelSheet, type SheetSlot } from "./panels/PanelSheet";
+import type { PanelId } from "./panels/panels";
+import { useFocusRouter } from "./panels/useFocusRouter";
+import { RulesPanel } from "./RulesPanel";
+import { useRulesState } from "./useRulesState";
+import { ThreadRulesChip } from "./threads/ThreadRulesChip";
 // M18-Add-deprecate: the 9-kind Add palette + its drag/insertion flow is
 // parked (superseded by Mode A "type code → Save → node appears"). Source
 // files stay on disk (AddComponentKindPicker / AddComponentModal /
@@ -177,7 +183,15 @@ function Graph() {
   // Only one at a time. Esc / scrim-click / chevron-on-same-node clears it.
   const [expandedNodeId, setExpandedNodeId] = useState<string | null>(null);
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const [modelsOpen, setModelsOpen] = useState(false);
+  // 2026-10-05 (GUI brief M3) — ONE sheet for the panels: which is open (or
+  // none). The old per-panel flags and setters are views onto it, so every
+  // caller that toggled a panel still does — and opening one closes another.
+  const [sheet, setSheet] = useState<PanelId | null>(null);
+  const [sheetSlot, setSheetSlot] = useState<SheetSlot | null>(null);
+  const sheetSetter = useCallback((id: PanelId) => (v: boolean | ((was: boolean) => boolean)) =>
+    setSheet((cur) => { const was = cur === id; const next = typeof v === "function" ? v(was) : v; return next ? id : was ? null : cur; }), []);
+  const modelsOpen = sheet === "models";
+  const setModelsOpen = useMemo(() => sheetSetter("models"), [sheetSetter]);
   // Model tiers. M-PROVIDER: the SERVER owns them now (.vibegraph/models.json,
   // loaded at boot, sent on connect as `model-tiers`) — a headless driver and
   // the board must route the same way, and a page load must not overwrite a
@@ -201,7 +215,8 @@ function Graph() {
   // and sends it with the catalogue on connect; the panel posts the enabled
   // list and renders the echoed, sanitised result. No localStorage copy: a
   // stale placeholder could show a skill as on that the server has off.
-  const [skillsOpen, setSkillsOpen] = useState(false);
+  const skillsOpen = sheet === "direction";
+  const setSkillsOpen = useMemo(() => sheetSetter("direction"), [sheetSetter]);
   const [skillsState, setSkillsState] = useState<SkillsConfigPayload | null>(null);
   const changeSkills = (enabled: string[], hooks?: string) => {
     bridge.postMessage({ type: "set-skills-config", payload: { version: "1.0", enabled, ...(hooks ? { hooks } : {}) } });
@@ -260,7 +275,8 @@ function Graph() {
   const [roadmapDrafting, setRoadmapDrafting] = useState(false);
   // M-AGENT2 — the Agent Manager run (envelope sibling) + its board.
   const [workRun, setWorkRun] = useState<import("../shared/protocol").WorkRun | null>(null);
-  const [workRunOpen, setWorkRunOpen] = useState(false);
+  const workRunOpen = sheet === "agents";
+  const setWorkRunOpen = useMemo(() => sheetSetter("agents"), [sheetSetter]);
   // M-CONTRACT.3 — stated constraints (envelope sibling), listed on the board.
   const [constraints, setConstraints] = useState<import("../shared/protocol").ConstraintRecord[]>([]);
   // M-STACK — the stack FACTS (envelope sibling) + the Stack panel, and
@@ -287,10 +303,23 @@ function Graph() {
   }, [bridge]);
   // PLAN-M-RUNTIME phase 3 — the trace overlay, when a run has produced one.
   const [observations, setObservations] = useState<import("../shared/protocol").ObservationStoreRecord | null>(null);
-  const [stackOpen, setStackOpen] = useState(false);
-  const [investigateOpen, setInvestigateOpen] = useState(false);
-  const [planOpen, setPlanOpen] = useState(false);
-  const openInvestigation = useCallback(() => setInvestigateOpen(true), []);
+  const stackOpen = sheet === "stack";
+  const setStackOpen = useMemo(() => sheetSetter("stack"), [sheetSetter]);
+  const investigateOpen = sheet === "board";
+  const setInvestigateOpen = useMemo(() => sheetSetter("board"), [sheetSetter]);
+  const planOpen = sheet === "plan";
+  const setPlanOpen = useMemo(() => sheetSetter("plan"), [sheetSetter]);
+  const rulesOpen = sheet === "rules";
+  const setRulesOpen = useMemo(() => sheetSetter("rules"), [sheetSetter]);
+  const [focusRule, setFocusRule] = useState<string | null>(null);
+  const rules = useRulesState(true);
+  // A chip asked for a card on the map (useFocusRouter → SystemView).
+  const [mapFocus, setMapFocus] = useState<{ id: string; n: number } | null>(null);
+  // A pin opens the board DOCKED: the person is still working the graph
+  // (pinning across threads), so the sheet must not cover it.
+  const [pinDock, setPinDock] = useState(false);
+  useEffect(() => { if (!sheet) setPinDock(false); }, [sheet]);
+  const openInvestigation = useCallback(() => { setPinDock(true); setInvestigateOpen(true); }, [setInvestigateOpen]);
   // M-ZOOM - the thread the reader zoomed OUT of, highlighted on arrival.
   const [zoomFocusEntry, setZoomFocusEntry] = useState<string | null>(null);
   const [policyPrefill, setPolicyPrefill] = useState<{ tool: string; role?: string } | null>(null);
@@ -966,6 +995,24 @@ function Graph() {
     return () => document.removeEventListener("vg-open-thread", onOpen);
   }, [entryPoints, handleSelectEntry]);
 
+  // 2026-10-05 (GUI brief M2) — where a clicked chip goes (useFocusRouter).
+  // Going somewhere on the canvas closes a centred sheet so it is seen.
+  const focusHandlers = useMemo(() => ({
+    files: () => Object.keys(projectDataRef.current),
+    functionFile: (name: string) => {
+      const tail = `/${name.split(".").join(".class/")}.fn`;
+      for (const [f, ir] of Object.entries(projectDataRef.current)) if (ir.nodes.some((n) => n.id.endsWith(tail))) return f;
+      return null;
+    },
+    entryPointIds: () => entryPoints.map((e) => e.id),
+    selectFile: (f: string) => { setSheet(null); handleSelectFile(f); },
+    openThread: (id: string) => { const e = entryPoints.find((x) => x.id === id); if (e) { setSheet(null); handleSelectEntry(e); } },
+    focusMap: (id: string) => { setSheet(null); setViewMode("system"); setMapFocus((m) => ({ id, n: (m?.n ?? 0) + 1 })); },
+    openRule: (id: string) => { setFocusRule(id); setSheet("rules"); },
+    openSheet: (id: "plan" | "stack") => setSheet(id),
+  }), [entryPoints, handleSelectEntry, handleSelectFile]);
+  useFocusRouter(focusHandlers);
+
   // M-ZOOM (PLAN-v5 5.2) - thread and system are one continuum, not two
   // views. Zooming out past the last band leaves the thread for the
   // system plane, carrying the thread's identity so the plane opens with
@@ -1190,6 +1237,7 @@ function Graph() {
             archPropose={archPropose}
             onArchAction={handleArchAction}
             insight={insight}
+            mapFocus={mapFocus}
           />
         ) : viewMode === "architecture" ? (
           <ArchitectureView projectIR={projectDataRef.current} onOpenForward={handleOpenForward} />
@@ -1252,6 +1300,11 @@ function Graph() {
                     undeclared={(insight?.env?.byThread[activeEntryPointId] ?? []).filter((n) => insight?.env?.undeclared.includes(n))}
                     hasDeclarations={insight?.env?.hasDeclarations ?? false}
                   />
+                )}
+                {/* 2026-10-05 — the stated rules routed to this thread, live. */}
+                {activeEntryPointId && (
+                  <ThreadRulesChip rules={rules.rules.filter((r) => r.threads.includes(activeEntryPointId))}
+                    onOpenRule={(id) => { setFocusRule(id); setRulesOpen(true); }} />
                 )}
                 {/* M-TRAINED.2 — artifact chip, third in the cluster. */}
                 {activeEntryPointId && (
@@ -1376,11 +1429,14 @@ function Graph() {
         onToggleEditor={() => setEditorOpen((v) => !v)}
         stackOpen={stackOpen}
         stackAvailable={isDirectoryMode}
-        onToggleStack={() => { setStackOpen((v) => !v); setModelsOpen(false); }}
+        onToggleStack={() => setStackOpen((v) => !v)}
         investigateOpen={investigateOpen}
-        onToggleInvestigate={() => { setInvestigateOpen((v) => !v); setStackOpen(false); }}
+        onToggleInvestigate={() => setInvestigateOpen((v) => !v)}
         planOpen={planOpen}
-        onTogglePlan={() => { setPlanOpen((v) => !v); setInvestigateOpen(false); setStackOpen(false); }}
+        onTogglePlan={() => setPlanOpen((v) => !v)}
+        rulesOpen={rulesOpen}
+        rulesPending={rules.pending}
+        onToggleRules={() => setRulesOpen((v) => !v)}
         onToggleFilters={() => { setFiltersOpen((v) => !v); setAnalysisOpen(false); }}
         onToggleAnalysis={() => { setAnalysisOpen((v) => !v); setFiltersOpen(false); }}
         onToggleCode={handleToggleCode}
@@ -1845,58 +1901,51 @@ function Graph() {
 
       {/* The key / deps notices render INSIDE the toolbar (TopToolbar notices). */}
 
-      {/* ── Model tiers ── */}
+      {/* 2026-10-05 (GUI brief M3) — every panel opens in ONE centred sheet
+          with a switcher; each panel renders its body into the sheet's
+          slot (SheetPortal). They stay mounted here as before: the board
+          must hear a pin while closed. */}
+      {sheet && (
+        <PanelSheet
+          active={sheet}
+          available={(isDirectoryMode ? ["plan", "rules", "stack", "agents", "direction", "models", "board"] : ["models"]) as PanelId[]}
+          badges={{ rules: rules.pending }}
+          onSwitch={setSheet}
+          onClose={() => setSheet(null)}
+          onSlot={setSheetSlot}
+          dock={pinDock && sheet === "board"}
+        />
+      )}
       {modelsOpen && (
         <ModelTiersPanel
           tiers={modelTiers}
           onChange={changeModelTiers}
-          onClose={() => setModelsOpen(false)}
+          slot={sheetSlot}
           onProbe={probeEndpoint}
           probe={endpointProbe}
           probing={endpointProbing}
         />
       )}
-
-      {/* ── M-SKILLS.2 — generic direction: enable per project, advisory. ── */}
-      {skillsOpen && (
-        <SkillsPanel
-          state={skillsState}
-          onChange={changeSkills}
-          onClose={() => setSkillsOpen(false)}
-        />
-      )}
-
-      {/* ── M-STACK.3 — the Stack panel: facts + the policies about them.
-          "State a policy" writes nothing: it opens the constraint form
-          on the board, pre-filled, because a policy is a human decision. ── */}
+      {skillsOpen && <SkillsPanel state={skillsState} onChange={changeSkills} slot={sheetSlot} />}
+      {/* M-STACK.3 — "State a policy" writes nothing: it opens the rule form
+          (the Rules panel), pre-filled, because a policy is a human decision. */}
       {stackOpen && (
         <StackPanel
           stack={stack}
           constraints={constraints}
-          onClose={() => setStackOpen(false)}
-          onStatePolicy={(tool, role) => { setPolicyPrefill({ tool, role }); setWorkRunOpen(true); }}
+          slot={sheetSlot}
+          onStatePolicy={(tool, role) => { setPolicyPrefill({ tool, role }); setRulesOpen(true); }}
         />
       )}
-
-      {/* 2026-09-29 — the investigation board: always mounted so a pin
-          taken while it is closed still lands (the pin opens it). */}
+      {isDirectoryMode && <InvestigationPanel open={investigateOpen} onOpen={openInvestigation} slot={sheetSlot} />}
+      {isDirectoryMode && <PlanPanel open={planOpen} slot={sheetSlot} />}
       {isDirectoryMode && (
-        <InvestigationPanel open={investigateOpen} onOpen={openInvestigation} onClose={() => setInvestigateOpen(false)} />
+        <RulesPanel open={rulesOpen} slot={sheetSlot} state={rules} stack={stack}
+          prefill={policyPrefill} onPrefillConsumed={() => setPolicyPrefill(null)} focusRule={focusRule}
+          threadLabel={(id) => entryPoints.find((e) => e.id === id)?.label ?? id} />
       )}
-      {/* 2026-09-30 — the hypothetical plan (.vibegraph/plan.json). */}
-      {isDirectoryMode && <PlanPanel open={planOpen} onClose={() => setPlanOpen(false)} />}
-
-      {/* ── M-AGENT2 — the Agent Manager run board ── */}
-      <WorkRunPanel
-        open={workRunOpen}
-        onClose={() => setWorkRunOpen(false)}
-        run={workRun}
-        constraints={constraints}
-        stack={stack}
-        policyPrefill={policyPrefill}
-        onPolicyPrefillConsumed={() => setPolicyPrefill(null)}
-      />
-
+      <WorkRunPanel open={workRunOpen} slot={sheetSlot} run={workRun} constraints={constraints} stack={stack}
+        onOpenRules={() => setRulesOpen(true)} />
 
       {/* ── README / VibeReadme viewer ── */}
       {readmePanelOpen && (

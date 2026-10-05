@@ -15,10 +15,10 @@
 // agent-stated policies and manifest-only evidence. lucide only.
 
 import React from "react";
-import { Boxes, FileWarning, GitMerge, ScrollText } from "lucide-react";
+import { FileWarning, GitMerge, ScrollText } from "lucide-react";
 import type { ConstraintRecord, StackIndexRecord, StackToolRecord } from "../shared/protocol";
 import { ROLE_LABEL, ROLE_ORDER, type StackRole } from "../shared/stack_taxonomy";
-import { belowToolbar, heightBelowToolbar } from "./TopToolbar";
+import { SheetPortal, SheetBody, type SheetSlot } from "./panels/PanelSheet";
 
 const mono = "var(--font-mono)";
 
@@ -110,10 +110,12 @@ function ToolRow({ tool, constraints, onStatePolicy }: {
   );
 }
 
-export function StackPanel({ stack, constraints, onClose, onStatePolicy }: {
+/** Rendered into the panel sheet (PanelSheet): the sheet owns the frame,
+ *  the close button and Esc; this owns the content. */
+export function StackPanel({ stack, constraints, slot, onStatePolicy }: {
   stack: StackIndexRecord | null;
   constraints: ConstraintRecord[];
-  onClose: () => void;
+  slot: SheetSlot | null;
   onStatePolicy: (tool: string, role: string) => void;
 }) {
   const tools = stack?.tools ?? [];
@@ -122,32 +124,13 @@ export function StackPanel({ stack, constraints, onClose, onStatePolicy }: {
     if (!byRole.has(t.role as StackRole)) byRole.set(t.role as StackRole, []);
     byRole.get(t.role as StackRole)!.push(t);
   }
+  if (!slot) return null;
+  const roles = ROLE_ORDER.filter((r) => byRole.has(r));
   return (
-    <div data-stack-panel style={{
-      // `var(--vg-chipstrip-h, 56px)` was the strip's HEIGHT used as a top
-      // OFFSET, so the panel sat 56px from the viewport top and ignored the
-      // toolbar entirely. Fine while the band was one row (48px); at 1280px
-      // it wraps to 82 and at 1100 to 116, and the panel's own header went
-      // behind it.
-      position: "absolute", top: belowToolbar(16), right: 16,
-      // border-box, or the panel's own 16px padding and 1px border sit
-      // OUTSIDE maxHeight and it overruns the viewport by 34px — which the
-      // old 80vh hid only because 80vh left room to spare.
-      width: 420, boxSizing: "border-box",
-      maxHeight: heightBelowToolbar(16), overflowY: "auto", background: "var(--bg-node)",
-      border: "1px solid var(--border-edge)", borderRadius: 6,
-      padding: 16, zIndex: 60, boxShadow: "0 8px 24px rgba(0,0,0,0.35)",
-    }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-        <Boxes size={14} strokeWidth={1.5} color="var(--text-muted)" />
-        <span style={{ fontSize: "var(--fs-12)", fontWeight: 600, color: "var(--text-primary)" }}>Stack</span>
-        <div style={{ flex: 1 }} />
-        <button onClick={onClose} title="Close"
-          style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: 14, lineHeight: 1, padding: 0 }}>
-          ×
-        </button>
-      </div>
-      <div style={{ fontSize: "var(--fs-11)", color: "var(--text-muted)", lineHeight: 1.5, marginBottom: 12 }}>
+    <SheetPortal slot={slot} subtitle={`${tools.length} tool${tools.length === 1 ? "" : "s"} · ${roles.length} role${roles.length === 1 ? "" : "s"} · IR fact`}>
+    <SheetBody nav={roles.map((r) => ({ id: r, label: r === "unknown" ? "unclassified" : ROLE_LABEL[r], count: byRole.get(r)!.length }))}>
+    <div data-stack-panel style={{ display: "flex", flexDirection: "column" }}>
+      <div style={{ fontSize: "var(--fs-12)", color: "var(--text-muted)", lineHeight: 1.5, marginBottom: 12 }}>
         What the code imports, calls and declares — IR fact, with the evidence behind each. A decision <em>about</em> a tool is a stated policy and is shown beneath it.
       </div>
 
@@ -158,7 +141,7 @@ export function StackPanel({ stack, constraints, onClose, onStatePolicy }: {
       )}
 
       {ROLE_ORDER.filter((r) => byRole.has(r)).map((role) => (
-        <div key={role} data-stack-role-group={role} style={{ marginBottom: 12 }}>
+        <div key={role} data-stack-role-group={role} data-sheet-section={role} style={{ marginBottom: 12 }}>
           <div style={{
             fontSize: "var(--fs-11)", fontFamily: mono, fontWeight: 600,
             color: role === "unknown" ? "var(--accent-warning)" : "var(--text-primary)",
@@ -179,5 +162,7 @@ export function StackPanel({ stack, constraints, onClose, onStatePolicy }: {
         </span>
       </div>
     </div>
+    </SheetBody>
+    </SheetPortal>
   );
 }

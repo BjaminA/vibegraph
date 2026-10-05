@@ -54,6 +54,8 @@ export interface LaidOutPosition {
   y: number;
 }
 
+export interface Placement { from: string; src: string | null }
+
 export interface ThreadLayout {
   positions: Map<string, LaidOutPosition>;
   width: number;
@@ -61,6 +63,11 @@ export interface ThreadLayout {
   /** node id → its branch index (the subtrees under the first fork after
    *  the seed); ThreadView colours edges by it. Absent = spine or none. */
   branchOf?: Map<string, number>;
+  /** node id → the call that placed it: the caller and the call site's
+   *  structural id. A card several calls reach is drawn ONCE, at the first
+   *  call the walk reached; a container wraps only the members placed by a
+   *  call written inside it (containerHome.ts). */
+  placedBy?: Map<string, Placement>;
 }
 
 interface SimNode extends SimulationNodeDatum {
@@ -188,6 +195,11 @@ export function useThreadLayout(
   projectIR?: Record<string, ProjectFileData> | null,
   iterations: number = DEFAULT_ITERATIONS,
   orientation: ThreadOrientation = "vertical",
+  /** the containers and `contains` edges the drawn thread leaves out: the
+   *  row spacing reserves room for their boxes (threadRowGaps.ts) */
+  containment?: Pick<Thread, "nodes" | "edges">,
+  /** measured card heights: a row is spaced by its tallest card, not 75 */
+  heights?: Map<string, number>,
 ): ThreadLayout {
   // The L-R source-order layout never reads the canvas size, so a dock
   // opening (every node click opens the editor) must not re-lay-out the
@@ -212,7 +224,7 @@ export function useThreadLayout(
     // d3-force BFS layout when projectIR isn't available (no way to
     // look up call-site lines without it).
     if (projectIR) {
-      return sourceOrderLayout(thread, width, height, projectIR, orientation);
+      return sourceOrderLayout(thread, width, height, projectIR, orientation, containment, heights);
     }
 
     const rowHeight = readRowHeight();
@@ -295,7 +307,7 @@ export function useThreadLayout(
     }
     return { positions, width, height };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- width/height ride keyW/keyH
-  }, [thread, keyW, keyH, iterations, fileGroups, projectIR, orientation]);
+  }, [thread, keyW, keyH, iterations, fileGroups, projectIR, orientation, containment, heights]);
 }
 
 // ─────────────────────────────────────────── vertical source order ──
@@ -357,13 +369,20 @@ function lineOfIrNode(
   return node?.line ?? 0;
 }
 
-function sourceOrderLayout(
+export function sourceOrderLayout(
   thread: Thread,
   width: number,
   height: number,
   projectIR: Record<string, ProjectFileData>,
   orientation: ThreadOrientation,
+  containment?: Pick<Thread, "nodes" | "edges">,
+  heights?: Map<string, number>,
 ): ThreadLayout {
+  const cardH = (id: string) => heights?.get(id) ?? CARD_H;
+  // 2026-10-05 — the drawn thread carries no containers or `contains` edges
+  // (ThreadView sizes boxes separately), so the row spacing used to find no
+  // box to make room for in the live view. It reads them from here.
+  const chrome: Thread = containment ? { ...thread, nodes: [...thread.nodes, ...containment.nodes.filter((n) => n.kind === "container")], edges: [...thread.edges, ...containment.edges.filter((e) => e.kind === "contains")] } : thread;
   const positions = new Map<string, LaidOutPosition>();
   // Vertical (the norm): main axis = execution order (DFS source order),
   // cross axis = fixed centre — a single readable column.
@@ -398,7 +417,7 @@ function sourceOrderLayout(
   // call-site's source line (look up `irSource` in the FROM node's
   // file's IR). `contains` edges aren't part of execution order, so
   // they're excluded — the vertical nesting alone carries that signal.
-  const adj = new Map<string, { to: string; line: number }[]>();
+  const adj = new Map<string, { to: string; line: number; src: string | null }[]>();
   // Only nodes that are DRAWN take a slot: an edge whose endpoint was
   // collapsed away (a folded nest) used to allocate a row nobody filled —
   // the empty bands between a private production codebase's route blocks.
@@ -410,8 +429,8 @@ function sourceOrderLayout(
     const fromFile = fileById.get(e.from) ?? null;
     const line = lineOfIrNode(e.irSource, fromFile, projectIR);
     const arr = adj.get(e.from);
-    if (arr) arr.push({ to: e.to, line });
-    else adj.set(e.from, [{ to: e.to, line }]);
+    if (arr) arr.push({ to: e.to, line, src: e.irSource ?? null });
+    else adj.set(e.from, [{ to: e.to, line, src: e.irSource ?? null }]);
   }
   // M-NEST L2d — a nested call shares its outer's source line, so a pure
   // line sort can't order them. Execution is children-first (the inner call
@@ -471,13 +490,15 @@ function sourceOrderLayout(
     //     a linear chain still reads as one rail).
     // Revisited nodes keep their first position (visited check).
     const rowOf = new Map<string, number>();
+    const placedBy = new Map<string, Placement>();
     const dfsH = (nodeId: string, depth: number, row: number): number => {
       visited.add(nodeId);
       rowOf.set(nodeId, row);
       positions.set(nodeId, place(depth * HORIZONTAL_COL_WIDTH, row));
       let rows = 0;
-      for (const { to } of adj.get(nodeId) ?? []) {
+      for (const { to, src } of adj.get(nodeId) ?? []) {
         if (visited.has(to)) continue;
+        placedBy.set(to, { from: nodeId, src });
         rows += dfsH(to, depth + 1, row + rows);
       }
       return Math.max(1, rows);
@@ -495,27 +516,32 @@ function sourceOrderLayout(
     }
     // Re-stack the rows: each row at least the fixed stride below the last,
     // more when container chrome between them needs it (rowGapsFor).
-    const gaps = rowGapsFor(thread, rowOf);
+    const gaps = rowGapsFor(chrome, rowOf, placedBy, (id) => positions.get(id)?.x);
     const rowY = new Map<number, number>();
     let y = LANE_PADDING_TOP;
     const rows = [...new Set(rowOf.values())].sort((a, b) => a - b);
+    // A row is as tall as its tallest card (measured when ThreadView has it).
+    const rowH = new Map<number, number>();
+    for (const [id, r] of rowOf) rowH.set(r, Math.max(rowH.get(r) ?? 0, cardH(id)));
     rows.forEach((r, i) => {
-      if (i > 0) y += Math.max((r - rows[i - 1]) * HORIZONTAL_LANE_HEIGHT, CARD_H + (gaps.get(r) ?? 0));
+      if (i > 0) y += Math.max((r - rows[i - 1]) * HORIZONTAL_LANE_HEIGHT, (rowH.get(rows[i - 1]) ?? CARD_H) + (gaps.get(r) ?? 0));
       rowY.set(r, y);
     });
     for (const [id, r] of rowOf) { const p = positions.get(id); if (p) positions.set(id, { ...p, y: rowY.get(r)! }); }
-    return { positions, width, height, branchOf };
+    return { positions, width, height, branchOf, placedBy };
   }
 
   // Vertical — the historical single-column pass, untouched by M23.
   let cursor = Y_PADDING_TOP; // advances along the main axis
+  const placedByV = new Map<string, Placement>();
 
   function dfs(nodeId: string): void {
     if (visited.has(nodeId)) return;
     visited.add(nodeId);
     positions.set(nodeId, place(cursor, 0));
     cursor += step;
-    for (const { to } of adj.get(nodeId) ?? []) {
+    for (const { to, src } of adj.get(nodeId) ?? []) {
+      if (!visited.has(to)) placedByV.set(to, { from: nodeId, src });
       dfs(to);
     }
   }
@@ -536,14 +562,14 @@ function sourceOrderLayout(
   // a gap grows where container boxes open or close between two cards.
   const order = [...positions.entries()].sort((a, b) => a[1].y - b[1].y).map(([id]) => id);
   const rowOfV = new Map(order.map((id, i) => [id, i]));
-  const gapsV = rowGapsFor(thread, rowOfV);
+  const gapsV = rowGapsFor(chrome, rowOfV, placedByV);
   let yv = Y_PADDING_TOP;
   order.forEach((id, i) => {
-    if (i > 0) yv += Math.max(step, CARD_H + (gapsV.get(i) ?? 0));
+    if (i > 0) yv += Math.max(step, cardH(order[i - 1]) + (gapsV.get(i) ?? 0));
     positions.set(id, { ...positions.get(id)!, y: yv });
   });
 
-  return { positions, width, height, branchOf };
+  return { positions, width, height, branchOf, placedBy: placedByV };
 }
 
 // Per-row collision sweep. Each row's nodes are sorted by their post-

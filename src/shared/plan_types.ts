@@ -342,6 +342,11 @@ export interface PlanFinding {
   assumptions?: Array<{ id: string; state: AssumptionState }>;
   /** a flow: each step's verdict, in order */
   steps?: Array<{ step: string; found: boolean; at?: string }>;
+  /** 2026-10-05 — the item as structure: labelled bullets of typed chips
+   *  (src/shared/plan_facts.ts); `detail` keeps the prose */
+  facts?: import("./kinds").ItemFact[];
+  /** the counts the folded summary states ("14 files · 9 entry points") */
+  numbers?: Record<string, number>;
 }
 
 /** 2026-10-01 — one cell of the derived write matrix: may this principal

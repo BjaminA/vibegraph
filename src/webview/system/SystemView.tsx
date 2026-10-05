@@ -8,7 +8,7 @@
 // Clicking a thread node opens that thread.
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { ReactFlow, Background, Controls, useStore, useReactFlow, type Node, type Edge } from "@xyflow/react";
+import { ReactFlow, Background, Controls, type Node, type Edge } from "@xyflow/react";
 import { crossedToThread } from "../threads/lod";
 import { Network, Boxes, Share2, Map as MapIcon } from "lucide-react";
 import type { SystemTier, SystemPlan, EntryPoint, ProjectThread } from "../types";
@@ -25,8 +25,8 @@ import { ArchEdge } from "./ArchEdge";
 import { ArchTraceBar, useArchTrace } from "./ArchTrace";
 import { ArchInspector, ArchLegend, ArchLensBar, ArchProposalBar, type MapLens } from "./ArchPanel";
 import { configModel } from "./arch_config";
-import { decisionsModel, resourcesModel, styleTopologyEdges, traceIds } from "./arch_topology";
-import { useTopologyState } from "../useTopologyState";
+import { styleTopologyEdges, traceIds } from "./arch_topology";
+import { useTopologyLens } from "./useTopologyLens";
 import { TopologyTraceBar } from "./TopologyTraceBar";
 import { journeysModel } from "./arch_journeys";
 import { planModel, overlayModel, ghostPlannedEdges, type PlanView } from "./arch_plan";
@@ -35,6 +35,8 @@ import { usePlanState } from "../usePlanState";
 import { ArchProposingCard } from "./ArchProposingCard";
 import { useDeferredLayout } from "./useDeferredLayout";
 import { LayoutSpinner } from "./LayoutSpinner";
+import { useMapFocus } from "./useMapFocus";
+import { MeasuredHeights } from "./MeasuredHeights";
 import type { ArchModelRecord, ArchNodeRecord, ArchEdgeRecord, ArchGroupRecord } from "../../shared/protocol";
 
 const nodeTypes = {
@@ -49,28 +51,6 @@ const EMPTY_LAYOUT: { nodes: Node[]; edges: Edge[]; hiddenTools?: string[]; hidd
 /** Above this many edges react-flow draws only what is in the viewport. */
 const VISIBLE_ONLY_AT = 200;
 
-/** Reports the subsystem cards' MEASURED heights (inside the canvas, where
- *  react-flow's store is), so the layout can stack them by their real size;
- *  fits the view once, when the first real heights arrive. */
-function MeasuredHeights({ onHeights }: { onHeights: (m: Map<string, number>) => void }) {
-  const key = useStore((st) => [...st.nodeLookup.values()]
-    .filter((n) => n.type === "subsystem" || n.type === "plannedSubsystem")
-    .map((n) => `${n.id}=${Math.round(n.measured?.height ?? 0)}`).join("|"));
-  const rf = useReactFlow();
-  const fitted = useRef(false);
-  useEffect(() => {
-    const m = new Map<string, number>();
-    for (const part of key ? key.split("|") : []) {
-      const i = part.lastIndexOf("=");
-      const h = Number(part.slice(i + 1));
-      if (h > 0) m.set(part.slice(0, i), h);
-    }
-    if (!m.size) return;
-    onHeights(m);
-    if (!fitted.current) { fitted.current = true; window.setTimeout(() => rf.fitView({ padding: FIT_PADDING }), 50); }
-  }, [key, onHeights, rf]);
-  return null;
-}
 /** where the map's first view starts: clear of the toolbar, lens and proposal bars. */
 const MAP_INSET = { top: 136, left: 0, pad: 24, right: 64 };
 
@@ -112,6 +92,10 @@ interface Props {
   /** M-ARCH.4 — the proposal round trip, and the three actions. */
   archPropose?: { busy: boolean; error: string | null; working?: "propose" | "revise" | null };
   onArchAction?: (action: "propose" | "ratify" | "reject" | "seed-plan", guidance?: string) => void;
+  /** 2026-10-05 — a chip asked for a card on the map (a zone, store or
+   *  identity → `topo:…`): open the map on it and select it. `n` makes a
+   *  repeated click on the same chip a new request. */
+  mapFocus?: { id: string; n: number } | null;
 }
 
 /** Fit padding: the top clears the toolbar band and the mode / lens bar that
@@ -133,6 +117,7 @@ export function SystemView({
   archPropose,
   onArchAction,
   insight = null,
+  mapFocus = null,
 }: Props) {
   // M-ZOOM - armed after mount for the same reason ThreadView is: this
   // view is arrived at, and an unarmed descend bounces straight back.
@@ -182,21 +167,10 @@ export function SystemView({
   const [archSelected, setArchSelected] = useState<{ node: ArchNodeRecord } | { edge: ArchEdgeRecord } | { group: ArchGroupRecord } | null>(null);
 
   // 2026-10-02 — the DECLARED topology (Resources / Decisions lenses, trace overlay).
-  const topo = useTopologyState();
-  const hasTopology = !!topo.model && topo.model.status.length > 0;
-  const topoLens = (lens === "resources" || lens === "decisions") && hasTopology ? lens : null;
-  const [traceName, setTraceName] = useState("");
-  const [traceIndex, setTraceIndex] = useState(0);
-  const topoMapModel = useMemo(() => {
-    if (mode !== "map" || focusEntryPointId || !topoLens || !topo.model) return null;
-    return topoLens === "resources" ? resourcesModel(topo.model, threads, topo.live?.drift) : decisionsModel(topo.model, threads);
-  }, [mode, focusEntryPointId, topoLens, topo, threads]);
-  // A selected card draws the reads the Resources lens folded; the cards stay
-  // where the unfocused model placed them (placeEdges below).
-  const topoFocus = topoLens === "resources" && archSelected && "node" in archSelected ? archSelected.node.id : null;
-  const topoDrawn = useMemo(() => (topoMapModel && topoFocus && topo.model
-    ? resourcesModel(topo.model, threads, topo.live?.drift, { focus: topoFocus })
-    : topoMapModel), [topoMapModel, topoFocus, topo, threads]);
+  const { topo, hasTopology, topoMapModel, topoDrawn, traceName, setTraceName, traceIndex, setTraceIndex } = useTopologyLens({
+    lens, onMap: mode === "map" && !focusEntryPointId, threads,
+    selectedNodeId: archSelected && "node" in archSelected ? archSelected.node.id : null,
+  });
   // 2026-09-30 — the hypothetical plan: Real / Plan / Overlay (arch_plan.ts).
   const planState = usePlanState();
   const [planViewRaw, setPlanView] = useState<PlanView>("real");
@@ -269,6 +243,11 @@ export function SystemView({
     return { nodes: [], edges: [] };
   }, [mode, system, plan, threads, entryPoints, crossings, focusEntryPointId, architecture, lens, cardHeights, insight, planMapModel, topoMapModel, topoDrawn, traceName, traceIndex, topo], layoutSize, flowView);
   const base = laidOut.value ?? EMPTY_LAYOUT;
+  // A chip's request for a card on the map (useMapFocus).
+  const flowRef = useMapFocus({
+    request: mapFocus, nodes: base.nodes, toMap: () => setMode("map"),
+    toResources: () => { if (lens !== "resources") setLens("resources"); }, select: setArchSelected,
+  });
 
   // Inject the drill-down callback into each node's data (react-flow custom
   // nodes receive only `data`): subsystem endpoint rows AND thread nodes both
@@ -491,6 +470,7 @@ export function SystemView({
         fitViewOptions={{ padding: FIT_PADDING }}
         minZoom={0.1}
         onInit={(inst) => {
+          flowRef.current = inst;
           if (mode !== "map" || !base.nodes.length) return;
           const r = wrapRef.current?.getBoundingClientRect();
           if (r) inst.setViewport(readableViewport(layoutBounds(base.nodes), r.width, r.height, MAP_INSET, lens === "birdseye" ? 0.35 : undefined));
@@ -505,7 +485,7 @@ export function SystemView({
         onEdgeClick={handleEdgeClick}
         onPaneClick={() => setArchSelected(null)}
       >
-        {mode === "subsystems" && !focusEntryPointId && <MeasuredHeights onHeights={onHeights} />}
+        {mode === "subsystems" && !focusEntryPointId && <MeasuredHeights onHeights={onHeights} padding={FIT_PADDING} />}
         <Background color="var(--border-edge)" gap={24} size={1} />
         <Controls style={{ background: "var(--bg-node)", borderColor: "var(--border-edge)" }} />
       </ReactFlow>

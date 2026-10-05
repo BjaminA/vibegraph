@@ -11,57 +11,30 @@
 // The server owns the file (.vibegraph/skills.json); this panel posts the
 // enabled list and renders the echoed, sanitised result.
 import React from "react";
-import { Compass, X } from "lucide-react";
 import type { SkillsConfigPayload } from "../shared/generic_skills_wire";
-import { belowToolbar, heightBelowToolbar } from "./TopToolbar";
+import { SheetPortal, SheetBody, type SheetSlot } from "./panels/PanelSheet";
 
 interface Props {
   state: SkillsConfigPayload | null;
   onChange: (enabled: string[], hooks?: "headlines" | "on-violation" | "off") => void;
-  onClose: () => void;
+  slot: SheetSlot | null;
 }
 
 const mono = "var(--font-mono, 'JetBrains Mono', monospace)";
 
-export function SkillsPanel({ state, onChange, onClose }: Props) {
-  React.useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
-
+export function SkillsPanel({ state, onChange, slot }: Props) {
   const enabled = new Set(state?.config.enabled ?? []);
   const toggle = (name: string) => {
     const next = new Set(enabled);
     if (next.has(name)) next.delete(name); else next.add(name);
     onChange([...next]);
   };
+  if (!slot) return null;
 
   return (
-    <div
-      data-skills-panel
-      style={{
-        // Same surface as the Stack panel. It used `--bg-panel`, a token
-        // tokens.css never defined, so the panel was fully transparent and the
-        // canvas text showed through it.
-        position: "fixed", right: 16, top: belowToolbar(16), width: 420, maxHeight: heightBelowToolbar(16),
-        boxSizing: "border-box", overflowY: "auto", zIndex: 1000,
-        background: "var(--bg-node)", border: "1px solid var(--border-edge)", borderRadius: 6,
-        boxShadow: "var(--shadow-panel)", padding: 16, color: "var(--text-primary)",
-      }}
-    >
-      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
-        <Compass size={14} strokeWidth={1.5} color="var(--text-muted)" />
-        <span style={{ fontSize: "var(--fs-12)", fontWeight: 600, color: "var(--text-primary)", flex: 1 }}>Generic direction</span>
-        <button
-          data-skills-close
-          onClick={onClose}
-          title="Close"
-          style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", padding: 2, display: "flex" }}
-        >
-          <X size={14} strokeWidth={1.5} />
-        </button>
-      </div>
+    <SheetPortal slot={slot} subtitle={state ? `${enabled.size} of ${state.catalogue.length} enabled · advice only` : undefined}>
+    <SheetBody>
+    <div data-skills-panel style={{ maxWidth: 720, color: "var(--text-primary)" }}>
       <div style={{ fontSize: 11, color: "var(--text-muted)", lineHeight: 1.5, marginBottom: 12 }}>
         Each skill is the prose half of a quality dimension — the why beside the check that catches a violation.
         An enabled skill reaches the chat, work-run workers and thread agents (in full, labelled) and Claude Code
@@ -135,5 +108,7 @@ export function SkillsPanel({ state, onChange, onClose }: Props) {
         );
       })}
     </div>
+    </SheetBody>
+    </SheetPortal>
   );
 }

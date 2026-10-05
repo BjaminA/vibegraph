@@ -1,0 +1,71 @@
+{
+  "version": "1",
+  "constraints": [
+    {
+      "id": "c1",
+      "kind": "invariant",
+      "text": "Only the admin's tool appoints an approver",
+      "scope": {
+        "all": true
+      },
+      "note": "the approver pointer decides who may decide",
+      "check": {
+        "rule": "callers-only",
+        "target": "appoint",
+        "files": [
+          "tools/assign-approver.ts"
+        ]
+      },
+      "source": "human",
+      "createdAt": "2026-10-05T10:19:23.402Z",
+      "proposals": [
+        {
+          "id": "p1",
+          "at": "2026-10-05T10:19:25.195Z",
+          "by": "agent",
+          "patch": {
+            "check": {
+              "rule": "callers-only",
+              "target": "appoint",
+              "files": [
+                "tools/assign-approver.ts",
+                "tools/remove-approver.ts"
+              ]
+            }
+          },
+          "why": "a removal tool is planned and must be able to clear the approver"
+        }
+      ]
+    },
+    {
+      "id": "c2",
+      "kind": "invariant",
+      "text": "Every decision is written to the status zone",
+      "scope": {
+        "files": [
+          "order_service/"
+        ]
+      },
+      "source": "human",
+      "createdAt": "2026-10-05T10:19:24.033Z"
+    },
+    {
+      "id": "c3",
+      "kind": "invariant",
+      "text": "The ledger client is the only code that talks to the ledger",
+      "scope": {
+        "all": true
+      },
+      "check": {
+        "rule": "callers-only",
+        "target": "writeDoc",
+        "files": [
+          "lib/store.ts",
+          "order_service/decide.ts"
+        ]
+      },
+      "source": "agent",
+      "createdAt": "2026-10-05T10:19:24.626Z"
+    }
+  ]
+}

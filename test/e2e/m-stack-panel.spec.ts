@@ -107,9 +107,9 @@ test.describe("M-STACK — the Stack panel: facts, and the policies stated about
     expect(stored[0].policy).toEqual({ tool: "sqlite3", rule: "replace-with", with: "api.db" });
 
     // ── and the panel now shows it bound under the tool it concerns ──
-    await page.click("[data-work-run-close]");
-    await page.click("[data-stack-toggle]");
-    await page.click("[data-stack-toggle]");
+    // 2026-10-05 — the form is the Rules panel's now, in the same sheet as
+    // the Stack panel: the switcher moves back without closing.
+    await page.click('[data-sheet-tab="stack"]');
     const bound = page.locator(`[data-stack-policy="sqlite3:${stored[0].id}"]`);
     await expect(bound).toBeVisible();
     await expect(bound).toContainText("replace sqlite3 with api.db");
