@@ -13,7 +13,7 @@
 //   npm run test:topology
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
-import { appendFileSync, cpSync, existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { appendFileSync, cpSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -131,4 +131,19 @@ test("module 6: a trace replayed against the declaration — the one write with 
   assert.match(bad[1].flags[0], /decision node verdict:nowhere is not declared/);
   assert.deepEqual(parseTrace("{bad\n").errors.length, 1);
   assert.equal(topologyState(FIX).traces[0].name, "run");
+});
+
+test("windows registration: one space-joined inputs string, backslashes and ./ still name the files; a run over no file says so", () => {
+  // what a Windows registration stored: the inputs as ONE string
+  const src = join(root, ".vibegraph/topology/sources.json");
+  const raw = JSON.parse(readFileSync(src, "utf-8"));
+  raw.sources.push({ id: "joined", generator: "node tools/topology.mjs", inputs: ["catalogue\\zones.mjs ./catalogue/rules.mjs,tools/topology.mjs"] });
+  writeFileSync(src, JSON.stringify(raw));
+  const s = loadSources(root).find((x) => x.id === "joined");
+  assert.deepEqual(s.inputs, ["catalogue/zones.mjs", "catalogue/rules.mjs", "tools/topology.mjs"]);
+  assert.equal(cli(["run", "joined"]).status, 0);
+  assert.equal(sourceStatus(root, s).state, "fresh", "fresh right after a run");
+  // an output generated while the inputs matched nothing is named as such
+  const r = cli(["add", "nothing", "--generator", "node tools/topology.mjs", "--inputs", "no/such/file.ts"]);
+  assert.match(r.stdout, /match no file, so it will read stale until they do/);
 });

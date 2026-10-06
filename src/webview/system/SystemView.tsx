@@ -29,7 +29,9 @@ import { styleTopologyEdges, traceIds } from "./arch_topology";
 import { useTopologyLens } from "./useTopologyLens";
 import { TopologyTraceBar } from "./TopologyTraceBar";
 import { journeysModel } from "./arch_journeys";
-import { planModel, overlayModel, ghostPlannedEdges, type PlanView } from "./arch_plan";
+import type { PlanView } from "./arch_plan";
+import { useMapModel, layoutMap } from "./useMapModel";
+import { MapFlows, lightFlow } from "./MapFlows";
 import { PlanViewToggle } from "./PlanViewToggle";
 import { usePlanState } from "../usePlanState";
 import { ArchProposingCard } from "./ArchProposingCard";
@@ -53,7 +55,6 @@ const VISIBLE_ONLY_AT = 200;
 
 /** where the map's first view starts: clear of the toolbar, lens and proposal bars. */
 const MAP_INSET = { top: 136, left: 0, pad: 24, right: 64 };
-
 // M-ARCH.2 — "map": the architecture model (clusters, boundary tools,
 // protocol edges) under a lens. The subsystem/thread toggle is untouched.
 type SystemMode = "subsystems" | "threads" | "map";
@@ -122,20 +123,20 @@ export function SystemView({
   // M-ZOOM - armed after mount for the same reason ThreadView is: this
   // view is arrived at, and an unarmed descend bounces straight back.
   const lastZoomRef = useRef<number>(1);
+  // The viewport, kept across a Real / Plan / Overlay switch (same lens).
+  const keptView = useRef<{ key: string; vp: { x: number; y: number; zoom: number } } | null>(null);
   const armedRef = useRef(false);
   useEffect(() => {
     armedRef.current = false;
     const t = setTimeout(() => { armedRef.current = true; }, 500);
     return () => clearTimeout(t);
   }, [focusEntryPointId]);
-  const [mode, setMode] = useState<SystemMode>(() => {
-    try {
-      const m = localStorage.getItem("vg-system-mode");
-      return m === "threads" || m === "map" ? m : "subsystems";
-    } catch {
-      return "subsystems";
-    }
+  // Nothing remembered (or Subsystems remembered on a project with no
+  // subsystem tier): the project's map, never an empty canvas.
+  const [modeRaw, setMode] = useState<SystemMode>(() => {
+    try { const m = localStorage.getItem("vg-system-mode"); return m === "threads" || m === "map" ? m : "subsystems"; } catch { return "subsystems"; }
   });
+  const mode: SystemMode = modeRaw === "subsystems" && !(system?.subsystems.length || plan?.subsystems.length) && architecture?.nodes.length ? "map" : modeRaw;
   const persistMode = (next: SystemMode) => {
     try {
       localStorage.setItem("vg-system-mode", next);
@@ -180,12 +181,11 @@ export function SystemView({
   const onTogglePlanFlows = React.useCallback((id: string) => {
     setPlanOpen((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   }, []);
-  const planMapModel = useMemo(() => {
-    if (mode !== "map" || focusEntryPointId || planView === "real" || !planState.plan) return null;
-    return planView === "plan" || !architecture
-      ? planModel(planState.plan, planState.reconcile, { expanded: planOpen })
-      : overlayModel(architecture, planState.plan, planState.reconcile, { expanded: planOpen });
-  }, [mode, focusEntryPointId, planView, planState, architecture, planOpen]);
+  // 2026-10-06 — Real / Plan / Overlay in the project's words, at the lens's level (useMapModel).
+  const { real: realMap, planMapModel, drawn, flows } = useMapModel({
+    on: mode === "map" && !focusEntryPointId, architecture, lens, planView, planState, planOpen, topology: topo.model?.topology ?? null, threads,
+  });
+  const [flowOn, setFlowOn] = useState<string | null>(null);
   // What is on screen. The canvas remounts when it changes, so fitView re-runs
   // for the new graph's coordinates (fitView only fits on mount, and the
   // subsystem vs thread layouts occupy different coordinate spaces). PLAN-v7
@@ -195,7 +195,7 @@ export function SystemView({
   // The size the next layout will be — above LAYOUT_DEFER_AT it is computed
   // after a paint, behind a spinner (useDeferredLayout).
   const layoutSize = topoDrawn ? topoDrawn.nodes.length + topoDrawn.edges.length
-    : planMapModel ? planMapModel.nodes.length + planMapModel.edges.length
+    : drawn ? drawn.nodes.length + drawn.edges.length
     : mode === "map" && !focusEntryPointId && architecture ? architecture.nodes.length + architecture.edges.length : 0;
   const laidOut = useDeferredLayout((): { nodes: Node[]; edges: Edge[]; hiddenTools?: string[]; hiddenClusters?: string[] } => {
     if (topoMapModel && topoDrawn) {
@@ -208,21 +208,15 @@ export function SystemView({
         nodes: lit && lit.size ? laid.nodes.map((n) => ({ ...n, data: { ...n.data, lit: lit.has(n.id), dim: !lit.has(n.id) } })) : laid.nodes,
       };
     }
-    if (planMapModel) {
-      // Every edge kept (the Payloads lens), so a boundary between two planned
-      // processes is drawn as well as a call into a planned tool.
-      const laid = buildArchLayout(planMapModel, "payloads", { keepPlannedTools: true });
-      return { ...laid, edges: ghostPlannedEdges(laid.edges, planMapModel) };
-    }
+    if (planMapModel && drawn) return layoutMap(drawn, lens, planView);
     if (mode === "map" && !focusEntryPointId) {
       // 2026-09-29 — the Journeys lens draws pages and the links between
       // them through the Flows pipeline; it needs no architecture model.
       if (lens === "journeys") return buildArchLayout(journeysModel(entryPoints, crossings), "flows");
       if (!architecture) return { nodes: [], edges: [] };
       // The Configuration lens draws its own model through the Tools pipeline.
-      return lens === "config"
-        ? buildArchLayout(configModel(architecture, insight?.env), "tools")
-        : buildArchLayout(architecture, lens === "resources" || lens === "decisions" ? "overview" : lens);
+      if (lens === "config") return buildArchLayout(configModel(architecture, insight?.env), "tools");
+      return drawn ? layoutMap(drawn, lens, "real") : buildArchLayout(architecture, lens === "resources" || lens === "decisions" ? "overview" : lens);
     }
     if (mode === "threads" || focusEntryPointId) {
       const laid = buildThreadInteractionLayout(threads, entryPoints, crossings);
@@ -241,7 +235,7 @@ export function SystemView({
     // the whole view then.
     if (system || plan) return buildSystemLayout(system ?? { subsystems: [], edges: [] }, plan, cardHeights ?? undefined);
     return { nodes: [], edges: [] };
-  }, [mode, system, plan, threads, entryPoints, crossings, focusEntryPointId, architecture, lens, cardHeights, insight, planMapModel, topoMapModel, topoDrawn, traceName, traceIndex, topo], layoutSize, flowView);
+  }, [mode, system, plan, threads, entryPoints, crossings, focusEntryPointId, architecture, lens, cardHeights, insight, planMapModel, drawn, planView, topoMapModel, topoDrawn, traceName, traceIndex, topo], layoutSize, flowView);
   const base = laidOut.value ?? EMPTY_LAYOUT;
   // A chip's request for a card on the map (useMapFocus).
   const flowRef = useMapFocus({
@@ -253,7 +247,10 @@ export function SystemView({
   // nodes receive only `data`): subsystem endpoint rows AND thread nodes both
   // open a thread via onOpenThread.
   const trace = useArchTrace(mode === "map" ? architecture : null, base);
-  const decorated = mode === "map" ? trace.decorate(base.nodes, base.edges) : base;
+  const traced = mode === "map" ? trace.decorate(base.nodes, base.edges) : base;
+  const decorated = mode === "map" && flowOn && !topoMapModel
+    ? lightFlow(traced.nodes, traced.edges, flows.find((f) => f.id === flowOn), (id) => realMap?.nodes.find((n) => n.id === id)?.storeOf)
+    : traced;
   const nodes = useMemo(
     () => decorated.nodes.map((n) => ({ ...n, data: { ...n.data, onOpenThread, stack, onTogglePlanFlows } })),
     [decorated.nodes, onOpenThread, stack, onTogglePlanFlows],
@@ -404,6 +401,7 @@ export function SystemView({
         <div data-arch-top-right style={{ position: "absolute", top: "calc(var(--vg-lens-bar-bottom, 120px) + 8px)", right: 16, zIndex: 32, display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8, pointerEvents: "none" }}>
           {planState.plan && <PlanViewToggle view={planView} onView={setPlanView} revision={planState.plan.revision} unplaced={planMapModel?.planUnplaced ?? null} onSeed={architecture && !architecture.proposal && onArchAction ? () => onArchAction("seed-plan") : undefined} />}
           {architecture && <ArchLegend model={architecture} hiddenTools={base.hiddenTools ?? []} hiddenClusters={base.hiddenClusters ?? []} lens={lens === "config" ? "tools" : lens === "journeys" ? "flows" : lens === "resources" || lens === "decisions" ? "payloads" : lens} fold={!!archSelected} />}
+          {!archSelected && !topoMapModel && lens !== "config" && lens !== "journeys" && <MapFlows flows={flows} active={flowOn} onActive={setFlowOn} />}
         </div>
       )}
       {mode === "map" && <ArchTraceBar mode={trace.mode} beats={trace.beats} labelOf={labelOf} actions={trace.actions} />}
@@ -455,6 +453,7 @@ export function SystemView({
         onMove={(_, viewport) => {
           const prev = lastZoomRef.current;
           lastZoomRef.current = viewport.zoom;
+          if (mode === "map") keptView.current = { key: `${lens}`, vp: viewport };
           if (armedRef.current && focusEntryPointId && crossedToThread(prev, viewport.zoom)) {
             armedRef.current = false; // one transition per visit
             onOpenThread?.(focusEntryPointId);
@@ -476,6 +475,7 @@ export function SystemView({
         onInit={(inst) => {
           flowRef.current = inst;
           if (mode !== "map" || !base.nodes.length) return;
+          if (keptView.current?.key === lens) { inst.setViewport(keptView.current.vp); return; }
           const r = wrapRef.current?.getBoundingClientRect();
           if (r) inst.setViewport(readableViewport(layoutBounds(base.nodes), r.width, r.height, MAP_INSET, lens === "birdseye" ? 0.35 : undefined));
         }}

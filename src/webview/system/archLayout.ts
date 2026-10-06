@@ -76,7 +76,17 @@ function chipTexts(n: ArchNodeRecord): string[] {
   if (n.wrappedBy?.length) out.push(`via ${n.wrappedBy[0]}${n.wrappedBy.length > 1 ? ` +${n.wrappedBy.length - 1}` : ""}`);
   if (n.internalHops) out.push(`internal: ${Object.entries(n.internalHops).map(([k, v]) => `${v} ${k}`).join(", ")}`);
   out.push(...planChipTexts(n));
+  out.push(...badgeTexts(n).map((b) => b.text));
   return out;
+}
+
+/** 2026-10-06 — the identities on a card (arch_real.ts): at most three, then
+ *  "+N" (the rest in its title). Kept in step with ArchNode. */
+export const BADGE_CAP = 3;
+export function badgeTexts(n: ArchNodeRecord): Array<{ id: string; text: string; title: string }> {
+  const bs = n.badges ?? [];
+  const shown = bs.slice(0, BADGE_CAP).map((b) => ({ id: b.id, text: b.label, title: b.title }));
+  return bs.length > BADGE_CAP ? [...shown, { id: "+more", text: `+${bs.length - BADGE_CAP}`, title: bs.slice(BADGE_CAP).map((b) => b.title).join("\n") }] : shown;
 }
 
 /** The plan's chips (arch_plan.ts), in ArchNode's order. */

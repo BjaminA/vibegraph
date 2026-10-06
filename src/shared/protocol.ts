@@ -719,7 +719,7 @@ export interface ArchNodeRecord {
   notes?: string[];
   /** M-ARCH.4 — the label came from `.vibegraph/architecture.json`
    *  (stated) or a pending proposal; `derivedLabel` keeps the code's. */
-  labelSource?: "stated" | "proposed";
+  labelSource?: "stated" | "proposed" | "plan";
   derivedLabel?: string;
   labelEvidence?: string[];
   /** layout only (the Overview's collapsed category box): the tool ids inside it. */
@@ -746,6 +746,24 @@ export interface ArchNodeRecord {
   planRules?: string[];
   planQuestions?: string[];
   plannedAs?: { id: string; label: string; verdict: string };
+  /** 2026-10-06 (system views) — a data zone's store and the families it
+   *  holds (server, arch_data_zones.ts): the zone's IDENTITY, so the plan's
+   *  zone matches it by family, never by label. */
+  zoneOf?: { store: string; holds: string[] };
+  /** a cluster that serves calls from outside the process: a `.listen()` or
+   *  routes (server, arch_served.ts). */
+  serves?: { how: "listen" | "routes"; files: string[] };
+  /** GUI ONLY (arch_real.ts / arch_levels.ts) — identities on the box (who it
+   *  runs as; who may write a zone); kept at every zoom level (`essential`);
+   *  the plan items it is (`planKeys`, `section:id`); a store card's id
+   *  for what it folds at Bird's-eye; a decision structure. */
+  badges?: Array<{ id: string; label: string; title: string }>;
+  essential?: boolean;
+  planKeys?: string[];
+  storeOf?: string;
+  decision?: { kind: "state machine" | "decision tree"; id: string };
+  /** a plan ghost's plan-check verdict (not drawn; Bird's-eye folds the unbuilt). */
+  planVerdict?: string;
 }
 
 /** GUI ONLY — one planned thread on the map. */

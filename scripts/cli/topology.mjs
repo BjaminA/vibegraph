@@ -20,7 +20,7 @@ export const TOPOLOGY_USAGE = `topology add <id> --generator "<cmd>" --inputs <g
                                   machines and decision trees — printed as JSON by the project's own generator
                                   (.vibegraph/topology/); zero tokens; see docs/guide/TOPOLOGY.md`;
 
-const list = (v) => (v ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+const list = (v) => (v ?? "").split(/[\s,]+/).map((s) => s.trim()).filter(Boolean);
 
 export function runTopology(args) {
   let parsed;

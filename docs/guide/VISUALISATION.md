@@ -79,6 +79,26 @@ The **lens bar** changes what is drawn, never what is true:
 |---|---|
 | ![Configuration lens: processes and the environment variables they read, grouped by prefix](../screenshots/08-config-lens.png) | ![Journeys lens: page to page by the links each renders](../screenshots/10-journeys.png) |
 
+**Zoom is a level, in every mode.** Bird's-eye is the picture a newcomer
+reads in ten seconds: processes, stores, outside callers, decision
+structures and trust boundaries, with each store's zones and SDKs folded into
+its card and everything planned but not built folded into one *N planned, not
+built* chip. Overview adds the zones in their store's box; Tools and Payloads
+draw everything. Zooming out never adds a box, and switching Real / Plan /
+Overlay keeps the lens and your zoom.
+
+**Real uses the project's own words** once plan check calls an item realised:
+a process takes the plan's name (the chip *named · plan*; the code's name is
+in the inspector) and badges who it runs as; a store is one card with its
+declared size and writers (*order ledger · 7 zones · 5 writers*) and its zones
+in its box, each badged by who may write it; a process that serves calls
+nothing in the project makes has an outside caller in front of it (the plan's
+external process when it has a boundary to it); each declared state machine
+and decision tree is a card on the process that evaluates it. **Flows** (under
+the legend) lists the plan's flows; pick one to light its path. The Overlay
+matches plan items to these boxes by identity (a zone by its families, a
+process by its path, a store by its id), so nothing is drawn twice.
+
 Click a box or an edge for the **inspector**: what it is, *why* its protocol
 reads as it does, the threads behind it, the call sites, and **Upstream**,
 **Downstream** and **Route from here…** traces. **Play start-here path**

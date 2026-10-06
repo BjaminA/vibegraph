@@ -3,7 +3,56 @@
 `vibegraph-knowledge` and the VibeGraph app. Newest first. Each entry says what
 changed and, where an existing user would notice, how behaviour differs.
 
-## 0.24.0 — unreleased
+## 0.25.0 — unreleased
+
+### The System view: the project in its own words, simpler as you zoom out
+
+From a field report on a finished project: the Real map showed the central
+store as a five-zone "file store", none of the identities, no outside caller
+and no decision structure, even though plan check called them realised; the
+Overlay drew 11 zones for 5 families and the store twice; and Bird's-eye,
+Overview and detail drew the same boxes in Plan and Overlay.
+[docs/guide/VISUALISATION.md](docs/guide/VISUALISATION.md#3-start-with-the-architecture-map).
+
+- **Real says what plan check found.** A process plan check calls realised
+  carries the plan's name ("named · plan"; the code's name is in the
+  inspector) and badges who it runs as. Each store is one card under its plan
+  or declared name with its declared size and writers ("order ledger · 7
+  zones · 5 writers"); the zones the code touches sit in its box, labelled by
+  the plan, sized by the declaration, badged by who may write them, and a
+  zone only one identity writes gets a "written only by …" box. A process that
+  serves calls (routes, a `.listen()`) has an **outside caller** in front of
+  it: the plan's external process when one has a boundary to it, else
+  "Outside callers". Each declared state machine and decision tree is a card
+  on the process that evaluates it; the declaration's and the code's reading
+  of one structure are one card. The plan's flows are a **Flows** list: pick
+  one and its path lights up.
+- **Overlay matches by identity, not label.** A zone by its families, a
+  process by its entry points or its `at` path, a store by its id or the tool
+  it is reached through. A matched plan item adds its name and "planned ✓" to
+  the real box and is never drawn again.
+- **Every mode zooms semantically.** Bird's-eye: processes, stores, outside
+  callers, decision structures and trust boundaries; zones and the store's
+  SDKs fold into the store card; everything planned but not built folds into
+  one "N planned, not built" chip; unclassified tools are left to Tools.
+  Overview adds the zones; Tools / Payloads draw everything. Going from
+  detail to Bird's-eye never adds a box, and switching Real / Plan / Overlay
+  keeps your zoom.
+- **The map shows the zones plan check sees.** A call to a planned store's
+  `access` function with a literal zone is drawn as that zone, as plan check
+  already counted it.
+- **The System view opens on the project.** If Subsystems is remembered on a
+  project with no subsystem tier, the map is drawn instead of an empty
+  canvas, and a launchpad chosen only because the architecture had not
+  arrived yet gives way to the map when it does.
+- **Topology freshness on Windows.** A source registered with its inputs as
+  one space-separated string (as a Windows shell passed them) matched no file,
+  so it read stale for ever after every run. Inputs are now split on spaces
+  and commas, `\` becomes `/` and a leading `./` is dropped, in `topology add`
+  and for sources already registered; a run whose inputs match nothing says
+  so.
+
+## 0.24.0 — 2026-10-05
 
 ### The plan's open questions: shown whole, closed on purpose, kept on the record
 

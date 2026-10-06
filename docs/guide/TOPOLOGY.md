@@ -52,6 +52,10 @@ vibegraph-knowledge topology show           # the page; --json for the merged mo
   isn't a topology is refused with the reason and nothing is stored. Output
   goes under `.vibegraph/topology/`, one file per source; several sources are
   merged, and two that declare one id differently are listed as a conflict.
+- **Inputs** are a list of files, folders (trailing `/`) and globs. A list
+  passed as one string — `"a.ts b.ts"`, or with commas — is split, Windows `\`
+  separators read as `/`, and a leading `./` is dropped, both when you register
+  and for sources already registered. A run whose inputs match no file says so.
 - **Staleness** is a content hash of the inputs, so it works with or without
   git. A source whose inputs changed is **stale**: it is still read, and said
   to be stale. **`export` re-runs** a stale source before writing

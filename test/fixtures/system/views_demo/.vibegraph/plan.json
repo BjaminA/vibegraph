@@ -1,0 +1,48 @@
+{
+  "version": "1",
+  "revision": 3,
+  "objective": "Orders are released only by the decider, on an appointed approver",
+  "processes": [
+    { "id": "partner-gateway", "kind": "backend", "label": "partner gateway", "serves": "partners read order status and file requests", "at": "gateway/", "runsAs": "gateway", "status": "agreed" },
+    { "id": "decider", "kind": "backend", "label": "order decider", "serves": "releases orders on an appointed approver", "at": "decider/", "runsAs": "decider", "status": "agreed" },
+    { "id": "clerk-app", "kind": "frontend", "label": "clerk app", "serves": "clerks file order requests", "at": "app/", "runsAs": "clerk", "status": "agreed" },
+    { "id": "appointer", "kind": "backend", "label": "admin appointer", "serves": "appoints the approver who releases orders", "at": "tools/appoint.ts", "runsAs": "admin", "status": "agreed" },
+    { "id": "partner", "kind": "external_http", "label": "partner system", "serves": "reads order status and files requests", "status": "agreed" },
+    { "id": "projector", "kind": "backend", "label": "order projector", "serves": "projects released orders for reporting", "at": "projector/", "status": "agreed" },
+    { "id": "archiver", "kind": "backend", "label": "order archiver", "serves": "archives released orders", "at": "archiver/", "status": "proposed" }
+  ],
+  "stores": [
+    { "id": "ledger", "kind": "document-store", "label": "order ledger", "serves": "orders and their phases", "reachedThrough": ["lib/"], "access": { "write": ["writeDoc"], "read": ["readDoc"] },
+      "zones": [
+        { "id": "status", "label": "order status", "holds": ["status"], "writers": ["decider"] },
+        { "id": "approver", "label": "the appointed approver", "holds": ["approver"], "writers": ["admin"] },
+        { "id": "requests", "label": "order requests, per role", "holds": ["request_{Role}"], "writers": ["clerk", "auditor", "gateway"] },
+        { "id": "records", "label": "order records, per kind", "holds": ["records_{Kind}"], "writers": ["clerk", "auditor"] }
+      ], "status": "agreed" }
+  ],
+  "principals": [
+    { "id": "decider", "kind": "service", "label": "the decider's identity", "status": "agreed" },
+    { "id": "admin", "kind": "human-role", "label": "the operation admin", "status": "agreed" },
+    { "id": "clerk", "kind": "human-role", "label": "clerks", "status": "agreed" },
+    { "id": "auditor", "kind": "human-role", "label": "auditors", "status": "agreed" },
+    { "id": "gateway", "kind": "service", "label": "the gateway's identity", "status": "agreed" }
+  ],
+  "stack": [],
+  "boundaries": [
+    { "id": "b1", "from": "partner", "to": "partner-gateway", "protocol": "HTTP", "carries": ["orderId", "status"], "status": "agreed" }
+  ],
+  "threads": [],
+  "flows": [
+    { "id": "order-request", "serves": "orders and their phases", "steps": [
+      { "process": "clerk-app", "op": "write", "zone": "ledger/requests", "family": "request_{Role}" },
+      { "process": "decider", "op": "read", "zone": "ledger/requests" },
+      { "process": "decider", "op": "write", "zone": "ledger/status", "family": "status" },
+      { "process": "partner-gateway", "op": "read", "zone": "ledger/status", "family": "status" }
+    ], "status": "agreed" }
+  ],
+  "policies": [],
+  "open": [],
+  "changelog": [
+    { "rev": 1, "at": "2026-10-06T09:00:00.000Z", "by": "human", "change": "objective set" }
+  ]
+}

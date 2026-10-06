@@ -65,6 +65,6 @@ export function lensSelection(full: ArchModelRecord, lens: ArchLens, opts: { col
   // tool stays when asked (the plan views): a plan can name a tool before it
   // names the boundary that reaches it, and hiding it would lose the plan.
   const touched = new Set(edges.flatMap((e) => [e.from, e.to]));
-  const nodes = kept.filter((n) => n.kind === "cluster" || n.kind === "hub" || touched.has(n.id) || (opts.keepPlannedTools && n.source === "planned") || !!opts.keepAll);
+  const nodes = kept.filter((n) => n.kind === "cluster" || n.kind === "hub" || n.essential || touched.has(n.id) || (opts.keepPlannedTools && n.source === "planned") || !!opts.keepAll);
   return { model, nodes, edges, hiddenTools, hiddenClusters: bird?.hiddenClusters ?? [], hierarchy };
 }

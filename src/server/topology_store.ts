@@ -76,10 +76,25 @@ export function validateSource(x: unknown): string | null {
   return null;
 }
 
+/** Inputs as one list of posix paths: a shell that passed "a.ts b.ts" as ONE
+ *  argument, a comma list, a Windows \ separator or a leading ./ all name the
+ *  same files (a registration on Windows stored one space-joined string, so
+ *  its inputs matched no file and the topology read stale for ever). */
+export function normalizeInputs(inputs: readonly string[]): string[] {
+  const out: string[] = [];
+  for (const raw of inputs) for (const part of String(raw).split(/[\s,]+/)) {
+    const p = part.replace(/\\/g, "/").replace(/^(\.\/)+/, "");
+    if (p && !out.includes(p)) out.push(p);
+  }
+  return out;
+}
+
 export function loadSources(root: string): TopologySource[] {
   try {
     const raw = JSON.parse(fs.readFileSync(path.join(root, SOURCES), "utf-8"));
-    return (Array.isArray(raw?.sources) ? raw.sources : []).filter((s: unknown) => validateSource(s) === null);
+    return (Array.isArray(raw?.sources) ? raw.sources : [])
+      .map((s: any) => (s && Array.isArray(s.inputs) ? { ...s, inputs: normalizeInputs(s.inputs) } : s))
+      .filter((s: unknown) => validateSource(s) === null);
   } catch { return []; }
 }
 
@@ -129,18 +144,23 @@ export function runSource(root: string, s: TopologySource, now: Date = new Date(
   try { parsed = JSON.parse(String(r.stdout)); } catch (e: any) { return { ok: false, detail: `the generator's output is not JSON: ${e.message}` }; }
   const bad = validateTopology(parsed);
   if (bad) return { ok: false, detail: `the generator's output is not a valid topology: ${bad}` };
-  const out: Output = { generatedAt: now.toISOString(), inputsHash: inputsHash(root, s.inputs).hash, topology: parsed as Topology };
+  const ih = inputsHash(root, s.inputs);
+  const out: Output = { generatedAt: now.toISOString(), inputsHash: ih.hash, topology: parsed as Topology };
   fs.mkdirSync(path.join(root, TOPOLOGY_DIR), { recursive: true });
   fs.writeFileSync(outPath(root, s.id), JSON.stringify(out, null, 2) + "\n");
   const t = parsed as Topology;
-  return { ok: true, detail: `${(t.zones ?? []).length} zone(s), ${(t.principals ?? []).length} principal(s), ${(t.grants ?? []).length} grant(s), ${(t.stateMachines ?? []).length + (t.decisionTrees ?? []).length} decision structure(s)` };
+  return { ok: true, detail: `${(t.zones ?? []).length} zone(s), ${(t.principals ?? []).length} principal(s), ${(t.grants ?? []).length} grant(s), ${(t.stateMachines ?? []).length + (t.decisionTrees ?? []).length} decision structure(s)${ih.files ? "" : ` — but its inputs (${s.inputs.join(", ")}) match no file, so it will read stale until they do`}` };
 }
+
+/** The hash of no files: an output stamped with it was generated while its inputs matched nothing. */
+const EMPTY_HASH = crypto.createHash("sha256").digest("hex").slice(0, 16);
 
 export function sourceStatus(root: string, s: TopologySource): TopologyStatus {
   const out = readOutput(root, s.id);
   if (!out) return { source: s, state: "never-run", detail: `not generated yet — vibegraph-knowledge topology run ${s.id}` };
   const now = inputsHash(root, s.inputs);
   if (!now.files) return { source: s, state: "stale", generatedAt: out.generatedAt, detail: `its inputs (${s.inputs.join(", ")}) match no file now` };
+  if (out.inputsHash === EMPTY_HASH) return { source: s, state: "stale", generatedAt: out.generatedAt, detail: `generated while its inputs matched no file — re-run: vibegraph-knowledge topology run ${s.id}` };
   return now.hash === out.inputsHash
     ? { source: s, state: "fresh", generatedAt: out.generatedAt, detail: `generated ${out.generatedAt.slice(0, 16)}; inputs unchanged since` }
     : { source: s, state: "stale", generatedAt: out.generatedAt, detail: `inputs changed since it was generated (${out.generatedAt.slice(0, 16)}) — re-run: vibegraph-knowledge topology run ${s.id}` };

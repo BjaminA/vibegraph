@@ -279,6 +279,18 @@
             "type": "string"
           }
         },
+        "zoneOf": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["store", "holds"],
+          "properties": { "store": { "type": "string" }, "holds": { "type": "array", "items": { "type": "string" } } }
+        },
+        "serves": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["how", "files"],
+          "properties": { "how": { "enum": ["listen", "routes"] }, "files": { "type": "array", "items": { "type": "string" } } }
+        },
         "threads": {
           "type": "array",
           "items": {

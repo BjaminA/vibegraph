@@ -23,7 +23,8 @@ const uniq = <T,>(xs: T[]) => [...new Set(xs)];
 
 export function collapseTools(model: ArchModelRecord): Collapsed {
   const wrapped = new Set(model.groups.flatMap((g) => g.wraps));
-  const tools = model.nodes.filter((n) => n.kind === "tool" && !wrapped.has(n.id));
+  // An essential card (arch_real.ts) and a plan ghost stay their own box.
+  const tools = model.nodes.filter((n) => n.kind === "tool" && !wrapped.has(n.id) && !n.essential && n.source !== "planned");
   const hidden = tools.filter((n) => n.category === "unknown").map((n) => n.id);
   const byCat = new Map<ArchCategory, ArchNodeRecord[]>();
   for (const t of tools) if (t.category !== "unknown") byCat.set(t.category, [...(byCat.get(t.category) ?? []), t]);

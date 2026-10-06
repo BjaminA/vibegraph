@@ -16,6 +16,10 @@ import { dismissBootScreen } from "../boot";
 
 /** The server's choice of first view (VG_START_VIEW, a meta tag in the page
  *  shell): "architecture" (default) or "index". */
+/** 2026-10-06 — the launchpad was chosen only because the first envelope had
+ *  no architecture yet: the first one that has it opens the map instead. */
+let indexForLackOfArch = false;
+
 function startView(): "architecture" | "index" {
   const v = document.querySelector('meta[name="vg-start-view"]')?.getAttribute("content");
   return v === "index" ? "index" : "architecture";
@@ -253,9 +257,13 @@ export function useWebSocketHandler(actions: WebSocketHandlerActions, deps: WebS
               localStorage.setItem("vg-system-mode", "map");
               localStorage.setItem("vg-arch-lens", "overview");
             } catch { /* the map still opens; only the remembered mode is lost */ }
-            setViewMode((v) => (v === "diagram" ? "system" : v));
+            setViewMode((v) => (v === "diagram" || (v === "index" && indexForLackOfArch) ? "system" : v));
+            indexForLackOfArch = false;
           } else if ((msg.payload.entryPoints ?? []).length > 0) {
-            setViewMode((v) => (v === "diagram" ? "index" : v));
+            setViewMode((v) => {
+              if (v === "diagram" && startView() === "architecture") indexForLackOfArch = true;
+              return v === "diagram" ? "index" : v;
+            });
           } else {
             setZoomLevel("project");
             setNodes(buildProjectLayout(msg.payload.files));

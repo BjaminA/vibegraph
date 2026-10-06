@@ -8,7 +8,7 @@ import { Handle, Position } from "@xyflow/react";
 import { Split, Monitor } from "lucide-react";
 import type { ArchNodeRecord, PlanFlowRecord } from "../../shared/protocol";
 import { archVisual } from "./arch_visual";
-import { planChipTexts } from "./archLayout";
+import { planChipTexts, badgeTexts } from "./archLayout";
 import { verdictTone } from "../planTone";
 
 export function ArchNode({ data, selected }: { data: { node: ArchNodeRecord; dim?: boolean; lit?: boolean; onTogglePlanFlows?: (id: string) => void }; selected?: boolean }) {
@@ -22,7 +22,7 @@ export function ArchNode({ data, selected }: { data: { node: ArchNodeRecord; dim
   const a = `var(${accent})`;
   const chips: { text: string; title: string; tone: string }[] = [];
   if (n.roleStatedBy) chips.push({ text: `role · ${n.roleStatedBy}`, title: `the role was stated by constraint ${n.roleStatedBy}, not a table`, tone: "var(--accent-config)" });
-  if (n.labelSource) chips.push({ text: `named · ${n.labelSource}`, title: `display name ${n.labelSource}; the code calls it ${n.derivedLabel}`, tone: n.labelSource === "stated" ? "var(--accent-config)" : "var(--proposed-border)" });
+  if (n.labelSource) chips.push({ text: `named · ${n.labelSource}`, title: `display name ${n.labelSource}; the code calls it ${n.derivedLabel}`, tone: n.labelSource === "proposed" ? "var(--proposed-border)" : "var(--accent-config)" });
   if (n.source !== "derived") chips.push({ text: n.source, title: `${n.source} — not derived from the code`, tone: "var(--proposed-border)" });
   if (n.dispatches?.length) {
     const total = n.dispatches.reduce((k, g) => k + g.scripts.length, 0);
@@ -41,6 +41,7 @@ export function ArchNode({ data, selected }: { data: { node: ArchNodeRecord; dim
   if (n.planRules?.length) planChips.push({ kind: "rules", text: planTexts[k++], tone: "var(--accent-config)", title: n.planRules.join("\n") });
   if (n.planQuestions?.length) planChips.push({ kind: "open", text: planTexts[k++], tone: "var(--accent-warning)", title: n.planQuestions.join("\n") });
 
+  const badges = badgeTexts(n);
   return (
     <div
       data-arch-node
@@ -89,7 +90,7 @@ export function ArchNode({ data, selected }: { data: { node: ArchNodeRecord; dim
           }} title={n.sublabel}>{n.sublabel}</div>
         </div>
       </div>
-      {(chips.length > 0 || internal || planChips.length > 0) && (
+      {(chips.length > 0 || internal || planChips.length > 0 || badges.length > 0) && (
         <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginTop: 8 }}>
           {chips.map((c) => (
             <span key={c.text} data-arch-chip={c.text} title={c.title} style={{
@@ -120,6 +121,12 @@ export function ArchNode({ data, selected }: { data: { node: ArchNodeRecord; dim
                 cursor: c.onClick ? "pointer" : "default", whiteSpace: "nowrap",
               }}
             >{c.text}</span>
+          ))}
+          {badges.map((b) => (
+            <span key={b.id} data-arch-badge={b.id} title={b.title} style={{
+              fontFamily: "var(--font-mono)", fontSize: "var(--fs-11)", color: "var(--accent-config)",
+              background: "color-mix(in oklab, var(--accent-config) 12%, transparent)", borderRadius: 8, padding: "0 4px", whiteSpace: "nowrap",
+            }}>{b.text}</span>
           ))}
         </div>
       )}

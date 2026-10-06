@@ -1,0 +1,6 @@
+{
+  "name": "views-decider",
+  "private": true,
+  "type": "module",
+  "bin": { "decider": "bin/decider.ts" }
+}

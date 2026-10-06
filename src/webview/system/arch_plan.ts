@@ -75,6 +75,19 @@ export function realisedTargets(plan: Plan, rec: PlanReconcile | null, real: Arc
     }
     if (best) out.set(`processes:${p.id}`, best.id);
   }
+  // 2026-10-06 — identity by PATH: a realised process with an `at` the entry
+  // points did not place goes to the cluster whose entry files sit under it.
+  for (const p of live(plan.processes)) {
+    if (out.has(`processes:${p.id}`) || !p.at || finding(rec, "processes", p.id)?.verdict !== "realised") continue;
+    const at = p.at.replace(/\/$/, "");
+    let best: { id: string; n: number } | null = null;
+    for (const n of real.nodes) {
+      if (n.kind !== "cluster") continue;
+      const k = (n.entryPoints ?? []).filter((e) => { const f = e.replace(/:[^:]*$/, ""); return f === at || f.startsWith(`${at}/`); }).length;
+      if (k && (!best || k > best.n)) best = { id: n.id, n: k };
+    }
+    if (best) out.set(`processes:${p.id}`, best.id);
+  }
   for (const t of live(plan.stack)) {
     if (finding(rec, "stack", t.tool)?.verdict !== "realised") continue;
     const node = real.nodes.find((n) => n.kind === "tool" && (n.tool ?? "").toLowerCase() === t.tool.toLowerCase());
@@ -105,6 +118,11 @@ function trustZones(real: ArchModelRecord | null): Map<string, string> {
 export function planRecords(plan: Plan, rec: PlanReconcile | null, real: ArchModelRecord | null, opts: PlanDrawOpts = {}):
   { nodes: ArchNodeRecord[]; edges: ArchEdgeRecord[]; groups: ArchGroupRecord[]; decorate: Map<string, Partial<ArchNodeRecord>>; decorateEdges: Map<string, Partial<ArchEdgeRecord>>; unplaced: PlanUnplaced } {
   const targets = realisedTargets(plan, rec, real);
+  // 2026-10-06 — what the real model already IS, by identity (arch_real.ts
+  // stamps `planKeys`): never drawn a second time.
+  const claimed = new Map<string, string>();
+  for (const n of real?.nodes ?? []) for (const k of n.planKeys ?? []) if (!claimed.has(k)) claimed.set(k, n.id);
+  for (const [k, id] of claimed) if (k.startsWith("processes:") || k.startsWith("stack:")) targets.set(k, id);
   const status = (s: string) => (s === "agreed" ? "agreed" : "proposed");
   const nodes: ArchNodeRecord[] = [];
   const groups: ArchGroupRecord[] = [];
@@ -124,7 +142,7 @@ export function planRecords(plan: Plan, rec: PlanReconcile | null, real: ArchMod
     where.set(p.id, id);
     if (real && f?.verdict === "realised") deco(id).plannedAs = { id: p.id, label: p.label, verdict: "realised" };
     nodes.push({
-      id, kind: "cluster", label: p.label, source: "planned",
+      id, kind: "cluster", label: p.label, source: "planned", planVerdict: f?.verdict ?? "unverified",
       sublabel: `planned ${p.kind} · ${status(p.status)}${f ? ` · ${f.verdict}` : ""}${p.at ? ` · ${p.at}` : ""}${p.runsAs ? ` · runs as ${p.runsAs}` : ""}${p.uses?.length ? ` · uses ${p.uses.join(", ")}` : ""}`,
       category: PROCESS_CATEGORY[p.kind] ?? "unknown", threads: [], refs: [],
       notes: [p.serves ? `serves: ${p.serves}` : "serves: (not said)", ...(f ? [`${f.verdict}: ${f.detail}`] : [])],
@@ -144,7 +162,7 @@ export function planRecords(plan: Plan, rec: PlanReconcile | null, real: ArchMod
     // boundary): one card, chipped "planned ✓", rather than drawn nowhere.
     if (real && f?.verdict === "realised") deco(id).plannedAs = { id: t.tool, label: t.tool, verdict: "realised" };
     nodes.push({
-      id, kind: "tool", label: t.tool, tool: t.tool, role: t.role, source: "planned",
+      id, kind: "tool", label: t.tool, tool: t.tool, role: t.role, source: "planned", planVerdict: f?.verdict ?? "unverified",
       sublabel: `planned ${t.role} · ${status(t.status)}${f ? ` · ${f.verdict}` : ""}`,
       category: ROLE_CATEGORY[t.role] ?? "unknown", threads: [], refs: [],
       notes: [...(t.why ? [`why: ${t.why}`] : []), ...(f ? [`${f.verdict}: ${f.detail}`] : [])],
@@ -156,7 +174,8 @@ export function planRecords(plan: Plan, rec: PlanReconcile | null, real: ArchMod
   for (const st of live(plan.stores ?? [])) {
     const f = finding(rec, "stores", st.id);
     const names = new Set(st.reachedThrough.map((n) => n.toLowerCase()));
-    const realBox = real && f?.verdict === "realised" ? real.nodes.find((n) => n.kind === "tool" && names.has((n.tool ?? "").toLowerCase())) : undefined;
+    const realBox = (claimed.has(`stores:${st.id}`) ? real!.nodes.find((n) => n.id === claimed.get(`stores:${st.id}`)) : undefined)
+      ?? (real && f?.verdict === "realised" ? real.nodes.find((n) => n.kind === "tool" && names.has((n.tool ?? "").toLowerCase())) : undefined);
     let box: string;
     if (realBox) {
       box = realBox.id;
@@ -165,7 +184,7 @@ export function planRecords(plan: Plan, rec: PlanReconcile | null, real: ArchMod
       box = `${PLAN_ID}store:${st.id}`;
       if (real && f?.verdict === "realised") deco(box).plannedAs = { id: st.id, label: st.label ?? st.id, verdict: "realised" };
       nodes.push({
-        id: box, kind: "tool", label: st.label ?? st.id, source: "planned",
+        id: box, kind: "tool", label: st.label ?? st.id, source: "planned", planVerdict: f?.verdict ?? "unverified",
         sublabel: `planned ${st.kind} store · ${status(st.status)}${f ? ` · ${f.verdict}` : ""}`,
         category: STORE_CATEGORY[st.kind] ?? "storage", threads: [], refs: [],
         notes: [`reached through ${st.reachedThrough.join(", ")}`, ...(st.serves ? [`serves: ${st.serves}`] : []), ...(f ? [`${f.verdict}: ${f.detail}`] : [])],
@@ -178,13 +197,21 @@ export function planRecords(plan: Plan, rec: PlanReconcile | null, real: ArchMod
     const zoneIds: string[] = [];
     for (const z of st.zones) {
       const zf = finding(rec, "stores", `${st.id}/${z.id}`);
+      // A zone the real model already draws (matched by its families): that
+      // box carries the plan's word; no second card.
+      const realZone = claimed.get(`stores:${st.id}/${z.id}`);
+      if (realZone) {
+        where.set(`${st.id}/${z.id}`, realZone);
+        deco(realZone).plannedAs = { id: `${st.id}/${z.id}`, label: z.label ?? z.id, verdict: zf?.verdict ?? "realised" };
+        continue;
+      }
       // Who may write it (the plan) and, when the code breaks that, who does.
       const wf = finding(rec, "stores", `${st.id}/${z.id}:writers`);
       const zid = `${PLAN_ID}zone:${st.id}/${z.id}`;
       zoneIds.push(zid);
       where.set(`${st.id}/${z.id}`, zid);
       nodes.push({
-        id: zid, kind: "tool", label: z.label ?? z.id, source: "planned",
+        id: zid, kind: "tool", label: z.label ?? z.id, source: "planned", planVerdict: zf?.verdict ?? "unverified", storeOf: box,
         sublabel: `zone · ${z.holds.join(", ")}${zf ? ` · ${zf.verdict}` : ""}${z.writers?.length ? ` · writers ${z.writers.join(", ")}` : ""}${wf?.verdict === "violated" ? " · WRITER VIOLATED" : ""}`,
         category: STORE_CATEGORY[st.kind] ?? "storage", threads: [], refs: [],
         notes: [
@@ -196,6 +223,14 @@ export function planRecords(plan: Plan, rec: PlanReconcile | null, real: ArchMod
           ...(wf ? [`writers ${wf.verdict}: ${wf.detail}`] : []),
         ],
       });
+    }
+    // A real store's box already holds its zones: a planned zone the code
+    // does not have yet joins that box; a ghost store gets its own.
+    if (!box.startsWith(PLAN_ID)) {
+      const g = real?.groups.find((x) => x.kind === "store" && x.wraps.includes(box));
+      if (g && zoneIds.length) groups.push({ ...g, id: `${PLAN_ID}storegroup:${st.id}`, wraps: zoneIds, parent: g.id, source: "planned", label: "planned zones" });
+      else if (zoneIds.length) groups.push({ id: `${PLAN_ID}storegroup:${st.id}`, kind: "store", label: `${st.label ?? st.id}: planned zones`, wraps: zoneIds, source: "planned" });
+      continue;
     }
     groups.push({ id: `${PLAN_ID}storegroup:${st.id}`, kind: "store", label: `${st.label ?? st.id} (${st.kind})`, wraps: [box, ...zoneIds], source: "planned" });
   }

@@ -11,6 +11,7 @@ import type { Plan } from "../shared/plan_types.ts";
 import { deriveDataArchitecture } from "./data_arch.ts";
 import { covers } from "./data_topology.ts";
 import { familyMatches } from "./call_args.ts";
+import { storeAccessSites, siteZone } from "./store_access.ts";
 
 const MAX_REFS = 8;
 
@@ -24,7 +25,19 @@ interface ZoneInputs {
 
 export function deriveDataZones(input: ZoneInputs): { nodes: ArchNodeRecord[]; edges: ArchEdgeRecord[]; notes: string[] } {
   const da = deriveDataArchitecture(input.files as any, input.stack as any, input.threads as any);
-  if (!da.operations.length) return { nodes: [], edges: [], notes: [] };
+  // 2026-10-06 — and the calls to a planned store's own access functions
+  // with a literal zone (store_access.ts — what plan check reads), so a zone
+  // plan check calls realised is on the map too, not only in the check.
+  const seen = new Set(da.operations.map((o) => `${o.file}:${o.line}`));
+  const entriesOf = (file: string) => input.threads.filter((t) => t.entryPointId && (t.filesReached ?? []).includes(file)).map((t) => String(t.entryPointId).split(":")[0]);
+  const accessOps = (input.plan?.stores ?? []).filter((s) => s.status !== "dropped").flatMap((st) =>
+    storeAccessSites(st, input.files).flatMap((site) => {
+      const zone = siteZone(st, site);
+      if (!zone || seen.has(`${site.file}:${site.line}`)) return [];
+      const holds = st.zones?.find((z) => z.id === zone)?.holds ?? [zone];
+      return [{ op: site.op, family: site.family ?? holds[0], file: site.file, line: site.line, entries: entriesOf(site.file), zoneKey: `${st.id}/${zone}`, zoneLabel: zone, store: st.id, holds }];
+    }));
+  if (!da.operations.length && !accessOps.length) return { nodes: [], edges: [], notes: [] };
   const planZones = (input.plan?.stores ?? []).filter((s) => s.status !== "dropped")
     .flatMap((s) => (s.zones ?? []).map((z) => ({ store: s.id, zone: z.id, holds: z.holds })));
   const derivedStore = da.topology.stores?.[0]?.id ?? "store";
@@ -44,8 +57,9 @@ export function deriveDataZones(input: ZoneInputs): { nodes: ArchNodeRecord[]; e
   }
   const zones = new Map<string, { label: string; store: string; holds: string[]; planned: boolean; refs: ArchRef[]; ops: Map<string, { refs: ArchRef[]; families: Set<string> }> }>();
   let unplaced = 0;
-  for (const o of da.operations) {
-    const g = groupOf(o.family);
+  type Op = { op: string; family: string; file: string; line: number; port?: string; entries: string[]; zoneKey?: string; zoneLabel?: string; store?: string; holds?: string[] };
+  for (const o of [...da.operations, ...accessOps] as Op[]) {
+    const g = o.zoneKey ? { key: o.zoneKey, label: o.zoneLabel!, store: o.store!, holds: o.holds!, planned: true } : groupOf(o.family);
     const ref: ArchRef = { file: o.file, text: `${o.op} ${o.family} at line ${o.line}${o.port ? ` through ${o.port}` : ""}` };
     const z = zones.get(g.key) ?? { label: g.label, store: g.store, holds: g.holds, planned: g.planned, refs: [], ops: new Map() };
     z.refs.push(ref);
@@ -67,7 +81,7 @@ export function deriveDataZones(input: ZoneInputs): { nodes: ArchNodeRecord[]; e
     const id = `zone:${key}`;
     nodes.push({
       id, kind: "tool", label: z.label, sublabel: `zone of ${z.store} · ${z.holds.slice(0, 3).join(", ")}${z.holds.length > 3 ? ", …" : ""}`,
-      category: "storage", source: "derived", tool: key, role: "db", origin: "project",
+      category: "storage", source: "derived", tool: key, role: "db", origin: "project", zoneOf: { store: z.store, holds: z.holds },
       threads: [], refs: z.refs.slice(0, MAX_REFS),
       notes: [
         `A zone of the store ${z.store}${z.planned ? " (grouped as the plan's store groups it)" : ""}: the families ${z.holds.join(", ")}.`,

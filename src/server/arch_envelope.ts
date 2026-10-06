@@ -19,6 +19,7 @@ import { readObservations } from "./observations.ts";
 import { observationsForNode } from "../shared/observations.ts";
 import { deriveDataZones } from "./arch_data_zones.ts";
 import { loadPlan } from "./plan_store.ts";
+import { stampServed } from "./arch_served.ts";
 
 const MANIFESTS = ["package.json", "pyproject.toml", "setup.py", "Cargo.toml", "go.mod", "requirements.txt"];
 
@@ -72,7 +73,7 @@ function derivedArchModel(
     memo.set(ep, c);
     return c;
   });
-  const model = buildArchModel({
+  const built = buildArchModel({
     entryPoints: env.entryPoints,
     threads: env.threads,
     stack: stack as never,
@@ -93,6 +94,8 @@ function derivedArchModel(
       return (file: string, nodeId: string) => observationsForNode(store as never, file, nodeId);
     })(),
   });
+  // 2026-10-06 — which processes answer calls from outside (arch_served.ts).
+  const model = stampServed(built, env.entryPoints, env.files as never);
   // Shared file stores (a directory several processes use through an
   // environment variable) — derived from the IR and the .env examples.
   if (!root) return stampHierarchy(model);
