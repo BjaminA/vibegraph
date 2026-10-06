@@ -99,6 +99,18 @@ the legend) lists the plan's flows; pick one to light its path. The Overlay
 matches plan items to these boxes by identity (a zone by its families, a
 process by its path, a store by its id), so nothing is drawn twice.
 
+**In → Process → Out.** Click a box and the inspector says what reaches it,
+what it does, and who takes what it produces. *In* and *Out* follow the data
+(a read brings data back to the caller), each row with the keys the code
+spells at the call (never values), the rules on that edge, and, through a
+store, who put the data there or who reads it next; click a row to light that
+path. *Process* is said in a fixed vocabulary — serves, renders, calls, runs,
+routes, reads, writes, watches, stores, queues, decides, validates,
+transforms — and only with evidence (click a word for it). A project adds its
+own words in `.vibegraph/operations.json` (they draw dashed; an existing word
+cannot be redefined). At Tools and Payloads every card carries its words, and
+edges show what moves along them as chips: the operation, then the keys.
+
 Click a box or an edge for the **inspector**: what it is, *why* its protocol
 reads as it does, the threads behind it, the call sites, and **Upstream**,
 **Downstream** and **Route from here…** traces. **Play start-here path**

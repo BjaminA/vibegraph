@@ -77,6 +77,8 @@ function chipTexts(n: ArchNodeRecord): string[] {
   if (n.internalHops) out.push(`internal: ${Object.entries(n.internalHops).map(([k, v]) => `${v} ${k}`).join(", ")}`);
   out.push(...planChipTexts(n));
   out.push(...badgeTexts(n).map((b) => b.text));
+  // a process word is a pill with an icon: ~3 characters wider than its text
+  out.push(...(n.ioWords ?? []).map((w) => `   ${w.label}`));
   return out;
 }
 

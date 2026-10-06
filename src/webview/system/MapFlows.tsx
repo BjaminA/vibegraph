@@ -50,7 +50,7 @@ export function MapFlows({ flows, active, onActive }: { flows: RealFlow[]; activ
 
 /** Light a flow's boxes (a folded zone lights the card it folded into) and
  *  the edges between two lit boxes; dim the rest. */
-export function lightFlow(nodes: Node[], edges: Edge[], flow: RealFlow | undefined, foldedInto: (id: string) => string | undefined): { nodes: Node[]; edges: Edge[] } {
+export function lightFlow(nodes: Node[], edges: Edge[], flow: Pick<RealFlow, "nodes"> | undefined, foldedInto: (id: string) => string | undefined): { nodes: Node[]; edges: Edge[] } {
   if (!flow) return { nodes, edges };
   const present = new Set(nodes.map((n) => n.id));
   const lit = new Set(flow.nodes.map((id) => (present.has(id) ? id : foldedInto(id))).filter((x): x is string => !!x && present.has(x)));
@@ -58,6 +58,6 @@ export function lightFlow(nodes: Node[], edges: Edge[], flow: RealFlow | undefin
     nodes: nodes.map((n) => (n.type === "archNode" ? { ...n, data: { ...n.data, lit: lit.has(n.id), dim: !lit.has(n.id) } } : n)),
     edges: edges.map((e) => (lit.has(e.source) && lit.has(e.target)
       ? { ...e, style: { ...e.style, opacity: 1, strokeWidth: 2.5 } }
-      : { ...e, style: { ...e.style, opacity: 0.15 } })),
+      : { ...e, data: { ...e.data, dim: true }, style: { ...e.style, opacity: 0.15 } })),
   };
 }

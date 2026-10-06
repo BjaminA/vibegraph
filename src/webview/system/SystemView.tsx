@@ -32,6 +32,7 @@ import { journeysModel } from "./arch_journeys";
 import type { PlanView } from "./arch_plan";
 import { useMapModel, layoutMap } from "./useMapModel";
 import { MapFlows, lightFlow } from "./MapFlows";
+import type { LitPath } from "./NodeIOCard";
 import { PlanViewToggle } from "./PlanViewToggle";
 import { usePlanState } from "../usePlanState";
 import { ArchProposingCard } from "./ArchProposingCard";
@@ -182,10 +183,10 @@ export function SystemView({
     setPlanOpen((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   }, []);
   // 2026-10-06 — Real / Plan / Overlay in the project's words, at the lens's level (useMapModel).
-  const { real: realMap, planMapModel, drawn, flows } = useMapModel({
+  const { real: realMap, planMapModel, drawn, flows, vocab } = useMapModel({
     on: mode === "map" && !focusEntryPointId, architecture, lens, planView, planState, planOpen, topology: topo.model?.topology ?? null, threads,
   });
-  const [flowOn, setFlowOn] = useState<string | null>(null);
+  const [flowOn, setFlowOn] = useState<string | LitPath | null>(null); // a flow's id, or an In / Out row's path
   // What is on screen. The canvas remounts when it changes, so fitView re-runs
   // for the new graph's coordinates (fitView only fits on mount, and the
   // subsystem vs thread layouts occupy different coordinate spaces). PLAN-v7
@@ -208,7 +209,7 @@ export function SystemView({
         nodes: lit && lit.size ? laid.nodes.map((n) => ({ ...n, data: { ...n.data, lit: lit.has(n.id), dim: !lit.has(n.id) } })) : laid.nodes,
       };
     }
-    if (planMapModel && drawn) return layoutMap(drawn, lens, planView);
+    if (planMapModel && drawn) return layoutMap(drawn, lens, planView, vocab);
     if (mode === "map" && !focusEntryPointId) {
       // 2026-09-29 — the Journeys lens draws pages and the links between
       // them through the Flows pipeline; it needs no architecture model.
@@ -216,7 +217,7 @@ export function SystemView({
       if (!architecture) return { nodes: [], edges: [] };
       // The Configuration lens draws its own model through the Tools pipeline.
       if (lens === "config") return buildArchLayout(configModel(architecture, insight?.env), "tools");
-      return drawn ? layoutMap(drawn, lens, "real") : buildArchLayout(architecture, lens === "resources" || lens === "decisions" ? "overview" : lens);
+      return drawn ? layoutMap(drawn, lens, "real", vocab) : buildArchLayout(architecture, lens === "resources" || lens === "decisions" ? "overview" : lens);
     }
     if (mode === "threads" || focusEntryPointId) {
       const laid = buildThreadInteractionLayout(threads, entryPoints, crossings);
@@ -235,7 +236,7 @@ export function SystemView({
     // the whole view then.
     if (system || plan) return buildSystemLayout(system ?? { subsystems: [], edges: [] }, plan, cardHeights ?? undefined);
     return { nodes: [], edges: [] };
-  }, [mode, system, plan, threads, entryPoints, crossings, focusEntryPointId, architecture, lens, cardHeights, insight, planMapModel, drawn, planView, topoMapModel, topoDrawn, traceName, traceIndex, topo], layoutSize, flowView);
+  }, [mode, system, plan, threads, entryPoints, crossings, focusEntryPointId, architecture, lens, cardHeights, insight, planMapModel, drawn, planView, vocab, topoMapModel, topoDrawn, traceName, traceIndex, topo], layoutSize, flowView);
   const base = laidOut.value ?? EMPTY_LAYOUT;
   // A chip's request for a card on the map (useMapFocus).
   const flowRef = useMapFocus({
@@ -249,7 +250,7 @@ export function SystemView({
   const trace = useArchTrace(mode === "map" ? architecture : null, base);
   const traced = mode === "map" ? trace.decorate(base.nodes, base.edges) : base;
   const decorated = mode === "map" && flowOn && !topoMapModel
-    ? lightFlow(traced.nodes, traced.edges, flows.find((f) => f.id === flowOn), (id) => realMap?.nodes.find((n) => n.id === id)?.storeOf)
+    ? lightFlow(traced.nodes, traced.edges, typeof flowOn === "string" ? flows.find((f) => f.id === flowOn) : flowOn, (id) => realMap?.nodes.find((n) => n.id === id)?.storeOf)
     : traced;
   const nodes = useMemo(
     () => decorated.nodes.map((n) => ({ ...n, data: { ...n.data, onOpenThread, stack, onTogglePlanFlows } })),
@@ -401,7 +402,7 @@ export function SystemView({
         <div data-arch-top-right style={{ position: "absolute", top: "calc(var(--vg-lens-bar-bottom, 120px) + 8px)", right: 16, zIndex: 32, display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8, pointerEvents: "none" }}>
           {planState.plan && <PlanViewToggle view={planView} onView={setPlanView} revision={planState.plan.revision} unplaced={planMapModel?.planUnplaced ?? null} onSeed={architecture && !architecture.proposal && onArchAction ? () => onArchAction("seed-plan") : undefined} />}
           {architecture && <ArchLegend model={architecture} hiddenTools={base.hiddenTools ?? []} hiddenClusters={base.hiddenClusters ?? []} lens={lens === "config" ? "tools" : lens === "journeys" ? "flows" : lens === "resources" || lens === "decisions" ? "payloads" : lens} fold={!!archSelected} />}
-          {!archSelected && !topoMapModel && lens !== "config" && lens !== "journeys" && <MapFlows flows={flows} active={flowOn} onActive={setFlowOn} />}
+          {!archSelected && !topoMapModel && lens !== "config" && lens !== "journeys" && <MapFlows flows={flows} active={typeof flowOn === "string" ? flowOn : null} onActive={setFlowOn} />}
         </div>
       )}
       {mode === "map" && <ArchTraceBar mode={trace.mode} beats={trace.beats} labelOf={labelOf} actions={trace.actions} />}
@@ -410,7 +411,7 @@ export function SystemView({
       )}
       {mode === "map" && archPropose?.working && <ArchProposingCard working={archPropose.working} model={architecture} />}
       {mode === "map" && architecture && (
-        <ArchInspector selected={archSelected} model={architecture} onClose={() => setArchSelected(null)} onOpenThread={onOpenThread}
+        <ArchInspector selected={archSelected} model={architecture} ioModel={planMapModel ?? realMap ?? undefined} vocab={vocab} onLight={setFlowOn} onClose={() => { setArchSelected(null); setFlowOn(null); }} onOpenThread={onOpenThread}
           onReach={(id, dir) => trace.actions.reach(id, dir)} onRouteFrom={(id) => { trace.actions.routeFrom(id); setArchSelected(null); }} />
       )}
 

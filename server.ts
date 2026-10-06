@@ -27,6 +27,7 @@ import { startHookedRun, stopHookedRun, decideHookedRun, currentHookedRun, type 
 import { hostAllowed, originAllowed, jsonContentType, staticPath, ensurePrivateIgnore, type GuardConfig } from "./src/server/local_guard";
 import { computeDataflow, findingsByThread, formatDataflowMd, type DataflowReport } from "./src/server/dataflow";
 import { archModelForEnvelope } from "./src/server/arch_envelope";
+import { withProjectWords } from "./src/server/operation_vocab";
 import { applyArchStore, loadArchStore, saveArchStore, ratifyProposal, rejectProposal, proposalGate } from "./src/server/arch_store";
 import { archBaseline, archDrift } from "./src/server/arch_drift";
 import { testReach, affectedTests } from "./src/shared/test_reach";
@@ -1207,7 +1208,7 @@ function buildProjectEnvelope(): {
     // M-XLANG.1 - the cross-language crossings, when any were found.
     ...(latestCrossings.all.length || latestCrossings.navigation?.length ? { crossings: latestCrossings } : {}),
     // M-ARCH.1 - the derived architecture, when it has anything to draw.
-    ...(archFresh() && latestArch && latestArch.nodes.length ? { architecture: latestArch } : {}),
+    ...(archFresh() && latestArch && latestArch.nodes.length ? { architecture: withProjectWords(latestArch, isDirectory ? inputPath : null) } : {}),
     // 2026-09-28 - reachability, env surface, freshness (src/server/insight.ts).
     ...(latestInsight ? { insight: latestInsight } : {}),
     // PLAN-M-RUNTIME phase 3 - the TRACE OVERLAY, when a run has produced

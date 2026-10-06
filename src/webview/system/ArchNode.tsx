@@ -9,6 +9,7 @@ import { Split, Monitor } from "lucide-react";
 import type { ArchNodeRecord, PlanFlowRecord } from "../../shared/protocol";
 import { archVisual } from "./arch_visual";
 import { planChipTexts, badgeTexts } from "./archLayout";
+import { opIcon } from "./opIcons";
 import { verdictTone } from "../planTone";
 
 export function ArchNode({ data, selected }: { data: { node: ArchNodeRecord; dim?: boolean; lit?: boolean; onTogglePlanFlows?: (id: string) => void }; selected?: boolean }) {
@@ -90,7 +91,7 @@ export function ArchNode({ data, selected }: { data: { node: ArchNodeRecord; dim
           }} title={n.sublabel}>{n.sublabel}</div>
         </div>
       </div>
-      {(chips.length > 0 || internal || planChips.length > 0 || badges.length > 0) && (
+      {(chips.length > 0 || internal || planChips.length > 0 || badges.length > 0 || (n.ioWords?.length ?? 0) > 0) && (
         <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginTop: 8 }}>
           {chips.map((c) => (
             <span key={c.text} data-arch-chip={c.text} title={c.title} style={{
@@ -122,6 +123,14 @@ export function ArchNode({ data, selected }: { data: { node: ArchNodeRecord; dim
               }}
             >{c.text}</span>
           ))}
+          {(n.ioWords ?? []).map((w) => {
+            const I = opIcon(w.icon);
+            return (
+              <span key={`w:${w.id}`} data-arch-io-word={w.id} className="vg-op" style={{ ["--a" as string]: `var(${w.accent})` } as React.CSSProperties}>
+                <I size={16} strokeWidth={1.5} aria-hidden />{w.label}
+              </span>
+            );
+          })}
           {badges.map((b) => (
             <span key={b.id} data-arch-badge={b.id} title={b.title} style={{
               fontFamily: "var(--font-mono)", fontSize: "var(--fs-11)", color: "var(--accent-config)",

@@ -141,3 +141,15 @@ button.vg-verdict[aria-pressed="true"] { border-color: hsl(var(--h) var(--s) var
   .vg-item li { grid-template-columns: minmax(0, 1fr); gap: 0; }
   .vg-diff { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* ── op: a processing word (src/shared/operations.json) ─────────────────── */
+/* What a box DOES, not a reference: a rounded pill in the word's accent, its
+   icon first. Set --a to the word's accent token. */
+.vg-op {
+  --a: var(--accent-thread);
+  display: inline-flex; align-items: center; gap: 4px; padding: 0 8px 0 4px; border-radius: 999px;
+  font: 600 var(--fs-11)/1.8 var(--font-ui); white-space: nowrap; color: var(--a);
+  background: color-mix(in oklab, var(--a) 14%, transparent);
+  border: 1px solid color-mix(in oklab, var(--a) 45%, transparent);
+}
+.vg-op[data-project=true] { border-style: dashed; }

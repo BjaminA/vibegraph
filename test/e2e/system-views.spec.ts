@@ -103,4 +103,32 @@ test.describe("system views", () => {
     }
     await expect(page.locator('[data-arch-id="decision:dt:release"]')).toHaveAttribute("data-arch-dim", "true");
   });
+
+  test("in → process → out: the inspector's three bands, a row lights its path, payload chips on edges, words on cards at Detail", async ({ page }) => {
+    await openMap(page);
+    await at(page, "real", "overview");
+    await expect(page.locator("[data-arch-io-word]")).toHaveCount(0); // words on cards only at Detail
+    await page.locator("[data-arch-node]", { hasText: "order decider" }).first().click({ force: true });
+    const card = page.locator("[data-node-io]");
+    for (const b of ["in", "process", "out"]) await expect(card.locator(`[data-io-band="${b}"]`)).toBeVisible();
+    const approver = card.locator('[data-io-row="in"]', { hasText: "the appointed approver" });
+    await expect(approver).toContainText("read");
+    await expect(approver.locator("[data-io-path]")).toContainText("admin appointer");
+    const status = card.locator('[data-io-row="out"]', { hasText: "order status" });
+    await expect(status.locator('[data-chip="json"]')).toHaveText("phase");
+    await expect(status.locator("[data-io-path]")).toContainText("partner gateway");
+    for (const w of ["read", "write", "decide"]) await expect(card.locator(`[data-io-word="${w}"]`)).toBeVisible();
+    await card.locator('[data-io-word="decide"]').click();
+    await expect(card.locator('[data-io-evidence="decide"]')).toContainText("order-phase");
+    // a row lights its path: the decider, the zone and the next reader stay lit
+    await status.click();
+    await expect(page.locator('[data-arch-id="decision:dt:release"]')).toHaveAttribute("data-arch-dim", "true");
+    await expect(page.locator("[data-arch-node]", { hasText: "partner gateway" }).first()).not.toHaveAttribute("data-arch-dim", "true");
+    await page.locator("[data-arch-inspector-close]").click();
+    await expect(page.locator('[data-arch-dim="true"]')).toHaveCount(0);
+    await at(page, "real", "payloads");
+    expect(await page.locator("[data-arch-edge-chips]").count()).toBeGreaterThan(0);
+    await expect(page.locator('[data-edge-chip="op"]').first()).toBeVisible();
+    expect(await page.locator("[data-arch-io-word]").count()).toBeGreaterThan(5);
+  });
 });

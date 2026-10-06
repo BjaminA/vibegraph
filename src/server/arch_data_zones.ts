@@ -6,12 +6,13 @@
 // when a plan says how families group, else one box per derived zone. A zone
 // no operation reaches is not drawn: the map shows what the code does.
 
-import type { ArchEdgeRecord, ArchNodeRecord, ArchRef } from "../shared/protocol.ts";
+import type { ArchEdgeRecord, ArchNodeRecord, ArchPayloadRecord, ArchRef } from "../shared/protocol.ts";
 import type { Plan } from "../shared/plan_types.ts";
 import { deriveDataArchitecture } from "./data_arch.ts";
 import { covers } from "./data_topology.ts";
 import { familyMatches } from "./call_args.ts";
 import { storeAccessSites, siteZone } from "./store_access.ts";
+import { callerPayload } from "./arch_payloads.ts";
 
 const MAX_REFS = 8;
 
@@ -35,7 +36,7 @@ export function deriveDataZones(input: ZoneInputs): { nodes: ArchNodeRecord[]; e
       const zone = siteZone(st, site);
       if (!zone || seen.has(`${site.file}:${site.line}`)) return [];
       const holds = st.zones?.find((z) => z.id === zone)?.holds ?? [zone];
-      return [{ op: site.op, family: site.family ?? holds[0], file: site.file, line: site.line, entries: entriesOf(site.file), zoneKey: `${st.id}/${zone}`, zoneLabel: zone, store: st.id, holds }];
+      return [{ op: site.op, family: site.family ?? holds[0], file: site.file, line: site.line, entries: entriesOf(site.file), zoneKey: `${st.id}/${zone}`, zoneLabel: zone, store: st.id, holds, nodeId: site.nodeId }];
     }));
   if (!da.operations.length && !accessOps.length) return { nodes: [], edges: [], notes: [] };
   const planZones = (input.plan?.stores ?? []).filter((s) => s.status !== "dropped")
@@ -55,9 +56,11 @@ export function deriveDataZones(input: ZoneInputs): { nodes: ArchNodeRecord[]; e
       clustersOf.set(f, [...new Set([...(clustersOf.get(f) ?? []), c.id])]);
     }
   }
-  const zones = new Map<string, { label: string; store: string; holds: string[]; planned: boolean; refs: ArchRef[]; ops: Map<string, { refs: ArchRef[]; families: Set<string> }> }>();
+  const zones = new Map<string, { label: string; store: string; holds: string[]; planned: boolean; refs: ArchRef[]; ops: Map<string, { refs: ArchRef[]; families: Set<string>; payloads: ArchPayloadRecord[] }> }>();
   let unplaced = 0;
-  type Op = { op: string; family: string; file: string; line: number; port?: string; entries: string[]; zoneKey?: string; zoneLabel?: string; store?: string; holds?: string[] };
+  type Op = { op: string; family: string; file: string; line: number; port?: string; entries: string[]; zoneKey?: string; zoneLabel?: string; store?: string; holds?: string[]; nodeId?: string };
+  // 2026-10-06 — the call's own text and keys ride the edge (node_io.ts's In / Out)
+  const callAt = (o: Op) => (input.files[o.file]?.nodes ?? []).find((n: any) => n.type === "call" && (o.nodeId ? n.id === o.nodeId : n.line === o.line));
   for (const o of [...da.operations, ...accessOps] as Op[]) {
     const g = o.zoneKey ? { key: o.zoneKey, label: o.zoneLabel!, store: o.store!, holds: o.holds!, planned: true } : groupOf(o.family);
     const ref: ArchRef = { file: o.file, text: `${o.op} ${o.family} at line ${o.line}${o.port ? ` through ${o.port}` : ""}` };
@@ -67,8 +70,10 @@ export function deriveDataZones(input: ZoneInputs): { nodes: ArchNodeRecord[]; e
     if (!cids.length) unplaced++;
     for (const cid of cids) {
       const k = `${cid}|${o.op}`;
-      const e = z.ops.get(k) ?? { refs: [], families: new Set<string>() };
+      const e = z.ops.get(k) ?? { refs: [], families: new Set<string>(), payloads: [] };
       e.refs.push(ref);
+      const pay = e.payloads.length < 4 ? callerPayload(callAt(o) ?? null, { file: o.file, text: `line ${o.line}` } as ArchRef) : null;
+      if (pay && !e.payloads.some((x) => x.text === pay.text)) e.payloads.push(pay);
       e.families.add(o.family);
       z.ops.set(k, e);
     }
@@ -94,6 +99,7 @@ export function deriveDataZones(input: ZoneInputs): { nodes: ArchNodeRecord[]; e
         id: `${cid}->${id}:uses:${op}`, from: cid, to: id, kind: "uses", protocol: op,
         protocolBasis: `the code ${op === "write" ? "writes" : op === "read" ? "reads" : "watches"} ${[...e.families].join(", ")} (${e.refs[0].file}: ${e.refs[0].text})`,
         count: e.refs.length, threads: [], confidence: "called", refs: e.refs.slice(0, MAX_REFS), source: "derived",
+        ...(e.payloads.length ? { payloads: e.payloads } : {}),
       });
     }
   }

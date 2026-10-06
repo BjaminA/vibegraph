@@ -764,6 +764,9 @@ export interface ArchNodeRecord {
   decision?: { kind: "state machine" | "decision tree"; id: string };
   /** a plan ghost's plan-check verdict (not drawn; Bird's-eye folds the unbuilt). */
   planVerdict?: string;
+  /** GUI ONLY (useMapModel, the Detail level) — the box's process words
+   *  (src/shared/node_io.ts), drawn as chips on the card. */
+  ioWords?: Array<{ id: string; label: string; accent: string; icon: string }>;
 }
 
 /** GUI ONLY — one planned thread on the map. */
@@ -857,6 +860,10 @@ export interface ArchModelRecord {
     unattributedBoundaries: number;
   };
   notes: string[];
+  /** 2026-10-06 — TRANSPORT ONLY (server.ts puts it on the envelope's copy,
+   *  never on an export): the project's own operation words
+   *  (.vibegraph/operations.json), merged after VibeGraph's. */
+  vocabulary?: import("./node_io.ts").OpWord[];
   /** M-ARCH.4 — the entry points a reader should walk first. */
   primaryPath?: { entryPoints: string[]; source: "stated" | "proposed"; evidence?: string[] };
   /** M-ARCH.4 — a pending model proposal (its items are in groups/labels

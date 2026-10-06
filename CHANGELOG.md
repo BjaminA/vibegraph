@@ -3,6 +3,51 @@
 `vibegraph-knowledge` and the VibeGraph app. Newest first. Each entry says what
 changed and, where an existing user would notice, how behaviour differs.
 
+## 0.26.0 — unreleased
+
+### In → process → out for every box (part 1 of 3: the facts and the words)
+
+From a field note: a box's card said what it IS (a role, its funnel, call
+sites) and never what data reaches it, what it does with it, or who takes
+what it produces.
+
+- **One vocabulary** (`src/shared/operations.json`): 13 processing words —
+  serves, renders, calls, runs, routes, reads, writes, watches, stores,
+  queues, decides, validates, transforms — each with a definition, an icon,
+  a colour token and the IR evidence that implies it. A project may ADD words
+  in `.vibegraph/operations.json` (a redefinition is refused with its reason).
+- **`src/shared/node_io.ts`**, zero tokens: a box's In and Out rows follow the
+  DATA (a read brings data back to the caller), each with the keys the call
+  spells, the stated and planned rules on that edge, and through a store the
+  path on — who takes what it wrote, who wrote what it reads. Its process is
+  the vocabulary's words whose evidence is on it, each citing that evidence.
+  What the IR cannot see is said ("no reader of this is seen in the code").
+- Zone edges now carry the payload of the access call (`writeDoc("status",
+  id, { phase })` → keys `phase`).
+- `architecture.md` gains **What each box does (in → process → out)**.
+
+### In → process → out on screen (part 2 of 3)
+
+- **The inspector is an In → Process → Out card.** Click a box: **In** lists
+  who sends it data (a store's reads included, since a read brings data
+  back), each with its operation, the keys as JSON chips, the rules on that
+  edge as rule chips, and through a store who put it there; **Process** is
+  the box's words as pills in their colour — click one for its definition
+  and the evidence; **Out** lists who takes what it produces, with the keys
+  and who reads it next. Click a row and that path lights on the map; the
+  rest dims. Chips are the software-spec chips.
+- **Payload chips on the edges.** An edge that carries an operation or keys
+  the code spells shows them as chips — the operation first, then the keys,
+  then a short protocol — in exactly the room the router left for its label;
+  what does not fit is "+N" (all of it on hover and in the inspector). A
+  planned boundary keeps its "· N keys · 1 rule" label.
+- **Words on the cards at Detail** (Tools, Payloads): each card carries its
+  process words; the card's height counts them, so routes go around them.
+- A project's own words (`.vibegraph/operations.json`) reach the screen
+  (carried on the envelope, never written to an export) and draw dashed.
+
+Next: "Scope this node" with Claude where the IR is silent (part 3).
+
 ## 0.25.0 — unreleased
 
 ### The System view: the project in its own words, simpler as you zoom out

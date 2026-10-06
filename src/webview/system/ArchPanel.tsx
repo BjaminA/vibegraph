@@ -12,6 +12,8 @@ import { ARCH_CATEGORIES, ARCH_CATEGORY_LABEL } from "../../shared/arch_protocol
 import { archVisual } from "./arch_visual";
 import { ARCH_LENSES, edgeLabel, type ArchLens } from "./archLayout";
 import { ArchDispatchList } from "./ArchDispatchList";
+import { NodeIOCard, type LitPath } from "./NodeIOCard";
+import type { Vocabulary } from "../../shared/node_io";
 
 const LENS_LABEL: Record<ArchLens | "config" | "journeys" | "resources" | "decisions", string> = { birdseye: "Bird's-eye", overview: "Overview", tools: "Tools", flows: "Flows", payloads: "Payloads", trust: "Trust", config: "Configuration", journeys: "Journeys", resources: "Resources", decisions: "Decisions" };
 const GUI_LENS_TITLE: Record<"config" | "journeys" | "resources" | "decisions", string> = {
@@ -274,9 +276,13 @@ function GroupInspector({ group, model, onClose }: { group: ArchGroupRecord; mod
   );
 }
 
-export function ArchInspector({ selected, model, onClose, onOpenThread, onReach, onRouteFrom }: {
+export function ArchInspector({ selected, model, ioModel, vocab, onLight, onClose, onOpenThread, onReach, onRouteFrom }: {
   selected: Selected;
   model: ArchModelRecord;
+  /** 2026-10-06 — the model the box is drawn from (Real / Plan / Overlay), for In → Process → Out */
+  ioModel?: ArchModelRecord;
+  vocab?: Vocabulary;
+  onLight?: (p: LitPath | null) => void;
   onClose: () => void;
   onOpenThread?: (entryPointId: string) => void;
   onReach?: (id: string, dir: "down" | "up") => void;
@@ -290,7 +296,7 @@ export function ArchInspector({ selected, model, onClose, onOpenThread, onReach,
   const threads = isNode ? selected.node.threads : selected.edge.threads;
   const refs = isNode ? selected.node.refs : selected.edge.refs;
   return (
-    <div data-arch-inspector style={{ ...panel, position: "absolute", top: "calc(var(--vg-lens-bar-bottom, 120px) + 64px)", right: 16, zIndex: 31, width: 360, maxHeight: "60%", overflowY: "auto", padding: 12 }}>
+    <div data-arch-inspector style={{ ...panel, position: "absolute", top: "calc(var(--vg-lens-bar-bottom, 120px) + 64px)", right: 16, zIndex: 31, width: isNode ? 420 : 360, maxHeight: "calc(100% - var(--vg-lens-bar-bottom, 120px) - 96px)", overflowY: "auto", padding: 12 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
         <div style={{ flex: 1, color: "var(--text-primary)", fontSize: "var(--fs-13)", fontWeight: 600 }}>{title}</div>
         <button data-arch-inspector-close onClick={onClose} title="Close" style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer" }}>
@@ -323,6 +329,7 @@ export function ArchInspector({ selected, model, onClose, onOpenThread, onReach,
               {onRouteFrom && <button data-arch-route-from onClick={() => onRouteFrom(selected.node.id)} style={traceBtn}>Route from here…</button>}
             </div>
           )}
+          {ioModel?.nodes.some((n) => n.id === selected.node.id) && <NodeIOCard key={selected.node.id} model={ioModel} nodeId={selected.node.id} vocab={vocab} onLight={onLight} />}
         </div>
       ) : (
         <div style={{ marginTop: 4 }}>

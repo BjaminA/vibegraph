@@ -13,6 +13,8 @@ import { enrichReal, type RealFlow } from "./arch_real";
 import { atLevel, levelOf } from "./arch_levels";
 import { planModel, overlayModel, ghostPlannedEdges, type PlanView } from "./arch_plan";
 import { buildArchLayout, ARCH_LENSES, type ArchLens } from "./archLayout";
+import { nodeIO, mergeVocabulary, CORE_VOCABULARY, type Vocabulary } from "../../shared/node_io";
+import { chipEdges } from "./edgeChips";
 
 interface ThreadLike { entryPointId: string | null; nodes: any[] }
 
@@ -34,7 +36,9 @@ export function useMapModel(opts: {
   const drawn = useMemo(() => (planMapModel ? atLevel(planMapModel, level, { plan: planView === "plan" }) : real ? atLevel(real, level) : null),
     [planMapModel, real, level, planView]);
   const flows: RealFlow[] = planView === "plan" ? [] : real?.realFlows ?? [];
-  return { real, planMapModel, drawn, level, flows };
+  // VibeGraph's words plus the project's own (carried on the envelope's model)
+  const vocab: Vocabulary = useMemo(() => (architecture?.vocabulary?.length ? mergeVocabulary({ words: architecture.vocabulary }).vocab : CORE_VOCABULARY), [architecture]);
+  return { real, planMapModel, drawn, level, flows, vocab };
 }
 
 /** The archLayout lens a map-model lens draws through. */
@@ -42,11 +46,16 @@ const asArchLens = (lens: string): ArchLens => (ARCH_LENSES.includes(lens as Arc
 
 /** Lay out the drawn model: the Plan view keeps every edge (its own picture);
  *  Real and Overlay go through the lens like the derived map always has. */
-export function layoutMap(drawn: ArchModelRecord, lens: string, planView: PlanView): { nodes: Node[]; edges: Edge[]; hiddenTools?: string[]; hiddenClusters?: string[] } {
+export function layoutMap(drawnIn: ArchModelRecord, lens: string, planView: PlanView, vocab: Vocabulary = CORE_VOCABULARY): { nodes: Node[]; edges: Edge[]; hiddenTools?: string[]; hiddenClusters?: string[] } {
+  // At Detail each card carries its process words (node_io.ts); the card's
+  // height is measured with them, so the router routes around them.
+  const drawn = levelOf(lens) === "detail"
+    ? { ...drawnIn, nodes: drawnIn.nodes.map((n) => ({ ...n, ioWords: nodeIO(drawnIn, n.id, vocab).process.map((p) => ({ id: p.word, label: p.label, accent: p.accent, icon: p.icon })) })) }
+    : drawnIn;
   if (planView === "plan") {
     const laid = buildArchLayout(drawn, "payloads", { keepPlannedTools: true });
-    return { ...laid, edges: ghostPlannedEdges(laid.edges, drawn) };
+    return { ...laid, edges: chipEdges(ghostPlannedEdges(laid.edges, drawn), drawn) };
   }
   const laid = buildArchLayout(drawn, asArchLens(lens), { keepPlannedTools: planView === "overlay" });
-  return planView === "overlay" ? { ...laid, edges: ghostPlannedEdges(laid.edges, drawn) } : laid;
+  return { ...laid, edges: chipEdges(planView === "overlay" ? ghostPlannedEdges(laid.edges, drawn) : laid.edges, drawn) };
 }

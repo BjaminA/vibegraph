@@ -34,6 +34,7 @@ import { buildCrossingIndex } from "../src/server/crossings.ts";
 import { archModelForEnvelope } from "../src/server/arch_envelope.ts";
 import { repositoryFor, systemMapFor, writeArchArtifacts } from "./arch_artifacts.mjs";
 import { renderSystemMapMd } from "../src/server/system_map_md.ts";
+import { loadVocabulary } from "../src/server/operation_vocab.ts";
 import { deriveThreadCalls } from "../src/webview/system/threadInteraction.ts";
 import { planWork } from "../src/server/plan_work.ts";
 import { getThreadSkill, injectableSkillText, threadSkillKey } from "../src/server/thread_skill_store.ts";
@@ -318,7 +319,7 @@ export function exportKnowledge({ root, out, task, envelope: envelopePath, commi
   if (withArch || archify) {
     writeArchArtifacts(architecture, { write, ...archArgs, repository: repositoryFor(absRoot), skipJson: withIr, archify });
   } else {
-    write("architecture.md", renderSystemMapMd(systemMapFor(architecture, archArgs)));
+    write("architecture.md", renderSystemMapMd(systemMapFor(architecture, archArgs), loadVocabulary(absRoot).vocab));
   }
 
   // 3. Project-level renderings: the system spec and every stated constraint.

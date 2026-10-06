@@ -1,0 +1,32 @@
+{
+  "version": "1",
+  "about": "Evidence: facts = what the IR says of the node; roles = the node's own stack role; uses = a role or tool name of something the node calls. The core processing words a node's PROCESS is said in (src/shared/node_io.ts). Each word names the IR evidence that implies it; a word with no evidence on a node is never said of it. A project may ADD words in .vibegraph/operations.json (never redefine these).",
+  "words": [
+    { "id": "serve", "label": "serves", "definition": "answers calls from outside its own process (routes, a .listen())", "icon": "Server", "accent": "--accent-thread",
+      "evidence": { "facts": ["serves"] } },
+    { "id": "render", "label": "renders", "definition": "draws pages or components for a person", "icon": "Monitor", "accent": "--accent-config",
+      "evidence": { "facts": ["family:web"] } },
+    { "id": "call", "label": "calls", "definition": "sends a request across a boundary and waits for the answer (HTTP, an API, an MCP tool, a model)", "icon": "ArrowUpRight", "accent": "--accent-io",
+      "evidence": { "facts": ["hop:http", "hop:tool", "effect:call"], "roles": ["http-client", "model-api", "agent-protocol", "remote"], "uses": ["http-client", "model-api", "agent-protocol", "remote"] } },
+    { "id": "run", "label": "runs", "definition": "starts another program and passes it arguments", "icon": "Terminal", "accent": "--accent-thread",
+      "evidence": { "facts": ["hop:command"] } },
+    { "id": "route", "label": "routes", "definition": "chooses which script or handler does the work and hands it on", "icon": "Split", "accent": "--accent-thread",
+      "evidence": { "facts": ["dispatches"] } },
+    { "id": "read", "label": "reads", "definition": "takes data out of a store, a file or a service", "icon": "ArrowDownToLine", "accent": "--accent-io",
+      "evidence": { "facts": ["effect:read", "zone:read"] } },
+    { "id": "write", "label": "writes", "definition": "puts data into a store, a file or a service", "icon": "ArrowUpFromLine", "accent": "--accent-io-write",
+      "evidence": { "facts": ["effect:write", "zone:write", "effect:admin", "effect:grant"] } },
+    { "id": "watch", "label": "watches", "definition": "is told when data changes, and reacts", "icon": "Eye", "accent": "--accent-io-muted",
+      "evidence": { "facts": ["effect:watch", "zone:watch"] } },
+    { "id": "store", "label": "stores", "definition": "keeps data for others to read later", "icon": "Database", "accent": "--accent-io-write",
+      "evidence": { "facts": ["zone", "store"], "roles": ["db", "cache"] } },
+    { "id": "publish", "label": "queues", "definition": "carries messages from producers to consumers", "icon": "ListOrdered", "accent": "--accent-io",
+      "evidence": { "roles": ["queue"] } },
+    { "id": "decide", "label": "decides", "definition": "evaluates a state machine or a decision tree and acts on its outcome", "icon": "GitFork", "accent": "--accent-warning",
+      "evidence": { "facts": ["decision", "enforces"] } },
+    { "id": "validate", "label": "validates", "definition": "checks data against a schema before it is used", "icon": "ShieldCheck", "accent": "--accent-config",
+      "evidence": { "uses": ["zod", "ajv", "joi", "yup", "valibot", "pydantic", "jsonschema", "marshmallow", "cerberus"] } },
+    { "id": "transform", "label": "transforms", "definition": "reshapes or computes over data in memory", "icon": "Shuffle", "accent": "--text-secondary",
+      "evidence": { "roles": ["data", "tensor"], "uses": ["data", "tensor"] } }
+  ]
+}
