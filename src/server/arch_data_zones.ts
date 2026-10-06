@@ -6,6 +6,7 @@
 // when a plan says how families group, else one box per derived zone. A zone
 // no operation reaches is not drawn: the map shows what the code does.
 
+import type { RegisteredAccess } from "./registered_access.ts";
 import type { ArchEdgeRecord, ArchNodeRecord, ArchPayloadRecord, ArchRef } from "../shared/protocol.ts";
 import type { Plan } from "../shared/plan_types.ts";
 import { deriveDataArchitecture } from "./data_arch.ts";
@@ -13,6 +14,7 @@ import { covers } from "./data_topology.ts";
 import { familyMatches } from "./call_args.ts";
 import { storeAccessSites, siteZone } from "./store_access.ts";
 import { callerPayload } from "./arch_payloads.ts";
+import { AttemptFinder } from "./attempts.ts";
 
 const MAX_REFS = 8;
 
@@ -20,12 +22,16 @@ interface ZoneInputs {
   files: Record<string, { nodes?: any[] }>;
   threads: Array<{ entryPointId?: string | null } & Record<string, any>>;
   stack: unknown;
-  model: { nodes: ArchNodeRecord[] };
+  model: { nodes: ArchNodeRecord[]; edges?: ArchEdgeRecord[] };
   plan?: Plan | null;
+  /** files declared negative (operations.json): their writes are attempts */
+  negative?: string[];
+  /** operations the project registered (operations.json `paths` / `access`) */
+  registered?: RegisteredAccess;
 }
 
 export function deriveDataZones(input: ZoneInputs): { nodes: ArchNodeRecord[]; edges: ArchEdgeRecord[]; notes: string[] } {
-  const da = deriveDataArchitecture(input.files as any, input.stack as any, input.threads as any);
+  const da = deriveDataArchitecture(input.files as any, input.stack as any, input.threads as any, input.registered);
   // 2026-10-06 — and the calls to a planned store's own access functions
   // with a literal zone (store_access.ts — what plan check reads), so a zone
   // plan check calls realised is on the map too, not only in the check.
@@ -58,12 +64,19 @@ export function deriveDataZones(input: ZoneInputs): { nodes: ArchNodeRecord[]; e
   }
   const zones = new Map<string, { label: string; store: string; holds: string[]; planned: boolean; refs: ArchRef[]; ops: Map<string, { refs: ArchRef[]; families: Set<string>; payloads: ArchPayloadRecord[] }> }>();
   let unplaced = 0;
-  type Op = { op: string; family: string; file: string; line: number; port?: string; entries: string[]; zoneKey?: string; zoneLabel?: string; store?: string; holds?: string[]; nodeId?: string };
+  type Op = { op: string; family: string; file: string; line: number; port?: string; entries: string[]; zoneKey?: string; zoneLabel?: string; store?: string; holds?: string[]; nodeId?: string; attemptVia?: string; stated?: string };
   // 2026-10-06 — the call's own text and keys ride the edge (node_io.ts's In / Out)
-  const callAt = (o: Op) => (input.files[o.file]?.nodes ?? []).find((n: any) => n.type === "call" && (o.nodeId ? n.id === o.nodeId : n.line === o.line));
-  for (const o of [...da.operations, ...accessOps] as Op[]) {
+  // M7: never a neighbour on the same line (a `results.push({ check, … })`
+  // wrapping the call): the op's own node, by id and line, or no keys at all
+  const callAt = (o: Op) => (o.nodeId ? (input.files[o.file]?.nodes ?? []).find((n: any) => n.id === o.nodeId && n.line === o.line) ?? null : null);
+  // M5: a write a negative test makes (`attempt(writeAs(…))`, a declared
+  // negative file) is an ATTEMPT — drawn apart, never counted as a write.
+  const attempts = new AttemptFinder(input.files as never, input.negative ?? []);
+  for (const raw of [...da.operations, ...accessOps] as Op[]) {
+    const at = raw.op === "write" ? attempts.of(raw.file, raw.nodeId) : null;
+    const o: Op = at ? { ...raw, op: "attempt", attemptVia: `${at.expect === "refused" ? "a negative test expects it REFUSED" : "a negative test's attempt"} — ${at.via}` } : raw;
     const g = o.zoneKey ? { key: o.zoneKey, label: o.zoneLabel!, store: o.store!, holds: o.holds!, planned: true } : groupOf(o.family);
-    const ref: ArchRef = { file: o.file, text: `${o.op} ${o.family} at line ${o.line}${o.port ? ` through ${o.port}` : ""}` };
+    const ref: ArchRef = { file: o.file, text: `${o.op} ${o.family} at line ${o.line}${o.port ? ` through ${o.port}` : ""}${o.attemptVia ? ` (${o.attemptVia})` : ""}${o.stated ? ` (STATED in .vibegraph/operations.json, not derived: ${o.stated})` : ""}` };
     const z = zones.get(g.key) ?? { label: g.label, store: g.store, holds: g.holds, planned: g.planned, refs: [], ops: new Map() };
     z.refs.push(ref);
     const cids = [...new Set(o.entries.flatMap((e) => clustersOf.get(e) ?? []))];
@@ -79,6 +92,21 @@ export function deriveDataZones(input: ZoneInputs): { nodes: ArchNodeRecord[]; e
     }
     zones.set(g.key, z);
   }
+  // 2026-10-06 (M3) — a process that holds no client for the store cannot
+  // touch it: code it shares with the real writer (a gatekeeper given an
+  // injected store) runs there against an in-memory or test double. When the
+  // map draws the store's client tool(s), an op from a process with no edge to
+  // any of them is left out, and counted.
+  const toolIds = new Set(input.model.nodes.filter((n) => n.kind === "tool").map((n) => n.id));
+  const clientsOf = (store: string): string[] => {
+    const ps = (input.plan?.stores ?? []).find((s) => s.id === store);
+    return [...new Set([...(ps?.reachedThrough ?? []), store].map((t) => `tool:${t}`))].filter((t) => toolIds.has(t));
+  };
+  const hasClient = (cid: string, store: string) => {
+    const cs = clientsOf(store);
+    return !cs.length || (input.model.edges ?? []).some((e) => e.from === cid && cs.includes(e.to));
+  };
+  let noClient = 0;
   const nodes: ArchNodeRecord[] = [];
   const edges: ArchEdgeRecord[] = [];
   for (const [key, z] of [...zones].sort((a, b) => a[0].localeCompare(b[0]))) {
@@ -95,14 +123,17 @@ export function deriveDataZones(input: ZoneInputs): { nodes: ArchNodeRecord[]; e
     } as ArchNodeRecord);
     for (const [k, e] of [...z.ops].sort((a, b) => a[0].localeCompare(b[0]))) {
       const [cid, op] = k.split("|");
+      if (!hasClient(cid, z.store)) { noClient++; continue; }
       edges.push({
         id: `${cid}->${id}:uses:${op}`, from: cid, to: id, kind: "uses", protocol: op,
-        protocolBasis: `the code ${op === "write" ? "writes" : op === "read" ? "reads" : "watches"} ${[...e.families].join(", ")} (${e.refs[0].file}: ${e.refs[0].text})`,
+        protocolBasis: op === "attempt"
+          ? `a refused ATTEMPT, not a write: ${[...e.families].join(", ")} (${e.refs[0].file}: ${e.refs[0].text}) — never counted among the zone's writers`
+          : `the code ${op === "write" ? "writes" : op === "read" ? "reads" : "watches"} ${[...e.families].join(", ")} (${e.refs[0].file}: ${e.refs[0].text})`,
         count: e.refs.length, threads: [], confidence: "called", refs: e.refs.slice(0, MAX_REFS), source: "derived",
         ...(e.payloads.length ? { payloads: e.payloads } : {}),
       });
     }
   }
-  const notes = nodes.length ? [`${nodes.length} store zone(s) drawn from the code's data operations${unplaced ? `; ${unplaced} operation(s) on no drawn process are not drawn` : ""}.`] : [];
+  const notes = nodes.length ? [`${nodes.length} store zone(s) drawn from the code's data operations${unplaced ? `; ${unplaced} operation(s) on no drawn process are not drawn` : ""}${noClient ? `; ${noClient} process × zone operation(s) left out: the process holds no client for the store (shared code run against an in-memory or test double)` : ""}.`] : [];
   return { nodes, edges, notes };
 }

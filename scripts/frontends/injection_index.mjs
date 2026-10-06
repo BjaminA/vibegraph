@@ -89,8 +89,12 @@ export function injectionIndex(files, resolveImport) {
         while (fn && fn.type !== "function_def") fn = byId.get(fn.parentId);
         const iface = fn?.returns ? ifaceOf(file, fn.returns) : null;
         if (iface) fromObject(iface, n.objectProps);
-      } else if (n.type === "assignment" && n.objectProps && n.annotation) {
-        const iface = ifaceOf(file, n.annotation);
+      } else if (n.type === "assignment" && n.objectProps) {
+        // 2026-10-06 — `let ops: Ops | undefined;` then `ops = { … }`: the
+        // object takes the type its name was DECLARED with in the same scope
+        const scope = (x) => { let p = byId.get(x.parentId); while (p && p.type !== "function_def") p = byId.get(p.parentId); return p?.id ?? null; };
+        const annotation = n.annotation ?? nodes.find((d) => d !== n && d.type === "assignment" && d.name === n.name && d.annotation && scope(d) === scope(n))?.annotation;
+        const iface = annotation ? ifaceOf(file, annotation) : null;
         if (iface) fromObject(iface, n.objectProps);
       } else if (n.type === "class_def") {
         for (const b of n.bases ?? []) {

@@ -3,7 +3,193 @@
 `vibegraph-knowledge` and the VibeGraph app. Newest first. Each entry says what
 changed and, where an existing user would notice, how behaviour differs.
 
-## 0.26.0 — unreleased
+## 0.27.0 — 2026-10-06
+
+From a field review of 0.25/0.26 on a finished project (the direction
+review): the map drew wrong facts, and the plan did not follow the project.
+Worked as the review's modules, cheapest and most misleading first.
+
+### Refused attempts are not writes; keys only from the payload (M5, M7)
+
+- **Attempts** (`src/server/attempts.ts`). A live check or probe that tries
+  writes the platform must refuse was drawn as those processes writing. A
+  write is now an ATTEMPT when it sits — directly, or through its enclosing
+  function at every call site — inside an attempt wrapper: a call named like
+  one (`attempt`, `expectRefused`, `assert.rejects`, `….rejects`) or a project
+  function shaped like one (its `try` calls one of its parameters and its
+  `catch` returns), with the text around it expecting a refusal; or when its
+  file is declared negative (`"negative": [globs]` in
+  `.vibegraph/operations.json`). A site expected ALLOWED (a control) stays a
+  write. An attempt is drawn red and dashed, is its own operation in
+  In → Process → Out, and never makes a box "write".
+- **Keys from the call that crosses, only.** A zone edge's keys come from
+  the store call's own node (by id and line), never from a call on the same
+  line (`results.push({ check, expect, got })`); a constructor's options
+  (`new Client({ readOnly })`) are not a payload; a hop's keys come from its
+  own call even when sibling calls share a structural id (crossings now
+  record their `line`).
+- **Two false data operations gone:** a call that wraps another operation on
+  the same zone is the container, not the operation; a string / array
+  built-in on a parameter (`b.replace(…)`) is never a write.
+
+### Runtime processes, not packages; runs-as from evidence (M3, M4)
+
+- **A process is a box** (`arch_model.ts`). An entry point whose file
+  listens, or that another project file starts with a local spawn / fork /
+  exec, is its own box (`cluster:process:<root>:<file>`, `runtime: {how,
+  by}`) instead of a member of its package's cluster; the one-shot scripts
+  and CLIs of the package stay together. A file with routes is already its
+  framework's API box. A shell script running another script is a step of a
+  one-shot job, not a process start; a platform's remote command
+  (`stream.exec`) is not a local start; an ambiguous hop (one literal,
+  several parsed files) is evidence for none. Bird's-eye never folds a
+  process into its package.
+- **Who it runs as, from the code** (`arch_identity.ts`, `identity` on the
+  box): an identity-shaped env var it — or a module it imports — reads
+  (`…_PERSON`, `…_USER`, `…_ROLE`, `…_ACCOUNT`, credentials, and a
+  `…CONFIG_PATH` when it holds a platform / database / cloud client); one its
+  starter passes in the spawn's `env`; an identity its starter creates for
+  the run (`createRunIdentity`, `createAccount`, …). Strongest first. No
+  evidence, no badge.
+- **The plan names, never asserts.** A plan process with `entryPoints` is
+  ANCHORED to the box running them; one placed only by `at` is LOCATED, not
+  anchored (said on the box) and gets no runs-as badge from the plan. An
+  anchored process shows the plan's principal only when the code shows an
+  identity source — and an identity created per run wins over the plan's
+  name, with the disagreement in its notes.
+- **A writer must hold a client for the store.** Logic shared with the real
+  writer, run by a process with no edge to the store's client tool (an
+  offline tool given an in-memory store), is not drawn writing the store;
+  the count is in the notes.
+- **Decision structures sit where they run:** placed by the threads that run
+  their evaluating functions, or that run steps in their file, a running
+  process outranking a library or CLI that shares the logic.
+
+### One decision inbox, terminal and GUI alike (M11)
+
+The review's finding: decisions were made in the terminal and person-only
+steps (refused under Claude Code, rightly) piled up where nobody looked.
+
+- **`vibegraph-knowledge inbox`** (`src/server/inbox.ts`) lists every step
+  waiting for a person — plan proposals, a proposed objective, changes to
+  rules, rules an agent stated, an architecture groups proposal, scopes,
+  skill and software-spec drafts, and open questions at the cap — each with a
+  stable id and its evidence; exit 1 while any waits. `inbox agree|reject
+  <id>…` (or `--kind <kind>`) decides through each store's own operation; a
+  person's step, refused under Claude Code.
+- **The Stop hook ends each Claude turn with one line** when something waits
+  ("5 decisions await the person (…): `vibegraph-knowledge inbox` in a
+  terminal outside Claude Code, or the Inbox in the viewer. Do not decide
+  them yourself"), and the session-start orientation says the same (it
+  replaces the plan-only "Review backlog" line).
+- **The Inbox panel** — a toolbar button with the count (shown while
+  something waits), the same list grouped by kind, Agree / Reject.
+- Found on the way: the panels-below-toolbar e2e had been red since the
+  0.22.0 PanelSheet (it searched for a right-edge box and closed through the
+  scrim); it now measures the sheet — a modal stacks above the toolbar, a
+  docked sheet starts below it.
+
+### Decisions in the plan; the plan follows the project (M1, M9, M10)
+
+The review's finding: the important decisions were made in the terminal and
+recorded everywhere except the plan — in a question's own text ("Likely not
+needed: …", "ANSWERED: …"), a handover note, commit subjects, the code — so
+the map kept drawing a store the project had decided against.
+
+- **A decisions ledger** (`plan.decisions`, `src/server/plan_decisions.ts`).
+  A decision says what was decided, where it came from (`open:q11`,
+  `commit:<sha>`, `doc:<file>:<line>`, `sensor:<key>`) and the plan edits it
+  implies (`effects`, the ordinary ops). An agent's decision waits PROPOSED;
+  a person agrees it once and its effects apply together — and a decision
+  from a question closes that question with it. New ops: `decide`,
+  `supersede`, `agree-decision`, `reject-decision`.
+- **Supersede** is first-class: the item is `dropped` with `supersededBy`
+  and `supersededWhy`, leaves every map and the "planned, not built" chip,
+  and stays on the record (`plan show` → "Superseded"; the hooked session's
+  plan says "Superseded — do not build"). An agent's supersede becomes a
+  proposed decision.
+- **Drift sensors** (`src/server/plan_sensors.ts`; zero tokens; they WRITE
+  NOTHING): an item resting on a question that says it is not needed → a
+  supersede; an open question that begins ANSWERED → a decision that closes
+  it; a running process no planned process covers → add it; a process that
+  creates its own identity per run with no principal for it → add one; a
+  planned process placed only by `at` while the code runs one of that name
+  elsewhere → anchor it; an item still unbuilt 30 revisions on while half
+  the processes are built → supersede, or keep; a commit subject or a line
+  of `HANDOVER.md` / `DECISIONS.md` / `docs/decisions.md` that records a
+  decision → record it (one that says "q10 answered" is folded into q10's
+  finding as more evidence). Each finding is an inbox item with its
+  evidence and effects; agreeing records the decision and applies them,
+  rejecting records the "no", so it does not come back. Groups that drifted
+  from the code and stale scopes are listed as things to look at.
+- `inbox` now parses the project to run the sensors that read the map
+  (`--quick` skips that); the Stop hook's count includes the ledger and the
+  sensors that need no map.
+- Measured on the reviewed project (a /tmp copy): q11 → supersede the query
+  projector and its store; q8, q9, q10, q13 answered, each with its commit;
+  a process's per-run identity → a principal; the three runtime boxes no
+  ratified group holds → "groups have drifted".
+
+### Store names built at run time; live next to declared (M6, M8)
+
+- **Names followed further** (zero tokens). A hole filled by a loop variable
+  over a literal table (`for (const [key, part] of PARTS) … entityPath(id,
+  part)`) is every value of the table — one data operation per family; a
+  plain function around a parameter (`/labels/${docIdFor(p)}`) is still that
+  parameter's hole; `this.#m()` links to the class's own private method (a JS
+  private method cannot be overridden); an object assigned after a typed
+  declaration (`let ops: Ops | undefined; … ops = { save: … }`) implements
+  the port. On the reviewed project (a /tmp copy) the gateway now reads
+  status, provenance, labels and every entity part and writes requests, and
+  ingest writes the parts and their labels — from the code alone.
+- **Stated where nothing can follow** (`src/server/registered_access.ts`).
+  `.vibegraph/operations.json` takes `paths` (a helper → its family) and
+  `access` (the operation at a file:line, with a one-line why). Each such
+  operation says STATED on its edge with the reason; without the file nothing
+  is guessed; an unknown family is reported, not drawn. The reviewed
+  project's flow studio — watching a list its deployment model builds at run
+  time — is drawn this way.
+- **Live next to declared** (`src/shared/live_inventory.ts`,
+  `src/server/topology_live.ts`). `topology live` also takes an INVENTORY —
+  any JSON listing named resources (a platform's own listing tool) — or
+  `--from <file>`; zones match by name only. The CLI, `topology show` and the
+  store card read "N declared · M provisioned · K live identities", with the
+  never-provisioned zones and the undeclared live resources listed.
+- **A catalogue word is not a writer**: `owner-of-entry`, `any-writer` and
+  the like are dropped from a store's writer count.
+
+### A direction from nothing; groups re-formed from facts (M2, M12)
+
+- **`plan observe`** (`src/server/plan_observe.ts`, zero tokens): the
+  direction the code already takes — each process (a running one by its
+  entry file, the rest by package; names shared by several get their package
+  prefix), who it runs as (one principal per identity the code shows), the
+  stores and zones it touches — as plan items an agent would propose, each
+  `groundedIn` the fact. With no plan it starts one (a person's step: refused
+  under Claude Code) whose objective says it is not stated, and asks for it.
+  On the reviewed project (a /tmp copy, plan removed) it finds the decider
+  (its own identity per run), the gateway (its partner identity), the flow
+  studio, the app server and the admin tools.
+- **`plan draft --direction`** (spends tokens, opt-in): the project's own
+  prose — README, CLAUDE.md, HANDOVER.md, docs/**.md, recent commit
+  subjects — goes to the draft, which may now answer `objective` (a
+  "Proposed objective" question a person adopts; the citation is not carried
+  into the objective) and `name` (a label for an observed process) beside its
+  items; every line passes the same quote gate, an unquoted one is INFERRED.
+- **`architecture --regroup`** (`src/server/arch_regroup.ts`, zero tokens):
+  groups re-formed by the identity the code runs each process as (and its
+  port — `runtime.port`, read off the process's own `listen` call), then by
+  package. A label says only what every member shares and is REBUILT from the
+  members on every derive (`labelFrom: "facts"`,
+  `src/shared/arch_fact_label.ts`). Pending in replace mode: ratifying
+  replaces the groups it was formed against. The inbox offers it when the
+  groups drifted.
+- **Bird's-eye** folds a generic transport library (`@grpc/grpc-js`,
+  `fetch` — role http-client, not essential): it says how a process talks,
+  not to whom. Overview and Tools still draw it. The reviewed project's Real
+  Bird's-eye: 16 boxes → 14.
+
+## 0.26.0 — 2026-10-06
 
 ### In → process → out for every box (part 1 of 3: the facts and the words)
 

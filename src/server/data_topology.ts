@@ -21,6 +21,7 @@
 //
 // Field names are taxonomy tables; nothing keys on the project's words.
 
+import type { RegisteredAccess } from "./registered_access.ts";
 import type { DataHop, Injection, SdkCall } from "../shared/data_arch_types.ts";
 import type { TopoFamily, TopoGrant, TopoRouter, TopoStore, TopoZone } from "../shared/topology_types.ts";
 import type { TableDecl, TableRow } from "../shared/data_arch_types.ts";
@@ -41,7 +42,7 @@ const norm = shapeOf;
 export { covers };
 
 export interface Family { id: string; pattern: string; zone: string; writers: string[]; readers: string[]; cite: string }
-export interface DataOp { file: string; line: number; op: "write" | "read" | "watch"; family: string; via?: string[]; port?: string; entries: string[]; fnId?: string }
+export interface DataOp { file: string; line: number; op: "write" | "read" | "watch"; family: string; via?: string[]; port?: string; entries: string[]; fnId?: string; nodeId?: string; /** stated in .vibegraph/operations.json, with its reason — not derived */ stated?: string }
 
 export function familiesFrom(tables: TableDecl[], lists: (file: string, ref: string) => string[] | null): { families: Family[]; catalogue: TableDecl | null; naming: TableDecl | null; namingKeys: NamingKeys } {
   const catalogues = tables.filter((d) => d.table.shape === "rows" && (d.table.rows?.length ?? 0) >= 2
@@ -98,7 +99,7 @@ export function zoneOfName(pattern: string, families: Family[], naming: NamingKe
 
 const OP_OF: Record<string, DataOp["op"] | undefined> = { write: "write", admin: "write", read: "read", watch: "watch" };
 
-export function dataOps(files: Files, ev: NameEvaluator, families: Family[], naming: NamingKeys, injections: Injection[], threads: ThreadLike[], sdkSites: Set<string> = new Set()): DataOp[] {
+export function dataOps(files: Files, ev: NameEvaluator, families: Family[], naming: NamingKeys, injections: Injection[], threads: ThreadLike[], sdkSites: Set<string> = new Set(), reg?: RegisteredAccess): DataOp[] {
   const ops: DataOp[] = [];
   const fnOf = (file: string, n: IrNode): IrNode | undefined => {
     const byId = new Map((files[file]?.nodes ?? []).map((x) => [x.id, x]));
@@ -132,8 +133,13 @@ export function dataOps(files: Files, ev: NameEvaluator, families: Family[], nam
   const bodyOp = new Map<string, DataOp["op"]>();
   for (const [file, ir] of Object.entries(files)) for (const n of ir.nodes ?? []) {
     const callee = String(n.funcName ?? n.callTarget ?? "");
-    const op = OP_OF[effectOf(callee.split(".").pop() ?? "")];
+    const method = callee.split(".").pop() ?? "";
+    const op = OP_OF[effectOf(method)];
     if (!op || !callee.includes(".")) continue;
+    // 2026-10-06 — a string / array built-in on a parameter (`b.replace(…)`,
+    // `xs.push(…)`) is not a data operation: `aliasFor(alias, "status")` read
+    // as "writes status" because its body called `.replace`.
+    if (BUILTIN_METHODS.has(method) && !sdkSites.has(`${file}:${n.line}:${callee}`)) continue;
     // a DATA operation, not a collection method: an SDK call, or a call through
     // one of the enclosing functions' own parameters (`boundaries.meta(b).watch`)
     const root = /^[\s(]*(?:await\s+)?([A-Za-z_$][\w$]*)/.exec(callee)?.[1] ?? "";
@@ -158,16 +164,41 @@ export function dataOps(files: Files, ev: NameEvaluator, families: Family[], nam
       const fn = fnOf(file, n);
       if (op && VERB_EFFECTS[verbWords(method)[0] ?? ""]) {
         const name: NameValue | null = ev.ofOperation(file, n as any);
-        const zone = name?.pattern ? zoneOfName(name.pattern, families, naming) : null;
-        if (zone) { ops.push({ file, line: n.line ?? 0, op, family: zone, ...(name!.via ? { via: name!.via } : {}), entries: entriesAt(file, fn), ...(fn ? { fnId: fn.id } : {}) }); continue; }
+        // a name built in a loop over a literal table is each of its values
+        const zones = [...new Set((name?.each ?? (name?.pattern ? [name.pattern] : [])).map((p) => zoneOfName(p, families, naming)).filter((z): z is string => !!z))];
+        if (zones.length) {
+          for (const zone of zones) ops.push({ file, line: n.line ?? 0, op, family: zone, ...(name!.via ? { via: name!.via } : {}), entries: entriesAt(file, fn), ...(fn ? { fnId: fn.id } : {}), nodeId: n.id });
+          continue;
+        }
+        // a name from a helper the project REGISTERED (operations.json `paths`)
+        const helper = reg ? registeredHelper(n, reg) : null;
+        if (helper) {
+          for (const f of reg!.paths[helper]) {
+            const zone = zoneIds.has(f) ? f : zoneOfName(f, families, naming);
+            if (zone) ops.push({ file, line: n.line ?? 0, op, family: zone, via: [`${helper} (registered in .vibegraph/operations.json)`], entries: entriesAt(file, fn), ...(fn ? { fnId: fn.id } : {}), nodeId: n.id, stated: `${helper} names ${f}` });
+          }
+          continue;
+        }
       }
       // a zone's literal name passed to a project function that operates on it
       if (/^[A-Za-z_$][\w$]*$/.test(callee)) {
         const lits = (n.args ?? []).flatMap((a) => [...a.matchAll(/["'`]([^"'`]+)["'`]/g)].map((m) => m[1])).filter((s) => zoneIds.has(s));
         const def = lits.length ? ev.fnDef(file, callee) : null;
         const inner = def ? bodyOp.get(`${def.file}::${def.node.name}`) : undefined;
-        if (inner) for (const z of lits) ops.push({ file, line: n.line ?? 0, op: inner, family: z, via: [`${callee} (${def!.file}:${def!.node.line})`], entries: entriesAt(file, fn) });
+        if (inner) for (const z of lits) ops.push({ file, line: n.line ?? 0, op: inner, family: z, via: [`${callee} (${def!.file}:${def!.node.line})`], entries: entriesAt(file, fn), nodeId: n.id });
       }
+    }
+  }
+  // operations the project STATES at a line (operations.json `access`)
+  for (const a of reg?.access ?? []) {
+    const at = (files[a.file]?.nodes ?? []).filter((n) => n.line === a.line).sort((x, y) => y.id.length - x.id.length)[0];
+    // the nearest enclosing function a thread reaches (a stated line may sit
+    // in a nested helper no thread lists as a step of its own)
+    let fn = at ? fnOf(a.file, at) : undefined;
+    while (fn && !entriesAt(a.file, fn).length && fnOf(a.file, fn)) fn = fnOf(a.file, fn);
+    for (const f of a.families) {
+      const zone = zoneIds.has(f) ? f : zoneOfName(f, families, naming);
+      if (zone) ops.push({ file: a.file, line: a.line, op: a.op, family: zone, via: ["stated in .vibegraph/operations.json"], entries: entriesAt(a.file, fn), ...(fn ? { fnId: fn.id } : {}), ...(at ? { nodeId: at.id } : {}), stated: a.why });
     }
   }
   // through injected ports: the logic's call site does the I/O its implementation does
@@ -178,16 +209,37 @@ export function dataOps(files: Files, ev: NameEvaluator, families: Family[], nam
       const inside = ops.filter((o) => o.file === impl.file && o.fnId === implFn.id && !o.port);
       for (const o of inside) for (const c of j.calls) {
         const n = (files[c.file]?.nodes ?? []).find((x) => x.line === c.line && String(x.funcName ?? x.callTarget ?? "").replace(/\?\.?/g, ".").startsWith(c.callee.split(".")[0]));
-        ops.push({ file: c.file, line: c.line, op: o.op, family: o.family, port: `${j.iface}.${j.property}`, entries: entriesAt(c.file, n ? fnOf(c.file, n) : undefined) });
+        ops.push({ file: c.file, line: c.line, op: o.op, family: o.family, port: `${j.iface}.${j.property}`, entries: entriesAt(c.file, n ? fnOf(c.file, n) : undefined), ...(n ? { nodeId: n.id } : {}) });
       }
     }
   }
   return dedupe(ops);
 }
 
+/** The registered helper a call's name comes from: a call to it nested in the
+ *  operation, or named in its argument text. */
+function registeredHelper(n: IrNode, reg: RegisteredAccess): string | null {
+  for (const a of n.args ?? []) {
+    const m = /^\s*(?:await\s+)?([A-Za-z_$][\w$]*)\s*\(/.exec(String(a));
+    if (m && reg.paths[m[1]]) return m[1];
+  }
+  return null;
+}
+
+/** JS string / array / collection built-ins: never a data operation on their own. */
+const BUILTIN_METHODS = new Set([
+  "replace", "replaceAll", "push", "pop", "shift", "unshift", "splice", "concat", "slice", "split", "join", "map", "filter",
+  "reduce", "find", "findIndex", "includes", "indexOf", "startsWith", "endsWith", "padStart", "padEnd", "trim", "toLowerCase",
+  "toUpperCase", "sort", "reverse", "fill", "flat", "flatMap", "forEach", "some", "every", "keys", "values", "entries", "at",
+]);
+
 function dedupe(ops: DataOp[]): DataOp[] {
   const seen = new Set<string>();
-  return ops.filter((o) => { const k = `${o.file}:${o.line}:${o.op}:${o.family}`; if (seen.has(k)) return false; seen.add(k); return true; });
+  const unique = ops.filter((o) => { const k = `${o.file}:${o.line}:${o.op}:${o.family}`; if (seen.has(k)) return false; seen.add(k); return true; });
+  // 2026-10-06 — an op on a call that WRAPS another op on the same zone is
+  // the container, not the operation (`results.push({ got: await
+  // attempt(writeAs(app, statusPath(e))) })`): the innermost call stands.
+  return unique.filter((o) => !o.nodeId || !unique.some((x) => x !== o && x.file === o.file && x.family === o.family && !!x.nodeId && x.nodeId.startsWith(`${o.nodeId}/`)));
 }
 
 export function hopsFrom(ops: DataOp[]): DataHop[] {

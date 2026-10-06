@@ -10,9 +10,15 @@ import { enabledDirection } from "./direction.mjs";
 import { docsStatus } from "../../src/server/docs_registry.ts";
 import { loadSources, sourceStatus } from "../../src/server/topology_store.ts";
 import { loadPlan } from "../../src/server/plan_store.ts";
-import { backlogCount, planBacklog } from "../../src/server/plan_review.ts";
+import { buildInbox, inboxLine } from "../../src/server/inbox.ts";
 
 const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+
+/** The decision inbox in one line (src/server/inbox.ts), or null — the
+ *  session-start orientation and the Stop hook both say it. */
+export function inboxNote(absRoot) {
+  try { return inboxLine(buildInbox(absRoot)); } catch { return null; }
+}
 
 export function orientation(absRoot, loaded, constraints) {
   const env = loaded.envelope;
@@ -62,8 +68,9 @@ export function orientation(absRoot, loaded, constraints) {
   }
   // 2026-10-01 — proposals waiting on a person (plan items, an objective, rule changes).
   const plan = (() => { try { return loadPlan(absRoot); } catch { return null; } })();
-  const backlog = plan && !plan.closed ? backlogCount(planBacklog(plan, null, constraints)) : constraints.reduce((n, c) => n + (c.proposals?.length ?? 0), 0);
-  if (backlog) lines.push("", `Review backlog: ${backlog} proposal${backlog === 1 ? "" : "s"} await a person — \`vibegraph-knowledge plan review\` lists them with their diffs (deciding is the person's, not yours).`);
+  // 2026-10-06 (M11) — every pending person step, not only the plan's
+  const inbox = inboxNote(absRoot);
+  if (inbox) lines.push("", inbox);
   // 2026-10-01 — generated documents whose inputs changed since they were generated.
   const stale = docsStatus(absRoot).filter((r) => r.state === "stale");
   // …and the declared topology, when a generator's inputs moved since it ran.

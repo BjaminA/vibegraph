@@ -108,8 +108,25 @@ path. *Process* is said in a fixed vocabulary — serves, renders, calls, runs,
 routes, reads, writes, watches, stores, queues, decides, validates,
 transforms — and only with evidence (click a word for it). A project adds its
 own words in `.vibegraph/operations.json` (they draw dashed; an existing word
-cannot be redefined). At Tools and Payloads every card carries its words, and
+cannot be redefined). A write a negative test makes — inside `attempt(…)`,
+`assert.rejects(…)` or a wrapper shaped like one, expecting a refusal — is a
+**refused attempt**, drawn red and dashed and never counted as a write; list
+probe files outright with `"negative": ["bin/probe-*.ts"]` in the same file.
+Store names built at run time are followed where the code allows it (a path
+helper, a loop over a literal table of parts, a private method, a port
+assigned after its typed declaration); what no rule can follow — a watch over
+a list read at run time — the same file may STATE: `"paths": {"tagKey":
+"tags"}` (a helper's family) or `"access": [{"at": "bin/watcher.ts:10",
+"op": "watch", "families": ["status"], "why": "…"}]`. A stated operation is
+labelled STATED on its edge, with the reason; a family no zone answers to is
+reported, not drawn. At Tools and Payloads every card carries its words, and
 edges show what moves along them as chips: the operation, then the keys.
+
+**Inbox.** When decisions wait for you — plan proposals, rule changes, rules
+an agent stated, groups, scopes, drafts — the toolbar shows **Inbox** with the
+count. The panel lists each with its evidence and Agree / Reject; the same list
+is `vibegraph-knowledge inbox`, and with the hooks installed the end of every
+Claude turn says how many wait.
 
 **Scope with Claude**, at the foot of the card, is for a box the code says
 little about (an SDK the project only calls, a platform client). Claude is

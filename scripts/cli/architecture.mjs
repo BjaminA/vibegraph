@@ -28,6 +28,7 @@ import { readInfraManifests } from "../../src/server/infra_manifests.ts";
 import { loadPlan } from "../../src/server/plan_store.ts";
 import { reconcilePlan } from "../../src/server/plan_reconcile.ts";
 import { seedArchFromPlan } from "../../src/server/plan_arch_seed.ts";
+import { regroupFromFacts } from "../../src/server/arch_regroup.ts";
 import { spawnClassifier } from "./classify.mjs";
 import { repositoryFor, writeArchArtifacts } from "../arch_artifacts.mjs";
 import { deriveThreadCalls } from "../../src/webview/system/threadInteraction.ts";
@@ -52,7 +53,7 @@ export function runArchitecture({ root, out, envelope, pipeline, commit, tool, a
     if (!d) { lines.push("no groups are ratified yet — there is nothing to drift from"); return { lines, messages, exitCode: 0 }; }
     lines.push(`drift since ${d.since}: ${d.level}`);
     for (const r of d.reasons) lines.push(`  ${r}`);
-    if (d.level === "substantial") lines.push("update the groups: vibegraph-knowledge architecture --update (spends tokens; extends the ratified groups, a person ratifies)");
+    if (d.level === "substantial") lines.push("re-form the groups from facts: vibegraph-knowledge architecture --regroup (zero tokens), or --update (spends tokens; extends the ratified groups); a person ratifies either");
     return { lines, messages, exitCode: d.level === "substantial" ? 2 : d.level === "minor" ? 1 : 0 };
   }
 
@@ -102,6 +103,13 @@ export function runArchitecture({ root, out, envelope, pipeline, commit, tool, a
     if (!plan) return { lines, messages: [...messages, "no plan (.vibegraph/plan.json) to seed from"], exitCode: 1 };
     const rec = reconcilePlan(plan, envl, stack, absRoot);
     const r = seedArchFromPlan(plan, rec, derived, loadArchStore(absRoot), { force, project: basename(absRoot) });
+    if (r.error) return { lines, messages: [...messages, r.error], exitCode: 1 };
+    saveArchStore(absRoot, r.store);
+    lines.push(...r.lines);
+  } else if (action === "regroup") {
+    // 2026-10-06 (M12) — groups re-formed from facts, PENDING (zero tokens).
+    const d = driftNow();
+    const r = regroupFromFacts(derived, loadArchStore(absRoot), { force, drifted: !!d && d.level === "substantial" });
     if (r.error) return { lines, messages: [...messages, r.error], exitCode: 1 };
     saveArchStore(absRoot, r.store);
     lines.push(...r.lines);

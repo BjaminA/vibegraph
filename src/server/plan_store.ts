@@ -14,6 +14,7 @@
 // refused with the reason, never trimmed, because the size limit is what keeps
 // a plan about its objective.
 
+import { validateDecisions } from "./plan_decisions.ts";
 import * as fs from "fs";
 import * as path from "path";
 import type {
@@ -55,6 +56,8 @@ export function validatePlan(x: unknown): string | null {
     if (!Array.isArray(p[s])) return `${s} must be an array`;
   }
   if (!Array.isArray(p.changelog)) return "changelog must be an array";
+  const badDecisions = validateDecisions(p.decisions);
+  if (badDecisions) return badDecisions;
   if (p.resolved !== undefined) {
     if (!Array.isArray(p.resolved)) return "resolved must be an array";
     if (p.resolved.length > PLAN_CAPS.resolved) return `resolved keeps at most ${PLAN_CAPS.resolved} questions`;

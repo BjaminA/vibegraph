@@ -1,5 +1,8 @@
 import { readDoc, writeDoc } from "../../lib/store";
 
+// the service account the decider writes as
+const account = process.env.DECIDER_ACCOUNT ?? "decider";
+
 /** Moves an order to its next phase, if the request allows it. */
 export async function applyTransition(id: string): Promise<string> {
   const request = await readDoc("request_clerk", id);

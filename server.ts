@@ -31,6 +31,7 @@ import { withProjectWords, loadVocabulary } from "./src/server/operation_vocab";
 import { nodeIO, ioLines } from "./src/shared/node_io";
 import { enrichReal } from "./src/webview/system/arch_real";
 import { scopeNode, decideNodeScope, type ScopeCtx } from "./src/server/node_scope_server";
+import { buildInbox, decideInbox } from "./src/server/inbox";
 import { applyArchStore, loadArchStore, saveArchStore, ratifyProposal, rejectProposal, proposalGate } from "./src/server/arch_store";
 import { archBaseline, archDrift } from "./src/server/arch_drift";
 import { testReach, affectedTests } from "./src/shared/test_reach";
@@ -8255,6 +8256,26 @@ function setupWebSocket() {
         } else if (msg.type === "topology-get") {
           // 2026-10-02 — the declared topology, read-only (src/server/topology_server.ts).
           ws.send(JSON.stringify({ type: "topology-state", payload: isDirectory ? topologyState(analyzedRoot(), derivedTopologyOnce(latestStack, latestThreads, () => deriveDataArchitecture(relativeProjectFiles() as any, latestStack as any, latestThreads as any).topology)) : { model: null, live: null, traces: [] } }));
+        } else if (msg.type === "inbox-get" || msg.type === "inbox-decide") {
+          // 2026-10-06 — the decision inbox (src/server/inbox.ts); the sender is a person.
+          if (!isDirectory) ws.send(JSON.stringify({ type: "inbox-state", payload: { items: [], error: "the inbox needs a project directory" } }));
+          else {
+            const root = analyzedRoot();
+            const plan = loadPlan(root);
+            let reply: { message?: string; error?: string } = {};
+            const recNow = () => (plan ? reconcilePlan(plan, planEnv() as any, latestStack, root) : null);
+            if (msg.type === "inbox-decide" && typeof msg.payload?.id === "string" && (msg.payload?.decision === "agree" || msg.payload?.decision === "reject")) {
+              const r = decideInbox(root, msg.payload.id, msg.payload.decision, {
+                who: personName(root), model: latestArchDerived, rec: recNow(),
+                archBaseline: (store) => (latestArchDerived ? archBaseline(applyArchStore(latestArchDerived, store), readInfraManifests(root).facts, plan) : undefined),
+              });
+              reply = r.ok ? { message: r.detail } : { error: r.detail };
+              if (r.ok) { reapplyArchStore(); broadcastProjectUpdate(); refreshArchDocs(); }
+            }
+            const after = loadPlan(root);
+            const rec = after ? reconcilePlan(after, planEnv() as any, latestStack, root) : null;
+            ws.send(JSON.stringify({ type: "inbox-state", payload: { items: buildInbox(root, { rec, model: latestArchDerived }), ...reply } }));
+          }
         } else if (msg.type === "rules-get" || msg.type === "rules-op") {
           // 2026-10-05 — the Rules panel (src/server/rules_server.ts): live
           // verdicts from the function `check` prints; the ops are a person's.

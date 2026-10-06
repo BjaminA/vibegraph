@@ -8,10 +8,15 @@
 // (`documentIdFor(requestPath(...))` — the family is the inner name's, the
 // wrapper is recorded as a router). What cannot be reduced is said with the
 // place it is computed.
+//
+// 2026-10-06 (direction review M6) — a hole filled by a LOOP VARIABLE over a
+// literal table (`for (const [key, part] of PARTS) … entityPath(id, part)`)
+// is every value the table gives that position: the name is all of them
+// (`each`), one data operation per family they reach.
 
 import type { NamePattern } from "../shared/data_arch_types.ts";
 
-interface Node { id: string; type: string; parentId?: string | null; name?: string; line?: number; col?: number; funcName?: string; callTarget?: string; args?: string[]; params?: string[]; returnsPattern?: { pattern: string; params: string[]; transformed?: string[] }; nested?: boolean; valueKind?: string; preview?: string }
+interface Node { id: string; type: string; parentId?: string | null; name?: string; line?: number; col?: number; funcName?: string; callTarget?: string; args?: string[]; params?: string[]; returnsPattern?: { pattern: string; params: string[]; transformed?: string[] }; nested?: boolean; valueKind?: string; preview?: string; target?: string; iterName?: string }
 interface IrFile { nodes?: Node[]; edges?: Array<{ source: string; target: string; type: string; targetFile?: string }> }
 type Files = Record<string, IrFile>;
 type Resolve = (from: string, imp: Record<string, any>) => string | null;
@@ -23,7 +28,20 @@ export interface NameValue {
   via?: string[];
   /** where an unreducible name is computed */
   computedAt?: string;
+  /** every name the call passes, when a hole is a loop over a literal table */
+  each?: string[];
 }
+
+const EACH_CAP = 24;
+/** The literal elements of one table row: `"x"` → [x], `["a", "b"]` → [a, b]. */
+const rowOf = (t: string): string[] | null => {
+  const one = strLit(t);
+  if (one !== null) return [one];
+  const m = /^\s*\[(.*)\]\s*$/s.exec(t);
+  if (!m) return null;
+  const parts = m[1].split(",").map((x) => strLit(x));
+  return parts.every((x): x is string => x !== null) ? parts : null;
+};
 
 const MAX_DEPTH = 3;
 const IDENT = /^[A-Za-z_$][\w$]*$/;
@@ -106,7 +124,15 @@ export class NameEvaluator {
         const lit = idx >= 0 && args[idx] !== undefined ? strLit(args[idx]) : null;
         return lit !== null ? lit : whole;
       });
-      return { pattern };
+      // holes a loop over a literal table fills: one name per value
+      let each = [pattern];
+      for (const p of rp.params) {
+        const a = args[rp.params.indexOf(p)];
+        const vals = a !== undefined && IDENT.test(a.trim()) && pattern.includes(`{${p}}`) ? this.loopValues(file, call, a.trim()) : null;
+        if (!vals) continue;
+        each = each.flatMap((x) => vals.map((v) => x.split(`{${p}}`).join(v))).slice(0, EACH_CAP);
+      }
+      return each.length > 1 || each[0] !== pattern ? { pattern, each } : { pattern };
     }
     // an unreducible function around a reducible name: its argument's name, routed through it
     for (const k of this.kids(file, call.id)) {
@@ -114,6 +140,24 @@ export class NameEvaluator {
       if (inner?.pattern) return { pattern: inner.pattern, via: [...(inner.via ?? []), `${callee} (${def.file}:${def.node.line})`] };
     }
     return { computedAt: `${def.file}:${def.node.line}`, via: [callee] };
+  }
+
+  /** The values a loop variable takes, when its loop walks a literal table
+   *  this file holds (`for (const [key, part] of PARTS)` → PARTS' column). */
+  private loopValues(file: string, at: Node, ident: string): string[] | null {
+    for (let p = this.node(file, at.parentId); p && p.type !== "function_def"; p = this.node(file, p.parentId)) {
+      if (p.type !== "for_loop" || !p.target || !p.iterName || !IDENT.test(p.iterName)) continue;
+      const t = p.target.trim();
+      const names = t === ident ? null : /^\[(.*)\]$/.exec(t)?.[1].split(",").map((x) => x.trim());
+      const col = t === ident ? -1 : names ? names.indexOf(ident) : -2;
+      if (col === -2) continue;
+      const table = (this.files[file]?.nodes ?? []).find((n) => n.type === "assignment" && n.name === p!.iterName && !n.parentId && n.valueKind === "list");
+      const rows = (table?.args ?? []).map(rowOf);
+      if (!rows.length || rows.some((r) => !r)) return null;
+      const vals = rows.map((r) => (col === -1 ? (r!.length === 1 ? r![0] : null) : r![col] ?? null));
+      return vals.every((v): v is string => v !== null) ? [...new Set(vals)] : null;
+    }
+    return null;
   }
 
   /** The enclosing function of a node. */

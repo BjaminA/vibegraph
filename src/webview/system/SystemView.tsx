@@ -184,7 +184,7 @@ export function SystemView({
   }, []);
   // 2026-10-06 — Real / Plan / Overlay in the project's words, at the lens's level (useMapModel).
   const { real: realMap, planMapModel, drawn, flows, vocab } = useMapModel({
-    on: mode === "map" && !focusEntryPointId, architecture, lens, planView, planState, planOpen, topology: topo.model?.topology ?? null, threads,
+    on: mode === "map" && !focusEntryPointId, architecture, lens, planView, planState, planOpen, topology: topo.model?.topology ?? null, threads, inventory: topo.inventory ?? null,
   });
   const [flowOn, setFlowOn] = useState<string | LitPath | null>(null); // a flow's id, or an In / Out row's path
   // What is on screen. The canvas remounts when it changes, so fitView re-runs

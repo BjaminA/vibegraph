@@ -5,6 +5,7 @@
 // every item cites file:line; what cannot be reduced is listed in `computed`,
 // never guessed. See src/shared/data_arch_types.ts.
 
+import type { RegisteredAccess } from "./registered_access.ts";
 import type { DataArchitecture, TableDecl } from "../shared/data_arch_types.ts";
 import type { Topology, TopoRouter } from "../shared/topology_types.ts";
 import { TOPOLOGY_VERSION } from "../shared/topology_types.ts";
@@ -59,7 +60,9 @@ function readersOfTable(files: IrFiles, name: string): string[] {
   return [...out];
 }
 
-export function deriveDataArchitecture(files: IrFiles, stack: StackLike = {}, threads: ThreadLike[] = []): DataArchitecture {
+/** `reg`: what the project registered in .vibegraph/operations.json
+ *  (registered_access.ts) — stated operations, labelled as such. */
+export function deriveDataArchitecture(files: IrFiles, stack: StackLike = {}, threads: ThreadLike[] = [], reg?: RegisteredAccess): DataArchitecture {
   const tables = collectTables(files);
   const lists = listResolver(tables);
   const topology: Topology = { version: TOPOLOGY_VERSION };
@@ -85,7 +88,14 @@ export function deriveDataArchitecture(files: IrFiles, stack: StackLike = {}, th
   const ov = applyWriterOverrides(files as any, catalogue, read.families);
   const families = ov.families;
   computed.push(...ov.computed);
-  const ops = dataOps(files as any, ev, families, namingKeys, inj.injections, threads, new Set(sdk.calls.map((c) => `${c.file}:${c.line}:${c.callee}`)));
+  const ops = dataOps(files as any, ev, families, namingKeys, inj.injections, threads, new Set(sdk.calls.map((c) => `${c.file}:${c.line}:${c.callee}`)), reg);
+  if (reg) {
+    computed.push(...reg.refused.map((r) => `operations.json ${r} — dropped`));
+    const zoneIds = new Set([...families.map((f) => f.zone), ...namingKeys.map((k) => k.value)]);
+    const named = [...Object.values(reg.paths).flat(), ...reg.access.flatMap((a) => a.families)];
+    const unknown = [...new Set(named.filter((f) => !zoneIds.has(f) && !ops.some((o) => o.stated && o.family === f)))];
+    if (unknown.length && families.length) computed.push(`operations.json names ${unknown.join(", ")}, which no zone the code declares answers to — not drawn`);
+  }
   const flows = hopsFrom(ops);
   let resourceNaming: ReturnType<NameEvaluator["resourceNaming"]> = null;
   if (families.length) {

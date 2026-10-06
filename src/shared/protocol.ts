@@ -645,6 +645,9 @@ export interface CrossingRecord {
   entryPointId: string;
   file: string;
   nodeId: string;
+  /** 2026-10-06 — the call's line: sibling calls can share a structural id,
+   *  and the payload must come from THIS one. */
+  line?: number;
   callee: string;
   /** the static path shape the URL yields; `*` is an interpolated segment. */
   path: string;
@@ -753,6 +756,14 @@ export interface ArchNodeRecord {
   /** a cluster that serves calls from outside the process: a `.listen()` or
    *  routes (server, arch_served.ts). */
   serves?: { how: "listen" | "routes"; files: string[] };
+  /** 2026-10-06 (M3) — a cluster that is ONE RUNTIME PROCESS: its entry
+   *  point listens, or another project file spawns / forks it. `by` names
+   *  the files that start it. Such a box is never folded into its package. */
+  runtime?: { how: Array<"listens" | "spawned">; by?: string[]; /** M12: the port it listens on ("8080", or "$PORT") */ port?: string };
+  /** 2026-10-06 (M4) — how the process gets its identity, from evidence only
+   *  (arch_identity.ts): an identity-shaped env var it reads, one a spawner
+   *  passes it, or an identity its spawner creates for each run. */
+  identity?: Array<{ kind: "env" | "given" | "created"; name: string; evidence: string }>;
   /** GUI ONLY (arch_real.ts / arch_levels.ts) — identities on the box (who it
    *  runs as; who may write a zone); kept at every zoom level (`essential`);
    *  the plan items it is (`planKeys`, `section:id`); a store card's id
@@ -871,7 +882,7 @@ export interface ArchModelRecord {
   primaryPath?: { entryPoints: string[]; source: "stated" | "proposed"; evidence?: string[] };
   /** M-ARCH.4 — a pending model proposal (its items are in groups/labels
    *  with source "proposed"); what the validator refused, named. */
-  proposal?: { at: string; model: string; narrative: string | null; refused: Array<{ item: string; reason: string }>; mode?: "update" };
+  proposal?: { at: string; model: string; narrative: string | null; refused: Array<{ item: string; reason: string }>; mode?: "update" | "replace" };
   /** 2026-09-28 — the groups were ratified by a person (arch_store
    *  `ratifiedAt`): the GUI shows this instead of a Propose button, and no
    *  path spawns another proposal unless a person forces it. */

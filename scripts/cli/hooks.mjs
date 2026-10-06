@@ -45,7 +45,7 @@ import { getThreadSkill, injectableSkillText } from "../../src/server/thread_ski
 import { affectedTests } from "../../src/shared/test_reach.ts";
 import { verbMayGate } from "../../src/server/quality/standings.ts";
 import { archForPrompt } from "./arch_context.mjs";
-import { orientation } from "./orientation.mjs";
+import { orientation, inboxNote } from "./orientation.mjs";
 import { planAffectedNote, planForPrompt, plannedThreadsForPrompt } from "./plan_context.mjs";
 import { softwareForPrompt } from "./software_context.mjs";
 import { directionForPrompt, directionForFindings } from "./direction.mjs";
@@ -459,7 +459,7 @@ function onStop(input, { absRoot, loaded, state, constraints }) {
   if (!gating.length) {
     const other = [
       fresh.length ? `VibeGraph: ${fresh.length} new advisory or unverifiable finding(s) this session — run \`vibegraph-knowledge check --uncommitted\`.` : null,
-      parseNote(loaded),
+      parseNote(loaded), inboxNote(absRoot), // M11: the person's waiting decisions, each turn
     ].filter(Boolean).join("\n");
     return other ? { json: { systemMessage: capped(other) } } : null;
   }

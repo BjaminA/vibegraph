@@ -46,6 +46,10 @@ export const PLAN_CAPS = {
   question: 1200,
   /** closed and dropped questions kept on the record (oldest go first) */
   resolved: 100,
+  /** decisions kept in the ledger (oldest go first) */
+  decisions: 200,
+  /** a decision's text */
+  decision: 600,
   /** a person's note when closing or dropping a question */
   note: 300,
   /** one line: labels, `serves`, `why`, a step, a question */
@@ -284,6 +288,12 @@ export interface ResolvedQuestion extends PlanQuestion {
 
 /** A question whose text says it is answered ("ANSWERED (date): …"): a
  *  passive tag, and what "Close all answered" offers. Partly answered is not. */
+/** The objective a "Proposed objective: …" question proposes — without the
+ *  citation a direction draft appends (` (cited: "…")` / ` (INFERRED — …)`). */
+export function proposedObjectiveText(text: string): string {
+  return text.replace(/^Proposed objective:\s*/, "").replace(/\s+\((?:cited: ".*"|INFERRED[^)]*)\)\s*$/s, "").trim();
+}
+
 export function looksAnswered(q: Pick<PlanQuestion, "text">): "answered" | "partly" | null {
   const t = q.text.trimStart();
   if (/^partly\s+answered\b/i.test(t)) return "partly";
@@ -318,6 +328,26 @@ export interface Plan {
   modules?: PlanModule[];
   /** 2026-10-05 — closed and dropped questions, newest last; absent while empty */
   resolved?: ResolvedQuestion[];
+  /** 2026-10-06 (direction review M1) — the DECISIONS ledger: what was
+   *  decided, where it came from, and the plan edits it implies. A model's
+   *  decision waits `proposed`; a person agrees it once and its effects apply. */
+  decisions?: PlanDecision[];
+}
+
+/** 2026-10-06 — one decision: an answered question, a sensor's finding, a
+ *  person's choice. `effects` are ordinary plan ops (add / update / drop /
+ *  supersede / close-question…), applied together when a person agrees. */
+export interface PlanDecision {
+  id: string;
+  /** where it came from: `open:q13`, `sensor:<key>`, `commit:<sha>`, `doc:<file>:<line>` */
+  from?: string;
+  said: string;
+  effects: Array<Record<string, unknown>>;
+  evidence: string[];
+  status: "proposed" | "agreed" | "rejected";
+  at: string;
+  by: PlanActor;
+  decidedAt?: string;
 }
 
 export type PlanSection = "processes" | "boundaries" | "stack" | "threads" | "policies" | "open" | "stores" | "principals" | "flows" | "modules";

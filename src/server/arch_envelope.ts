@@ -3,6 +3,7 @@
 // and the package roots read from disk. Kept apart from arch_model.ts so
 // that module stays pure.
 
+import { registeredAccess } from "./registered_access.ts";
 import { applyArchStore, loadArchStore } from "./arch_store.ts";
 import * as fs from "fs";
 import * as path from "path";
@@ -20,6 +21,8 @@ import { observationsForNode } from "../shared/observations.ts";
 import { deriveDataZones } from "./arch_data_zones.ts";
 import { loadPlan } from "./plan_store.ts";
 import { stampServed } from "./arch_served.ts";
+import { stampIdentity } from "./arch_identity.ts";
+import { negativeGlobs } from "./operation_vocab.ts";
 
 const MANIFESTS = ["package.json", "pyproject.toml", "setup.py", "Cargo.toml", "go.mod", "requirements.txt"];
 
@@ -82,6 +85,7 @@ function derivedArchModel(
     fileOfNode: opts.fileOfNode,
     manifestDirs: manifestDirsFor(root, Object.keys(env.files)),
     languageOf: (f) => (typeof env.files[f]?.language === "string" ? env.files[f].language! : null),
+    signalsOf: (f) => ((env.files[f] as { programSignals?: string[] } | undefined)?.programSignals ?? []),
     // M-ARCH.3 — the payload lens's inputs.
     nodeFor: opts.nodeFor,
     fileNodes: (f) => (env.files[f]?.nodes as never) ?? null,
@@ -95,7 +99,7 @@ function derivedArchModel(
     })(),
   });
   // 2026-10-06 — which processes answer calls from outside (arch_served.ts).
-  const model = stampServed(built, env.entryPoints, env.files as never);
+  const model = stampIdentity(stampServed(built, env.entryPoints, env.files as never), env.files as never, env.threads, crossings);
   // Shared file stores (a directory several processes use through an
   // environment variable) — derived from the IR and the .env examples.
   if (!root) return stampHierarchy(model);
@@ -104,7 +108,7 @@ function derivedArchModel(
   const stores = deriveFileStores({ files: env.files as never, infra, threads: env.threads, model });
   // 2026-10-02 — the zones of the data stores the code writes, reads and watches
   let zones: ReturnType<typeof deriveDataZones> = { nodes: [], edges: [], notes: [] };
-  try { zones = deriveDataZones({ files: env.files, threads: env.threads, stack, model, plan: loadPlan(root) }); } catch { /* best effort */ }
+  try { zones = deriveDataZones({ files: env.files, threads: env.threads, stack, model, plan: loadPlan(root), negative: negativeGlobs(root), registered: registeredAccess(root) }); } catch { /* best effort */ }
   const extra = { nodes: [...stores.nodes, ...zones.nodes], edges: [...stores.edges, ...zones.edges], notes: [...stores.notes, ...zones.notes] };
   if (!extra.nodes.length) return stampHierarchy(model);
   return stampHierarchy({ ...model, nodes: [...model.nodes, ...extra.nodes], edges: [...model.edges, ...extra.edges], notes: [...model.notes, ...extra.notes] });

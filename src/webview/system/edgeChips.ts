@@ -46,10 +46,12 @@ export function chipsFor(e: ArchEdgeRecord, model: ArchModelRecord, label: strin
   return out;
 }
 
-/** Put chips on every laid-out edge that carries an operation or keys. */
+/** Put chips on every laid-out edge that carries an operation or keys. A
+ *  refused ATTEMPT (attempts.ts) is drawn red and dashed whatever its label. */
 export function chipEdges(edges: Edge[], model: ArchModelRecord): Edge[] {
-  return edges.map((e) => {
-    const rec = (e.data as { edge?: ArchEdgeRecord } | undefined)?.edge;
+  return edges.map((e0) => {
+    const rec = (e0.data as { edge?: ArchEdgeRecord } | undefined)?.edge;
+    const e = rec?.protocol === "attempt" ? { ...e0, style: { ...e0.style, stroke: "var(--accent-error)", strokeDasharray: "4 4" }, data: { ...e0.data, attempt: true } } : e0;
     if (!rec || e.label === undefined) return e;
     const label = String(e.label ?? "");
     // exactly the room the router reserved for the label: no wider, or a chip

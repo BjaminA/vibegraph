@@ -56,6 +56,16 @@ function piece(n, params, text, transforms) {
     const r = piece(n.childForFieldName("right"), params, text, transforms);
     return l === null || r === null ? null : l + r;
   }
+  if (n.type === "call_expression" && n.childForFieldName("function")?.type === "identifier") {
+    // 2026-10-06 — a plain function applied to a parameter
+    // (`/labels/${documentIdFor(docPath)}`) is still that hole, transformed:
+    // the family is read off the shape around it, the function is a router
+    const args = n.childForFieldName("arguments")?.namedChildren ?? [];
+    const inner = args.length === 1 ? piece(args[0], params, text, transforms) : null;
+    const hole = inner && /^\{([^{}]+)\}$/.exec(inner);
+    if (hole) { transforms.set(hole[1], `${text(n.childForFieldName("function"))}(…)`); return inner; }
+    return null;
+  }
   if (n.type === "call_expression" || n.type === "member_expression") {
     const root = rootIdent(n);
     if (root && params.includes(text(root))) { transforms.set(text(root), text(n).slice(text(root).length)); return `{${text(root)}}`; }

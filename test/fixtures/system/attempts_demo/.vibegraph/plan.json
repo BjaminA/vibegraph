@@ -1,0 +1,21 @@
+{
+  "version": "1",
+  "revision": 1,
+  "objective": "Only the decider writes an order's status",
+  "processes": [],
+  "stores": [
+    { "id": "ledger", "kind": "document-store", "label": "order ledger", "reachedThrough": ["lib/"], "access": { "write": ["writeDoc"], "read": ["readDoc"] },
+      "zones": [
+        { "id": "status", "holds": ["status"] },
+        { "id": "approver", "holds": ["approver"] },
+        { "id": "requests", "holds": ["requests"] }
+      ], "status": "agreed" }
+  ],
+  "principals": [],
+  "stack": [],
+  "boundaries": [],
+  "threads": [],
+  "policies": [],
+  "open": [],
+  "changelog": [{ "rev": 1, "at": "2026-10-06T09:00:00.000Z", "by": "human", "change": "objective set" }]
+}

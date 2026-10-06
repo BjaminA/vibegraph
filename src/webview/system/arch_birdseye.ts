@@ -37,7 +37,7 @@ const unitOf = (n: ArchNodeRecord) => (n.root ? n.root.split("/")[0] : ".");
 function foldUnits(full: ArchModelRecord): { model: ArchModelRecord; absorbed: Map<string, ArchNodeRecord[]> } {
   // An ESSENTIAL card (arch_real.ts / arch_levels.ts: a store, an outside
   // caller, a decision structure, the plan's chip) is never folded.
-  const clusters = full.nodes.filter((n) => n.kind === "cluster" && !n.essential);
+  const clusters = full.nodes.filter((n) => n.kind === "cluster" && !n.essential && !n.runtime);
   const unitById = new Map(clusters.map((c) => [c.id, unitOf(c)]));
   // A process with a HOP to another process of its own unit is part of the
   // flow this lens exists to show, so it keeps its own box (2026-09-25: the
@@ -72,7 +72,7 @@ function foldUnits(full: ArchModelRecord): { model: ArchModelRecord; absorbed: M
   }
   const to = (id: string) => keeperOf.get(id)?.id ?? id;
   const nodes = full.nodes
-    .filter((n) => n.kind !== "cluster" || n.essential || keeperOf.get(n.id)?.id === n.id)
+    .filter((n) => n.kind !== "cluster" || n.essential || n.runtime || keeperOf.get(n.id)?.id === n.id)
     .map((n) => folded.get(n.id) ?? n);
   const edges = full.edges
     .map((e) => ({ ...e, from: to(e.from), to: to(e.to) }))

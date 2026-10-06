@@ -16,6 +16,7 @@ import { PLAN_CAPS, PLAN_SECTIONS, planItemId } from "../shared/plan_types.ts";
 import { validatePlan, validateItem, emptyPlan } from "./plan_store.ts";
 import { validateStore } from "./plan_store_items.ts";
 import { renameSymbolRefs } from "./plan_affected.ts";
+import { DECISION_OP_NAMES, applyDecisionOp, describeDecisionOp, parseDecisionOp, type DecisionOp } from "./plan_decisions.ts";
 
 export type PlanOp =
   | { op: "set-objective"; text: string }
@@ -36,13 +37,17 @@ export type PlanOp =
    *  needed), with an optional note; both are kept in `resolved`, reopenable */
   | { op: "close-question"; id: string; note?: string }
   | { op: "drop-question"; id: string; note?: string }
-  | { op: "reopen-question"; id: string };
+  | { op: "reopen-question"; id: string }
+  /** 2026-10-06 — the decisions ledger and supersede (plan_decisions.ts) */
+  | DecisionOp;
 
-export const PLAN_OP_NAMES = ["set-objective", "add", "update", "drop", "agree", "rename", "to-store", "rename-symbol", "reject", "close", "reopen", "close-question", "drop-question", "reopen-question"] as const;
+export const PLAN_OP_NAMES = ["set-objective", "add", "update", "drop", "agree", "rename", "to-store", "rename-symbol", "reject", "close", "reopen", "close-question", "drop-question", "reopen-question", ...DECISION_OP_NAMES] as const;
+const isDecisionOp = (op: PlanOp): op is DecisionOp => (DECISION_OP_NAMES as readonly string[]).includes(op.op);
 
 /** Parse an untrusted op (WS, MCP, the CLI). */
 export function parsePlanOp(x: unknown): { ok: true; op: PlanOp } | { ok: false; error: string } {
   if (!x || typeof x !== "object" || Array.isArray(x)) return { ok: false, error: "an op must be an object" };
+  if ((DECISION_OP_NAMES as readonly string[]).includes(String((x as any).op))) return parseDecisionOp(x as Record<string, unknown>);
   const o = x as Record<string, any>;
   if (!PLAN_OP_NAMES.includes(o.op)) return { ok: false, error: `op must be one of ${PLAN_OP_NAMES.join("|")}` };
   if (o.op === "set-objective") return typeof o.text === "string" ? { ok: true, op: { op: o.op, text: o.text } } : { ok: false, error: "set-objective needs text" };
@@ -93,6 +98,7 @@ const describe = (op: PlanOp, id?: string) =>
   : op.op === "rename-symbol" ? `rename function ${op.from} → ${op.to} in the plan`
   : op.op === "close-question" || op.op === "drop-question" ? `${op.op === "close-question" ? "close" : "drop"} open ${op.id}${op.note ? ` — ${op.note}` : ""}`
   : op.op === "reopen-question" ? `reopen open ${op.id}`
+  : isDecisionOp(op) ? describeDecisionOp(op)
   : `${op.op} ${op.section} ${id ?? (op as any).id}`;
 
 export interface ApplyResult { plan?: Plan; error?: string; changes: string[] }
@@ -141,6 +147,19 @@ function resolveQuestion(plan: Plan, id: string, state: "closed" | "dropped", by
 }
 
 function applyOne(plan: Plan, op: PlanOp, by: PlanActor, changes: string[], now: Date): string | null {
+  if (isDecisionOp(op)) {
+    // an effect applies to THIS plan as a person; a dry run uses a copy
+    const asPerson = (target: Plan, ch: string[]) => (eff: Record<string, unknown>) => {
+      const p = parsePlanOp(eff);
+      return p.ok ? applyOne(target, p.op, "human", ch, now) : p.error;
+    };
+    const tryEffects = (effects: Array<Record<string, unknown>>) => {
+      const copy = structuredClone(plan);
+      for (const e of effects) { const err = asPerson(copy, [])(e); if (err) return `${String(e.op)}: ${err}`; }
+      return null;
+    };
+    return applyDecisionOp(plan, op, by, changes, now, asPerson(plan, changes), tryEffects);
+  }
   if (op.op === "close-question" || op.op === "drop-question") {
     const err = resolveQuestion(plan, op.id, op.op === "close-question" ? "closed" : "dropped", by, now, op.note);
     if (!err) changes.push(describe(op));

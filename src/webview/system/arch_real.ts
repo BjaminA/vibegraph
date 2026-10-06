@@ -22,16 +22,17 @@
 // process by its entry points or path, a store by its id — never by label, so
 // the Overlay finds them here instead of drawing them a second time.
 
+import { countLive, isCatalogueWord, type LiveInventory } from "../../shared/live_inventory.ts";
 import type { ArchModelRecord, ArchNodeRecord, ArchEdgeRecord, ArchGroupRecord } from "../../shared/protocol";
 import type { Plan, PlanReconcile } from "../../shared/plan_types";
 import type { Topology, TopoZone } from "../../shared/topology_types";
 import { whoMay, threadsOfFunction } from "../../shared/topology_query.ts";
 import { unifies } from "../../shared/name_pattern.ts";
 import { stampHierarchy } from "../../shared/arch_hierarchy.ts";
-import { realisedTargets } from "./arch_plan.ts";
+import { realisedTargets, locatedOnly } from "./arch_plan.ts";
 
 interface ThreadLike { entryPointId: string | null; nodes: any[] }
-export interface RealInputs { plan?: Plan | null; rec?: PlanReconcile | null; topology?: Topology | null; threads?: ThreadLike[] }
+export interface RealInputs { plan?: Plan | null; rec?: PlanReconcile | null; topology?: Topology | null; threads?: ThreadLike[]; /** M8: what `topology live` saved */ inventory?: { at: string; command: string; inventory: LiveInventory } | null }
 export interface RealFlow { id: string; label: string; verdict: string; nodes: string[]; edges: string[]; steps: Array<{ text: string; found: boolean }> }
 export type RealModel = ArchModelRecord & { realFlows: RealFlow[] };
 
@@ -48,11 +49,12 @@ function coveredZones(t: Topology | null | undefined, inStore: (z: TopoZone) => 
   const fams = (z: TopoZone) => [z.id, ...(z.holds ?? []), ...(t.families ?? []).filter((f) => f.zone === z.id).map((f) => f.id)];
   return (t.zones ?? []).filter((z) => inStore(z) && holds.some((h) => fams(z).some((f) => unifies(h, f))));
 }
+// M8: a catalogue WORD (`any-writer`, `owner-of-entry`) is a rule, not a writer — never counted
 const writersOf = (t: Topology | null | undefined, zones: TopoZone[]) =>
-  t ? uniq(zones.flatMap((z) => whoMay(t, z.id, "write").map((w) => w.principal))).sort() : [];
+  t ? uniq(zones.flatMap((z) => whoMay(t, z.id, "write").map((w) => w.principal))).filter((p) => !isCatalogueWord(p)).sort() : [];
 
 export function enrichReal(real: ArchModelRecord, inp: RealInputs = {}): RealModel {
-  const { plan = null, rec = null, topology: t = null, threads = [] } = inp;
+  const { plan = null, rec = null, topology: t = null, threads = [], inventory = null } = inp;
   const nodes = new Map(real.nodes.map((n) => [n.id, { ...n }]));
   const edges: ArchEdgeRecord[] = [...real.edges];
   const groups: ArchGroupRecord[] = [...(real.groups ?? [])];
@@ -80,13 +82,34 @@ export function enrichReal(real: ArchModelRecord, inp: RealInputs = {}): RealMod
       n.derivedLabel ??= n.label;
       n.label = ps.length === 1 ? ps[0].label : `${ps[0].label} +${ps.length - 1}`;
       n.labelSource = "plan";
-      n.notes = [`the plan's ${ps.map((p) => `${p.label} (${p.id})`).join(", ")} — realised here; the code calls it ${n.derivedLabel}`, ...(n.notes ?? [])];
+      const located = ps.every(locatedOnly);
+      if (located) n.sublabel = `located, not anchored · ${n.sublabel}`;
+      n.notes = [
+        `the plan's ${ps.map((p) => `${p.label} (${p.id})`).join(", ")} — ${located ? "LOCATED here by its `at` path, not anchored: give it `entryPoints` to name the process that runs it" : "realised here, anchored by its entry points"}; the code calls it ${n.derivedLabel}`,
+        ...(n.notes ?? []),
+      ];
       n.essential = true; // the plan says it is its own process: never folded into another
       for (const p of ps) {
         key(n, `processes:${p.id}`);
-        if (p.runsAs) addBadge(n, badge(p.runsAs, `runs as ${principalLabel(p.runsAs)}`));
+        // M4: the plan NAMES an identity, never asserts one — only an
+        // anchored process whose code shows an identity source gets its badge
+        const created = n.identity?.find((i) => i.kind === "created");
+        if (p.runsAs && created) {
+          // the code makes an identity for each run: that is who it runs as,
+          // whatever the plan names — said, not hidden
+          addBadge(n, badge("own identity per run", created.evidence));
+          n.notes = [...(n.notes ?? []), `the plan says it runs as ${p.runsAs}; the code creates its own identity for each run (${created.evidence})`];
+        } else if (p.runsAs && !located && n.identity?.length) addBadge(n, badge(p.runsAs, `runs as ${principalLabel(p.runsAs)} — the code shows: ${n.identity.map((i) => i.evidence).join("; ")}`));
+        else if (p.runsAs) n.notes = [...(n.notes ?? []), `the plan says it runs as ${p.runsAs}; ${located ? "it is only located, so the badge is not drawn" : "nothing in the code shows its identity"}`];
       }
     }
+  }
+  // ── identities from evidence (arch_identity.ts), on every process ──
+  for (const n of nodes.values()) {
+    if (n.kind !== "cluster" || !n.identity?.length || n.badges?.length) continue;
+    const created = n.identity.find((i) => i.kind === "created");
+    if (created) { addBadge(n, badge("own identity per run", created.evidence)); continue; }
+    for (const i of n.identity.slice(0, 3)) addBadge(n, badge(i.name, `${i.kind === "given" ? "given by the process that starts it" : "read by it"}: ${i.evidence}`));
   }
 
   // ── stores ──
@@ -110,15 +133,21 @@ export function enrichReal(real: ArchModelRecord, inp: RealInputs = {}): RealMod
     const declared = (t?.zones ?? []).filter(inStore);
     const writers = writersOf(t, declared);
     const card = `${STORE_CARD}${sid}`;
+    // M8: declared next to live — what `topology live` found provisioned
+    const lc = inventory && tst && declared.length ? countLive(declared, inventory.inventory) : null;
+    const ids = inventory?.inventory.identities.length ?? 0;
     nodes.set(card, {
       id: card, kind: "tool", category: "database", source: tst ? "stated" : "derived", essential: true,
       label: pst?.label ?? tst?.label ?? sid,
-      sublabel: [plural(declared.length || zoneNodes.length, "zone"), ...(writers.length ? [plural(writers.length, "writer")] : []), ...(absorbed.length ? [`via ${absorbed.map((a) => a.label).join(", ")}`] : [])].join(" · "),
+      sublabel: [lc ? `${lc.declared} declared · ${lc.provisioned.length} provisioned` : plural(declared.length || zoneNodes.length, "zone"), ...(writers.length ? [plural(writers.length, "writer")] : []), ...(absorbed.length ? [`via ${absorbed.map((a) => a.label).join(", ")}`] : [])].join(" · "),
       threads: [], refs: [], planKeys: pst ? [`stores:${sid}`] : [],
       notes: [
         ...(tst ? [`declared by the project's topology${tst.label && tst.label !== (pst?.label ?? sid) ? ` as "${tst.label}"` : ""}: ${plural(declared.length, "zone")}${writers.length ? `, written by ${writers.join(", ")}` : ""}`] : []),
         ...(zoneNodes.length ? [`the code reads and writes ${plural(zoneNodes.length, "zone group")} of it (drawn in its box)`] : []),
         ...(absorbed.length ? [`reached through ${absorbed.map((a) => a.label).join(", ")} — folded into this card at Bird's-eye`] : []),
+        ...(lc ? [`live (${inventory!.at.slice(0, 16)}, \`${inventory!.command}\`): ${lc.provisioned.length} of ${lc.declared} declared zones provisioned${ids ? `, read as ${ids} identit${ids === 1 ? "y" : "ies"}` : ""}`,
+          ...(lc.missing.length ? [`never provisioned: ${lc.missing.slice(0, 12).join(", ")}${lc.missing.length > 12 ? ` +${lc.missing.length - 12}` : ""}`] : []),
+          ...(lc.undeclared.length ? [`live but not declared: ${lc.undeclared.slice(0, 8).join(", ")}${lc.undeclared.length > 8 ? ` +${lc.undeclared.length - 8}` : ""}`] : [])] : []),
       ],
     });
     for (const a of absorbed) nodes.get(a.id)!.storeOf = card;
@@ -191,8 +220,23 @@ export function enrichReal(real: ArchModelRecord, inp: RealInputs = {}): RealMod
   const placeDecision = (fns: string[], cite?: string) => {
     const hits = new Map<string, number>();
     for (const fn of uniq(fns)) for (const ep of threadsOfFunction(fn, threads)) { const c = clusterOfEntry(ep); if (c) hits.set(c, (hits.get(c) ?? 0) + 1); }
-    if (!hits.size && cite) { const c = clusterOfFile(cite.replace(/:\d+$/, "")); if (c) hits.set(c, 1); }
-    return [...hits].sort((a, b) => b[1] - a[1])[0]?.[0];
+    if (!hits.size && cite) {
+      // the threads that REACH the file it is declared in (a running process
+      // that walks it outranks the library folder it sits in)
+      const file = cite.replace(/:\d+$/, "");
+      for (const t of threads as Array<ThreadLike & { filesReached?: string[] }>) {
+        if (!t.entryPointId || !(t.filesReached ?? []).includes(file)) continue;
+        const c = clusterOfEntry(t.entryPointId);
+        // weighted by the steps that RUN in that file, not by reaching it
+        const steps = (t.nodes ?? []).filter((x: any) => x.file === file).length;
+        if (c) hits.set(c, (hits.get(c) ?? 0) + Math.max(1, steps));
+      }
+      if (!hits.size) { const c = clusterOfFile(file); if (c) hits.set(c, 1); }
+    }
+    // a structure is enforced where it RUNS: a runtime process outranks a
+    // CLI or library that shares its logic (M3)
+    const weight = (c: string) => (nodes.get(c)?.runtime ? 1000 : 0);
+    return [...hits].sort((a, b) => (b[1] + weight(b[0])) - (a[1] + weight(a[0])))[0]?.[0];
   };
   type Dec = { id: string; kind: "state machine" | "decision tree"; label: string; sub: string; fns: string[]; cite?: string; shape: string[]; also?: string[] };
   const listed: Dec[] = [

@@ -4,7 +4,7 @@
   "objective": "Orders are released only by the decider, on an appointed approver",
   "processes": [
     { "id": "partner-gateway", "kind": "backend", "label": "partner gateway", "serves": "partners read order status and file requests", "at": "gateway/", "runsAs": "gateway", "status": "agreed" },
-    { "id": "decider", "kind": "backend", "label": "order decider", "serves": "releases orders on an appointed approver", "at": "decider/", "runsAs": "decider", "status": "agreed" },
+    { "id": "decider", "kind": "backend", "label": "order decider", "serves": "releases orders on an appointed approver", "at": "decider/", "entryPoints": ["decider/bin/decider.ts"], "runsAs": "decider", "status": "agreed" },
     { "id": "clerk-app", "kind": "frontend", "label": "clerk app", "serves": "clerks file order requests", "at": "app/", "runsAs": "clerk", "status": "agreed" },
     { "id": "appointer", "kind": "backend", "label": "admin appointer", "serves": "appoints the approver who releases orders", "at": "tools/appoint.ts", "runsAs": "admin", "status": "agreed" },
     { "id": "partner", "kind": "external_http", "label": "partner system", "serves": "reads order status and files requests", "status": "agreed" },

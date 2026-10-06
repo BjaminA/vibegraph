@@ -50,7 +50,7 @@ export function mergeVocabulary(extra: unknown, base: Vocabulary = CORE_VOCABULA
   return { vocab: { version: "1", words }, errors };
 }
 
-export type DataOp = "write" | "read" | "watch" | "call" | "admin" | "grant" | "hop" | "enforces" | "scoped";
+export type DataOp = "write" | "read" | "watch" | "call" | "admin" | "grant" | "hop" | "enforces" | "scoped" | "attempt";
 
 /** 2026-10-06 — a box SCOPED by a model where the IR is silent (part 3,
  *  src/server/node_scope.ts): the vocabulary's words and the boxes data comes
@@ -104,6 +104,7 @@ const isStoreLike = (n: ArchNodeRecord | undefined) => !!n && (!!n.zoneOf || !!n
 export function edgeOps(e: ArchEdgeRecord, to?: ArchNodeRecord): DataOp[] {
   if (e.kind !== "uses") return ["hop"];
   if (e.protocol === "enforces") return ["enforces"];
+  if (e.protocol === "attempt") return ["attempt"]; // M5: a refused attempt, never a write
   const p = e.protocol.toLowerCase();
   const named = (["write", "read", "watch"] as const).filter((op) => new RegExp(`\\b${op}`).test(p));
   if (named.length && isStoreLike(to)) return [...named];
@@ -162,6 +163,7 @@ export function nodeIO(model: ArchModelRecord, nodeId: string, vocab: Vocabulary
     for (const op of ops) {
       if (op === "hop") { if (mine) fact(`hop:${e.kind}`, `to ${label(other)} (${e.protocol})`, e.refs.slice(0, 2)); }
       else if (op === "enforces") fact(mine ? "enforces" : "decision", `${mine ? "evaluates" : "evaluated by"} ${label(other)}`);
+      else if (op === "attempt") { /* an attempt the platform refuses says nothing about what the box does */ }
       else if (mine && isStoreLike(byId.get(other)) && (op === "write" || op === "read" || op === "watch")) fact(`zone:${op}`, `${op}s ${label(other)}`, e.refs.slice(0, 2));
       else if (mine) fact(`effect:${op}`, `${op} on ${label(other)}${caller?.text ? ` (${caller.text})` : ""}`, e.refs.slice(0, 2));
     }

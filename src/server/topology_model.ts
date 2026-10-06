@@ -5,6 +5,7 @@
 // `topology` commands, the lenses and the export — so a zone found in the code
 // is checkable everywhere, not only where someone registered a generator.
 
+import { registeredAccess } from "./registered_access.ts";
 import type { TopologyModel } from "../shared/topology_types.ts";
 import { loadTopology } from "./topology_store.ts";
 import { deriveDataArchitecture } from "./data_arch.ts";
@@ -17,7 +18,7 @@ export function topologyFor(root: string, env: EnvLike, stack?: unknown): Topolo
   let derived;
   try {
     const st = stack ?? buildStackIndex({ files, threads: env.threads ?? [] } as never, root);
-    derived = deriveDataArchitecture(files, st as never, (env.threads ?? []) as never).topology;
+    derived = deriveDataArchitecture(files, st as never, (env.threads ?? []) as never, registeredAccess(root)).topology;
   } catch { derived = undefined; }
   return loadTopology(root, derived);
 }

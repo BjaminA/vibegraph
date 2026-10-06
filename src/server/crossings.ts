@@ -175,6 +175,7 @@ const HTTP_EFFECT = "http";
 interface CallSite {
   file: string;
   nodeId: string;
+  line?: number;
   callee: string;
   args: string[];
 }
@@ -189,7 +190,7 @@ function httpCalls(file: string, nodes: any[]): CallSite[] {
     if (!callee) continue;
     const args = Array.isArray(n.args) ? n.args.filter((a: unknown): a is string => typeof a === "string") : [];
     if (typeof n.id !== "string") continue;
-    out.push({ file, nodeId: n.id, callee, args });
+    out.push({ file, nodeId: n.id, ...(typeof n.line === "number" ? { line: n.line } : {}), callee, args });
   }
   return out;
 }
@@ -311,7 +312,7 @@ function commandCrossings(
         if (matched !== suffix) notes.push(`the literal is a deploy path; the tail it shares with a parsed file (\`${matched}\`) is the match`);
         notes.push(`named by a string literal in ${nodeCallee(n)}${!inWalkedFn ? " (module level of a file this thread reaches)" : ""}; the command that carries it (a platform CommandStream, exec, child_process) is attributed on the boundary node, not here`);
         out.push({
-          kind: "command", entryPointId: ep, file, nodeId: n.id, callee: nodeCallee(n),
+          kind: "command", entryPointId: ep, file, nodeId: n.id, ...(typeof n.line === "number" ? { line: n.line } : {}), callee: nodeCallee(n),
           path: literal, method: null, targets, confidence, note: notes.join("; "),
         });
       }
@@ -353,7 +354,7 @@ function toolCrossings(
       if (targets.length > 1) notes.push(`${targets.length} registrations carry that name and nothing here separates them`);
       notes.push("the server this client connects to is not resolved (a transport names it by command or URL at runtime); the match is on the tool name alone");
       out.push({
-        kind: "tool", entryPointId: ep, file, nodeId: n.id, callee: nodeCallee(n),
+        kind: "tool", entryPointId: ep, file, nodeId: n.id, ...(typeof n.line === "number" ? { line: n.line } : {}), callee: nodeCallee(n),
         path: name, method: null, targets, confidence, note: notes.join("; "),
       });
     }
@@ -442,7 +443,7 @@ export function buildCrossingIndex(env: CrossingEnvelopeLike): CrossingIndex {
         notes.push("the request's base URL is not resolved, so the match is on path shape alone");
 
         found.push({
-          kind: "http", entryPointId: ep, file, nodeId: call.nodeId, callee: call.callee,
+          kind: "http", entryPointId: ep, file, nodeId: call.nodeId, ...(call.line !== undefined ? { line: call.line } : {}), callee: call.callee,
           path, method, ...(assumed && method ? { methodAssumed: true as const } : {}),
           targets, confidence, note: notes.join("; "),
         });

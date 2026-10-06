@@ -16,7 +16,7 @@
 //
 // Pure node builtins, no runtime state — every function takes the project root.
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { sourceHashOf } from "./readme_store.ts";
 
@@ -183,6 +183,24 @@ export function readStoredThreadSkill(root: string, entryPointId: string): Store
   if (!existsSync(p)) return null;
   try { return parse(readFileSync(p, "utf-8")); }
   catch { return null; }
+}
+
+/** 2026-10-06 — every stored skill (the decision inbox lists the drafts). */
+export function listStoredThreadSkills(root: string): StoredThreadSkill[] {
+  const dir = join(root, ".vibegraph", "thread-skills");
+  let names: string[] = [];
+  try { names = readdirSync(dir).filter((f) => f.endsWith(".md")); } catch { return []; }
+  const out: StoredThreadSkill[] = [];
+  for (const f of names.sort()) { try { const r = parse(readFileSync(join(dir, f), "utf-8")); if (r) out.push(r); } catch { /* unreadable: skipped */ } }
+  return out;
+}
+
+/** 2026-10-06 — a person rejects a DRAFT: it is removed (a ratified skill is never removed here). */
+export function rejectDraftThreadSkill(root: string, entryPointId: string): boolean {
+  const r = readStoredThreadSkill(root, entryPointId);
+  if (!r || r.status !== "draft") return false;
+  unlinkSync(threadSkillPath(root, entryPointId));
+  return true;
 }
 
 /** Read the skill tagged with staleness (stored hash vs the thread's current

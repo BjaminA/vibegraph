@@ -166,6 +166,25 @@ vibegraph-knowledge topology live --command "node tools/live.mjs"
 - **The Resources lens** draws the drift: an undeclared zone card, an extra
   grant in red, a missing one dotted.
 
+**Or an inventory.** A platform's own listing tool rarely prints a topology;
+it prints what exists — resources with names, aliases and ids, and the
+identity it read as. `topology live` takes that too (any JSON with a list of
+named things), or `--from <file.json>` when the listing has to run elsewhere:
+
+```bash
+vibegraph-knowledge topology live --command "node tools/inventory.mjs --json"
+vibegraph-knowledge topology live --from inventory.json
+```
+
+Each declared zone is matched to a live resource **by name only** — its id, a
+`<prefix>-<zone>` name, or its label's `<placeholder>` spelled out — and the
+answer is "51 declared · 41 provisioned · 1 live identity", the declared zones
+never provisioned, and the live resources nothing declares (exit 1 while any
+zone is missing). `topology show` ends with the same, and the store card on
+the map reads "51 declared · 41 provisioned" with both lists in its notes. A
+catalogue WORD in a grant (`owner-of-entry`, `any-writer`) is a rule, never
+counted as a writer.
+
 ## 6. Trace overlay
 
 ```bash

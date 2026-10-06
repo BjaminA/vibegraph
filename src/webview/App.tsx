@@ -89,6 +89,8 @@ import { PanelSheet, type SheetSlot } from "./panels/PanelSheet";
 import type { PanelId } from "./panels/panels";
 import { useFocusRouter } from "./panels/useFocusRouter";
 import { RulesPanel } from "./RulesPanel";
+import { InboxPanel } from "./InboxPanel";
+import { useInboxState } from "./useInboxState";
 import { useRulesState } from "./useRulesState";
 import { ThreadRulesChip } from "./threads/ThreadRulesChip";
 // M18-Add-deprecate: the 9-kind Add palette + its drag/insertion flow is
@@ -315,6 +317,9 @@ function Graph() {
   const setRulesOpen = useMemo(() => sheetSetter("rules"), [sheetSetter]);
   const [focusRule, setFocusRule] = useState<string | null>(null);
   const rules = useRulesState(true);
+  const inbox = useInboxState(true); // 2026-10-06 (M11): every decision waiting for the person
+  const inboxOpen = sheet === "inbox";
+  const setInboxOpen = useMemo(() => sheetSetter("inbox"), [sheetSetter]);
   // A chip asked for a card on the map (useFocusRouter → SystemView).
   const [mapFocus, setMapFocus] = useState<{ id: string; n: number } | null>(null);
   // A pin opens the board DOCKED: the person is still working the graph
@@ -1439,6 +1444,7 @@ function Graph() {
         rulesOpen={rulesOpen}
         rulesPending={rules.pending}
         onToggleRules={() => setRulesOpen((v) => !v)}
+        inboxOpen={inboxOpen} inboxPending={inbox.pending} onToggleInbox={() => setInboxOpen((v) => !v)}
         onToggleFilters={() => { setFiltersOpen((v) => !v); setAnalysisOpen(false); }}
         onToggleAnalysis={() => { setAnalysisOpen((v) => !v); setFiltersOpen(false); }}
         onToggleCode={handleToggleCode}
@@ -1910,7 +1916,7 @@ function Graph() {
       {sheet && (
         <PanelSheet
           active={sheet}
-          available={(isDirectoryMode ? ["plan", "rules", "stack", "agents", "direction", "models", "board"] : ["models"]) as PanelId[]}
+          available={(isDirectoryMode ? ["inbox", "plan", "rules", "stack", "agents", "direction", "models", "board"] : ["models"]) as PanelId[]}
           badges={{ rules: rules.pending }}
           onSwitch={setSheet}
           onClose={() => setSheet(null)}
@@ -1941,6 +1947,7 @@ function Graph() {
       )}
       {isDirectoryMode && <InvestigationPanel open={investigateOpen} onOpen={openInvestigation} slot={sheetSlot} />}
       {isDirectoryMode && <PlanPanel open={planOpen} slot={sheetSlot} />}
+      {isDirectoryMode && <InboxPanel open={inboxOpen} slot={sheetSlot} state={inbox} />}
       {isDirectoryMode && (
         <RulesPanel open={rulesOpen} slot={sheetSlot} state={rules} stack={stack}
           prefill={policyPrefill} onPrefillConsumed={() => setPolicyPrefill(null)} focusRule={focusRule}

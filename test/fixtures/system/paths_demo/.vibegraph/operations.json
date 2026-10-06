@@ -1,0 +1,6 @@
+{
+  "paths": { "tagKey": "tags" },
+  "access": [
+    { "at": "bin/watcher.ts:10", "op": "watch", "families": ["status", "notes", "nonesuch"], "why": "the watched list comes from deployment.json at run time" }
+  ]
+}

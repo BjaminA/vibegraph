@@ -24,6 +24,7 @@
 //
 // Validated at the boundary; a mangled entry is dropped, never half-loaded.
 
+import { factLabel } from "../shared/arch_fact_label.ts";
 import { stampHierarchy } from "../shared/arch_hierarchy.ts";
 import { describeRule, resolveMembers, validateRule, type GroupRule } from "../shared/arch_rules.ts";
 import * as fs from "fs";
@@ -40,7 +41,11 @@ export const GROUP_KINDS = ["host", "region", "subnet", "trust", "network", "pro
  *  arch_rules.ts), so code added later lands in its group with no model;
  *  `exclude` — boxes the rules must not bring in; `planned` — the plan item
  *  the group was drawn for ("processes:api"), which may have no code yet. */
-export interface StatedGroup { id: string; kind: string; label: string; wraps: string[]; parent?: string; note?: string; match?: GroupRule[]; exclude?: string[]; planned?: string }
+export interface StatedGroup {
+  id: string; kind: string; label: string; wraps: string[]; parent?: string; note?: string; match?: GroupRule[]; exclude?: string[]; planned?: string;
+  /** 2026-10-06 (M12) — the label is REBUILT from the members' facts on every derive (shared/arch_fact_label.ts) */
+  labelFrom?: "facts";
+}
 export interface ProposedGroup extends StatedGroup { evidence: string[] }
 export interface ProposedName { label: string; evidence: string[] }
 
@@ -55,7 +60,7 @@ export interface ArchProposal {
   refused: Array<{ item: string; reason: string }>;
   /** 2026-10-05 — an UPDATE of ratified groups after drift: a group with an
    *  existing id EXTENDS it (members and rules added), never replaces it. */
-  mode?: "update";
+  mode?: "update" | "replace";
 }
 
 /** What the map held when the groups were ratified (the drift baseline). */
@@ -87,7 +92,8 @@ function validGroup(g: unknown): g is StatedGroup {
     && (x.parent === undefined || typeof x.parent === "string")
     && (x.match === undefined || (Array.isArray(x.match) && x.match.every((r) => !!validateRule(r).rule)))
     && (x.exclude === undefined || (Array.isArray(x.exclude) && x.exclude.every((w) => typeof w === "string")))
-    && (x.planned === undefined || typeof x.planned === "string");
+    && (x.planned === undefined || typeof x.planned === "string")
+    && (x.labelFrom === undefined || x.labelFrom === "facts");
 }
 
 function validBaseline(b: unknown): b is ArchBaseline {
@@ -132,7 +138,7 @@ export function loadArchStore(root: string | null): ArchStore {
         ...(pr.primaryPath && typeof pr.primaryPath === "object" ? { primaryPath: pr.primaryPath as ArchProposal["primaryPath"] } : {}),
         ...(typeof pr.narrative === "string" ? { narrative: pr.narrative } : {}),
         refused: Array.isArray(pr.refused) ? (pr.refused as ArchProposal["refused"]) : [],
-        ...(pr.mode === "update" ? { mode: "update" as const } : {}),
+        ...(pr.mode === "update" || pr.mode === "replace" ? { mode: pr.mode as "update" | "replace" } : {}),
       };
     }
     return store;
@@ -186,6 +192,9 @@ export function ratifyProposal(store: ArchStore, opts: { baseline?: ArchBaseline
   if (p.mode === "update") {
     const merged = mergeUpdate(store.groups, p.groups);
     groups = merged.groups.map(({ evidence, ...g }) => (merged.touched.has(g.id) ? { ...g, note: `${g.note ? `${g.note}; ` : ""}updated: ${noteOf(evidence ?? [])}` } : g));
+  } else if (p.mode === "replace") {
+    // M12: a regroup from facts REPLACES the groups it was formed against
+    groups = p.groups.map(({ evidence, ...g }) => ({ ...g, note: noteOf(evidence) }));
   } else {
     groups = store.groups.filter((g) => !p.groups.some((x) => x.id === g.id));
     for (const g of p.groups) {
@@ -264,7 +273,8 @@ export function applyArchStore(model: ArchModelRecord, store: ArchStore): ArchMo
   // previews its extensions on the stated groups; members come from what a
   // group names plus what its rules claim (src/shared/arch_rules.ts).
   const update = store.proposal?.mode === "update" ? mergeUpdate(store.groups, store.proposal.groups) : null;
-  const statedNow: Array<StatedGroup & { evidence?: string[] }> = update ? update.groups.filter((g) => !update.touched.has(g.id)) : store.groups;
+  // a REPLACE proposal previews the map as it will be: the stated groups give way
+  const statedNow: Array<StatedGroup & { evidence?: string[] }> = update ? update.groups.filter((g) => !update.touched.has(g.id)) : store.proposal?.mode === "replace" ? [] : store.groups;
   const proposedNow: Array<StatedGroup & { evidence?: string[] }> = update ? update.groups.filter((g) => update.touched.has(g.id)) : (store.proposal?.groups ?? []);
   const effective = resolveMembers([...statedNow, ...proposedNow.filter((g) => !statedNow.some((s) => s.id === g.id))], model);
   // A statement about a box the code no longer yields is SAID, never dropped
@@ -289,8 +299,10 @@ export function applyArchStore(model: ArchModelRecord, store: ArchStore): ArchMo
     }
     if (!wraps.length || groupIds.has(g.id)) return;
     groupIds.add(g.id);
+    const byId = new Map(model.nodes.map((n) => [n.id, n]));
+    const label = g.labelFrom === "facts" ? factLabel(wraps.map((w) => byId.get(w)).filter((n): n is ArchModelRecord["nodes"][number] => !!n)) : g.label;
     groups.push({
-      id: g.id, kind: g.kind, label: g.label, wraps, ...(g.parent ? { parent: g.parent } : {}), source, ...(evidence ? { evidence } : {}),
+      id: g.id, kind: g.kind, label, wraps, ...(g.parent ? { parent: g.parent } : {}), source, ...(evidence ? { evidence } : {}),
       ...(eff?.byRule.length ? { byRule: eff.byRule } : {}), ...(g.match?.length ? { rules: g.match.map(describeRule) } : {}),
     });
   };

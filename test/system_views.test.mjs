@@ -71,7 +71,10 @@ test("Real: processes by their plan names with who they run as; the outside call
   const gw = real.nodes.find((n) => n.kind === "cluster" && n.label === "partner gateway");
   assert.ok(gw, real.nodes.filter((n) => n.kind === "cluster").map((n) => n.label).join(" | "));
   assert.deepEqual(gw.serves, { how: "listen", files: ["gateway/src/server.ts"] });
-  assert.deepEqual(gw.badges.map((b) => b.id), ["gateway"]);
+  // M4: the plan only LOCATES the gateway (`at`, no entry points): its
+  // badge is the identity the code reads, never the plan's word
+  assert.match(gw.sublabel, /^located, not anchored/);
+  assert.deepEqual(gw.badges.map((b) => b.id), ["$GATEWAY_USER"]);
   assert.ok(gw.derivedLabel && gw.derivedLabel !== gw.label, "the code's own name is kept");
   const partner = byLabel(real.nodes, "partner system");
   assert.equal(partner.kind, "actor");
@@ -80,7 +83,10 @@ test("Real: processes by their plan names with who they run as; the outside call
   const app = real.nodes.find((n) => n.label === "clerk app");
   assert.ok(real.edges.some((e) => e.to === app.id && e.from.startsWith("actor:outside:")));
   const decider = real.nodes.find((n) => n.label === "order decider");
+  // anchored by its entry point, and the code shows an identity: the plan names the badge
   assert.deepEqual(decider.badges.map((b) => b.id), ["decider"]);
+  assert.match(decider.badges[0].title, /DECIDER_ACCOUNT/);
+  assert.ok(!/located/.test(decider.sublabel));
   for (const id of ["decision:sm:order-phase", "decision:dt:release"]) {
     const d = real.nodes.find((n) => n.id === id);
     assert.ok(d?.essential, id);

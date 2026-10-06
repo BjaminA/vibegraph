@@ -138,6 +138,16 @@ export function formatPlanMd(plan: Plan, rec?: PlanReconcile | null): string {
     for (const q of [...plan.resolved].reverse()) out.push(`- **${q.id}** ${q.state} at rev ${q.rev} by ${q.by} (${q.at.slice(0, 10)})${q.note ? ` — ${q.note}` : ""}: ${q.text.split("\n")[0].slice(0, 200)}`);
     out.push("");
   }
+  // 2026-10-06 — the decisions ledger (plan_decisions.ts), newest first
+  if (plan.decisions?.length) {
+    out.push("## Decisions", "");
+    for (const d of [...plan.decisions].reverse().slice(0, 30)) {
+      out.push(`- **${d.id}** ${d.status} (${d.by}, ${(d.decidedAt ?? d.at).slice(0, 10)})${d.from ? ` from ${d.from}` : ""}: ${d.said}`);
+      for (const e of d.effects.slice(0, 6)) out.push(`  - ${String(e.op)} ${[e.section, e.id ?? (e.item as any)?.id].filter(Boolean).join(" ")}${e.why ? ` — ${String(e.why).slice(0, 160)}` : ""}`);
+    }
+    if (plan.decisions.length > 30) out.push(`- … ${plan.decisions.length - 30} earlier`);
+    out.push("");
+  }
   if (rec?.offObjective?.length) {
     out.push("## Possibly off the objective (a word-match guess)", "",
       "These say they serve something that shares no word with the objective. Words are not meaning — check each one, and drop it or say how it serves the objective.", "",
@@ -147,7 +157,12 @@ export function formatPlanMd(plan: Plan, rec?: PlanReconcile | null): string {
     const counts = Object.entries(rec.counts).map(([k, n]) => `${n} ${k}`).join(", ");
     out.push("## Plan vs code", "", counts ? `${counts}.` : "Nothing to compare yet.", "", ...rec.limits.map((l) => `- ${l}`), "");
   }
-  const dropped = PLAN_ITEM_SECTIONS.flatMap((s) => sectionItems(plan, s).filter((i) => i.status === "dropped").map((i) => `${s} ${planItemId(s, i)}`));
+  const gone = PLAN_ITEM_SECTIONS.flatMap((s) => sectionItems(plan, s).filter((i) => i.status === "dropped").map((i) => ({ s, i: i as any })));
+  const superseded = gone.filter((g) => g.i.supersededBy);
+  if (superseded.length) {
+    out.push("## Superseded (on no map; kept for the record)", "", ...superseded.map((g) => `- ${g.s} **${planItemId(g.s, g.i)}** by ${g.i.supersededBy} — ${g.i.supersededWhy ?? ""}`), "");
+  }
+  const dropped = gone.filter((g) => !g.i.supersededBy).map((g) => `${g.s} ${planItemId(g.s, g.i)}`);
   if (dropped.length) out.push(`Dropped (kept for the record): ${dropped.join(", ")}.`, "");
   if (plan.changelog.length) {
     out.push("## Recent changes", "");
@@ -192,6 +207,10 @@ export function compactPlan(plan: Plan, sinceRevision?: number): string {
   if (plan.open.length) lines.push(`Open questions: ${plan.open.map((q) => `${q.id} ${q.text}${q.evidence?.some((e) => e.result) ? ` [${assumptionState(q).toUpperCase()}]` : ""}`).join("; ")}`);
   const assumed = [...new Set(([] as Array<{ assumes?: string[] }>).concat(plan.processes, plan.boundaries, plan.stack, plan.threads, plan.policies, plan.stores ?? [], plan.flows ?? [], plan.modules ?? []).flatMap((x) => x.assumes ?? []))];
   const refuted = assumed.filter((q) => assumptionState(plan.open.find((x) => x.id === q)) === "refuted");
+  const pending = (plan.decisions ?? []).filter((d) => d.status === "proposed");
+  if (pending.length) lines.push(`Decisions waiting for a person: ${pending.map((d) => `${d.id} ${d.said}`).join("; ")}`);
+  const superseded = PLAN_ITEM_SECTIONS.flatMap((s) => sectionItems(plan, s).filter((i: any) => i.supersededBy).map((i: any) => `${planItemId(s, i)}`));
+  if (superseded.length) lines.push(`Superseded — do not build: ${superseded.join(", ")}`);
   if (refuted.length) lines.push(`REFUTED assumptions (items resting on them are built on something false): ${refuted.join(", ")}`);
   lines.push("`?` = proposed, not yet agreed. Keep work on the objective; propose plan changes with the vibegraph_plan_edit tool or `vibegraph-knowledge plan edit` (a person agrees). Full page: `vibegraph-knowledge plan show`.");
   return lines.join("\n");

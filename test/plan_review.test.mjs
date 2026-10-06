@@ -73,7 +73,9 @@ test("ACCEPTANCE: one page — every pending proposal, a diff or the item, its e
 
 test("the backlog count reaches the session-start hook", () => {
   const ctx = runHook("session-start", { session_id: "s", source: "startup" }, { absRoot: root, pipeline: {} })?.json?.hookSpecificOutput?.additionalContext ?? "";
-  assert.match(ctx, /Review backlog: 3 proposals await a person — `vibegraph-knowledge plan review`/);
+  // 2026-10-06 (M11) — said as the decision INBOX, which holds the plan's
+  // backlog beside every other waiting person step
+  assert.match(ctx, /\d+ decisions await the person \([^)]*\bplan\b[^)]*\): `vibegraph-knowledge inbox`/);
 });
 
 test("ACCEPTANCE: decided in one action — a rejected change restores the agreed version, an agreed new item stays", () => {

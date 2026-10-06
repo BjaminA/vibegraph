@@ -6,10 +6,12 @@ import { useEffect, useState } from "react";
 import { bridge, type ExtensionMessage } from "./types";
 import type { TopologyModel } from "../shared/topology_types";
 import type { TopologyDrift, TraceStep } from "../shared/topology_analysis";
+import type { LiveInventory } from "../shared/live_inventory";
 
 export interface TopologyState {
   model: TopologyModel | null;
   live: { at: string; drift: TopologyDrift } | null;
+  inventory?: { at: string; command: string; inventory: LiveInventory } | null;
   traces: Array<{ name: string; steps: TraceStep[]; errors: string[] }>;
 }
 

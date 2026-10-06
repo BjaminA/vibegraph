@@ -4,6 +4,11 @@
 // from. The same citation gate as a software spec: a quote not in the sources
 // drops the item; no quote keeps it with `groundedIn: null` (INFERRED). Every
 // item lands PROPOSED (applied as an agent). Pure: the CLI spends the tokens.
+//
+// 2026-10-06 (direction review M2) — a DIRECTION draft also may answer
+// {"op":"objective","text","cite"} (it becomes the "Proposed objective: …"
+// question a person adopts) and {"op":"name","id","label","cite"} (a name for
+// an observed process). Both pass the same quote check.
 
 import type { Plan, PlanSection } from "../shared/plan_types.ts";
 import { PLAN_CAPS, PLAN_SECTIONS } from "../shared/plan_types.ts";
@@ -58,7 +63,21 @@ export function gatePlanDraft(rawOps: unknown[], sourceTexts: string[]): { ops: 
   const dropped: string[] = [];
   const inferred: string[] = [];
   for (const raw of rawOps.slice(0, MAX_OPS)) {
-    const o = raw as { op?: string; section?: string; item?: Record<string, unknown> };
+    const o = raw as { op?: string; section?: string; item?: Record<string, unknown>; text?: unknown; id?: unknown; label?: unknown; cite?: unknown };
+    if (o?.op === "objective" || o?.op === "name") {
+      const text = String(o.op === "objective" ? o.text ?? "" : o.label ?? "").trim();
+      const where = o.op === "objective" ? "the objective" : `a name for ${String(o.id)}`;
+      if (!text || text.includes("\n") || text.length > (o.op === "objective" ? PLAN_CAPS.objective : 80) || (o.op === "name" && typeof o.id !== "string")) { dropped.push(`${where} — not one usable line`); continue; }
+      let cited: string | null = null;
+      if (typeof o.cite === "string" && o.cite.trim()) {
+        const n = normalizeForCite(o.cite);
+        if (n.length < 12 || !hay.includes(n)) { dropped.push(`${where} — its quote is not in the documents ("${o.cite.slice(0, 80)}")`); continue; }
+        cited = o.cite.trim().slice(0, 200);
+      } else inferred.push(where);
+      if (o.op === "objective") ops.push({ op: "add", section: "open", item: { text: `Proposed objective: ${text}${cited ? ` (cited: "${cited}")` : " (INFERRED — no quote)"}`.slice(0, PLAN_CAPS.question) } });
+      else ops.push({ op: "update", section: "processes", id: String(o.id), fields: { label: text, groundedIn: cited } });
+      continue;
+    }
     if (o?.op !== "add" || !PLAN_SECTIONS.includes(o.section as PlanSection) || !o.item || typeof o.item !== "object") { dropped.push(`not an add operation: ${JSON.stringify(raw).slice(0, 80)}`); continue; }
     const { cite, status: _s, ...item } = o.item as Record<string, unknown>;
     const name = String(item.id ?? item.tool ?? item.text ?? "?").slice(0, 60);

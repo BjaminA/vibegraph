@@ -19,7 +19,8 @@
 //      one name link to neither (JS makes it undefined). And CLASS INSTANCES:
 //      `const w = new C(); w.m()` and a parameter typed `w: C` link to C.m —
 //      a name assigned twice, a type some project class extends, and
-//      `this.m()` stay unlinked (which m runs is decided at run time).
+//      `this.m()` stay unlinked (which m runs is decided at run time);
+//      `this.#m()` links — a private method cannot be overridden.
 //
 // NAMED LIMITS: namespace-member calls (`import * as ns`, `export * as ns`)
 // don't link; an inherited method (defined on a base class) doesn't link;
@@ -182,6 +183,19 @@ export function linkFiles(files) {
               source: id, target: methodId, type: "reference", targetFile: c.file,
               qualifiedTarget: `${files[c.file].modulePath ?? c.file}:${k}.${parts[2]}`,
             });
+          }
+          continue;
+        }
+        const own = /^(?:await\s+)?this\.(#[A-Za-z_$][\w$]*)$/.exec(callee);
+        if (own) {
+          // 2026-10-06 — `this.#m()`: a JS PRIVATE method cannot be overridden
+          // or reached from outside its class, so it is the enclosing class's
+          // own #m, decided by the language, not at run time.
+          const owner = [...(classIndex.get(rel)?.values() ?? [])].filter((c) => id.startsWith(`${c.id}/`)).sort((a, b) => b.id.length - a.id.length)[0];
+          const methodId = owner?.methods.get(own[1]);
+          if (methodId) {
+            const cname = [...classIndex.get(rel).entries()].find(([, c]) => c === owner)[0];
+            edges.push({ source: id, target: methodId, type: "reference", targetFile: rel, qualifiedTarget: `${files[rel].modulePath ?? rel}:${cname}.${own[1]}` });
           }
           continue;
         }

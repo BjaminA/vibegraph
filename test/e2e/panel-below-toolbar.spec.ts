@@ -30,6 +30,19 @@ async function toolbarBottom(page: Page): Promise<number> {
  *  per-panel selector so a new panel is covered the day it is added. */
 async function openPanelBox(page: Page) {
   return page.evaluate(() => {
+    // 2026-10-06 — since 0.22.0 every panel renders into ONE sheet
+    // (PanelSheet): measure the sheet. The position heuristic below is kept
+    // for a panel drawn outside it.
+    const sheet = document.querySelector("[data-panel-sheet]");
+    if (sheet) {
+      const r = sheet.getBoundingClientRect();
+      // a MODAL sheet (centred, over a scrim) sits above the toolbar by
+      // design; only a DOCKED one must start below the band
+      const modal = sheet.getAttribute("data-docked") !== "true";
+      const z = Number(getComputedStyle(sheet).zIndex) || 0;
+      const tz = Number(getComputedStyle(document.querySelector("[data-top-toolbar]")!).zIndex) || 0;
+      return { top: Math.round(r.top), bottom: Math.round(r.bottom), vh: window.innerHeight, modal, above: z > tz };
+    }
     const boxes = [...document.querySelectorAll("div")]
       .map((el) => ({ el, r: el.getBoundingClientRect(), cs: getComputedStyle(el) }))
       .filter((x) => !x.el.closest("[data-top-toolbar]"))
@@ -81,11 +94,18 @@ test.describe("right-edge panels clear the toolbar band at every width", () => {
         const drawn = await page.evaluate(() =>
           Math.round(document.querySelector("[data-top-toolbar]")!.getBoundingClientRect().bottom));
         expect(openBottom, "the published band matches the toolbar as drawn").toBe(drawn);
-        expect(box!.top, `${name} at ${width}px is UNDER the toolbar (band ends ${openBottom})`)
-          .toBeGreaterThanOrEqual(openBottom);
+        if ((box as { modal?: boolean }).modal) {
+          expect((box as { above?: boolean }).above, `${name} at ${width}px: a modal sheet must stack above the toolbar`).toBe(true);
+          expect(box!.top, `${name} at ${width}px starts above the viewport`).toBeGreaterThanOrEqual(0);
+        } else {
+          expect(box!.top, `${name} at ${width}px is UNDER the toolbar (band ends ${openBottom})`)
+            .toBeGreaterThanOrEqual(openBottom);
+        }
         expect(box!.bottom, `${name} at ${width}px overruns the viewport`)
           .toBeLessThanOrEqual(box!.vh);
-        await btn.click();
+        // the sheet's scrim covers the toolbar: close it with its own button
+        const close = page.locator("[data-sheet-close]");
+        if (await close.count()) await close.click(); else await btn.click();
         await page.waitForTimeout(300);
       }
     }

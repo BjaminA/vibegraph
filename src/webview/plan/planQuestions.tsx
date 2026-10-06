@@ -17,7 +17,7 @@
 import React, { useState } from "react";
 import { Check, Trash2, ArrowUpRight, RotateCcw, Plus } from "lucide-react";
 import type { Plan, PlanFinding, PlanQuestion, ResolvedQuestion } from "../../shared/plan_types";
-import { PLAN_CAPS, looksAnswered } from "../../shared/plan_types";
+import { PLAN_CAPS, looksAnswered, proposedObjectiveText } from "../../shared/plan_types";
 import { Chip, Verdict } from "../panels/Chip";
 import { sendPlanOp, sendPlanOps } from "../usePlanState";
 
@@ -71,7 +71,7 @@ export function QuestionCard({ q, finding }: { q: PlanQuestion; finding?: PlanFi
         <div className="vg-item-acts">
           {q.text.startsWith(PROPOSED_OBJECTIVE) && (
             <button className="vg-btn" data-tone="go" data-plan-adopt-objective title="Make this the plan's objective"
-              onClick={() => sendPlanOps([{ op: "set-objective", text: q.text.slice(PROPOSED_OBJECTIVE.length).trim() }, { op: "close-question", id: q.id, note: "adopted as the objective" }])}>
+              onClick={() => sendPlanOps([{ op: "set-objective", text: proposedObjectiveText(q.text) }, { op: "close-question", id: q.id, note: "adopted as the objective" }])}>
               <ArrowUpRight size={12} strokeWidth={1.5} /> Adopt as objective
             </button>
           )}

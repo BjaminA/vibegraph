@@ -226,7 +226,7 @@ export function ArchProposalBar({ model, state, onAction }: {
       {p && (
         <>
           <span data-arch-proposal-summary title={why} style={{ padding: "0 4px" }}>
-            {`${p.mode === "update" ? "update" : "proposal"} from ${p.model}: ${proposedGroups} groups · ${proposedNames} names${p.refused.length ? ` · ${p.refused.length} refused` : ""}`}
+            {`${p.mode === "update" ? "update" : p.mode === "replace" ? "regroup" : "proposal"} from ${p.model}: ${proposedGroups} groups · ${proposedNames} names${p.refused.length ? ` · ${p.refused.length} refused` : ""}`}
           </span>
           <button data-arch-ratify disabled={state.busy || !onAction} onClick={() => onAction?.("ratify")} style={btn} title="Make this proposal stated (.vibegraph/architecture.json)">
             <Check size={16} strokeWidth={1.5} />Ratify

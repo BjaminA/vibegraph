@@ -10,6 +10,17 @@ import { loadArchStore } from "./arch_store.ts";
 import { linesReader, withScopeStaleness } from "./node_scope.ts";
 import { listSpecs } from "./software_store.ts";
 
+/** Files the project declares NEGATIVE (`negative`: globs in
+ *  .vibegraph/operations.json): every write in them is an attempt the
+ *  platform should refuse, never a write (attempts.ts). */
+export function negativeGlobs(root: string | null): string[] {
+  if (!root) return [];
+  try {
+    const raw = JSON.parse(fs.readFileSync(path.join(root, OPERATIONS_FILE), "utf-8"));
+    return Array.isArray(raw?.negative) ? raw.negative.filter((g: unknown): g is string => typeof g === "string" && !g.includes("..")).slice(0, 50) : [];
+  } catch { return []; }
+}
+
 /** The store's scopes, each judged against the box's code NOW (stale or not). */
 export function scopesNow(root: string, model: Parameters<typeof withScopeStaleness>[1]) {
   let specs: ReturnType<typeof listSpecs> = [];

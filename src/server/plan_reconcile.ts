@@ -14,6 +14,7 @@
 // Matching is by name and path, and says so. What it cannot see is listed in
 // `limits` on every result, never implied away.
 
+import { registeredAccess } from "./registered_access.ts";
 import type { Plan, PlanFinding, PlanReconcile, PlanVerdict, PlanProcess } from "../shared/plan_types.ts";
 import { sectionItems, planItemId } from "../shared/plan_types.ts";
 import { planItemFacts } from "../shared/plan_facts.ts";
@@ -300,7 +301,7 @@ export function reconcilePlan(plan: Plan, env: EnvLike, stack: StackIndex, root:
   let graphMemo: { graph: ImportEdge[]; packages: WorkspacePackage[] } | null = null;
   const graphOf = () => (graphMemo ??= (() => { const packages = workspacePackages(root); return { graph: importGraph(env.files, packages), packages }; })());
   // what the code says about stores (data_arch.ts), derived once
-  const da = (plan.stores ?? []).length ? deriveDataArchitecture(env.files, stack as any, env.threads as any) : null;
+  const da = (plan.stores ?? []).length ? deriveDataArchitecture(env.files, stack as any, env.threads as any, registeredAccess(root)) : null;
   const st = (plan.stores ?? []).length ? storeFindings(plan, stack, env.files, graphOf().graph, graphOf().packages, da ? { zones: da.topology.zones ?? [], ops: da.operations } : undefined) : { findings: [], reach: new Map(), sites: new Map() };
   for (const f of st.findings) add(f);
   if (da) mergeDerivedSites(plan, st.sites, da.operations);

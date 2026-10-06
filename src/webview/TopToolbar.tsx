@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Cpu, Spline, GitBranch, FileText, Pencil, Network, Boxes, Layers, Sparkles, DraftingCompass, Hammer, Bot, Compass, ClipboardList, Scale } from "lucide-react";
+import { Cpu, Spline, GitBranch, FileText, Pencil, Network, Boxes, Layers, Sparkles, DraftingCompass, Hammer, Bot, Compass, ClipboardList, Scale, Inbox } from "lucide-react";
 import { ThemeButton } from "./ThemeButton";
 
 interface Props {
@@ -63,6 +63,10 @@ interface Props {
   /** 2026-10-05 — the Rules panel, with the count of reviews waiting for a person. */
   rulesOpen?: boolean;
   rulesPending?: number;
+  /** 2026-10-06 — the decision inbox and how many wait */
+  inboxOpen?: boolean;
+  inboxPending?: number;
+  onToggleInbox?: () => void;
   onToggleRules?: () => void;
   // M-SKILLS.2 — the Skills panel: generic direction, enabled per project.
   // Directory mode only (the enable file lives under the project).
@@ -206,6 +210,7 @@ export function TopToolbar({
   buildAvailable, buildOpen, building, onToggleBuild,
   onToggleFilters, onToggleModels, stackOpen, stackAvailable, onToggleStack,
   investigateOpen, onToggleInvestigate, planOpen, onTogglePlan, rulesOpen, rulesPending = 0, onToggleRules,
+  inboxOpen, inboxPending = 0, onToggleInbox,
   skillsOpen, skillsAvailable, onToggleSkills,
   workRunOpen, workRunAvailable, onToggleWorkRun,
   onToggleAnalysis, onToggleCode, onToggleThread,
@@ -459,6 +464,19 @@ export function TopToolbar({
           accent="var(--accent-thread)">
           <DraftingCompass size={16} strokeWidth={1.5} />
           Plan
+        </ToolButton>
+      )}
+      {/* 2026-10-06 — every decision waiting for the person (direction review
+          M11), shown only when something waits or the inbox is open. */}
+      {stackAvailable && onToggleInbox && (inboxPending > 0 || inboxOpen) && (
+        <ToolButton data-inbox-toggle active={!!inboxOpen} onClick={onToggleInbox}
+          title={`Inbox — ${inboxPending} decision${inboxPending === 1 ? " waits" : "s wait"} for you`} accent="var(--accent-warning)">
+          <Inbox size={16} strokeWidth={1.5} />
+          Inbox
+          <span data-inbox-badge={inboxPending} style={{
+            minWidth: 16, padding: "0 4px", borderRadius: 8, fontSize: "var(--fs-11)", fontWeight: 600, lineHeight: "16px", textAlign: "center",
+            background: "var(--accent-warning)", color: "var(--bg-canvas)",
+          }}>{inboxPending}</span>
         </ToolButton>
       )}
       {/* 2026-10-05 — the stated rules, where a person reviews them; the

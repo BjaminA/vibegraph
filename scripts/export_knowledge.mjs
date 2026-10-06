@@ -21,6 +21,7 @@
 //
 // Every file names its KIND in README.md: derived (a script read it from
 // the code), stated (a human wrote it), observed (a consented run saw it).
+import { registeredAccess } from "../src/server/registered_access.ts";
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -280,7 +281,7 @@ export function exportKnowledge({ root, out, task, envelope: envelopePath, commi
   // 2026-10-02 — the DATA ARCHITECTURE derived from the code (data_arch.ts):
   // literal tables, decision structures, names, SDK effects, injections, hops.
   // Its topology joins the declared one as the lowest-ranked source.
-  const dataArch = deriveDataArchitecture(env.files ?? {}, stack, env.threads ?? []);
+  const dataArch = deriveDataArchitecture(env.files ?? {}, stack, env.threads ?? [], registeredAccess(root));
   if (hasDataArch(dataArch)) write("data-architecture.md", formatDataArchMd(dataArch));
   if (withIr) write("data_topology.json", json(dataArch));
   const topo = loadTopology(absRoot, dataArch.topology);

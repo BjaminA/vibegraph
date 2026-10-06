@@ -12,10 +12,11 @@ import { decisionChain, diffTopology, driftCount, formatChain, parseTrace, repla
 import { loadEnvelope } from "../quality_check.mjs";
 import { topologyFor } from "../../src/server/topology_model.ts";
 import { pipelineHere } from "./pipeline.mjs";
+import { liveCount, liveLine, loadLive, parseLive, saveLive } from "../../src/server/topology_live.ts";
 
 export const TOPOLOGY_USAGE = `topology add <id> --generator "<cmd>" --inputs <globs> | remove <id> | list | run [<id>] | show | check
               | who-writes <zone> | can-write <principal> | touches <family> | explain <tree>:<node>
-              | live --command "<read-only cmd>" | trace <events.jsonl> [--save <name>]   [--root <dir>] [--json]
+              | live --command "<read-only cmd>" | live --from <file.json> | trace <events.jsonl> [--save <name>]   [--root <dir>] [--json]
                                   the DECLARED topology — stores, zones, families, principals, grants, routers, state
                                   machines and decision trees — printed as JSON by the project's own generator
                                   (.vibegraph/topology/); zero tokens; see docs/guide/TOPOLOGY.md`;
@@ -27,7 +28,7 @@ export function runTopology(args) {
   try {
     parsed = parseArgs({ args, allowPositionals: true, options: {
       root: { type: "string" }, json: { type: "boolean" }, generator: { type: "string" }, inputs: { type: "string" },
-      command: { type: "string" }, save: { type: "string" },
+      command: { type: "string" }, save: { type: "string" }, from: { type: "string" },
     } });
   } catch (e) { return { exitCode: 2, text: `${e.message}\n\nusage: vibegraph-knowledge ${TOPOLOGY_USAGE}\n` }; }
   const [sub, arg] = parsed.positionals;
@@ -67,7 +68,14 @@ export function runTopology(args) {
   // one model: what the code says (derived) under what a generator declares
   const model = topologyFor(root, envOf());
   const t = model.topology;
-  if (sub === "show") { const env = envOf(); return parsed.values.json ? asJson(model) : done(formatTopologyMd(model, env.threads ?? [], env.files ?? {})); }
+  if (sub === "show") {
+    const env = envOf();
+    const lv = loadLive(root);
+    const count = lv?.inventory ? liveCount(t, lv.inventory) : null;
+    if (parsed.values.json) return asJson(count ? { ...model, live: { at: lv.at, ...count, identities: lv.inventory.identities } } : model);
+    const md = formatTopologyMd(model, env.threads ?? [], env.files ?? {});
+    return done(count ? `${md}\n## Live (${lv.at.slice(0, 16)}, \`${lv.command}\`)\n\n${liveLine(count, lv.inventory.identities.length)}${count.missing.length ? `\n\nNever provisioned: ${count.missing.join(", ")}` : ""}${count.undeclared.length ? `\n\nLive, not declared: ${count.undeclared.join(", ")}` : ""}\n` : md);
+  }
   if (sub === "who-writes") {
     const w = whoMay(t, arg ?? "", "write");
     if (parsed.values.json) return asJson(w);
@@ -96,15 +104,29 @@ export function runTopology(args) {
     // The platform's ACTUAL resources and grants, from a read-only command
     // the person supplies. VibeGraph runs it once and writes nothing to the
     // platform — the command must be read-only; that is the person's word.
-    if (!parsed.values.command) return done("live needs --command \"<read-only command printing the topology JSON>\"", 2);
-    const r = spawnSync(parsed.values.command, { cwd: root, shell: true, encoding: "utf-8", timeout: 120_000, maxBuffer: 32 * 1024 * 1024 });
-    if (r.error || r.status !== 0) return done(`the live command failed: ${r.error?.message ?? `exit ${r.status}`} ${String(r.stderr ?? "").slice(0, 300)}`, 2);
-    let live;
-    try { live = JSON.parse(r.stdout); } catch (e) { return done(`the live command's output is not JSON: ${e.message}`, 2); }
-    const bad = validateTopology(live);
-    if (bad) return done(`the live inventory is not a valid topology: ${bad}`, 2);
-    mkdirSync(join(root, TOPOLOGY_DIR), { recursive: true });
-    writeFileSync(join(root, TOPOLOGY_DIR, "live.json"), JSON.stringify({ at: new Date().toISOString(), command: parsed.values.command, topology: live }, null, 2) + "\n");
+    // 2026-10-06 (M8) — or an INVENTORY of named resources (a platform's own
+    // listing tool), counted against the declared zones by name.
+    if (!parsed.values.command && !parsed.values.from) return done("live needs --command \"<read-only command printing a topology or an inventory as JSON>\" (or --from <file.json>)", 2);
+    let stdout;
+    if (parsed.values.from) {
+      try { stdout = readFileSync(resolve(cliPath(parsed.values.from)), "utf-8"); } catch (e) { return done(`cannot read ${parsed.values.from}: ${e.message}`, 2); }
+    } else {
+      const r = spawnSync(parsed.values.command, { cwd: root, shell: true, encoding: "utf-8", timeout: 120_000, maxBuffer: 32 * 1024 * 1024 });
+      if (r.error || r.status !== 0) return done(`the live command failed: ${r.error?.message ?? `exit ${r.status}`} ${String(r.stderr ?? "").slice(0, 300)}`, 2);
+      stdout = r.stdout;
+    }
+    let json;
+    try { json = JSON.parse(stdout); } catch (e) { return done(`the live output is not JSON: ${e.message}`, 2); }
+    const parsedLive = parseLive(json);
+    if (parsedLive.error) return done(`the live output is not usable: ${parsedLive.error}`, 2);
+    saveLive(root, parsed.values.command ?? `file ${parsed.values.from}`, parsedLive);
+    if (parsedLive.inventory) {
+      const c = liveCount(t, parsedLive.inventory);
+      if (parsed.values.json) return asJson({ ...c, identities: parsedLive.inventory.identities }, c.missing.length ? 1 : 0);
+      const sec = (title, xs) => (xs.length ? [`${title} (${xs.length}):`, ...xs.map((x) => `  ${x}`)] : []);
+      return done([liveLine(c, parsedLive.inventory.identities.length), ...sec("Declared, never provisioned", c.missing), ...sec("Live, not declared", c.undeclared)].join("\n"), c.missing.length ? 1 : 0);
+    }
+    const live = parsedLive.topology;
     const d = diffTopology(t, live);
     if (parsed.values.json) return asJson(d, driftCount(d) ? 1 : 0);
     const sec = (title, xs) => (xs.length ? [`${title} (${xs.length}):`, ...xs.map((x) => `  ${x}`)] : []);

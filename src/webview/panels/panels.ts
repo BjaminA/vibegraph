@@ -2,13 +2,14 @@
 // tint hue, its title, its icon and the subtitle it opens with. The sheet,
 // the switcher and the tint are derived from the row: a new panel is one row.
 
-import { DraftingCompass, Scale, Layers, Bot, Compass, Cpu, ClipboardList, type LucideIcon } from "lucide-react";
+import { DraftingCompass, Scale, Layers, Bot, Compass, Cpu, ClipboardList, Inbox, type LucideIcon } from "lucide-react";
 
-export type PanelId = "plan" | "rules" | "stack" | "agents" | "direction" | "models" | "board";
+export type PanelId = "inbox" | "plan" | "rules" | "stack" | "agents" | "direction" | "models" | "board";
 
 export interface PanelSpec { id: PanelId; hue: number; title: string; icon: LucideIcon; subtitle: string }
 
 export const PANELS: readonly PanelSpec[] = [
+  { id: "inbox",     hue: 15,  title: "Inbox",         icon: Inbox,           subtitle: "every decision waiting for you" },
   { id: "plan",      hue: 210, title: "Plan",          icon: DraftingCompass, subtitle: "hypothetical: a plan, not the code" },
   { id: "rules",     hue: 45,  title: "Rules",         icon: Scale,           subtitle: "the stated rules, checked after every edit" },
   { id: "stack",     hue: 195, title: "Stack",         icon: Layers,          subtitle: "what the project is built on" },

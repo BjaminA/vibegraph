@@ -2,6 +2,9 @@
 import { createServer } from "node:http";
 import { readDoc, writeDoc } from "../../lib/store";
 
+// the partner identity this gateway acts as
+const asUser = process.env.GATEWAY_USER ?? "gateway";
+
 const server = createServer(async (req, res) => {
   const url = new URL(req.url ?? "/", "http://localhost");
   if (url.pathname === "/orders") {

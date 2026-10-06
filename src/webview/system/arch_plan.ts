@@ -64,14 +64,27 @@ const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? "" : "s"}`;
 export function realisedTargets(plan: Plan, rec: PlanReconcile | null, real: ArchModelRecord | null): Map<string, string> {
   const out = new Map<string, string>();
   if (!real || !rec) return out;
+  // 2026-10-06 (M3) — ANCHORED first: a plan process naming its own entry
+  // points (ids or files) is the box that runs them, whatever its `at` says.
   for (const p of live(plan.processes)) {
+    const eps = p.entryPoints ?? [];
+    if (!eps.length) continue;
+    const hit = real.nodes.filter((n) => n.kind === "cluster" && (n.entryPoints ?? []).some((e) => eps.includes(e) || eps.includes(e.replace(/:[^:]*$/, ""))));
+    if (hit.length) out.set(`processes:${p.id}`, hit.sort((a, b) => (b.runtime ? 1 : 0) - (a.runtime ? 1 : 0))[0].id);
+  }
+  for (const p of live(plan.processes)) {
+    if (out.has(`processes:${p.id}`)) continue;
     const f = finding(rec, "processes", p.id);
     if (f?.verdict !== "realised" || !f.entryPoints?.length) continue;
-    let best: { id: string; n: number } | null = null;
+    // a box an ANCHORED plan process already names is not this one's; on a
+    // tie a running process outranks a group of one-shot scripts
+    const anchoredBoxes = new Set(live(plan.processes).filter((x) => (x.entryPoints ?? []).length).map((x) => out.get(`processes:${x.id}`)).filter(Boolean));
+    let best: { id: string; n: number; rt: boolean } | null = null;
     for (const n of real.nodes) {
-      if (n.kind !== "cluster" || !n.entryPoints?.length) continue;
+      if (n.kind !== "cluster" || !n.entryPoints?.length || anchoredBoxes.has(n.id)) continue;
       const k = f.entryPoints.filter((e) => n.entryPoints!.includes(e)).length;
-      if (k && (!best || k > best.n)) best = { id: n.id, n: k };
+      const rt = !!n.runtime;
+      if (k && (!best || k > best.n || (k === best.n && rt && !best.rt))) best = { id: n.id, n: k, rt };
     }
     if (best) out.set(`processes:${p.id}`, best.id);
   }
@@ -95,6 +108,11 @@ export function realisedTargets(plan: Plan, rec: PlanReconcile | null, real: Arc
   }
   return out;
 }
+
+/** A plan process placed only by its `at` path or the files under it —
+ *  LOCATED, not anchored: it names where code lives, not which process runs
+ *  it (a logic library is not the service that runs it). */
+export const locatedOnly = (p: { entryPoints?: string[] }) => !(p.entryPoints ?? []).length;
 
 /** node id → the label of the stated/proposed trust zone around it. */
 function trustZones(real: ArchModelRecord | null): Map<string, string> {

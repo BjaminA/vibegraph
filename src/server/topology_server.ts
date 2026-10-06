@@ -7,12 +7,16 @@
 import * as fs from "fs";
 import * as path from "path";
 import type { Topology, TopologyModel } from "../shared/topology_types.ts";
-import { TOPOLOGY_DIR, loadTopology, validateTopology } from "./topology_store.ts";
+import { TOPOLOGY_DIR, loadTopology } from "./topology_store.ts";
 import { diffTopology, parseTrace, replayTrace, type TopologyDrift, type TraceStep } from "../shared/topology_analysis.ts";
+import { loadLive } from "./topology_live.ts";
+import type { LiveInventory } from "../shared/live_inventory.ts";
 
 export interface TopologyReply {
   model: TopologyModel;
   live: { at: string; drift: TopologyDrift } | null;
+  /** M8: an inventory of what is provisioned, counted against the declared zones on the map */
+  inventory: { at: string; command: string; inventory: LiveInventory } | null;
   traces: Array<{ name: string; steps: TraceStep[]; errors: string[] }>;
 }
 
@@ -33,11 +37,9 @@ export function derivedTopologyOnce(stack: unknown, threads: unknown, compute: (
 /** `derived` — the topology read from the code (data_arch.ts), the lowest-ranked source. */
 export function topologyState(root: string, derived?: Topology): TopologyReply {
   const model = loadTopology(root, derived);
-  let live: TopologyReply["live"] = null;
-  try {
-    const raw = JSON.parse(fs.readFileSync(path.join(root, TOPOLOGY_DIR, "live.json"), "utf-8"));
-    if (!validateTopology(raw.topology)) live = { at: String(raw.at), drift: diffTopology(model.topology, raw.topology) };
-  } catch { /* no live inventory saved */ }
+  const saved = loadLive(root);
+  const live: TopologyReply["live"] = saved?.topology ? { at: saved.at, drift: diffTopology(model.topology, saved.topology) } : null;
+  const inventory: TopologyReply["inventory"] = saved?.inventory ? { at: saved.at, command: saved.command, inventory: saved.inventory } : null;
   const traces: TopologyReply["traces"] = [];
   const dir = path.join(root, TOPOLOGY_DIR, "traces");
   try {
@@ -46,5 +48,5 @@ export function topologyState(root: string, derived?: Topology): TopologyReply {
       traces.push({ name: f.replace(/\.jsonl$/, ""), steps: replayTrace(model.topology, events.slice(0, 2000)), errors });
     }
   } catch { /* no traces saved */ }
-  return { model, live, traces };
+  return { model, live, inventory, traces };
 }

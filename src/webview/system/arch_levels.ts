@@ -53,6 +53,9 @@ export function atLevel<M extends ArchModelRecord>(model: M, level: MapLevel, op
   for (const n of model.nodes) if (n.storeOf && byId.has(n.storeOf) && n.id !== n.storeOf) into.set(n.id, n.storeOf);
   // an unclassified tool says least: not drawn at this height (Tools draws it)
   for (const n of model.nodes) if (n.kind === "tool" && n.category === "unknown" && !n.essential && n.source !== "planned") into.set(n.id, "");
+  // 2026-10-06 — a generic transport library (`@grpc/grpc-js`, `fetch`) says
+  // HOW a process talks, not to whom: Overview and Tools draw it, not here
+  for (const n of model.nodes) if (n.kind === "tool" && n.role === "http-client" && !n.essential && n.source !== "planned") into.set(n.id, "");
   // plan items not built, planned tools, the unowned-threads card → one chip
   const ghost = (n: ArchNodeRecord) => n.source === "planned";
   const folded: ArchNodeRecord[] = [];

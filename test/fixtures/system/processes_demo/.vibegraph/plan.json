@@ -1,0 +1,23 @@
+{
+  "version": "1",
+  "revision": 1,
+  "objective": "Orders are released only by the runner, as its own account",
+  "processes": [
+    { "id": "order-service", "kind": "backend", "label": "order service", "serves": "answers order status", "at": "svc/", "runsAs": "svc", "status": "agreed" },
+    { "id": "runner", "kind": "backend", "label": "release runner", "serves": "releases orders", "at": "svc/", "entryPoints": ["svc/runner.ts"], "runsAs": "svc", "status": "agreed" }
+  ],
+  "stores": [
+    { "id": "ledger", "kind": "document-store", "label": "order ledger", "reachedThrough": ["fetch"], "access": { "write": ["write"], "read": ["read"] },
+      "zones": [
+        { "id": "status", "holds": ["status"] },
+        { "id": "requests", "holds": ["requests"] }
+      ], "status": "agreed" }
+  ],
+  "principals": [{ "id": "svc", "kind": "service", "status": "agreed" }],
+  "stack": [],
+  "boundaries": [],
+  "threads": [],
+  "policies": [],
+  "open": [],
+  "changelog": [{ "rev": 1, "at": "2026-10-06T09:00:00.000Z", "by": "human", "change": "objective set" }]
+}

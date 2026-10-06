@@ -285,6 +285,21 @@
           "required": ["store", "holds"],
           "properties": { "store": { "type": "string" }, "holds": { "type": "array", "items": { "type": "string" } } }
         },
+        "runtime": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["how"],
+          "properties": { "how": { "type": "array", "items": { "enum": ["listens", "spawned"] } }, "by": { "type": "array", "items": { "type": "string" } }, "port": { "type": "string" } }
+        },
+        "identity": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["kind", "name", "evidence"],
+            "properties": { "kind": { "enum": ["env", "given", "created"] }, "name": { "type": "string" }, "evidence": { "type": "string" } }
+          }
+        },
         "serves": {
           "type": "object",
           "additionalProperties": false,

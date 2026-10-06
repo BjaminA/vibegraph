@@ -176,6 +176,7 @@
         "entryPointId": { "type": "string" },
         "file": { "type": "string" },
         "nodeId": { "type": "string" },
+        "line": { "type": "integer" },
         "callee": { "type": "string" },
         "path": { "type": "string" },
         "method": { "type": ["string", "null"] },

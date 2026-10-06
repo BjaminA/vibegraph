@@ -78,6 +78,8 @@ CLI) and says so; everything else is deterministic.
 | `topology add \| run \| check \| show` | The DECLARED topology — stores, zones, principals, grants, decision structures — from the project's own generator | `.vibegraph/topology/` | — |
 | `topology who-writes \| can-write \| touches \| explain \| live \| trace` | Ask it; diff it against a read-only live inventory; replay a run log against it | nothing (`live`/`trace --save` keep a copy) | — |
 | `plan draft --from <url\|file>…` | Draft plan items from documents and the ratified software specs; a quote not in them drops the item; all proposed | `.vibegraph/plan.json` | **yes** |
+| `plan observe` | The direction the code already takes — processes, who each runs as, stores and zones — as proposed plan items; starts a plan when there is none (a person's step) | `.vibegraph/plan.json` | — |
+| `plan draft --direction` | The objective, 3–7 principles and box names, drafted from the project's own prose (README, CLAUDE.md, HANDOVER.md, docs/, commits), each quoted | `.vibegraph/plan.json` | **yes** |
 | `software add <tool> --from <url\|file>…` | Draft a spec for a tool from its own documents, behind the citation gate; saved as a draft | `.vibegraph/software/` | **yes** |
 | `software list` / `show <tool> [--usage]` / `ratify <tool>` / `remove <tool>` | The specs; one with every quote and where the code calls it; accept one (quotes re-checked) | `.vibegraph/software/` | — |
 | `software edit <tool>` / `rule add\|update\|remove <tool>` / `unknown add\|remove <tool>` | Change a spec: every quote re-checked, your items marked STATED; your edit keeps it ratified, a model's sends it back to draft | `.vibegraph/software/` | — |
@@ -417,7 +419,15 @@ vibegraph-knowledge plan close | reopen
 vibegraph-knowledge plan close open <qN> [--note "…"]   # a question is answered
 vibegraph-knowledge plan drop open <qN> [--note "…"]    # a question is not needed
 vibegraph-knowledge plan reopen open <qN>
+vibegraph-knowledge plan edit '{"op":"supersede","section":"stores","id":"query-db","why":"…"}'
+vibegraph-knowledge plan edit '{"op":"decide","said":"…","from":"open:q11","effects":[…]}'
 ```
+
+**Decisions.** `plan.decisions` is the ledger: what was decided, where it
+came from and the plan edits it implies. A person's `decide` applies its
+effects at once; an agent's (`--as agent`, MCP) waits proposed until a person
+agrees it (`agree-decision` / `reject-decision`, or the inbox). `supersede`
+drops an item from every map with the reason, and keeps it on the record.
 
 A closed or dropped question is kept under `resolved` in `plan.json` with its
 revision, who, when and the note — `plan show` lists it, and the Plan panel's
@@ -570,6 +580,14 @@ nowhere. A ratified spec is used in these places:
   records `source: "<tool> s1"`. A check's `{placeholders}` are the project's
   own names, filled from `--param`. A rule still missing one says which
   names it needs, and carries no check until it has them.
+- **A direction from nothing:** `plan observe` (zero tokens) starts a plan
+  from what the code does — every process, who it runs as, the stores and
+  zones it touches — each item proposed and grounded in its fact, the
+  objective said to be unstated. `plan draft --direction` (**spends tokens**)
+  then reads the project's own prose and proposes the objective (adopted from
+  the inbox, without its citation), 3–7 principles (planned rules, with a
+  checkable half where the grammar has one — `plan promote` makes them
+  checked) and names for the observed boxes; every line passes the quote gate.
 - **Plan drafting:** `plan draft --from <docs>` (**spends tokens**) sends
   the objective, the plan so far, every ratified spec and the documents to a
   model. Its items pass the same gate (quotes may come from the documents or
@@ -742,7 +760,7 @@ hook lists stale documents. See
 vibegraph-knowledge topology add <id> --generator "<cmd>" --inputs <globs>   # run once, validated, stored
 vibegraph-knowledge topology run | check | show | remove <id>
 vibegraph-knowledge topology who-writes <zone> | can-write <principal> | touches <family> | explain <tree>:<node>
-vibegraph-knowledge topology live --command "<read-only cmd>" | trace <events.jsonl> [--save <name>]
+vibegraph-knowledge topology live --command "<read-only cmd>" | live --from <file.json> | trace <events.jsonl> [--save <name>]
 ```
 
 For projects whose partitions, grants and decision rules are data and whose
@@ -802,6 +820,7 @@ vibegraph-knowledge architecture [<root>] [--out <dir>] [--archify]
 vibegraph-knowledge architecture [<root>] --propose            # spends tokens
 vibegraph-knowledge architecture [<root>] --modify "<what should change>"   # spends tokens
 vibegraph-knowledge architecture [<root>] --seed-plan [--force] # zero tokens: groups read off the plan
+vibegraph-knowledge architecture [<root>] --regroup [--force]   # zero tokens: groups re-formed from facts
 vibegraph-knowledge architecture [<root>] --drift              # zero tokens: what changed since ratifying
 vibegraph-knowledge architecture [<root>] --update             # spends tokens: extend the ratified groups
 vibegraph-knowledge architecture [<root>] --ratify | --reject
@@ -820,6 +839,14 @@ and exits 0 (none), 1 (minor: counted) or 2 (substantial: run `--update`),
 so a hook or CI job can ask. `--update` shows the model the ratified groups
 as fixed and what changed; it may only extend them or add groups, and the
 result is pending like any proposal.
+
+`--regroup` re-forms the groups from facts, for zero tokens: processes the
+code runs as the same identity (and port) form a group, the rest group by
+package, and each label is built from what every member shares — "runs as
+$GATEWAY_USER · port 8080" — and REBUILT from the members on every derive
+(`labelFrom: "facts"`), so it cannot outlive its code. Ratifying it REPLACES
+the groups it was formed against. Over ratified groups it needs drift (or
+`--force`); the inbox offers it whenever the groups drifted.
 
 `--seed-plan` proposes the same kind of groups without a model, read off
 `.vibegraph/plan.json`: one `process` group per planned process, with a rule
@@ -881,6 +908,32 @@ Over MCP, `vibegraph_node_io` returns any box's In → Process → Out (zero
 tokens, the same answer as the inspector, with its scope and whether it is
 stale), and `vibegraph_scope_node` drafts a scope (spends tokens); ratifying
 stays yours.
+
+### `inbox` — every decision waiting for you
+
+```bash
+vibegraph-knowledge inbox                     # the list; exit 1 while any waits
+vibegraph-knowledge inbox agree <id>…          # or: inbox reject <id>…
+vibegraph-knowledge inbox agree --kind plan    # every item of one kind
+```
+
+One list of the steps that are a person's: plan proposals and a proposed
+objective, changes to stated rules and rules an agent stated, a pending
+architecture groups proposal, proposed scopes, skill and software-spec drafts,
+and open questions at the cap. Each is decided through its own store's
+operation (`plan agree`, `constraint accept`, `scope ratify`…). Deciding is
+refused when Claude Code runs it; with the hooks installed, the end of every
+Claude turn says how many wait. The viewer's **Inbox** button shows the same
+list.
+
+The inbox also carries the plan's **decisions** waiting for a person and the
+**drift sensors'** findings — a planned item a question says is not needed, an
+open question that is already ANSWERED, a process or a per-run identity the
+code has and the plan does not, a process the plan placed somewhere else, a
+decision recorded in a commit or a handover note. Each comes with its evidence
+and the plan edits agreeing would make; rejecting one is remembered. Sensing
+writes nothing. `--quick` skips parsing the project (and the sensors that read
+the map).
 
 ### `classify` — tools no table knows
 

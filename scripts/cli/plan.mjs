@@ -23,10 +23,13 @@ import { workingTreeDelta } from "./check.mjs";
 import { importGraph, workspacePackages } from "../../src/server/import_graph.ts";
 import { promotePolicy } from "../../src/server/plan_promote.ts";
 import { PLAN_SECTIONS } from "../../src/shared/plan_types.ts";
-import { isAgentRun } from "./actor.mjs";
+import { isAgentRun, PERSONS_STEP } from "./actor.mjs";
+import { observeSkeleton, OBSERVED_OBJECTIVE } from "../../src/server/plan_observe.ts";
+import { buildCrossingIndex } from "../../src/server/crossings.ts";
+import { archModelForEnvelope } from "../../src/server/arch_envelope.ts";
 import { cliPath } from "./winpath.mjs";
 
-export const PLAN_USAGE = `plan init "<objective>" | show | check | edit '<op>' | agree|drop <section> <id> | promote <rule id> | layers [--apply] | affected [--uncommitted] | review | close|reopen
+export const PLAN_USAGE = `plan init "<objective>" | observe | show | check | edit '<op>' | agree|drop <section> <id> | promote <rule id> | layers [--apply] | affected [--uncommitted] | review | close|reopen
                                   [--root <dir>] [--json] [--as agent]   the HYPOTHETICAL project (.vibegraph/plan.json): objective,
                                   processes, stack, data boundaries, primary threads, planned rules, open questions; zero tokens
                                   (except \`plan draft --from <docs>\`, which SPENDS TOKENS: items drafted from documents, each quoted).
@@ -36,6 +39,12 @@ export const PLAN_USAGE = `plan init "<objective>" | show | check | edit '<op>' 
 const HELP = `usage: vibegraph-knowledge ${PLAN_USAGE}
 
   init "<objective>"          start a plan (one line: what it is for)
+  observe                     zero tokens: the direction the code already takes — its processes, who each runs as, the
+                              stores and zones it touches — as PROPOSED items, each grounded in the fact it came from;
+                              with no plan yet it starts one (a person's step) whose objective says it is not stated
+  draft --direction           SPENDS TOKENS: from the project's own prose (README, CLAUDE.md, HANDOVER.md, docs/,
+                              recent commit subjects) a model proposes the objective, 3–7 principles and names for the
+                              observed boxes, each line quoting its source (--dry-run, --reply)
   draft --from <url|file> …   SPENDS TOKENS: a model drafts items from the documents and every ratified software
                               spec; a quote not in them drops the item; all land proposed (--dry-run, --reply)
   show [--json]               the plan, objective first
@@ -83,6 +92,28 @@ export function runPlan(args) {
   };
 
   if (!sub || sub === "help" || sub === "--help") return done(HELP, sub ? 0 : 2);
+  if (sub === "observe") {
+    // 2026-10-06 (M2) — the observed skeleton: zero tokens, every item proposed
+    const existing = loadPlan(root);
+    if (!existing && isAgentRun()) return done(`refused: \`plan observe\` would START a plan — ${PERSONS_STEP}`, 1);
+    const { envelope } = loadEnvelope(root, null, pipelineHere(root), { cache: true });
+    const model = archModelForEnvelope(envelope, buildStackIndex(envelope, root), buildCrossingIndex(envelope), root, undefined, { applyStore: false });
+    const { ops, notes } = observeSkeleton(model, existing);
+    let base = existing;
+    if (!base) {
+      const r0 = applyPlanOps(null, [{ op: "set-objective", text: OBSERVED_OBJECTIVE }, { op: "add", section: "open", item: { text: "What is this project for? State the objective (plan edit set-objective), or draft one: plan draft --direction" } }], "human");
+      if (r0.error) return done(`refused: ${r0.error}`, 1);
+      base = r0.plan;
+    }
+    if (!ops.length) { if (!existing) savePlan(root, base); return done(`nothing new observed${notes.length ? `\n${notes.join("\n")}` : ""}`); }
+    const r = applyPlanOps(base, ops, "agent");
+    if (r.error) return done(`refused: ${r.error}`, 1);
+    const saved = savePlan(root, r.plan);
+    if (saved.error) return done(`refused: ${saved.error}`, 1);
+    return done([`plan rev ${r.plan.revision}: observed from the code, zero tokens — ${ops.length} item(s) PROPOSED (agree the few that matter; the rest stays proposed)`,
+      ...ops.map((o) => `  ${o.section} ${o.item.id ?? o.item.tool}: ${o.item.label ?? ""}${o.item.runsAs ? ` · runs as ${o.item.runsAs}` : ""}`), ...notes.map((n) => `  note: ${n}`),
+      ...(existing ? [] : ["the objective is not stated: state it (plan edit '{\"op\":\"set-objective\",\"text\":\"…\"}') or draft it: plan draft --direction"])].join("\n"));
+  }
   if (sub === "init") {
     if (!rest[0]) return done("plan init needs the objective, in one line", 2);
     if (loadPlan(root)) return done("a plan already exists — `plan show`, or change its objective with set-objective", 1);

@@ -58,8 +58,12 @@ export function callerPayload(n: PayloadNodeLike | null, ref: ArchRef): ArchPayl
   else if (n.preview) text = n.preview;
   else if (callee) text = `${callee}(…)`;
   else return null;
-  const keys = payloadKeys(n);
-  return { side: "caller", source: "derived", text: clip(text), ...(keys.length ? { keys } : {}), where: ref };
+  // 2026-10-06 (M7) — a constructor's options configure the object, they do
+  // not cross a boundary (`new Client({ readOnly })`): no keys from it,
+  // the same rule sdk_effects uses to leave constructors uncounted.
+  const ctor = /^\s*(await\s+)?new\s/.test(n.preview ?? "") || /^\s*new\s/.test(text);
+  const keys = ctor ? [] : payloadKeys(n);
+  return { side: "caller", source: "derived", text: clip(text), ...(keys.length ? { keys } : {}), ...(ctor ? { note: "a constructor: its options configure the object, they are not a payload" } : {}), where: ref };
 }
 
 /** A script's POSITIONAL inputs, read from its top-level assignments that

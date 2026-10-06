@@ -14,13 +14,14 @@ import { applyPlanOps } from "../../src/server/plan_ops.ts";
 import { ratifiedSpecs, readSources } from "../../src/server/software_store.ts";
 import { buildPlanDraftPrompt, parsePlanDraftReply, gatePlanDraft } from "../../src/server/plan_draft.ts";
 import { cliPath } from "./winpath.mjs";
+import { projectProse, DIRECTION_HINT } from "./project_prose.mjs";
 
 export async function runPlanDraft(args) {
   let parsed;
   try {
     parsed = parseArgs({ args, allowPositionals: true, options: {
       root: { type: "string" }, from: { type: "string", multiple: true }, hint: { type: "string" },
-      model: { type: "string" }, "dry-run": { type: "boolean" }, reply: { type: "string" },
+      model: { type: "string" }, "dry-run": { type: "boolean" }, reply: { type: "string" }, direction: { type: "boolean" },
     } });
   } catch (e) { return { exitCode: 2, text: `${e.message}\n` }; }
   const root = resolve(cliPath(parsed.values.root ?? "."));
@@ -33,9 +34,12 @@ export async function runPlanDraft(args) {
     if (r.error) return done(`could not read ${r.error}`, 1);
     docs.push({ ref, text: r.text });
   }
+  // M2: the project's own prose, read here — no fetch, nothing outside the project
+  if (parsed.values.direction) docs.push(...projectProse(root));
   const specs = ratifiedSpecs(root);
-  if (!docs.length && !specs.length) return done("plan draft needs --from <docs> (or a ratified software spec to plan with)", 2);
-  const prompt = buildPlanDraftPrompt(plan, specs, docs, parsed.values.hint);
+  if (!docs.length && !specs.length) return done(`plan draft needs --from <docs>${parsed.values.direction ? " (the project has no README, CLAUDE.md, HANDOVER.md, docs/ or commits to read)" : ""} (or a ratified software spec to plan with)`, 2);
+  const hint = parsed.values.direction ? [DIRECTION_HINT, parsed.values.hint].filter(Boolean).join(" ") : parsed.values.hint;
+  const prompt = buildPlanDraftPrompt(plan, specs, docs, hint);
   if (parsed.values["dry-run"]) return done(`(dry run — nothing spent, nothing saved)\n\n${prompt}`);
   let reply;
   if (parsed.values.reply) reply = readFileSync(resolve(parsed.values.reply), "utf-8");

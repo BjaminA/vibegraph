@@ -55,6 +55,8 @@ export interface ArchInputs {
   /** A file's registry language from its IR — an extensionless script
    *  (`bin/orders-cli`) has none by path. */
   languageOf?: (file: string) => string | null;
+  /** 2026-10-06 (M3) — a file's program signals (`listen`, `argv`, `await`). */
+  signalsOf?: (file: string) => string[];
   /** M-ARCH.3 — a file's IR nodes (a module-seeded script's argv signature). */
   fileNodes?: (file: string) => Array<{ type?: string; name?: string; preview?: string; parentId?: string | null }> | null;
   /** M-ARCH.3 — the IR node at (file, id), for a call site's text and keys. */
@@ -129,21 +131,73 @@ export function buildArchModel(input: ArchInputs): ArchModelRecord {
   const clusterOf = new Map<string, string>(); // entryPointId → cluster id
   const clusters = new Map<string, ArchNodeRecord & { _files: Set<string> }>();
   let tests = 0;
+  // 2026-10-06 (M3) — a RUNTIME PROCESS is its own box, not a member of its
+  // package's cluster: an entry point whose file listens, or that another
+  // project file spawns / forks / execs. A package that is one process keeps
+  // its id (nothing to split); one holding several gives each runtime entry
+  // its own cluster, and the rest (one-shot scripts, CLIs) stay together.
+  const runtimeOf = new Map<string, NonNullable<ArchNodeRecord["runtime"]>>();
+  // a LOCAL process start: a bare call, or one on a child-process module —
+  // never a platform's remote command (`stream.exec(…)` runs elsewhere)
+  const SPAWN = /^((child_process|childProcess|cp|proc|Bun|execa)\.)?(spawn|spawnSync|fork|exec|execFile|execa|execSync|execFileSync|execaNode)$/;
+  for (const h of input.crossings?.all ?? []) {
+    // an ambiguous hop (one literal, several parsed files) names none of them
+    // a shell script that runs another script is one step of a one-shot job,
+    // not a process starting another (bash  even replaces itself)
+    const shell = (input.languageOf?.(h.file) ?? languageForPath(h.file)?.id) === "bash";
+    if (h.kind !== "command" || shell || h.targets.length !== 1 || !SPAWN.test(String(h.callee).replace(/\(.*$/, ""))) continue;
+    for (const t of h.targets) {
+      const target = epById.get(t.entryPointId);
+      if (!target || target.file === h.file) continue;
+      const r = runtimeOf.get(target.id) ?? { how: [], by: [] };
+      if (!r.how.includes("spawned")) r.how.push("spawned");
+      if (!r.by!.includes(h.file)) r.by!.push(h.file);
+      runtimeOf.set(target.id, r);
+    }
+  }
+  // a file with ROUTES is already a process: its framework's API cluster
+  const routed = new Set(input.entryPoints.filter((e) => e.kind === "route").map((e) => e.file));
+  for (const [id] of [...runtimeOf]) { const e = epById.get(id); if (!e || routed.has(e.file)) runtimeOf.delete(id); }
+  for (const e of input.entryPoints) {
+    if (routed.has(e.file)) continue;
+    if ((input.signalsOf?.(e.file) ?? []).includes("listen")) {
+      const r = runtimeOf.get(e.id) ?? { how: [], by: [] };
+      if (!r.how.includes("listens")) r.how.unshift("listens");
+      runtimeOf.set(e.id, r);
+    }
+  }
+  const keyOf = new Map<string, { id: string; root: string; fam: Family }>();
+  const perKey = new Map<string, number>();
+  for (const e of input.entryPoints) {
+    const fam = familyOf(e, input.languageOf?.(e.file) ?? null);
+    if (!fam) continue;
+    const root = packageRootOf(e.file, manifestDirs);
+    const id = `cluster:${fam.family}:${root || "."}`;
+    keyOf.set(e.id, { id, root, fam });
+    perKey.set(id, (perKey.get(id) ?? 0) + 1);
+  }
+  const base = (f: string) => f.split("/").pop()!.replace(/\.[^.]+$/, "");
   for (const e of input.entryPoints) {
     const fam = familyOf(e, input.languageOf?.(e.file) ?? null);
     if (!fam) { tests++; continue; }
-    const root = packageRootOf(e.file, manifestDirs);
-    const id = `cluster:${fam.family}:${root || "."}`;
+    const k = keyOf.get(e.id)!;
+    const runtime = runtimeOf.get(e.id);
+    const own = !!runtime && (perKey.get(k.id) ?? 0) > 1;
+    const root = k.root;
+    // one box per process FILE, whatever family its entry points come from
+    const id = own ? `cluster:process:${root || "."}:${base(e.file)}` : k.id;
     clusterOf.set(e.id, id);
     let c = clusters.get(id);
     if (!c) {
+      const dir = e.file.split("/").slice(0, -1).join("/");
       c = {
-        id, kind: "cluster", label: root ? `${fam.label} · ${root}` : fam.label, sublabel: "",
+        id, kind: "cluster", label: own ? `${base(e.file)} (${dir || "."})` : root ? `${fam.label} · ${root}` : fam.label, sublabel: "",
         category: fam.category, source: "derived", family: fam.family, root,
         entryPoints: [], frameworks: [], threads: [], refs: [], _files: new Set(),
       };
       clusters.set(id, c);
     }
+    if (runtime && (own || perKey.get(k.id) === 1)) c.runtime = { how: runtime.how, ...(runtime.by!.length ? { by: [...runtime.by!].sort() } : {}) };
     c.entryPoints!.push(e.id);
     if (e.framework && !c.frameworks!.includes(e.framework)) c.frameworks!.push(e.framework);
     if (threadByEp.has(e.id)) c.threads.push(e.id);
@@ -310,8 +364,15 @@ export function buildArchModel(input: ArchInputs): ArchModelRecord {
     if ([...e._pay.values()].filter((x) => x.side === p.side).length >= MAX_PAYLOADS) return;
     e._pay.set(key, p);
   };
-  const nodeAt = (file: string | null, id: string | null): PayloadNodeLike | null =>
-    (input.nodeFor && file && id ? (input.nodeFor(file, id) as PayloadNodeLike | null) : null);
+  const nodeAt = (file: string | null, id: string | null, line?: number): PayloadNodeLike | null => {
+    // 2026-10-06 — sibling calls can share a structural id (TS): with the
+    // line, the payload is THIS call's, not the first sibling's
+    if (file && id && line !== undefined && input.fileNodes) {
+      const hit = (input.fileNodes(file) ?? []).find((n: any) => n.id === id && n.line === line);
+      if (hit) return hit as PayloadNodeLike;
+    }
+    return input.nodeFor && file && id ? (input.nodeFor(file, id) as PayloadNodeLike | null) : null;
+  };
   const edge = (from: string, to: string, kind: ArchEdgeRecord["kind"], proto: { protocol: string; basis: string; presence?: true }) => {
     const id = `${from}->${to}:${kind}:${proto.protocol}${proto.presence ? ":presence" : ""}`;
     let e = edges.get(id);
@@ -399,7 +460,7 @@ export function buildArchModel(input: ArchInputs): ArchModelRecord {
         if (kind === "tool") e._details.add(h.path);
         const hopRef = { file: h.file, nodeId: h.nodeId, text: `${h.callee} ${h.path}`.slice(0, 160) };
         if (e.refs.length < MAX_REFS) e.refs.push(hopRef);
-        addPayload(e, callerPayload(nodeAt(h.file, h.nodeId), hopRef));
+        addPayload(e, callerPayload(nodeAt(h.file, h.nodeId, h.line), hopRef));
         const targetEp = epById.get(t.entryPointId);
         const targetNodes = targetEp?.irNodeId === "module" && input.nodeFor
           ? scriptNodes(input, targetEp.file) : undefined;
@@ -430,7 +491,9 @@ export function buildArchModel(input: ArchInputs): ArchModelRecord {
     const n = c.entryPoints!.length;
     nodes.push({
       ...c, files: _files.size,
-      sublabel: `${n} entry point${n === 1 ? "" : "s"} · ${_files.size} file${_files.size === 1 ? "" : "s"}${c.frameworks!.length ? ` · ${c.frameworks!.join(", ")}` : ""}`,
+      sublabel: c.runtime && c.id.startsWith("cluster:process:")
+        ? `process · ${c.runtime.how.map((h) => (h === "spawned" ? `started by ${(c.runtime!.by ?? []).map((f) => f.split("/").pop()).join(", ")}` : "listens")).join(" · ")} · ${_files.size} file${_files.size === 1 ? "" : "s"}`
+        : `${n} entry point${n === 1 ? "" : "s"} · ${_files.size} file${_files.size === 1 ? "" : "s"}${c.frameworks!.length ? ` · ${c.frameworks!.join(", ")}` : ""}`,
     });
   }
   for (const c of cloudNodes.values()) {

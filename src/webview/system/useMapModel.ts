@@ -9,7 +9,7 @@ import type { Node, Edge } from "@xyflow/react";
 import type { ArchModelRecord } from "../../shared/protocol";
 import type { PlanState } from "../usePlanState";
 import type { Topology } from "../../shared/topology_types";
-import { enrichReal, type RealFlow } from "./arch_real";
+import { enrichReal, type RealFlow, type RealInputs } from "./arch_real";
 import { atLevel, levelOf } from "./arch_levels";
 import { planModel, overlayModel, ghostPlannedEdges, type PlanView } from "./arch_plan";
 import { buildArchLayout, ARCH_LENSES, type ArchLens } from "./archLayout";
@@ -20,13 +20,13 @@ interface ThreadLike { entryPointId: string | null; nodes: any[] }
 
 export function useMapModel(opts: {
   on: boolean; architecture: ArchModelRecord | null; lens: string; planView: PlanView; planState: PlanState;
-  planOpen: ReadonlySet<string>; topology: Topology | null; threads: ThreadLike[];
+  planOpen: ReadonlySet<string>; topology: Topology | null; threads: ThreadLike[]; inventory?: RealInputs["inventory"];
 }) {
-  const { on, architecture, lens, planView, planState, planOpen, topology, threads } = opts;
+  const { on, architecture, lens, planView, planState, planOpen, topology, threads, inventory = null } = opts;
   const { plan, reconcile } = planState;
   const level = levelOf(lens);
-  const real = useMemo(() => (on && architecture ? enrichReal(architecture, { plan, rec: reconcile, topology, threads }) : null),
-    [on, architecture, plan, reconcile, topology, threads]);
+  const real = useMemo(() => (on && architecture ? enrichReal(architecture, { plan, rec: reconcile, topology, threads, inventory }) : null),
+    [on, architecture, plan, reconcile, topology, threads, inventory]);
   const planMapModel = useMemo(() => {
     if (!on || planView === "real" || !plan) return null;
     return planView === "plan" || !real
