@@ -6,6 +6,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import { CORE_VOCABULARY, mergeVocabulary, type Vocabulary } from "../shared/node_io.ts";
+import { loadArchStore } from "./arch_store.ts";
 
 export const OPERATIONS_FILE = path.join(".vibegraph", "operations.json");
 
@@ -19,8 +20,10 @@ export function loadVocabulary(root: string | null): { vocab: Vocabulary; errors
 }
 
 /** The model as the envelope carries it: with the project's own words, when
- *  it has any (the GUI already has VibeGraph's). Never written to an export. */
-export function withProjectWords<M extends { vocabulary?: unknown }>(model: M, root: string | null): M {
+ *  it has any (the GUI already has VibeGraph's), and the scoped boxes
+ *  (node_scope.ts). Never written to an export. */
+export function withProjectWords<M extends { vocabulary?: unknown; scopes?: unknown }>(model: M, root: string | null): M {
   const extra = loadVocabulary(root).vocab.words.filter((w) => w.project);
-  return extra.length ? { ...model, vocabulary: extra } : model;
+  const scopes = root ? loadArchStore(root).scopes : undefined;
+  return extra.length || scopes ? { ...model, ...(extra.length ? { vocabulary: extra } : {}), ...(scopes ? { scopes } : {}) } : model;
 }

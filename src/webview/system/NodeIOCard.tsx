@@ -15,6 +15,7 @@ import { nodeIO, verbOf, type IoRow, type NodeIO, type Vocabulary } from "../../
 import type { KindId } from "../../shared/kinds";
 import { Chip } from "../panels/Chip";
 import { opIcon } from "./opIcons";
+import { NodeScopeBlock } from "./NodeScopeBlock";
 
 export interface LitPath { nodes: string[]; edges: string[] }
 const KEY_CAP = 6;
@@ -46,7 +47,8 @@ function Row({ r, side, byId, nodeId, lit, onLight }: { r: IoRow; side: "in" | "
         background: lit ? "color-mix(in oklab, var(--accent-thread) 12%, transparent)" : "transparent",
       }}>
       <Chip kind={kindOf(byId.get(r.node))} id={r.node} label={r.label} focusable={false} />
-      <span data-io-op-label style={{ ...quiet, color: "var(--text-secondary)" }}>{r.op === "hop" ? r.via : r.op}</span>
+      <span data-io-op-label style={{ ...quiet, color: "var(--text-secondary)" }}>{r.op === "hop" ? r.via : r.op === "scoped" ? r.via : r.op}</span>
+      {r.op === "scoped" && r.text && <span style={{ ...quiet, color: "var(--text-secondary)" }}>{r.text}</span>}
       {keys.map((k) => <Chip key={k} kind="json" id={k} focusable={false} />)}
       {r.keys.length > KEY_CAP && <span style={quiet}>{`+${r.keys.length - KEY_CAP}`}</span>}
       {r.keysFrom === "plan" && <span style={quiet}>(planned keys)</span>}
@@ -66,7 +68,7 @@ function Row({ r, side, byId, nodeId, lit, onLight }: { r: IoRow; side: "in" | "
   );
 }
 
-export function NodeIOCard({ model, nodeId, vocab, onLight }: { model: ArchModelRecord; nodeId: string; vocab?: Vocabulary; onLight?: (p: LitPath | null) => void }) {
+export function NodeIOCard({ model, nodeId, vocab, onLight, scopeable = true }: { model: ArchModelRecord; nodeId: string; vocab?: Vocabulary; onLight?: (p: LitPath | null) => void; scopeable?: boolean }) {
   const io: NodeIO = nodeIO(model, nodeId, vocab);
   const byId = new Map(model.nodes.map((n) => [n.id, n]));
   const [lit, setLit] = useState<string | null>(null);
@@ -85,9 +87,9 @@ export function NodeIOCard({ model, nodeId, vocab, onLight }: { model: ArchModel
           {io.process.map((p) => {
             const Icon = opIcon(p.icon);
             return (
-              <button key={p.word} data-io-word={p.word} data-project={p.project ? "true" : undefined} className="vg-op" aria-expanded={why === p.word}
-                onClick={() => setWhy(why === p.word ? null : p.word)} title={p.definition}
-                style={{ ["--a" as string]: `var(${p.accent})`, cursor: "pointer" } as React.CSSProperties}>
+              <button key={p.word} data-io-word={p.word} data-project={p.project ? "true" : undefined} data-scoped={p.scoped ? "true" : undefined} className="vg-op" aria-expanded={why === p.word}
+                onClick={() => setWhy(why === p.word ? null : p.word)} title={`${p.definition}${p.scoped ? "\n(scoped by a model, ratified)" : ""}`}
+                style={{ ["--a" as string]: `var(${p.accent})`, cursor: "pointer", ...(p.scoped ? { borderStyle: "dashed" } : {}), ...(p.inferred ? { opacity: 0.55 } : {}) } as React.CSSProperties}>
                 <Icon size={16} strokeWidth={1.5} aria-hidden />{p.label}
               </button>
             );
@@ -110,6 +112,7 @@ export function NodeIOCard({ model, nodeId, vocab, onLight }: { model: ArchModel
           : <div style={quiet}>{io.silent.find((s) => /reader|leaving/.test(s)) ?? "—"}</div>}
       </div>
       {io.silent.some((s) => /payload keys/.test(s)) && <div style={{ ...quiet, marginTop: 8 }}>{io.silent.find((s) => /payload keys/.test(s))}</div>}
+      {scopeable && <NodeScopeBlock nodeId={nodeId} scope={io.scope} byId={byId} vocab={vocab} empty={!io.process.length} />}
     </div>
   );
 }

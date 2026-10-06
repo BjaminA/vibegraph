@@ -86,6 +86,8 @@ CLI) and says so; everything else is deterministic.
 | `architecture --ratify \| --reject` | Makes the pending proposal stated / drops it (ratifying stores the drift baseline) | `.vibegraph/architecture.json` | — |
 | `architecture --drift` | What changed since the groups were ratified; exit 0 none · 1 minor · 2 substantial | nothing | — |
 | `architecture --update` | Extend the ratified groups for what changed (they stay fixed); stored pending | `.vibegraph/architecture.json` | **yes** |
+| `scope <box> [--note "…"] [--dry-run]` | Describes one box the code says little about, in the operation vocabulary, every claim citing a line it was shown; stored PROPOSED | `.vibegraph/architecture.json` (`scopes`) | **yes** |
+| `scope ratify \| reject <box>` · `scope list` | A person's decision: only a ratified scope reaches In → Process → Out and `architecture.md` | `.vibegraph/architecture.json` | — |
 | `classify [--dry-run \| --apply]` | The role of tools no table knows; `--apply` stores each as a model-stated policy | `.vibegraph/constraints.json` | **yes** |
 | `--version` / `--help` | The version / every command and option | nothing | — |
 
@@ -849,6 +851,28 @@ app's button, and MCP) refuse to spend tokens on another one, and say when it
 was ratified. To draft again anyway, add `--force`; or edit
 `.vibegraph/architecture.json` by hand.
 
+### `scope` — what a box does, where the code is silent
+
+```bash
+vibegraph-knowledge scope <box id> [--note "what to look at"] [--dry-run] [--reply <file>]
+vibegraph-knowledge scope ratify <box id>      # or: scope reject <box id>
+vibegraph-knowledge scope list
+```
+
+**Spends tokens.** The In → Process → Out of a box is read from the code at no
+cost (`architecture.md`, "What each box does"). Where that leaves a box bare —
+an SDK the project only calls, a platform client — `scope` shows a model the
+box's call sites (numbered lines), its edges and any ratified software spec,
+and asks it to describe the box using only the operation vocabulary
+(`src/shared/operations.json`, plus `.vibegraph/operations.json`). Every word
+and every in / out entry must cite a line it was shown: a word outside the
+vocabulary or a box that does not exist is refused, an unshown citation or the
+box's own id is dropped, and an uncited claim is kept as **INFERRED** (drawn
+faded). The result waits **proposed**; `scope ratify` (a person's step —
+refused from Claude Code) makes it part of the box's In → Process → Out, the
+GUI inspector and `architecture.md`. `--dry-run` prints the prompt. The GUI's
+inspector has the same flow: **Scope with Claude**, then Ratify or Reject.
+
 ### `classify` — tools no table knows
 
 ```bash
@@ -887,7 +911,7 @@ shares them. Leave `.vibegraph/knowledge/` uncommitted: it is regenerated.
 
 ## What costs tokens
 
-Only `classify`, `architecture --propose` / `--modify`, and `skills draft`.
+Only `classify`, `architecture --propose` / `--modify`, `scope`, and `skills draft`.
 Each says so in `--help`, uses your `claude` CLI (or `VG_CLAUDE_BIN`), runs
 with no MCP servers and no write tools, and stores what it produced as a
 model's work until you ratify it. Everything else is deterministic.

@@ -28,6 +28,7 @@ import { hostAllowed, originAllowed, jsonContentType, staticPath, ensurePrivateI
 import { computeDataflow, findingsByThread, formatDataflowMd, type DataflowReport } from "./src/server/dataflow";
 import { archModelForEnvelope } from "./src/server/arch_envelope";
 import { withProjectWords } from "./src/server/operation_vocab";
+import { scopeNode, decideNodeScope, type ScopeCtx } from "./src/server/node_scope_server";
 import { applyArchStore, loadArchStore, saveArchStore, ratifyProposal, rejectProposal, proposalGate } from "./src/server/arch_store";
 import { archBaseline, archDrift } from "./src/server/arch_drift";
 import { testReach, affectedTests } from "./src/shared/test_reach";
@@ -408,6 +409,13 @@ function refreshArchDocs(): void {
     console.warn(`  [Architecture] exported documents not refreshed: ${e?.message ?? e}`);
   }
 }
+
+// 2026-10-06 — "Scope this node" (src/server/node_scope_server.ts).
+const scopeCtx: ScopeCtx = {
+  root: () => (isDirectory ? inputPath : null), model: () => latestArch, claudeAvailable: () => claudeCliAvailable,
+  run: (prompt) => _runReadmeLlm(prompt, "thinking", "gen"), modelLabel: () => tierLabel("thinking"),
+  changed: () => { broadcastProjectUpdate(); refreshArchDocs(); },
+};
 
 function archDecide(decision: "ratify" | "reject"): { ok: boolean; error?: string } {
   if (!isDirectory) return { ok: false, error: "the architecture layer needs a project directory" };
@@ -8260,6 +8268,14 @@ function setupWebSocket() {
           const reply = (payload: unknown) => ws.send(JSON.stringify({ type: "arch-proposal", payload: { action: t.slice(5), ...(payload as object) } }));
           if (t === "arch-propose") archProposeCore(typeof msg.payload?.guidance === "string" ? msg.payload.guidance : undefined, { update: msg.payload?.update === true }).then(reply, (e) => reply({ ok: false, error: String(e?.message ?? e) }));
           else reply(archDecide(t === "arch-ratify" ? "ratify" : "reject"));
+        } else if (msg.type === "arch-scope" || msg.type === "arch-scope-ratify" || msg.type === "arch-scope-reject") {
+          // 2026-10-06 — scope spends tokens and stores a PROPOSED scope of one
+          // box; ratify / reject are the person's. Reply: arch-scope-result.
+          const t = msg.type;
+          const node = typeof msg.payload?.node === "string" ? msg.payload.node : "";
+          const reply = (payload: unknown) => ws.send(JSON.stringify({ type: "arch-scope-result", payload: { action: t === "arch-scope" ? "scope" : t.slice(11), node, ...(payload as object) } }));
+          if (t === "arch-scope") scopeNode(scopeCtx, node, typeof msg.payload?.guidance === "string" ? msg.payload.guidance : undefined).then(reply, (e) => reply({ ok: false, error: String(e?.message ?? e) }));
+          else reply(decideNodeScope(scopeCtx, node, t === "arch-scope-ratify" ? "ratify" : "reject"));
         } else if (msg.type === "system-propose-intent") {
           // PLAN-v7 Stage 3b — describe → claude -p architecture draft →
           // system-proposal (drafted plan, grounding-enforced).

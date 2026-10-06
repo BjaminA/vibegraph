@@ -111,6 +111,17 @@ own words in `.vibegraph/operations.json` (they draw dashed; an existing word
 cannot be redefined). At Tools and Payloads every card carries its words, and
 edges show what moves along them as chips: the operation, then the keys.
 
+**Scope with Claude**, at the foot of the card, is for a box the code says
+little about (an SDK the project only calls, a platform client). Claude is
+shown its call sites, its edges and any ratified software spec, and may
+describe it only in those words, citing a line for every claim. The reply
+waits as a *proposed scope* — cited words solid, uncited ones faded as
+INFERRED, and what the check refused listed under *citations*. Nothing on the
+card changes until you **Ratify** (or **Reject**); after that its words and
+rows join the bands, marked *scoped*, and `architecture.md` says so. Add a
+note to steer it ("what does it return?"); **Re-scope** asks again. On the
+command line: `vibegraph-knowledge scope <box>`.
+
 Click a box or an edge for the **inspector**: what it is, *why* its protocol
 reads as it does, the threads behind it, the call sites, and **Upstream**,
 **Downstream** and **Route from here…** traces. **Play start-here path**

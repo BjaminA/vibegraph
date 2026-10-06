@@ -30,6 +30,9 @@ import * as fs from "fs";
 import * as path from "path";
 import type { ArchGroupRecord, ArchModelRecord } from "../shared/protocol.ts";
 
+import { validScopes } from "./node_scope.ts";
+import type { NodeScopeRecord } from "../shared/node_io.ts";
+
 export const ARCH_STORE_FILE = path.join(".vibegraph", "architecture.json");
 export const GROUP_KINDS = ["host", "region", "subnet", "trust", "network", "process", "account", "zone"] as const;
 
@@ -67,6 +70,9 @@ export interface ArchStore {
   proposal?: ArchProposal;
   ratified?: { at: string; model: string };
   baseline?: ArchBaseline;
+  /** 2026-10-06 — boxes scoped by a model (node_scope.ts): proposed, then a
+   *  person's ratify. Independent of the groups' proposal and gate. */
+  scopes?: Record<string, NodeScopeRecord>;
 }
 
 const ID = /^[A-Za-z][\w.:-]{0,79}$/;
@@ -114,6 +120,8 @@ export function loadArchStore(root: string | null): ArchStore {
       store.ratified = { at: rt.at, model: rt.model };
     }
     if (validBaseline(raw.baseline)) store.baseline = raw.baseline;
+    const scopes = validScopes(raw.scopes);
+    if (Object.keys(scopes).length) store.scopes = scopes;
     const pr = raw.proposal as Record<string, unknown> | undefined;
     if (pr && typeof pr === "object" && Array.isArray(pr.groups)) {
       store.proposal = {

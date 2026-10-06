@@ -50,7 +50,23 @@ export function mergeVocabulary(extra: unknown, base: Vocabulary = CORE_VOCABULA
   return { vocab: { version: "1", words }, errors };
 }
 
-export type DataOp = "write" | "read" | "watch" | "call" | "admin" | "grant" | "hop" | "enforces";
+export type DataOp = "write" | "read" | "watch" | "call" | "admin" | "grant" | "hop" | "enforces" | "scoped";
+
+/** 2026-10-06 — a box SCOPED by a model where the IR is silent (part 3,
+ *  src/server/node_scope.ts): the vocabulary's words and the boxes data comes
+ *  from / goes to, each with the citations the gate kept (empty = INFERRED).
+ *  Only a RATIFIED scope reaches In → Process → Out; a proposed one waits. */
+export interface ScopeBody {
+  at: string;
+  model: string;
+  summary: string;
+  words: Array<{ word: string; evidence: string[] }>;
+  in: Array<{ node: string; what: string; evidence: string[] }>;
+  out: Array<{ node: string; what: string; evidence: string[] }>;
+  refused: Array<{ item: string; reason: string }>;
+  ratifiedAt?: string;
+}
+export interface NodeScopeRecord { node: string; ratified?: ScopeBody; proposed?: ScopeBody }
 export interface IoRow {
   edge: string;
   node: string;
@@ -72,8 +88,8 @@ export interface IoRow {
 
 /** `reads`, `writes`, `watches` — an op as a third-person verb. */
 export const verbOf = (op: DataOp) => (op === "watch" ? "watches" : op === "hop" ? "hops" : op === "enforces" ? "enforces" : `${op}s`);
-export interface ProcessOp { word: string; label: string; definition: string; icon: string; accent: string; evidence: string[]; refs: ArchRef[]; project?: boolean }
-export interface NodeIO { node: string; in: IoRow[]; process: ProcessOp[]; out: IoRow[]; silent: string[] }
+export interface ProcessOp { word: string; label: string; definition: string; icon: string; accent: string; evidence: string[]; refs: ArchRef[]; project?: boolean; scoped?: boolean; inferred?: boolean }
+export interface NodeIO { node: string; in: IoRow[]; process: ProcessOp[]; out: IoRow[]; silent: string[]; scope?: NodeScopeRecord }
 
 const uniq = <T,>(xs: T[]) => [...new Set(xs)];
 const isStoreLike = (n: ArchNodeRecord | undefined) => !!n && (!!n.zoneOf || !!n.storeOf || n.id.startsWith("store:") || n.id.startsWith("zone:"));
@@ -102,7 +118,7 @@ function keysOf(e: ArchEdgeRecord): { keys: string[]; from: IoRow["keysFrom"] } 
   return { keys: [], from: "none" };
 }
 
-export function nodeIO(model: ArchModelRecord, nodeId: string, vocab: Vocabulary = CORE_VOCABULARY): NodeIO {
+export function nodeIO(model: ArchModelRecord, nodeId: string, vocab: Vocabulary = CORE_VOCABULARY, scopes: Record<string, NodeScopeRecord> | undefined = model.scopes): NodeIO {
   const byId = new Map(model.nodes.map((n) => [n.id, n]));
   const n = byId.get(nodeId);
   const out: NodeIO = { node: nodeId, in: [], process: [], out: [], silent: [] };
@@ -191,10 +207,30 @@ export function nodeIO(model: ArchModelRecord, nodeId: string, vocab: Vocabulary
   out.in = merge(out.in); out.out = merge(out.out);
   const order = (a: IoRow, b: IoRow) => b.keys.length - a.keys.length || a.label.localeCompare(b.label);
   out.in.sort(order); out.out.sort(order);
+  // ── a RATIFIED scope fills what the code did not say (never replaces it) ──
+  const scope = scopes?.[nodeId];
+  if (scope) out.scope = scope;
+  const sc = scope?.ratified;
+  if (sc) {
+    for (const w of sc.words) {
+      const def = vocab.words.find((x) => x.id === w.word);
+      if (!def) continue;
+      const cited = w.evidence.length ? `scoped (ratified): ${w.evidence.join(", ")}` : "scoped (ratified), INFERRED — no citation";
+      const have = out.process.find((p) => p.word === w.word);
+      if (have) { have.evidence.push(cited); continue; }
+      out.process.push({ word: def.id, label: def.label, definition: def.definition, icon: def.icon, accent: def.accent, evidence: [cited], refs: [], scoped: true, ...(w.evidence.length ? {} : { inferred: true }), ...(def.project ? { project: true } : {}) });
+    }
+    const add = (rows: IoRow[], list: ScopeBody["in"]) => {
+      for (const r of list) if (byId.has(r.node) && !rows.some((x) => x.node === r.node)) {
+        rows.push({ edge: `scope:${nodeId}:${r.node}`, node: r.node, label: label(r.node), via: `scoped${r.evidence.length ? "" : ", INFERRED"}`, op: "scoped", keys: [], keysFrom: "none", rules: [], text: r.what });
+      }
+    };
+    add(out.in, sc.in); add(out.out, sc.out);
+  }
   if (!out.in.length) out.silent.push(n.kind === "actor" ? "an outside caller: what it sends is not in the code" : "nothing in the code is seen sending data in");
   if (!out.out.length) out.silent.push(isStoreLike(n) || n.kind === "tool" ? "no reader of this is seen in the code" : "nothing it produces is seen leaving it");
   if (![...out.in, ...out.out].some((r) => r.keys.length)) out.silent.push("no payload keys: the code passes no object literal or keyword arguments here (a value built elsewhere is not followed)");
-  if (!out.process.length) out.silent.push("no operation word has evidence on this box — Scope it to ask");
+  if (!out.process.length) out.silent.push(scope?.proposed ? "no operation word has evidence on this box — a scope is waiting for a decision" : "no operation word has evidence on this box — Scope it to ask");
   return out;
 }
 

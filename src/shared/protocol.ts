@@ -864,6 +864,9 @@ export interface ArchModelRecord {
    *  never on an export): the project's own operation words
    *  (.vibegraph/operations.json), merged after VibeGraph's. */
   vocabulary?: import("./node_io.ts").OpWord[];
+  /** TRANSPORT ONLY, like `vocabulary`: the boxes scoped by a model
+   *  (.vibegraph/architecture.json `scopes`), proposed and ratified. */
+  scopes?: Record<string, import("./node_io.ts").NodeScopeRecord>;
   /** M-ARCH.4 — the entry points a reader should walk first. */
   primaryPath?: { entryPoints: string[]; source: "stated" | "proposed"; evidence?: string[] };
   /** M-ARCH.4 — a pending model proposal (its items are in groups/labels

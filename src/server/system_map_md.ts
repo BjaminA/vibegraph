@@ -12,7 +12,7 @@
 
 import type { ArchEdgeRecord, ArchNodeRecord } from "../shared/protocol.ts";
 import type { SystemMap, SystemMapGroupTree } from "./system_map.ts";
-import { nodeIO, ioLines, CORE_VOCABULARY, type Vocabulary } from "../shared/node_io.ts";
+import { nodeIO, ioLines, CORE_VOCABULARY, type Vocabulary, type NodeScopeRecord } from "../shared/node_io.ts";
 
 const LIST_CAP = 8;
 const THREAD_CAP = 25;
@@ -32,7 +32,7 @@ function provenance(source: string, evidence?: string[]): string {
   return "";
 }
 
-export function renderSystemMapMd(map: SystemMap, vocab: Vocabulary = CORE_VOCABULARY): string {
+export function renderSystemMapMd(map: SystemMap, vocab: Vocabulary = CORE_VOCABULARY, scopes?: Record<string, NodeScopeRecord>): string {
   const allNodes = new Map<string, ArchNodeRecord>(map.nodes.map((n) => [n.id, n]));
   for (const v of Object.values(map.views)) for (const n of v.reshaped.nodes) if (!allNodes.has(n.id)) allNodes.set(n.id, n);
   const edgeById = new Map<string, ArchEdgeRecord>(map.edges.map((e) => [e.id, e]));
@@ -263,8 +263,10 @@ export function renderSystemMapMd(map: SystemMap, vocab: Vocabulary = CORE_VOCAB
   if (boxes.length) {
     push("## What each box does (in → process → out)", "", `_In and out follow the DATA (a read brings data back to the caller). Process words: ${vocab.words.map((w) => w.label).join(", ")} — each said only with its evidence. Keys are what the code spells at the call, never values; \u2192 after a store names who takes it next._`, "");
     for (const n of boxes) {
-      const l = ioLines(nodeIO(ioModel, n.id, vocab));
-      push(`- **${n.label}** — in: ${l.in} · **${l.process}** · out: ${l.out}`);
+      const io = nodeIO(ioModel, n.id, vocab, scopes);
+      const l = ioLines(io);
+      const sc = io.scope?.ratified;
+      push(`- **${n.label}** — in: ${l.in} · **${l.process}** · out: ${l.out}${sc ? ` _(scoped by ${sc.model}, ratified${sc.summary ? `: ${sc.summary}` : ""})_` : ""}`);
     }
     push("");
   }

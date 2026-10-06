@@ -46,7 +46,25 @@ what it produces.
 - A project's own words (`.vibegraph/operations.json`) reach the screen
   (carried on the envelope, never written to an export) and draw dashed.
 
-Next: "Scope this node" with Claude where the IR is silent (part 3).
+### Scope this node (part 3 of 3)
+
+Where the code says little about what a box does (on the field project, 4 of
+25 boxes — SDKs and platform clients), Claude can describe it — under the
+same rules as the architecture proposal.
+
+- **The dossier** (`src/server/node_scope.ts`): the box's call sites as
+  numbered lines, its edges by id, any ratified software spec's definition
+  and operations, and what the code already shows. Only those are citable.
+- **The gate**: a word outside the vocabulary and a box that does not exist
+  are refused and named; a citation it was not shown, or the box's own id, is
+  dropped; a claim left uncited is kept as INFERRED (faded).
+- **Proposed, then a person's decision.** The scope waits in
+  `.vibegraph/architecture.json` (`scopes`) and changes nothing until it is
+  ratified — in the inspector (**Scope with Claude** → Ratify / Reject, with an
+  optional note to steer it) or with `vibegraph-knowledge scope <box>` /
+  `scope ratify|reject <box>` (refused from Claude Code). A ratified scope's
+  words and rows join In → Process → Out marked *scoped*, and
+  `architecture.md` carries it.
 
 ## 0.25.0 — unreleased
 
