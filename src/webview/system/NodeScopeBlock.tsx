@@ -84,8 +84,14 @@ export function NodeScopeBlock({ nodeId, scope, byId, vocab = CORE_VOCABULARY, e
     bridge.postMessage({ type, payload: { node: nodeId, ...(type === "arch-scope" && note.trim() ? { guidance: note.trim() } : {}) } } as never);
   };
   const p = scope?.proposed, r = scope?.ratified;
+  const stale = (p ?? r)?.stale;
   return (
-    <div data-node-scope={nodeId} data-scope-state={p ? "proposed" : r ? "ratified" : "none"} style={{ marginTop: 12, paddingLeft: 8, borderLeft: "2px dashed var(--proposed-border)" }}>
+    <div data-node-scope={nodeId} data-scope-state={p ? "proposed" : r ? "ratified" : "none"} data-scope-stale={stale ? "true" : undefined} style={{ marginTop: 12, paddingLeft: 8, borderLeft: "2px dashed var(--proposed-border)" }}>
+      {stale && (
+        <div data-scope-stale-note style={{ ...quiet, color: "var(--accent-warning)", marginBottom: 4 }}>
+          {`STALE — the code this ${p ? "proposal" : "scope"} was drawn from has changed since ${String((p ?? r)!.at).slice(0, 10)}: its call sites, edges or software spec are not what Claude was shown. Re-scope to check it again.`}
+        </div>
+      )}
       {r && !p && (
         <div data-scope-ratified style={{ ...quiet, marginBottom: 4 }}>
           {`scoped by ${r.model}, ratified ${String(r.ratifiedAt ?? r.at).slice(0, 10)} — its words and rows are in the bands above, marked scoped`}

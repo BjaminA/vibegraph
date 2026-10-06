@@ -96,3 +96,20 @@ test("the CLI: scope proposes from a saved reply; ratify is a person's step; arc
   assert.match(readFileSync(join(root, ".vibegraph/knowledge/architecture.md"), "utf-8"), /scoped by stub|scoped by saved reply/);
 });
 
+
+test("staleness: a scope records what it was shown; a changed line under it reads STALE, an older scope is not judged", async () => {
+  const { withScopeStaleness } = await import("../src/server/node_scope.ts");
+  const { scope } = parseScope(reply, model, BOX, dossier, { model: "stub" });
+  assert.equal(scope.basis, dossier.basis);
+  const scopes = { [BOX]: { node: BOX, ratified: scope } };
+  const same = withScopeStaleness(scopes, model, { readLines: linesReader(FIX) });
+  assert.equal(same[BOX].ratified.stale, false);
+  const changed = (file) => { const l = linesReader(FIX)(file); return l && file === "lib/store.ts" ? l.map((x, i) => (i === 2 ? x.replace("ledger", "ledger-v2") : x)) : l; };
+  const moved = withScopeStaleness(scopes, model, { readLines: changed });
+  assert.equal(moved[BOX].ratified.stale, true);
+  assert.ok(nodeIO(model, BOX, undefined, moved).process.find((p) => p.word === "store").evidence.some((e) => /STALE/.test(e)));
+  const { basis: _b, ...old } = scope;
+  assert.equal(withScopeStaleness({ [BOX]: { node: BOX, ratified: old } }, model, { readLines: changed })[BOX].ratified.stale, false, "no basis recorded: not judged");
+  // the stale flag is never stored
+  assert.equal(loadArchStore(FIX).scopes, undefined);
+});

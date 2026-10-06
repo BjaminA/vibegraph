@@ -65,6 +65,18 @@ same rules as the architecture proposal.
   `scope ratify|reject <box>` (refused from Claude Code). A ratified scope's
   words and rows join In → Process → Out marked *scoped*, and
   `architecture.md` carries it.
+- **A scope goes stale with its code.** Each scope records a hash of what it
+  was shown (the citable code lines, edges and spec lines — not the list of
+  other boxes, so a box added elsewhere stales nothing). When that changes it
+  reads STALE in the inspector, in its words' evidence, in `architecture.md`
+  and in `scope list` (exit 1); the flag is worked out on read, never stored.
+- **Over MCP.** `vibegraph_node_io` answers any box's In → Process → Out —
+  over the same map the GUI's Real view draws (store cards, decision
+  structures, outside callers), with its scope — and names the nearest ids
+  for a wrong one; `vibegraph_scope_node` drafts a scope (spends tokens), and
+  ratifying stays a person's step.
+- The scope button appears only on boxes the code derives (a store card, a
+  decision structure or an outside caller is already drawn from facts).
 
 ## 0.25.0 — unreleased
 

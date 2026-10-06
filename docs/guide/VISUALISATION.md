@@ -119,8 +119,11 @@ waits as a *proposed scope* — cited words solid, uncited ones faded as
 INFERRED, and what the check refused listed under *citations*. Nothing on the
 card changes until you **Ratify** (or **Reject**); after that its words and
 rows join the bands, marked *scoped*, and `architecture.md` says so. Add a
-note to steer it ("what does it return?"); **Re-scope** asks again. On the
-command line: `vibegraph-knowledge scope <box>`.
+note to steer it ("what does it return?"); **Re-scope** asks again. When the
+code a scope was drawn from changes, the card says **STALE** and the scope's
+words carry that caveat until you re-scope. On the command line:
+`vibegraph-knowledge scope <box>`; a Claude session reads any box with the
+MCP tool `vibegraph_node_io` and may draft a scope with `vibegraph_scope_node`.
 
 Click a box or an edge for the **inspector**: what it is, *why* its protocol
 reads as it does, the threads behind it, the call sites, and **Upstream**,

@@ -7,6 +7,15 @@ import * as fs from "fs";
 import * as path from "path";
 import { CORE_VOCABULARY, mergeVocabulary, type Vocabulary } from "../shared/node_io.ts";
 import { loadArchStore } from "./arch_store.ts";
+import { linesReader, withScopeStaleness } from "./node_scope.ts";
+import { listSpecs } from "./software_store.ts";
+
+/** The store's scopes, each judged against the box's code NOW (stale or not). */
+export function scopesNow(root: string, model: Parameters<typeof withScopeStaleness>[1]) {
+  let specs: ReturnType<typeof listSpecs> = [];
+  try { specs = listSpecs(root); } catch { specs = []; }
+  return withScopeStaleness(loadArchStore(root).scopes, model, { readLines: linesReader(root), specs });
+}
 
 export const OPERATIONS_FILE = path.join(".vibegraph", "operations.json");
 
@@ -22,8 +31,8 @@ export function loadVocabulary(root: string | null): { vocab: Vocabulary; errors
 /** The model as the envelope carries it: with the project's own words, when
  *  it has any (the GUI already has VibeGraph's), and the scoped boxes
  *  (node_scope.ts). Never written to an export. */
-export function withProjectWords<M extends { vocabulary?: unknown; scopes?: unknown }>(model: M, root: string | null): M {
+export function withProjectWords<M extends Parameters<typeof withScopeStaleness>[1]>(model: M, root: string | null): M {
   const extra = loadVocabulary(root).vocab.words.filter((w) => w.project);
-  const scopes = root ? loadArchStore(root).scopes : undefined;
+  const scopes = root ? scopesNow(root, model) : undefined;
   return extra.length || scopes ? { ...model, ...(extra.length ? { vocabulary: extra } : {}), ...(scopes ? { scopes } : {}) } : model;
 }

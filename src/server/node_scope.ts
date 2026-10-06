@@ -16,15 +16,39 @@
 //     a person ratifies it, and only a ratified scope reaches In → Process →
 //     Out, architecture.md and the hooks.
 //
-// Pure apart from reading the lines it shows (readLines is passed in).
+// Pure apart from reading the lines it shows (readLines is passed in;
+// linesReader reads them from the project, never outside it).
 
+import { createHash } from "node:crypto";
+import * as fs from "node:fs";
+import * as path from "node:path";
 import type { ArchModelRecord } from "../shared/protocol.ts";
 import type { SoftwareSpec } from "../shared/software_types.ts";
 import { nodeIO, ioLines, CORE_VOCABULARY, type Vocabulary, type ScopeBody, type NodeScopeRecord } from "../shared/node_io.ts";
 
+/** The project's lines, read once per file; nothing outside the root. */
+export function linesReader(root: string): (file: string) => string[] | null {
+  const cache = new Map<string, string[] | null>();
+  return (file) => {
+    if (cache.has(file)) return cache.get(file)!;
+    const abs = path.resolve(root, file);
+    let lines: string[] | null = null;
+    if (abs.startsWith(path.resolve(root) + path.sep)) { try { lines = fs.readFileSync(abs, "utf-8").split(/\r?\n/); } catch { lines = null; } }
+    cache.set(file, lines);
+    return lines;
+  };
+}
+
 export const SCOPE_LIMITS = { files: 6, linesPerSite: 7, headLines: 30, totalLines: 220, summary: 240, what: 100, rows: 8 };
 
-export interface Dossier { text: string; cites: Set<string> }
+export interface Dossier {
+  text: string;
+  cites: Set<string>;
+  /** a hash of the citable lines only (code, edges, spec): what a scope rests
+   *  on. The list of other boxes and the derived summary are left out, so a
+   *  box added elsewhere does not stale every scope. */
+  basis: string;
+}
 
 /** Everything the model may see and cite about one box. */
 export function scopeDossier(model: ArchModelRecord, nodeId: string, opts: {
@@ -35,6 +59,7 @@ export function scopeDossier(model: ArchModelRecord, nodeId: string, opts: {
   const vocab = opts.vocab ?? CORE_VOCABULARY;
   const cites = new Set<string>();
   const L: string[] = [];
+  const B: string[] = []; // the basis: what a citation can point at
   const label = (id: string) => model.nodes.find((x) => x.id === id)?.label ?? id;
   L.push(`BOX ${n.id} — "${n.label}" (${n.kind}, ${n.category}${n.role ? `, role ${n.role}` : ""}${n.tool ? `, tool ${n.tool}` : ""}): ${n.sublabel}`);
   for (const note of (n.notes ?? []).slice(0, 4)) L.push(`  note: ${note}`);
@@ -48,6 +73,7 @@ export function scopeDossier(model: ArchModelRecord, nodeId: string, opts: {
     cites.add(e.id);
     const pay = (e.payloads ?? []).filter((p) => p.side === "caller").slice(0, 2).map((p) => p.text).join(" ; ");
     L.push(`- ${e.id}: ${label(e.from)} → ${label(e.to)} · ${e.kind} ${e.protocol} — ${e.protocolBasis}${pay ? ` — the call: ${pay}` : ""}`);
+    B.push(`${e.id}|${pay}`);
   }
 
   // code: lines around each call site, and the head of each entry file
@@ -67,6 +93,7 @@ export function scopeDossier(model: ArchModelRecord, nodeId: string, opts: {
     for (let i = Math.max(0, from); i < Math.min(lines.length, to) && shown < SCOPE_LIMITS.totalLines; i++, shown++) {
       cites.add(`${file}:${i + 1}`);
       L.push(`${file}:${i + 1}: ${lines[i].slice(0, 200)}`);
+      B.push(`${file}:${i + 1}|${lines[i]}`);
     }
   };
   for (const [file, heads] of [...sites].slice(0, SCOPE_LIMITS.files)) {
@@ -83,14 +110,31 @@ export function scopeDossier(model: ArchModelRecord, nodeId: string, opts: {
     L.push(`SOFTWARE SPEC ${spec.tool} (ratified):`);
     cites.add(`spec:${spec.tool}:definition`);
     L.push(`- spec:${spec.tool}:definition: ${spec.definition}`);
+    B.push(`spec:${spec.tool}|${spec.definition}`);
     for (const o of spec.operations.slice(0, 20)) {
       cites.add(`spec:${spec.tool}:op:${o.name}`);
       L.push(`- spec:${spec.tool}:op:${o.name}: ${o.does}${o.on ? ` ${o.on}` : ""}${o.note ? ` — ${o.note}` : ""}`);
+      B.push(`spec:${spec.tool}:op:${o.name}|${o.does}|${o.on ?? ""}`);
     }
   }
   L.push("", "OTHER BOXES (ids you may name in in / out):");
   for (const x of model.nodes.filter((x) => x.id !== nodeId).slice(0, 60)) L.push(`- ${x.id}: ${x.label}`);
-  return { text: L.join("\n"), cites };
+  return { text: L.join("\n"), cites, basis: createHash("sha256").update(B.join("\n")).digest("hex").slice(0, 16) };
+}
+
+/** Scopes as they are read: each body whose basis no longer matches the
+ *  box's dossier is marked `stale` (a body from before the basis existed is
+ *  not judged). A box gone from the map is stale too. */
+export function withScopeStaleness(scopes: Record<string, NodeScopeRecord> | undefined, model: ArchModelRecord, opts: { readLines: (file: string) => string[] | null; specs?: SoftwareSpec[] }): Record<string, NodeScopeRecord> | undefined {
+  if (!scopes) return scopes;
+  const out: Record<string, NodeScopeRecord> = {};
+  for (const [id, rec] of Object.entries(scopes)) {
+    const d = scopeDossier(model, id, opts);
+    const judge = (b?: ScopeBody) => (b ? { ...b, stale: b.basis ? !d || d.basis !== b.basis : false } : undefined);
+    const ratified = judge(rec.ratified), proposed = judge(rec.proposed);
+    out[id] = { node: id, ...(ratified ? { ratified } : {}), ...(proposed ? { proposed } : {}) };
+  }
+  return out;
 }
 
 export function buildScopePrompt(model: ArchModelRecord, nodeId: string, dossier: Dossier, vocab: Vocabulary = CORE_VOCABULARY, guidance?: string): string {
@@ -154,7 +198,7 @@ export function parseScope(text: string, model: ArchModelRecord, nodeId: string,
   const inn = rows(obj.in, "in"), out = rows(obj.out, "out");
   const summary = typeof obj.summary === "string" ? obj.summary.trim().slice(0, SCOPE_LIMITS.summary) : "";
   if (!words.length && !inn.length && !out.length) return { scope: null, error: `nothing usable came back${refused.length ? ` (${refused.map((r) => `${r.item}: ${r.reason}`).join("; ")})` : ""}` };
-  return { scope: { at: (meta.now ?? (() => new Date()))().toISOString(), model: meta.model, summary, words, in: inn, out, refused } };
+  return { scope: { at: (meta.now ?? (() => new Date()))().toISOString(), model: meta.model, summary, words, in: inn, out, refused, basis: dossier.basis } };
 }
 
 /** A person's decision on a proposed scope. */
@@ -184,6 +228,7 @@ export function validScopes(raw: unknown): Record<string, NodeScopeRecord> {
       in: rows(x.in), out: rows(x.out),
       refused: (Array.isArray(x.refused) ? x.refused : []).filter((r: any) => r && typeof r.item === "string").map((r: any) => ({ item: r.item, reason: String(r.reason ?? "") })),
       ...(typeof x.ratifiedAt === "string" ? { ratifiedAt: x.ratifiedAt } : {}),
+      ...(typeof x.basis === "string" ? { basis: x.basis } : {}),
     };
   };
   for (const [id, rec] of Object.entries(raw as Record<string, unknown>)) {

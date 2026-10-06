@@ -65,6 +65,12 @@ export interface ScopeBody {
   out: Array<{ node: string; what: string; evidence: string[] }>;
   refused: Array<{ item: string; reason: string }>;
   ratifiedAt?: string;
+  /** a hash of what the model was shown about the box (its code lines,
+   *  edges and spec lines — node_scope.ts scopeBasis) */
+  basis?: string;
+  /** TRANSPORT ONLY: the box's code / edges / spec changed since — worked
+   *  out where scopes are read (withScopeStaleness), never stored */
+  stale?: boolean;
 }
 export interface NodeScopeRecord { node: string; ratified?: ScopeBody; proposed?: ScopeBody }
 export interface IoRow {
@@ -215,14 +221,15 @@ export function nodeIO(model: ArchModelRecord, nodeId: string, vocab: Vocabulary
     for (const w of sc.words) {
       const def = vocab.words.find((x) => x.id === w.word);
       if (!def) continue;
-      const cited = w.evidence.length ? `scoped (ratified): ${w.evidence.join(", ")}` : "scoped (ratified), INFERRED — no citation";
+      const tag = sc.stale ? "ratified, STALE — the code under it changed since; re-scope" : "ratified";
+      const cited = w.evidence.length ? `scoped (${tag}): ${w.evidence.join(", ")}` : `scoped (${tag}), INFERRED — no citation`;
       const have = out.process.find((p) => p.word === w.word);
       if (have) { have.evidence.push(cited); continue; }
       out.process.push({ word: def.id, label: def.label, definition: def.definition, icon: def.icon, accent: def.accent, evidence: [cited], refs: [], scoped: true, ...(w.evidence.length ? {} : { inferred: true }), ...(def.project ? { project: true } : {}) });
     }
     const add = (rows: IoRow[], list: ScopeBody["in"]) => {
       for (const r of list) if (byId.has(r.node) && !rows.some((x) => x.node === r.node)) {
-        rows.push({ edge: `scope:${nodeId}:${r.node}`, node: r.node, label: label(r.node), via: `scoped${r.evidence.length ? "" : ", INFERRED"}`, op: "scoped", keys: [], keysFrom: "none", rules: [], text: r.what });
+        rows.push({ edge: `scope:${nodeId}:${r.node}`, node: r.node, label: label(r.node), via: `scoped${sc.stale ? ", STALE" : ""}${r.evidence.length ? "" : ", INFERRED"}`, op: "scoped", keys: [], keysFrom: "none", rules: [], text: r.what });
       }
     };
     add(out.in, sc.in); add(out.out, sc.out);

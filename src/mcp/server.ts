@@ -1048,6 +1048,52 @@ function registerTools(server: McpServer, ctx: VibegraphMcpContext): void {
     },
   );
 
+  // 2026-10-06 - In → Process → Out, and "Scope this node"
+  server.registerTool(
+    "vibegraph_node_io",
+    {
+      description:
+        "One box of the architecture map (an id from vibegraph_architecture) as IN → PROCESS → OUT, zero tokens: " +
+        "IN and OUT follow the DATA (a read brings data back to the caller), one row per box it exchanges data with, " +
+        "each with the operation, the payload KEYS the code spells at the call (never values), the rules on that edge " +
+        "and, through a store, who put the data there or who reads it next. PROCESS is said only in the operation " +
+        "vocabulary (serves, renders, calls, runs, routes, reads, writes, watches, stores, queues, decides, validates, " +
+        "transforms, plus the project's own words), each word with its evidence. `silent` says what the code does not " +
+        "show. A RATIFIED scope (a model's description a person accepted) is merged in, marked scoped; `scope` shows " +
+        "it and any proposal, with `stale: true` when the code it was drawn from has changed since. Read-only.",
+      inputSchema: { nodeId: z.string().describe("an architecture box id, e.g. tool:yjs or cluster:api:services/orders") },
+    },
+    async ({ nodeId }) => {
+      const r = ctx.nodeIO(nodeId);
+      if (!r.io) return { content: [{ type: "text", text: r.error ?? "unavailable" }], isError: true };
+      return { content: [{ type: "text", text: JSON.stringify({ summary: r.lines, ...r.io }, null, 2) }] };
+    },
+  );
+
+  server.registerTool(
+    "vibegraph_scope_node",
+    {
+      description:
+        "SPENDS TOKENS. Ask a model to describe one architecture box the code says little about (an SDK the project " +
+        "only calls, a platform client): it is shown the box's call sites as numbered lines, its edges and any ratified " +
+        "software spec, and may use ONLY the operation vocabulary, citing a shown line for every word and every in / " +
+        "out entry. A word outside the vocabulary or a box that does not exist is refused; an unshown citation or the " +
+        "box's own id is dropped; an uncited claim is kept as INFERRED. The result is stored PROPOSED in " +
+        ".vibegraph/architecture.json - it changes nothing until a PERSON ratifies it (the GUI inspector, or " +
+        "`vibegraph-knowledge scope ratify <box>` in their own terminal). Use vibegraph_node_io first: scope only a box " +
+        "whose process the code leaves empty or vague.",
+      inputSchema: {
+        nodeId: z.string().describe("the architecture box id"),
+        note: z.string().max(400).optional().describe("what to look at, in a sentence (optional)"),
+      },
+    },
+    async ({ nodeId, note }) => {
+      const r = await ctx.scopeNode(nodeId, note);
+      if (!r.ok) return { content: [{ type: "text", text: `Scope failed: ${r.error ?? "unknown"}` }], isError: true };
+      return { content: [{ type: "text", text: JSON.stringify({ proposed: true, note: "awaiting a person's ratification (GUI inspector or `vibegraph-knowledge scope ratify`)", scope: r.scope }, null, 2) }] };
+    },
+  );
+
   server.registerTool(
     "vibegraph_list_constraints",
     {

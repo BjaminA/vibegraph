@@ -3,13 +3,12 @@
 // needs (the project root, the map, the model runner) is passed in, so
 // server.ts only routes the WS messages here.
 
-import * as fs from "fs";
-import * as path from "path";
 import type { ArchModelRecord } from "../shared/protocol.ts";
 import { loadArchStore, saveArchStore } from "./arch_store.ts";
 import { listSpecs } from "./software_store.ts";
 import { loadVocabulary } from "./operation_vocab.ts";
-import { buildScopePrompt, decideScope, parseScope, scopeDossier } from "./node_scope.ts";
+import { buildScopePrompt, decideScope, parseScope, scopeDossier, linesReader } from "./node_scope.ts";
+export { linesReader };
 
 export interface ScopeCtx {
   root: () => string | null;
@@ -20,18 +19,6 @@ export interface ScopeCtx {
   modelLabel: () => string;
   /** after the store changed: re-broadcast and refresh the exported docs */
   changed: () => void;
-}
-
-export function linesReader(root: string): (file: string) => string[] | null {
-  const cache = new Map<string, string[] | null>();
-  return (file) => {
-    if (cache.has(file)) return cache.get(file)!;
-    const abs = path.resolve(root, file);
-    let lines: string[] | null = null;
-    if (abs.startsWith(path.resolve(root) + path.sep)) { try { lines = fs.readFileSync(abs, "utf-8").split(/\r?\n/); } catch { lines = null; } }
-    cache.set(file, lines);
-    return lines;
-  };
 }
 
 export async function scopeNode(ctx: ScopeCtx, nodeId: string, guidance?: string): Promise<{ ok: boolean; error?: string; words?: number; refused?: number }> {

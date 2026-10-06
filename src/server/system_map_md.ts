@@ -266,7 +266,7 @@ export function renderSystemMapMd(map: SystemMap, vocab: Vocabulary = CORE_VOCAB
       const io = nodeIO(ioModel, n.id, vocab, scopes);
       const l = ioLines(io);
       const sc = io.scope?.ratified;
-      push(`- **${n.label}** — in: ${l.in} · **${l.process}** · out: ${l.out}${sc ? ` _(scoped by ${sc.model}, ratified${sc.summary ? `: ${sc.summary}` : ""})_` : ""}`);
+      push(`- **${n.label}** — in: ${l.in} · **${l.process}** · out: ${l.out}${sc ? ` _(scoped by ${sc.model}, ratified${sc.stale ? ", STALE — the code under it changed since; re-scope" : ""}${sc.summary ? `: ${sc.summary}` : ""})_` : ""}`);
     }
     push("");
   }

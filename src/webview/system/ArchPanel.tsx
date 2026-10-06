@@ -329,7 +329,7 @@ export function ArchInspector({ selected, model, ioModel, vocab, onLight, onClos
               {onRouteFrom && <button data-arch-route-from onClick={() => onRouteFrom(selected.node.id)} style={traceBtn}>Route from here…</button>}
             </div>
           )}
-          {ioModel?.nodes.some((n) => n.id === selected.node.id) && <NodeIOCard key={selected.node.id} model={ioModel} nodeId={selected.node.id} vocab={vocab} onLight={onLight} />}
+          {ioModel?.nodes.some((n) => n.id === selected.node.id) && <NodeIOCard key={selected.node.id} model={ioModel} nodeId={selected.node.id} vocab={vocab} onLight={onLight} scopeable={model.nodes.some((n) => n.id === selected.node.id)} />}
         </div>
       ) : (
         <div style={{ marginTop: 4 }}>

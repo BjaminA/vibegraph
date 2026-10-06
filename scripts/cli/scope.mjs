@@ -15,7 +15,7 @@ import { buildCrossingIndex } from "../../src/server/crossings.ts";
 import { archModelForEnvelope } from "../../src/server/arch_envelope.ts";
 import { applyArchStore, loadArchStore, saveArchStore } from "../../src/server/arch_store.ts";
 import { listSpecs } from "../../src/server/software_store.ts";
-import { loadVocabulary } from "../../src/server/operation_vocab.ts";
+import { loadVocabulary, scopesNow } from "../../src/server/operation_vocab.ts";
 import { buildScopePrompt, decideScope, parseScope, scopeDossier } from "../../src/server/node_scope.ts";
 import { linesReader } from "../../src/server/node_scope_server.ts";
 import { nodeIO, ioLines } from "../../src/shared/node_io.ts";
@@ -44,9 +44,12 @@ export function runScope(args, env = process.env) {
   const store = loadArchStore(root);
 
   if (a === "list") {
-    const rows = Object.values(store.scopes ?? {});
-    if (!rows.length) return done("no box is scoped yet — vibegraph-knowledge scope <box id>");
-    return done(rows.map((r) => `${r.node}: ${r.ratified ? `ratified (${r.ratified.model})` : ""}${r.ratified && r.proposed ? "; " : ""}${r.proposed ? `PROPOSED by ${r.proposed.model}` : ""}`).join("\n"));
+    if (!Object.keys(store.scopes ?? {}).length) return done("no box is scoped yet — vibegraph-knowledge scope <box id>");
+    // judged against the code now: a scope whose call sites, edges or spec moved is STALE
+    const rows = Object.values(scopesNow(root, mapOf(root)) ?? {});
+    const st = (b) => (b.stale ? ", STALE — the code under it changed; re-scope" : "");
+    const stale = rows.filter((r) => r.ratified?.stale || r.proposed?.stale).length;
+    return done(rows.map((r) => `${r.node}: ${r.ratified ? `ratified (${r.ratified.model}${st(r.ratified)})` : ""}${r.ratified && r.proposed ? "; " : ""}${r.proposed ? `PROPOSED by ${r.proposed.model}${st(r.proposed)}` : ""}`).join("\n"), stale ? 1 : 0);
   }
   if (a === "ratify" || a === "reject") {
     if (!b) return done(`usage: vibegraph-knowledge scope ${a} <box id>`, 2);

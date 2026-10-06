@@ -873,6 +873,15 @@ refused from Claude Code) makes it part of the box's In → Process → Out, the
 GUI inspector and `architecture.md`. `--dry-run` prints the prompt. The GUI's
 inspector has the same flow: **Scope with Claude**, then Ratify or Reject.
 
+A scope records a hash of exactly what it was shown (the code lines, edges and
+spec lines it could cite). When any of those change, it reads **STALE**
+everywhere it appears — the inspector, `architecture.md`, `scope list` (which
+then exits 1) — and keeps applying with that caveat until you re-scope it.
+Over MCP, `vibegraph_node_io` returns any box's In → Process → Out (zero
+tokens, the same answer as the inspector, with its scope and whether it is
+stale), and `vibegraph_scope_node` drafts a scope (spends tokens); ratifying
+stays yours.
+
 ### `classify` — tools no table knows
 
 ```bash

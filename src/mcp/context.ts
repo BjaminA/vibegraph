@@ -397,4 +397,11 @@ export interface VibegraphMcpContext {
    * ratifies (in the GUI). Spends tokens.
    */
   proposeArchitecture(): Promise<{ ok: boolean; error?: string; groups?: number; names?: number; refused?: number; model?: import("../shared/protocol").ArchModelRecord | null }>;
+  /** 2026-10-06 - one box's In → Process → Out (src/shared/node_io.ts), with
+   *  its scope (ratified / proposed, stale or not). Read-only, zero tokens. */
+  nodeIO(nodeId: string): { io: import("../shared/node_io").NodeIO | null; lines?: { in: string; process: string; out: string }; error?: string };
+  /** 2026-10-06 - "Scope this node": a model describes the box in the operation
+   *  vocabulary, citing what it was shown; stored PROPOSED (src/server/node_scope.ts).
+   *  Spends tokens. Only a person ratifies. */
+  scopeNode(nodeId: string, note?: string): Promise<{ ok: boolean; error?: string; scope?: import("../shared/node_io").NodeScopeRecord | null }>;
 }

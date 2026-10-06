@@ -27,7 +27,9 @@ import { startHookedRun, stopHookedRun, decideHookedRun, currentHookedRun, type 
 import { hostAllowed, originAllowed, jsonContentType, staticPath, ensurePrivateIgnore, type GuardConfig } from "./src/server/local_guard";
 import { computeDataflow, findingsByThread, formatDataflowMd, type DataflowReport } from "./src/server/dataflow";
 import { archModelForEnvelope } from "./src/server/arch_envelope";
-import { withProjectWords } from "./src/server/operation_vocab";
+import { withProjectWords, loadVocabulary } from "./src/server/operation_vocab";
+import { nodeIO, ioLines } from "./src/shared/node_io";
+import { enrichReal } from "./src/webview/system/arch_real";
 import { scopeNode, decideNodeScope, type ScopeCtx } from "./src/server/node_scope_server";
 import { applyArchStore, loadArchStore, saveArchStore, ratifyProposal, rejectProposal, proposalGate } from "./src/server/arch_store";
 import { archBaseline, archDrift } from "./src/server/arch_drift";
@@ -7685,6 +7687,28 @@ const mcpContext: VibegraphMcpContext = {
   proposeArchitecture: async () => {
     const r = await archProposeCore();
     return r.ok ? { ...r, model: latestArch } : r;
+  },
+  // 2026-10-06 - In → Process → Out for one box, and "Scope this node" (drafts only).
+  nodeIO: (nodeId) => {
+    if (!isDirectory || !latestArch) return { io: null, error: "no architecture model yet" };
+    if (!latestArch.nodes.some((n) => n.id === nodeId) && !/^(store|decision|actor):/.test(nodeId)) {
+      const near = latestArch.nodes.filter((n) => n.id.includes(nodeId) || n.label.toLowerCase().includes(nodeId.toLowerCase())).slice(0, 8);
+      return { io: null, error: `no box ${nodeId}${near.length ? ` - did you mean: ${near.map((n) => `${n.id} (${n.label})`).join(", ")}` : " - vibegraph_architecture lists every box id"}` };
+    }
+    // The map the GUI's Real view draws: the plan's names, the declared
+    // topology's stores and decision structures, outside callers (arch_real.ts).
+    const plan = loadPlan(inputPath);
+    const rec = plan ? reconcilePlan(plan, planEnv() as any, latestStack, inputPath) : null;
+    let topology = null;
+    try { topology = topologyState(analyzedRoot(), derivedTopologyOnce(latestStack, latestThreads, () => deriveDataArchitecture(relativeProjectFiles() as any, latestStack as any, latestThreads as any).topology)).model?.topology ?? null; } catch { topology = null; }
+    const real = enrichReal(withProjectWords(latestArch, inputPath), { plan, rec, topology, threads: latestThreads as any });
+    if (!real.nodes.some((n) => n.id === nodeId)) return { io: null, error: `no box ${nodeId}` };
+    const io = nodeIO(real, nodeId, loadVocabulary(inputPath).vocab);
+    return { io, lines: ioLines(io) };
+  },
+  scopeNode: async (nodeId, note) => {
+    const r = await scopeNode(scopeCtx, nodeId, note);
+    return r.ok ? { ok: true, scope: loadArchStore(inputPath).scopes?.[nodeId] ?? null } : { ok: false, error: r.error };
   },
   crossings: (entryPointId) => {
     if (entryPointId && !latestCrossings.byThread[entryPointId]) {
