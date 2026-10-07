@@ -3,6 +3,38 @@
 `vibegraph-knowledge` and the VibeGraph app. Newest first. Each entry says what
 changed and, where an existing user would notice, how behaviour differs.
 
+## 0.27.8 — 2026-10-07
+
+### Arrows say what they carry
+
+Asked for: arrows in the code view and the thread view that mean more. A call
+arrow said what went in (its arguments) and nothing about what came back, and
+nothing showed one call's result being handed to the next.
+
+- **The IR records every name an unpacking binds.** `a, b = f()` was an
+  assignment named `?`; it now carries `targets: ["a", "b"]` (Python tuples
+  and lists, `*rest` starred; TS/JS object and array destructuring, shorthand,
+  renames, defaults, rest). Additive — `name` and node ids are unchanged, no
+  snapshot moved.
+- **What comes back.** A call edge reads `(args) → names`. In the code view a
+  call into another file's stub gains an amber `→ names` line; in the thread
+  view the edge label does the same. One rule, `src/shared/call_flow.ts`,
+  serves both views.
+- **Data-flow lines.** Within one function, a later call whose arguments read
+  a name an earlier call's result was bound to gets a dashed amber line from
+  producer to consumer, labelled with the names (`load ⇢ run_training` via
+  `train_x, train_y`). The latest earlier binding wins (a rebinding takes the
+  flow); `x.shape` reads `x`; strings and keyword names do not count. They are
+  drawn over the layout and never move a card; in the thread view they appear
+  only between drawn nodes, so the Primary rank stays quiet. Named limit: by
+  name, not by value — no aliasing, containers or attribute stores.
+- Tests: `test:call-flow` (5), `test:code-layout` (data-flow edge from the
+  stub), `test:e2e-thread-dataflow` (fixture `test/fixtures/threads/
+  dataflow_demo`: four lines with their names, the call edge's
+  `("data.csv") → xs, ys`, amber labels). A label that finds no clear spot is
+  still not drawn; every thread edge now carries its full text as
+  `data-edge-carries`.
+
 ## 0.27.7 — 2026-10-07
 
 ### Cards fit their content

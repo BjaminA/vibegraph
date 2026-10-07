@@ -49,6 +49,8 @@ export interface AstNode {
   // type so consumers (cross-file link, architecture view) read it without
   // an `as any` cast.
   callTarget?: string;
+  /** 2026-10-07 — the names an unpacking / destructuring assignment binds (`a, b = f()`) */
+  targets?: string[];
   // assignment (field-additive): type-annotation source for `x: int`,
   // dataclass fields, etc. Declaration-only forms have an empty preview.
   annotation?: string;

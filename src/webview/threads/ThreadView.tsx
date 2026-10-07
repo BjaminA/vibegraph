@@ -55,6 +55,7 @@ import { bridge } from "../types";
 import { accentForThreadNode } from "./colour_for_node";
 import { iconForNode } from "./icon_for_node";
 import { resolveEdgeLabel } from "./edge_args";
+import { threadDataFlowEdges } from "./data_flow_edges";
 import { computeFileGroups } from "./depthCues";
 import { homeMembers } from "./containerHome";
 import { MeasuredCards, sameSizes, type CardSizes } from "./MeasuredCards";
@@ -846,6 +847,7 @@ function ThreadCanvas({ thread: rawThread, width, height, projectIR, entryPoints
     // §5.6a — the error path into an except band gets a red arrowhead to
     // match its red stroke (the only red edge in the thread).
     const errorColour = readVar("--accent-error", "hsl(356 90% 67%)");
+    const warningColour = readVar("--accent-warning", "hsl(40 96% 62%)");
 
     // §5.6 — spread converging container edges across the entry ports so
     // they don't collapse onto a single anchor and cross. Group edges
@@ -958,6 +960,9 @@ function ThreadCanvas({ thread: rawThread, width, height, projectIR, entryPoints
         data: data as unknown as Record<string, unknown>,
       } satisfies Edge;
     });
+    // 2026-10-07 — data flow: a step's result reaching a later step, drawn
+    // over the layout (it never places a card)
+    built.push(...(threadDataFlowEdges(thread, projectIR, warningColour) as typeof built));
     // M-FS3 (full-scope review P2) — labelled edges fanning out of ONE
     // source all placed their label at the bezier midpoint, so a seed
     // with three arg-previews rendered them overprinted into a garbled

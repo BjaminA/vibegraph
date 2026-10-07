@@ -152,6 +152,16 @@ test("a callee sits level with the line that calls it; a call into another file 
   assert.deepEqual([stub.data.label, stub.data.file], ["load()", "data.py"]);
   assert.ok(stub.position.x > main.position.x + main.width && stub.position.x < train.position.x, "in main's lane, before the next block");
   const line7 = main.position.y + 30 + 10 + (7 - 6) * 18 + 9;
-  assert.ok(Math.abs(stub.position.y + 24 - line7) < 1, "level with line 7");
+  assert.ok(Math.abs(stub.position.y + stub.height / 2 - line7) < 1, "level with line 7");
+  assert.deepEqual(stub.data.returns, ["xs"], "what comes back rides the stub");
   assert.equal(callEdges.find((e) => e.target === stub.id).sourceHandle, "L7");
+});
+
+test("a call's result reaching a later call is a data-flow line, labelled with the names", () => {
+  const { nodes, callEdges } = buildCodeLayout(STORY, STORY_REF, STORY_SRC, "python");
+  const stub = nodes.find((n) => n.type === "codeStub");
+  const flow = callEdges.find((e) => e.data?.kind === "data-flow");
+  assert.ok(flow, "xs = load() then train(m, xs)");
+  assert.deepEqual([flow.source, flow.sourceHandle, flow.target, flow.targetHandle, flow.label], [stub.id, "out", "module/train.fn", "in", "xs"]);
+  assert.equal(callEdges.filter((e) => e.data?.kind === "data-flow").length, 1, "m = 1 is no call: nothing flows from it");
 });

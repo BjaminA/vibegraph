@@ -23,7 +23,9 @@ export interface ThreadEdgeData {
   // M24 — "flow": unconditional container join (try→finally). Solid,
   // like direct; carries an explicit label ("always"). Fork arrows into
   // if arms arrive as "conditional" and pick up the dashed class.
-  kind: "direct" | "conditional" | "flow";
+  // 2026-10-07 — "data-flow": a step's result reaching a later step
+  // (data_flow_edges.ts); drawn over the layout, amber and dashed.
+  kind: "direct" | "conditional" | "flow" | "data-flow";
   irSource: string | null;
   crossFile: boolean;
   tier: "thin" | "medium" | "thick";
@@ -190,6 +192,7 @@ export function ThreadEdge(props: EdgeProps) {
     d.kind === "conditional" ? "vg-thread-edge-conditional" : "",
     // M24 — solid join between sibling containers (try→finally).
     d.kind === "flow" ? "vg-thread-edge-flow" : "",
+    d.kind === "data-flow" ? "vg-thread-edge-dataflow" : "",
     // §5.6a — curved function-exit terminal; error path into an except band.
     d.toReturn ? "vg-thread-edge-return" : "",
     d.toExcept ? "vg-thread-edge-error" : "",
@@ -220,6 +223,8 @@ export function ThreadEdge(props: EdgeProps) {
         style={hueStyle}
         data-source={source}
         data-target={target}
+        // what the edge carries, even when its label found no clear spot
+        data-edge-carries={d.labelFull ?? undefined}
         {...hueAttrs}
       >
         <BaseEdge id={id} path={edgePath} markerEnd={markerEnd} />
@@ -242,7 +247,10 @@ export function ThreadEdge(props: EdgeProps) {
               className={[
                 "vg-thread-edge-label",
                 d.labelSource === "fn-params" ? "vg-thread-edge-label-inferred" : "",
+                // the label is portalled out of the edge's <g>, so it carries its own class
+                d.kind === "data-flow" ? "vg-thread-edge-label-dataflow" : "",
               ].filter(Boolean).join(" ")}
+              data-edge-dataflow={d.kind === "data-flow" ? "" : undefined}
               // labelX/labelY are layout coords; React Flow's
               // EdgeLabelRenderer portal already places it within the
               // transformed viewport, so we use plain CSS transform here

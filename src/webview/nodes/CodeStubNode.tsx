@@ -17,9 +17,16 @@ export function CodeStubNode({ data, selected }: { data: CodeStubData; selected?
       border: `1px dashed color-mix(in oklab, var(--accent-thread) ${selected ? 70 : 40}%, var(--border-edge))`,
     }}>
       <Handle id="in" type="target" position={Position.Left} style={{ opacity: 0, pointerEvents: "none" }} />
+      {/* 2026-10-07 — a data-flow line leaves here: this call's result, taken by a later call */}
+      <Handle id="out" type="source" position={Position.Right} style={{ opacity: 0, pointerEvents: "none" }} />
       <span style={{ display: "flex", alignItems: "center", gap: 4, color: "var(--text-primary)", fontFamily: "var(--font-mono)", fontSize: "var(--fsm-12)", whiteSpace: "nowrap" }}>
         {data.label}<ArrowUpRight size={12} strokeWidth={1.5} style={{ color: "var(--text-muted)" }} />
       </span>
+      {data.returns?.length ? (
+        <span data-code-stub-returns title={`its result is bound to ${data.returns.join(", ")}`} style={{
+          color: "var(--accent-warning)", fontFamily: "var(--font-mono)", fontSize: "var(--fsm-12)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+        }}>{`→ ${data.returns.join(", ")}`}</span>
+      ) : null}
       <span style={{ color: "var(--text-muted)", fontFamily: "var(--font-ui)", fontSize: "var(--fs-11)", whiteSpace: "nowrap" }}>{data.file}</span>
     </div>
   );

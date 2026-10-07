@@ -177,6 +177,19 @@
   /* No pulse on conditional edges — uncertainty isn't "alive". */
   animation: none;
 }
+/* 2026-10-07 — a step's result reaching a later step (data_flow_edges.ts):
+   the data colour, quieter and dashed — where data goes, not who calls whom. */
+.vg-thread-edge-dataflow .react-flow__edge-path {
+  stroke: var(--accent-warning) !important;
+  stroke-dasharray: 5 4;
+  opacity: 0.85;
+  filter: none;
+  animation: none;
+}
+.vg-thread-edge-label.vg-thread-edge-label-dataflow {
+  color: var(--accent-warning);
+  border-color: color-mix(in oklab, var(--accent-warning) 40%, transparent);
+}
 .vg-thread-edge-cross-file .react-flow__edge-path {
   stroke-dasharray: 6 3;
   filter: drop-shadow(0 0 6px color-mix(in oklab, var(--accent-thread) 35%, transparent));

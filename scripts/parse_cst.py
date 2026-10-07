@@ -575,6 +575,17 @@ class GraphBuilder(cst.CSTVisitor):
         # inside list/tuple/dict literals are NOT exposed here — that's a parser
         # enhancement out of M4a scope.
         extras: dict = {"name": name, "valueKind": vkind, "preview": preview}
+        # 2026-10-07 — what an unpacking assignment binds (`a, b = f()`): the
+        # names a call's result flows into. `name` stays "?" (ids unchanged);
+        # field-additive, no version bump (the elseLine/args precedent).
+        if isinstance(first_target, (cst.Tuple, cst.List)):
+            names = []
+            for el in first_target.elements:
+                v = el.value
+                star = isinstance(v, cst.StarredElement) or isinstance(el, cst.StarredElement)
+                inner = v.value if isinstance(v, cst.StarredElement) else v
+                names.append(("*" if star else "") + self._target_name(inner))
+            extras["targets"] = names
         self._stamp_table(extras, node.value)
         if isinstance(node.value, cst.Call):
             self._claim(node.value)  # the assignment node IS this call's node

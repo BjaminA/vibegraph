@@ -52,6 +52,8 @@ export function CodeBlockNode({ data, selected }: { data: CodeBlockData; selecte
       <Handle type="source" position={Position.Right} style={{ opacity: 0, pointerEvents: "none" }} />
       {/* 2026-10-07 — a call arrives at the header and leaves from its own line */}
       <Handle id="in" type="target" position={Position.Left} style={{ top: CODE_HEAD_H / 2, opacity: 0, pointerEvents: "none" }} />
+      {/* a data-flow line leaves from the header: this function's result, taken by a later call */}
+      <Handle id="out" type="source" position={Position.Right} style={{ top: CODE_HEAD_H / 2, opacity: 0, pointerEvents: "none" }} />
       {(data.callLines ?? []).map((l) => (
         <Handle key={l} id={`L${l}`} type="source" position={Position.Right} style={{ top: lineMid(l, data.firstLine), opacity: 0, pointerEvents: "none" }} />
       ))}

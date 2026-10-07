@@ -360,6 +360,11 @@
         "callTarget": {
           "type": "string"
         },
+        "targets": {
+          "description": "2026-10-07 — the names an unpacking / destructuring assignment binds, in order (`a, b = f()`; `const { x, ...rest } = g()` → [\"x\", \"*rest\"]). Absent for a single name.",
+          "type": "array",
+          "items": { "type": "string" }
+        },
         "effectKind": {
           "$ref": "#/$defs/EffectKind"
         },

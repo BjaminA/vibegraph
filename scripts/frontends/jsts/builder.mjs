@@ -361,15 +361,32 @@ export class JstsGraphBuilder {
       // module 4: a typed constant says which interface its object meets
       const typeNode = decl.childForFieldName("type");
       const annotation = typeNode ? this.text(typeNode).replace(/^:\s*/, "") : null;
-      this.emitAssignment(n, parentId, name, value, undefined, annotation);
+      // 2026-10-07 — what a destructuring binds (`const { a, b } = f()`,
+      // `const [x, y] = await g()`): the names a call's result flows into
+      const targets = nameNode && /^(object|array)_pattern$/.test(nameNode.type) ? this.boundNames(nameNode) : null;
+      this.emitAssignment(n, parentId, name, value, undefined, annotation, targets);
     }
   }
 
-  emitAssignment(posNode, parentId, name, value, augmented, annotation) {
+  /** The identifiers a destructuring pattern binds, in order (`...rest` as "*rest"). */
+  boundNames(pattern) {
+    const out = [];
+    const walk = (c, rest) => {
+      if (c.type === "identifier" || c.type === "shorthand_property_identifier_pattern") { out.push((rest ? "*" : "") + this.text(c)); return; }
+      if (c.type === "pair_pattern") { const v = c.childForFieldName("value"); if (v) walk(v, rest); return; }
+      if (c.type === "assignment_pattern") { const l = c.childForFieldName("left") ?? c.namedChildren[0]; if (l) walk(l, rest); return; }
+      for (const k of c.namedChildren) walk(k, rest || c.type === "rest_pattern");
+    };
+    for (const k of pattern.namedChildren) walk(k, false);
+    return out;
+  }
+
+  emitAssignment(posNode, parentId, name, value, augmented, annotation, targets) {
     const id = this.makeId(parentId, `${this.safeName(name)}.assign`);
     const node = {
       id, type: "assignment", parentId: parentId ?? null, ...this.pos(posNode),
       name,
+      ...(targets?.length ? { targets } : {}),
       valueKind: this.valueKindOf(value),
       preview: value ? this.preview(value) : "",
       // M-CONTRACT.5 parity — `count += f()` REBINDS nothing; without

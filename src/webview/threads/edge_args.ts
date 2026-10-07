@@ -17,7 +17,8 @@
 // from-args (future).
 
 import type { Thread, ThreadEdge as ThreadEdgeJSON } from "./types";
-import type { AstNode, ProjectFileData } from "../../shared/protocol";
+import type { ProjectFileData } from "../../shared/protocol";
+import { callIO, type CallNodeLike } from "../../shared/call_flow";
 
 export type EdgeLabelSource = "call-args" | "fn-params";
 
@@ -44,10 +45,10 @@ export function resolveEdgeLabel(
     if (sourceIR) {
       const callNode = sourceIR.nodes.find((n) => n.id === edge.irSource);
       if (callNode) {
-        const args = extractArgs(callNode);
-        if (args && args.length > 0) {
-          return formatLabel(args, "call-args");
-        }
+        // 2026-10-07 — what goes in AND what comes back (shared/call_flow.ts):
+        // an assignment-valued call carries its args now, and its bound names
+        const io = callIO(callNode as CallNodeLike);
+        if (io.args.length || io.binds.length) return formatIO(io.args, io.binds);
       }
     }
   }
@@ -71,11 +72,14 @@ export function resolveEdgeLabel(
   return null;
 }
 
-// Args on Call are strings already (preview-y); on assignment the IR
-// doesn't expose them — return null and let the caller fall back.
-function extractArgs(node: AstNode): string[] | null {
-  if (node.type === "call" && node.args) return node.args;
-  return null;
+/** `(args) → names`: the arguments, then what the result is bound to. */
+function formatIO(args: string[], binds: string[]): EdgeLabel {
+  const inn = args.join(", ");
+  const out = binds.join(", ");
+  const fullText = `(${inn})${out ? ` → ${out}` : ""}`;
+  const shortIn = inn.length <= MAX_DISPLAY ? inn : inn.slice(0, MAX_DISPLAY - 1).trimEnd() + "…";
+  const shortOut = out.length <= 22 ? out : out.slice(0, 21).trimEnd() + "…";
+  return { text: `(${shortIn})${out ? ` → ${shortOut}` : ""}`, fullText, source: "call-args" };
 }
 
 function formatLabel(items: string[], source: EdgeLabelSource): EdgeLabel {
