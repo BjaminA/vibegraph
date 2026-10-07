@@ -982,5 +982,7 @@ model's work until you ratify it. Everything else is deterministic.
 
 `VG_PYTHON` (the interpreter), `VIBEGRAPH_PYDEPS` (a directory already holding
 `libcst`), `VIBEGRAPH_KNOWLEDGE_HOME` (where `libcst` is installed when
-missing, default `~/.cache/vibegraph-knowledge`), `VG_CLAUDE_BIN` (the model
-command). See [SETUP.md §6](SETUP.md#6-settings).
+missing, default `~/.cache/vibegraph-knowledge`), `VG_CLAUDE_BIN` / `VG_CLAUDE_ARGS` (which
+Claude, and extra arguments) — or, without editing the environment,
+`vibegraph-knowledge config set claude.bin "<path>"`. `doctor` says which
+Claude is found and how. See [SETUP.md §6](SETUP.md#6-settings).

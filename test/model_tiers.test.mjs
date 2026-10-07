@@ -78,7 +78,7 @@ test("VG_CLAUDE_BIN prefix args survive, with routing appended after them", () =
   setModelTiers({ thinking: "claude-opus-5", routine: "claude-sonnet-5" });
   try {
     const { cmd, args } = resolveClaudeBin("thinking");
-    assert.equal(cmd, "node");
+    assert.equal(cmd, process.execPath); // 2026-10-07 (find_claude.ts): a bare `node` in VG_CLAUDE_BIN is this Node
     assert.deepEqual(args, ["/path/to/stub.mjs", "--model", "claude-opus-5"],
       "the stub path must stay first or the stub is never invoked");
   } finally {
@@ -298,7 +298,7 @@ test("M-GATEWAY: the spawn carries the route's endpoint, its key, and NOT the ot
     setModelTiers(sanitiseTiers({ routes: { worker: { provider: "claude", endpoint: gw, model: "glm-5.3" } } }));
     const t = resolveClaudeBin("worker");
     assert.equal(t.provider, "claude", "still the claude provider: same binary, same spawn, same MCP channel");
-    assert.equal(t.cmd, "claude");
+    assert.match(t.cmd, /claude(\.exe)?$/); // the Claude find_claude.ts found (a full path), or the bare name when none
     assert.equal(t.label, "claude:glm-5.3@api.z.ai");
     assert.deepEqual(t.env, { ANTHROPIC_BASE_URL: gw, ANTHROPIC_MODEL: "glm-5.3", ANTHROPIC_AUTH_TOKEN: "zai-key-abc" });
 

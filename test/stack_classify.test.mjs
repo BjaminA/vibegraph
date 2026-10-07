@@ -256,11 +256,14 @@ test("a doc mention is a WORD: short names do not match inside other words, a sc
 });
 
 test("VG_CLAUDE_BIN names a binary, a node script, or either with arguments", () => {
-  assert.deepEqual(classifierTarget({ VG_CLAUDE_BIN: "claude --model haiku" }), { cmd: "claude", args: ["--model", "haiku"], label: "claude" });
+  // a bare name is looked up as the OS would (none on this env's empty PATH → used as given); the pinned model is read from the parsed args
+  assert.deepEqual(classifierTarget({ VG_CLAUDE_BIN: "claude --model haiku" }), { cmd: "claude", args: ["--model", "haiku"], label: "claude", pinned: "haiku" });
   const script = classifierTarget({ VG_CLAUDE_BIN: STUB });
   assert.equal(script.cmd, process.execPath);
   assert.equal(script.args[0], STUB);
-  assert.equal(classifierTarget({}).cmd, "claude");
+  // nothing set: the real search (find_claude.ts) — an installed Claude, or none (cmd null, the reason kept)
+  const none = classifierTarget({});
+  assert.ok(none.cmd === null ? /Claude Code was not found/.test(none.missing) : /claude(\.exe)?$/.test(none.cmd));
 });
 
 after(() => rmSync(tmp, { recursive: true, force: true }));

@@ -24,6 +24,8 @@ import { applyHooks, applyInit, ALL_SKILLS, applySkills, hookCommand, windowsHoo
 import { spawnSync } from "node:child_process";
 import { HOOK_EVENTS, runHook } from "./hooks.mjs";
 import { doctorReport, hookRunPayload, recordFired } from "./hook_tools.mjs";
+import { runConfig, CONFIG_USAGE } from "./config.mjs";
+import { describeClaude } from "../../src/server/find_claude.ts";
 import { LESSONS_USAGE, runLessons } from "./lessons.mjs";
 import { DIRECTION_USAGE, runDirection } from "./direction.mjs";
 import { DATAFLOW_USAGE, runDataflow } from "./dataflow.mjs";
@@ -94,7 +96,8 @@ usage:
                                                fire a hook by hand: the stdin JSON is built for you, the
                                                exit codes are the hook's (0 · 2 blocked). Events: ${HOOK_EVENTS.join(", ")}
   ${PACKAGE_NAME} doctor [<root>]                are the hooks installed, runnable from this side, and have
-                                               they fired since installed? exit 0 · 1 a warning
+                                               they fired since installed? which Claude is found? exit 0 · 1 a warning
+  ${PACKAGE_NAME} ${CONFIG_USAGE}
       --skill              also install the Claude Code skills into .claude/skills/: /vibegraph (set up and
                            use this) and the task skills /vibegraph-plan, -debug, -security, -review (which
                            knowledge file and command to open for that task; ~100 tokens each until used);
@@ -551,7 +554,11 @@ function cmdDoctor(args) {
   try { absRoot = projectRoot(args.find((a) => !a.startsWith("-"))); } catch (e) { return fail(e.message); }
   const r = doctorReport(absRoot);
   for (const [level, text] of r.lines) process.stdout.write(`${level === "ok" ? "ok  " : level === "info" ? "--  " : "!!  "}${text}\n`);
-  return r.ok ? 0 : 1;
+  // which Claude every Claude call uses, and how it was found (find_claude.ts)
+  const claude = describeClaude();
+  const found = claude.startsWith("Claude: ") && !claude.includes("failed");
+  process.stdout.write(`${found ? "ok  " : "!!  "}${claude.split("\n").join("\n    ")}\n`);
+  return r.ok && found ? 0 : 1;
 }
 
 function cmdBrief(args) {
@@ -618,6 +625,7 @@ export function main(argv) {
   if (command === "coverage") return cmdCoverage(rest);
   if (command === "hook") return cmdHook(rest);
   if (command === "doctor") return cmdDoctor(rest);
+  if (command === "config") { const r = runConfig(rest); (r.exitCode === 2 ? process.stderr : process.stdout).write(r.text); return r.exitCode; }
   if (command === "lessons") return cmdLessons(rest);
   if (command === "brief") return cmdBrief(rest);
   if (command === "dataflow") { const r = runDataflow(rest); process.stdout.write(r.text); return r.exitCode; }

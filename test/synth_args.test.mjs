@@ -46,7 +46,7 @@ test("resolveClaudeBin honors VG_CLAUDE_BIN (whitespace split)", () => {
   // shape of a struct rather than the behaviour under test — and went red
   // the day either was added, for no reason a reader could act on.
   const r = resolveClaudeBin();
-  assert.equal(r.cmd, "node");
+  assert.equal(r.cmd, process.execPath); // 2026-10-07 (find_claude.ts): a bare `node` in VG_CLAUDE_BIN is this Node
   assert.deepEqual(r.args, ["/tmp/x.mjs", "--flag"]);
   if (prev === undefined) delete process.env.VG_CLAUDE_BIN; else process.env.VG_CLAUDE_BIN = prev;
 });

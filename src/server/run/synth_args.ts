@@ -12,6 +12,7 @@
 // injected into executed source. And the SM3 floor (scan_effects.py) runs
 // regardless — synthesized inputs never widen the statically-scanned set.
 
+import { claudeCommand, parseArgv, pinnedModel } from "../find_claude.ts";
 import { spawn } from "child_process";
 import * as path from "path";
 import {
@@ -87,9 +88,9 @@ function gatewayEnv(endpoint: string, model: string | null): { env: Record<strin
   return { env, unset: ["ANTHROPIC_API_KEY"] };
 }
 
-// VG_CLAUDE_BIN (whitespace-split; first token = command, rest = prefix
-// args) overrides the spawned binary. Same contract as the chat backend's
-// resolveBin so one stub mechanism covers every headless Claude path.
+// Which Claude runs is find_claude.ts's answer (VG_CLAUDE_BIN, the saved
+// setting, PATH as the OS searches it, the install places) — the one
+// resolver every headless Claude path shares.
 //
 // `tier` (model_tiers.ts) routes the spawn by what it does: every one-shot
 // spawn in the codebase resolves its binary here, so this is the single
@@ -118,7 +119,7 @@ export function resolveClaudeBin(tier?: ModelTier): SpawnTarget {
     };
   }
   if (route && route.provider === "command") {
-    const parts = route.command.split(/\s+/);
+    const parts = parseArgv(route.command);
     return { cmd: parts[0], args: parts.slice(1), provider: "command", label: routeLabel(route), timeoutMs: LOCAL_TIMEOUT_MS };
   }
   // `resolveTierRoute` already decided the claude args — the tier ladder for
@@ -128,11 +129,11 @@ export function resolveClaudeBin(tier?: ModelTier): SpawnTarget {
   // route and no routing, exactly as before.
   const routing = route && route.provider === "claude" ? route.args : [];
   const gwEndpoint = route && route.provider === "claude" ? route.endpoint ?? null : null;
-  const raw = process.env.VG_CLAUDE_BIN;
+  const claude = claudeCommand();
   // The audit label must say what actually ran: a model pinned through
   // VG_CLAUDE_BIN (the drills run `claude --model claude-opus-5`) is the
   // model when the tier itself pins none — "claude:default" would be a lie.
-  const binModel = raw?.match(/--model\s+(\S+)/)?.[1];
+  const binModel = pinnedModel(claude);
   const tierModel = route && route.provider === "claude" ? route.model : null;
   // ...and the same rule one level out: ANTHROPIC_MODEL is the CLI's own
   // default-model env var, so where nothing else pins one it names what
@@ -147,11 +148,7 @@ export function resolveClaudeBin(tier?: ModelTier): SpawnTarget {
   const label = `claude:${tierModel ?? binModel ?? envModel ?? "default"}${serviceSuffix(baseUrl)}`;
   const gw = gwEndpoint ? gatewayEnv(gwEndpoint, tierModel) : null;
   const extra = gw ? { env: gw.env, envUnset: gw.unset } : {};
-  if (raw && raw.trim().length > 0) {
-    const parts = raw.trim().split(/\s+/);
-    return { cmd: parts[0], args: [...parts.slice(1), ...routing], provider: "claude", label, timeoutMs: CLAUDE_TIMEOUT_MS, ...extra };
-  }
-  return { cmd: "claude", args: routing, provider: "claude", label, timeoutMs: CLAUDE_TIMEOUT_MS, ...extra };
+  return { cmd: claude.cmd, args: [...claude.args, ...routing], provider: "claude", label, timeoutMs: CLAUDE_TIMEOUT_MS, ...extra };
 }
 
 /** Live tier settings. Held here (not passed through every call site)

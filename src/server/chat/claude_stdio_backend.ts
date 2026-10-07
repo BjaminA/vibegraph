@@ -17,11 +17,12 @@
 //     forgotten tab doesn't pin a process; resume makes the reap
 //     invisible to the user.
 //
-// VG_CLAUDE_BIN (whitespace-split; first token = command) overrides
+// Which Claude runs is find_claude.ts's answer (VG_CLAUDE_BIN overrides it)
 // the spawned binary so the unit test can drive a stub that speaks
 // stream-json — automated tests never spawn the real `claude`
 // (auth/cost; project convention recorded at M10R.7).
 
+import { claudeCommand } from "../find_claude.ts";
 import { spawn, type ChildProcess } from "child_process";
 import type { ChatBackend, ChatSession, ChatSessionInit, ChatEvent } from "./backend";
 import { mapClaudeStreamMessage } from "./stream_json.ts";
@@ -29,12 +30,8 @@ import { mapClaudeStreamMessage } from "./stream_json.ts";
 const DEFAULT_IDLE_MS = 15 * 60_000;
 
 function resolveBin(): { cmd: string; args: string[] } {
-  const raw = process.env.VG_CLAUDE_BIN;
-  if (raw && raw.trim().length > 0) {
-    const parts = raw.trim().split(/\s+/);
-    return { cmd: parts[0], args: parts.slice(1) };
-  }
-  return { cmd: "claude", args: [] };
+  const t = claudeCommand();
+  return { cmd: t.cmd, args: t.args };
 }
 
 class StdioSession implements ChatSession {

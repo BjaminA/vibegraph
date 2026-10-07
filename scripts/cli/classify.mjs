@@ -17,6 +17,7 @@
 // Air-gapped flow: --dossier-out writes the evidence + prompt as JSON;
 // --from-dossier reads it back (no parse step, so no Python needed); and
 // --reply <file> uses a saved model reply instead of spawning.
+import { findClaude, isMissing, pinnedModel } from "../../src/server/find_claude.ts";
 import { spawnSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -30,28 +31,34 @@ import { cliPath } from "./winpath.mjs";
 
 /** The server's CHAT_DENIED_TOOLS plus Bash: a classifier reads, never runs. */
 export const CLASSIFY_DENIED_TOOLS = ["Edit", "Write", "MultiEdit", "NotebookEdit", "Bash"];
+/** What a classifier may use without asking: it reads, nothing else. */
+export const CLASSIFY_ALLOWED_TOOLS = ["Read", "Glob", "Grep"];
 
-/** `VG_CLAUDE_BIN` may be a binary, a node script, or either followed by
- *  arguments (`claude --model haiku`); the first token is what to run. */
+/** Which Claude runs: find_claude.ts, the one resolver every caller shares
+ *  (VG_CLAUDE_BIN, the saved setting, PATH as the OS searches it, the
+ *  install places). Never through a shell. */
 export function classifierTarget(env = process.env) {
-  const raw = (env.VG_CLAUDE_BIN ?? "claude").trim();
-  const [bin, ...pre] = raw.split(/\s+/);
-  if (/\.(mjs|cjs|js)$/.test(bin)) return { cmd: process.execPath, args: [resolve(bin), ...pre], label: bin };
-  return { cmd: bin, args: pre, label: bin };
+  const f = findClaude(env);
+  if (isMissing(f)) return { cmd: null, args: [], label: "claude", missing: f.error };
+  const label = f.cmd === process.execPath ? (f.args[0] ?? "claude") : f.cmd;
+  return { cmd: f.cmd, args: f.args, label, pinned: pinnedModel(f) };
 }
 
 /** One reasoning spawn. Returns the model's reply TEXT, or the failure. */
 export function spawnClassifier({ prompt, model, cwd, timeoutMs = 10 * 60 * 1000, env = process.env }) {
   const target = classifierTarget(env);
+  if (!target.cmd) return { ok: false, error: target.missing, label: "claude" };
   const args = [
     ...target.args,
     "-p", "--output-format", "json", "--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}',
-    "--dangerously-skip-permissions",
+    // 2026-10-07 — no permission bypass: the task reads its prompt, so it is
+    // allowed read-only tools and the user's own policy still applies
+    "--allowedTools", CLASSIFY_ALLOWED_TOOLS.join(","),
     "--disallowedTools", CLASSIFY_DENIED_TOOLS.join(","),
     ...(model ? ["--model", model] : []),
     "--", prompt,
   ];
-  const r = spawnSync(target.cmd, args, { cwd, encoding: "utf-8", timeout: timeoutMs, maxBuffer: 64 * 1024 * 1024, env });
+  const r = spawnSync(target.cmd, args, { cwd, encoding: "utf-8", timeout: timeoutMs, maxBuffer: 64 * 1024 * 1024, env, shell: false });
   if (r.error) return { ok: false, error: `could not spawn ${target.label}: ${r.error.message}`, label: target.label };
   let parsed = null;
   try { parsed = JSON.parse(r.stdout); } catch { parsed = null; }
@@ -61,14 +68,10 @@ export function spawnClassifier({ prompt, model, cwd, timeoutMs = 10 * 60 * 1000
   }
   const text = typeof parsed?.result === "string" ? parsed.result : typeof parsed?.result === "object" && parsed?.result ? JSON.stringify(parsed.result) : "";
   if (!text) return { ok: false, error: `${target.label} returned no result text`, label: target.label };
-  const modelLabel = model ?? (pre(env) ?? (typeof parsed?.model === "string" ? parsed.model : target.label));
+  const modelLabel = model ?? (target.pinned ?? (typeof parsed?.model === "string" ? parsed.model : target.label));
   return { ok: true, text, label: target.label, model: modelLabel };
 }
 
-function pre(env) {
-  const m = /--model\s+(\S+)/.exec(env.VG_CLAUDE_BIN ?? "");
-  return m ? m[1] : null;
-}
 
 /**
  * @returns {{ dossiers, prompt, spawned: boolean, reply?, parsed?, applied?, exitCode: number, messages: string[] }}

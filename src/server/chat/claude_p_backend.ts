@@ -9,6 +9,7 @@
 // The stream-json mapping moved to ./stream_json (shared with the
 // stdio backend) at M27.1.
 
+import { claudeCommand } from "../find_claude.ts";
 import { spawn } from "child_process";
 import type { ChatBackend, ChatSession, ChatSessionInit, ChatEvent } from "./backend";
 import { mapClaudeStreamMessage } from "./stream_json.ts";
@@ -38,9 +39,11 @@ export class ClaudePHeadlessBackend implements ChatBackend {
       },
     });
 
+    const claude = claudeCommand();
     const child = spawn(
-      "claude",
+      claude.cmd,
       [
+        ...claude.args,
         "-p",
         "--output-format", "stream-json",
         "--verbose",

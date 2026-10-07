@@ -195,7 +195,20 @@ should share them.
 | `VG_HOST` | `127.0.0.1` | the address it binds. Anything else exposes an **unauthenticated** server beyond your machine — the server says so loudly. |
 | `VG_START_VIEW` | architecture map | set to `index` to open on the thread list instead |
 | `VG_THREAD_RANK` | `primary` | how much of a thread is drawn at first: `primary`, `secondary` or `all` (the canvas switch overrides it, and is remembered) |
-| `VG_CLAUDE_BIN` | `claude` on your PATH | the command used for every model call (e.g. `claude --model …`) |
+| `VG_CLAUDE_BIN` | found for you (below) | the Claude Code used for every model call: a path (used whole — spaces are fine), a JSON array `["<path>","--model","opus"]`, or a quoted command line |
+| `VG_CLAUDE_ARGS` | — | extra arguments for every Claude call (e.g. `--model sonnet`) |
+
+**How Claude is found** (one resolver, `src/server/find_claude.ts`, for every
+call): `VG_CLAUDE_BIN`, then the saved `vibegraph-knowledge config set
+claude.bin "<path>"` (per user — no environment to edit), then PATH searched
+the way the OS does (on Windows each `PATHEXT` extension; npm's `claude.cmd`
+wrapper is followed to the package's own `claude.exe`, never run through
+`cmd`), then where Claude Code installs itself: the native installer
+(`~/.local/bin`, `%USERPROFILE%\.local\bin`), npm's global package folder,
+Homebrew, `~/.claude/local`, and last the VS Code / Cursor extension's bundled
+binary. It is always started without a shell, so a prompt reaches it exactly
+as written. `vibegraph-knowledge doctor` says which Claude was found and how;
+when none is, the message lists every place it looked.
 | `VG_PYTHON` | `python3` | the interpreter the knowledge commands use (`view` always runs `python3`) |
 | `VIBEGRAPH_PYDEPS` | — | a directory that already holds `libcst` (and `black`, for `view`) |
 | `VIBEGRAPH_KNOWLEDGE_HOME` | `~/.cache/vibegraph-knowledge` | where the package installs `libcst` and `black` when missing |

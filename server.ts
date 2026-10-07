@@ -1,4 +1,5 @@
 import { bootMarkup } from "./src/shared/boot_markup";
+import { findClaude, isMissing, describeClaude } from "./src/server/find_claude";
 import * as http from "http";
 import * as fs from "fs";
 import * as path from "path";
@@ -590,19 +591,20 @@ const resolvedPyFile = inputPath;
 // needed. Consumers: the chat panel (M25 revival), Analyze, the
 // editor's Intent tier-2 fallback, and README generation.
 let claudeCliAvailable = false;
-if (process.env.VG_CLAUDE_BIN) {
-  // M-SKILL.4 — the stub contract (M10R.7) covers every headless path: when
-  // tests override the binary, "available" means the override, not PATH.
-  claudeCliAvailable = true;
-  console.log("  Claude: VG_CLAUDE_BIN override in effect — headless Claude paths use the stub");
-} else {
-  try {
-    const { execSync } = require("child_process");
-    execSync("command -v claude", { stdio: "ignore" });
+{
+  // 2026-10-07 — find_claude.ts, the one resolver: a setting first, PATH as
+  // the OS searches it (npm's Windows wrapper followed to its claude.exe),
+  // then the install places; when nothing is found it says where it looked.
+  const found = findClaude();
+  if (isMissing(found)) console.warn(`  ${found.error.split("\n").join("\n  ")}\n  Chat / Analyze / Intent / README generation will surface errors until then.`);
+  else if (found.via.startsWith("VG_CLAUDE_BIN")) {
+    // M-SKILL.4 — the stub contract (M10R.7) covers every headless path: an
+    // override is "available" as it stands (a stub need not answer --version)
     claudeCliAvailable = true;
-    console.log("  Claude: claude CLI detected — Chat / Analyze / Intent / READMEs route through Claude Code");
-  } catch {
-    console.warn("  Claude: claude CLI not on PATH — Chat / Analyze / Intent / README generation will surface errors. Install Claude Code.");
+    console.log("  Claude: VG_CLAUDE_BIN override in effect — headless Claude paths use it");
+  } else {
+    claudeCliAvailable = true;
+    console.log(`  ${describeClaude()} — Chat / Analyze / Intent / READMEs route through Claude Code`);
   }
 }
 

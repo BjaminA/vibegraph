@@ -3,6 +3,43 @@
 `vibegraph-knowledge` and the VibeGraph app. Newest first. Each entry says what
 changed and, where an existing user would notice, how behaviour differs.
 
+## 0.27.1 — 2026-10-07
+
+### Finding Claude on every platform
+
+Reported from Windows: "claude CLI not on PATH — Install Claude Code" while
+`claude` worked in PowerShell, and Chat, Analyze, Intent, READMEs and `scope`
+all failed. Four copies of the lookup split `VG_CLAUDE_BIN` on spaces and
+started the bare word `claude` with no shell — which on Windows finds only a
+real `.exe`, never npm's `claude.cmd` — and searched PATH alone.
+
+- **One resolver** (`src/server/find_claude.ts`), used by every Claude call:
+  the one-shot spawns and tier routing, the GUI chat, `classify` / `scope` /
+  `architecture --propose`, and the startup check. A test fails if any other
+  file reads `VG_CLAUDE_BIN` or starts `claude` itself.
+- **Order:** `VG_CLAUDE_BIN` (a path used whole, a JSON array, or a quoted
+  command line), the new per-user `config set claude.bin`, PATH searched as
+  the OS does (npm's Windows wrapper followed to the package's `claude.exe`,
+  or its JS entry run with this Node), then the install places — native
+  installer, npm's global folder, Homebrew, `~/.claude/local`, the editor
+  extension's bundled binary (newest, labelled). `VG_CLAUDE_ARGS` adds
+  arguments; a pinned `--model` is read from the parsed arguments.
+- **Never through a shell:** a prompt with `& % ^ "` reaches Claude as
+  written.
+- **`doctor`** says which Claude was found, how, and its version (`--version`
+  once, cached by mtime). When none is found, the message lists every place
+  tried and both fixes, instead of "install".
+- **The classifier** (`classify`, `scope`, architecture proposals) no longer
+  passes `--dangerously-skip-permissions`: it allows read-only tools and keeps
+  the deny list, so your own permission policy still applies.
+- **Behaviour change:** a bare `node` in `VG_CLAUDE_BIN` now means the Node
+  running VibeGraph; a relative script path is resolved where it was set.
+- Verified on Windows with npm-only Claude Code (only `claude`, `.cmd` and
+  `.ps1` on PATH): it resolves to the package's `claude.exe`.
+- Found on the way, not fixed: `test:e2e-hooked-run`'s blocking case fails on
+  this machine at 0.26.0 too (the run completes without the post-edit block);
+  it predates this change.
+
 ## 0.27.0 — 2026-10-06
 
 From a field review of 0.25/0.26 on a finished project (the direction

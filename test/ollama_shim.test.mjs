@@ -220,12 +220,12 @@ test("resolveClaudeBin routes an ollama tier to the shim with its endpoint/model
     const r = resolveClaudeBin("routine");
     assert.deepEqual(r.args.slice(1), ["--ollama-endpoint", "http://10.0.0.5:11434", "--ollama-model", "qwen3:8b"], "per-tier endpoint/model override the local defaults");
     const t = resolveClaudeBin("thinking");
-    assert.equal(t.cmd, "node");
+    assert.equal(t.cmd, "node"); // a person's command route runs as given
     assert.deepEqual(t.args, ["/my/shim.mjs", "--flag"]);
     assert.equal(t.provider, "command");
     assert.equal(t.label, "command:node");
     // no tier = unrouted = claude with the stub, as before
-    assert.equal(resolveClaudeBin().cmd, "node");
+    assert.equal(resolveClaudeBin().cmd, process.execPath); // 2026-10-07 (find_claude.ts): a bare `node` in VG_CLAUDE_BIN is this Node
     assert.deepEqual(resolveClaudeBin().args, ["/stub.mjs"]);
   } finally {
     if (prev === undefined) delete process.env.VG_CLAUDE_BIN; else process.env.VG_CLAUDE_BIN = prev;

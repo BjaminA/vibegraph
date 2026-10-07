@@ -275,8 +275,8 @@ What that buys, and what it does not claim:
   with the reason, never a role.
 - `--dry-run` shows the evidence and the prompt and spawns nothing;
   `--dossier-out` / `--from-dossier` / `--reply` move the evidence and the
-  reply as files, for a machine that has no model. `VG_CLAUDE_BIN` swaps the
-  binary; the spawn denies the write tools and Bash structurally.
+  reply as files, for a machine that has no model. `VG_CLAUDE_BIN` (or `config set claude.bin`) picks the
+  Claude; the spawn allows read-only tools, denies the write tools and Bash, and never bypasses your permissions.
 
 Measured on a ~1100-file, four-language production tree: 63 unclassified
 third-party tools → 25 once the tables learned the platform class and the
