@@ -72,6 +72,7 @@ import {
 import { buildLayout, buildProjectLayout, basename, applyFilters } from "./layout";
 import { useFileCodeMode, useFileCodeView } from "./layout/useFileCodeView";
 import { CodeBlockNode } from "./nodes/CodeBlockNode";
+import { CodeStubNode } from "./nodes/CodeStubNode";
 import { useWebSocketHandler, useEventBus, useSelectionBus, type EditState } from "./messaging";
 import { ViewTransition, MotionEdge, useNodeMotion } from "./motion";
 import { ThreadView, ThreadIndex, ThreadContainerNode, SkillBadge, ThreadSkillCard, ArtifactChip, ArtifactCard, artifactsForThread, type Thread } from "./threads";
@@ -124,6 +125,7 @@ const nodeTypes = {
   // 2026-09-24 — the file view's CODE mode: one block of source per
   // top-level statement (layout/code_layout.ts).
   codeBlock: CodeBlockNode,
+  codeStub: CodeStubNode,
 };
 
 const edgeTypes = {

@@ -14,10 +14,18 @@
 // which is what makes this view compact — and sized to ALL of its text, so
 // no block ever scrolls or clips (Ben, 2026-09-25). Edges keep their meaning: an edge
 // between two statements is drawn between the blocks that hold them.
+//
+// 2026-10-07 — and it reads as the code's STORY, left to right, all from the
+// IR: the block that runs when the file runs is marked and comes first; every
+// CALL is its own line from the line that makes it to what it calls, labelled
+// with what it passes (the call's arguments); a callee sits level with the
+// line that calls it, in call order; a call into another file ends at a small
+// stub naming the function and its file, so the story does not stop at the
+// file's edge.
 
-import type { Edge, Node } from "@xyflow/react";
+import { MarkerType, type Edge, type Node } from "@xyflow/react";
 import type { AstNode } from "../types";
-import { layoutDefinitions } from "./defs_layout.ts";
+import { layoutDefinitions, runsFirst } from "./defs_layout.ts";
 
 export const CODE_CHAR_W = 7.3;   // JetBrains Mono 12px (fallback; the browser measures)
 export const CODE_LINE_H = 18;
@@ -32,6 +40,8 @@ const SLACK = 4;                  // sub-pixel rounding of a measured glyph
 const LABEL_CHAR_W = 7.5;         // Inter 12px semibold, generous
 const LABEL_CHROME = 12 + 8 + 12 + 40; // pads + gap + the `L123` marker
 const COLUMN_GAP = 120;
+/** the gap either side of a lane of stubs (calls into other files) */
+const LANE_GAP = 40;
 const STACK_GAP = 24;
 const IMPORT_TYPES = new Set(["import", "import_from"]);
 const STATE_TYPES = new Set(["assignment"]);
@@ -44,7 +54,32 @@ export interface CodeBlockData {
   language: string;
   /** the IR node ids this block holds (the first is the node itself) */
   holds: string[];
+  /** lines that make a call drawn from this block (each gets its own handle) */
+  callLines?: number[];
+  /** runs when the file runs: where the story starts */
+  entry?: boolean;
   [k: string]: unknown;
+}
+
+/** A call into another file: the function and where it lives. */
+export interface CodeStubData { label: string; file: string; targetFile: string; targetId: string; [k: string]: unknown }
+export const STUB_H = 48;
+
+/** The y of a line's middle inside its block (the handle a call leaves from). */
+export const lineMid = (line: number, firstLine: number) => CODE_HEAD_H + CODE_PAD_Y + (line - firstLine) * CODE_LINE_H + CODE_LINE_H / 2;
+
+/** What a call passes, as written: its arguments, shortened. */
+function passed(n: AstNode | undefined): string {
+  const args = ((n as { args?: string[] } | undefined)?.args ?? []).map((a) => String(a).replace(/\s+/g, " ").trim()).filter(Boolean);
+  if (!args.length) return "";
+  const text = args.join(", ");
+  return text.length > 44 ? `${text.slice(0, 43)}…` : text;
+}
+
+/** A callee's name from its structural id: `module/load.fn` → load, `module/K.class/m.fn` → K.m. */
+function calleeName(id: string): string {
+  const parts = id.split("/").slice(1).map((p) => p.replace(/\.(fn|class)(@\d+)?$/, ""));
+  return parts.filter((p) => p && !/^(if|for|while|try|with)@/.test(p)).join(".") || id;
 }
 
 const topOf = (id: string, byId: Map<string, AstNode>): string | null => {
@@ -84,11 +119,11 @@ function labelOf(n: AstNode): string {
 
 export function buildCodeLayout(
   astNodes: AstNode[],
-  refEdges: Array<{ source: string; target: string }>,
+  refEdges: Array<{ source: string; target: string; targetFile?: string }>,
   source: string,
   language: string,
   measure: LineMeasure = CODE_CHAR_W,
-): { nodes: Node[]; mapEdge: (e: Edge) => Edge | null } {
+): { nodes: Node[]; mapEdge: (e: Edge) => Edge | null; callEdges: Edge[] } {
   const lines = source.split("\n");
   const byId = new Map(astNodes.map((n) => [n.id, n]));
   const top = astNodes.filter((n) => !n.parentId).sort((a, b) => (a.line ?? 0) - (b.line ?? 0));
@@ -111,6 +146,45 @@ export function buildCodeLayout(
   const stateBlocks = state.map((n) => block(n.id, labelOf(n), n.type, slice(startOf(n), n.endLine ?? n.line), startOf(n), [n.id]));
   const defBlocks = defs.map((n) => block(n.id, labelOf(n), n.type, slice(startOf(n), n.endLine ?? n.line), startOf(n), [n.id]));
 
+  const size = new Map(defBlocks.map((b) => [b.id, b]));
+  const firstLineOf = new Map([...(importBlock ? [importBlock] : []), ...stateBlocks, ...defBlocks].map((b) => [b.id, b.data.firstLine]));
+  const holder = (id: string) => { const t = topOf(id, byId); return t && IMPORT_TYPES.has(byId.get(t)!.type) ? "code:imports" : t; };
+  // Every call site: the block and line it is made from, what it reaches
+  // (a block of this file, or a stub for a function in another one), and
+  // what it passes.
+  type Site = { from: string; line: number; to: string; label: string };
+  const sites: Site[] = [];
+  const stubs = new Map<string, { id: string; data: CodeStubData; w: number; h: number }>();
+  for (const e of refEdges) {
+    const from = holder(e.source);
+    const src = byId.get(e.source);
+    if (!from || !src?.line) continue;
+    let to: string | null;
+    if (e.targetFile && !byId.has(e.target)) {
+      const id = `stub:${e.targetFile}#${e.target}`;
+      if (!stubs.has(id)) {
+        const label = `${calleeName(e.target)}()`, file = e.targetFile.split(/[\\/]/).pop() ?? e.targetFile;
+        stubs.set(id, { id, w: Math.ceil(Math.max(label.length * LABEL_CHAR_W, file.length * 7) + 44), h: STUB_H, data: { label, file, targetFile: e.targetFile, targetId: e.target } });
+      }
+      to = id;
+    } else to = holder(e.target);
+    if (!to || to === from) continue;
+    if (!sites.some((x) => x.from === from && x.line === src.line && x.to === to)) sites.push({ from, line: src.line, to, label: passed(src) });
+  }
+  // In-file calls shape the flow; a call into another file ends at a stub in
+  // its caller's LANE, level with the line that makes it (placed below).
+  const calls: Array<[string, string]> = sites.filter((c) => !stubs.has(c.to)).map((c) => [c.from, c.to]);
+  const firstCall = new Map<string, number>();
+  for (const c of sites) { const k = `${c.from}->${c.to}`; firstCall.set(k, Math.min(firstCall.get(k) ?? Infinity, c.line)); }
+  // Each stub belongs to the first block (in story order) that calls it.
+  const laneOf = new Map<string, string[]>();
+  const owned = new Set<string>();
+  for (const c of [...sites].sort((a, b) => a.line - b.line)) {
+    if (!stubs.has(c.to) || owned.has(c.to)) continue;
+    owned.add(c.to);
+    laneOf.set(c.from, [...(laneOf.get(c.from) ?? []), c.to]);
+  }
+  const laneW = (id: string) => { const l = laneOf.get(id); return l?.length ? Math.max(...l.map((s) => stubs.get(s)!.w)) + 2 * LANE_GAP : 0; };
   // Columns: imports, state, then the definitions region.
   const pos = new Map<string, { x: number; y: number }>();
   let x = 40;
@@ -118,34 +192,78 @@ export function buildCodeLayout(
     if (!list.length) return;
     let y = 40;
     for (const b of list) { pos.set(b.id, { x, y }); y += b.h + STACK_GAP; }
-    x += Math.max(...list.map((b) => b.w)) + COLUMN_GAP;
+    // a column whose blocks call into other files keeps room for their lane
+    x += Math.max(...list.map((b) => b.w + laneW(b.id))) + COLUMN_GAP;
   };
   if (importBlock) stack([importBlock]);
   stack(stateBlocks);
   const besideHeight = Math.max(0, ...[importBlock ? [importBlock] : [], stateBlocks]
     .map((l) => l.reduce((k, b) => k + b.h + STACK_GAP, 0)));
-  const size = new Map(defBlocks.map((b) => [b.id, b]));
-  const calls: Array<[string, string]> = [];
-  for (const e of refEdges) {
-    const a = topOf(e.source, byId), b = topOf(e.target, byId);
-    if (a && b && a !== b) calls.push([a, b]);
-  }
   const rel = layoutDefinitions({
-    defs, calls, besideHeight,
+    defs, calls, besideHeight, lane: laneW,
     width: (id) => size.get(id)?.w ?? 300, height: (id) => size.get(id)?.h ?? 60,
+    entries: runsFirst(top),
+    // level with the line that calls it: the callee's header (a stub's
+    // middle) on the call line's middle
+    callAt: (caller, callee) => {
+      const line = firstCall.get(`${caller}->${callee}`);
+      const first = firstLineOf.get(caller);
+      if (line === undefined || first === undefined) return 0;
+      return lineMid(line, first) - (stubs.has(callee) ? STUB_H / 2 : CODE_HEAD_H / 2);
+    },
   });
   for (const [id, p] of rel) pos.set(id, { x: x + p.x, y: 40 + p.y });
+  // The lanes: each stub beside its caller, at the line that calls it,
+  // pushed down only by the stub above it.
+  for (const [caller, list] of laneOf) {
+    const at = pos.get(caller), first = firstLineOf.get(caller);
+    const w = size.get(caller)?.w ?? stateBlocks.find((b) => b.id === caller)?.w ?? importBlock?.w;
+    if (!at || first === undefined || w === undefined) continue;
+    let below = -Infinity;
+    // the rows where this block's IN-FILE calls leave: a stub never sits on
+    // one, or the line to the next block would run behind it
+    const keepClear = sites.filter((c) => c.from === caller && !stubs.has(c.to)).map((c) => at.y + lineMid(c.line, first));
+    for (const st of list) {
+      const want = at.y + lineMid(firstCall.get(`${caller}->${st}`) ?? first, first) - STUB_H / 2;
+      let y = Math.max(want, below);
+      for (let moved = true, n = 0; moved && n < 20; n++) {
+        moved = false;
+        for (const r of keepClear) if (r > y - 4 && r < y + STUB_H + 4) { y = r + 6; moved = true; }
+      }
+      pos.set(st, { x: at.x + w + LANE_GAP, y });
+      below = y + STUB_H + 8;
+    }
+  }
 
+  const entries = runsFirst(top);
+  const linesFrom = new Map<string, number[]>();
+  for (const c of sites) linesFrom.set(c.from, [...new Set([...(linesFrom.get(c.from) ?? []), c.line])].sort((a, b) => a - b));
   const nodes: Node[] = [...(importBlock ? [importBlock] : []), ...stateBlocks, ...defBlocks].map((b) => ({
     id: b.id,
     type: "codeBlock",
     position: pos.get(b.id) ?? { x: 0, y: 0 },
-    data: b.data,
+    data: { ...b.data, callLines: linesFrom.get(b.id) ?? [], entry: entries.has(b.id) },
     width: b.w,
     height: b.h,
     style: { width: b.w, height: b.h },
     draggable: true,
     selectable: true,
+  }));
+  for (const st of stubs.values()) {
+    nodes.push({ id: st.id, type: "codeStub", position: pos.get(st.id) ?? { x: 0, y: 0 }, data: st.data, width: st.w, height: st.h, style: { width: st.w, height: st.h }, draggable: true, selectable: true });
+  }
+  // One line per call site, from the line that makes it, saying what it passes.
+  const callEdges: Edge[] = sites.map((c) => ({
+    id: `call:${c.from}:L${c.line}->${c.to}`,
+    source: c.from, sourceHandle: `L${c.line}`, target: c.to, targetHandle: "in",
+    type: "default",
+    className: "vg-flow-edge",
+    // a call into another file ends a stub's width away, beside the line that
+    // reads the same: only the long lines to the next block say what they pass
+    ...(c.label && !stubs.has(c.to) ? { label: c.label, labelStyle: { fill: "var(--text-secondary)", fontFamily: "var(--font-mono)", fontSize: 11 }, labelBgStyle: { fill: "var(--bg-canvas)", fillOpacity: 0.92 }, labelBgPadding: [6, 3] as [number, number], labelBgBorderRadius: 4 } : {}),
+    style: { stroke: "var(--accent-thread)", strokeWidth: 1.5 },
+    markerEnd: { type: MarkerType.ArrowClosed, color: "var(--accent-thread)", width: 14, height: 14 },
+    data: { kind: "call", family: "flow" },
   }));
 
   // An edge between statements is drawn between the blocks holding them.
@@ -164,5 +282,5 @@ export function buildCodeLayout(
     seen.add(key);
     return { ...e, id: `code:${key}`, source: s, target: t };
   };
-  return { nodes, mapEdge };
+  return { nodes, mapEdge, callEdges };
 }

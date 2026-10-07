@@ -3,6 +3,32 @@
 `vibegraph-knowledge` and the VibeGraph app. Newest first. Each entry says what
 changed and, where an existing user would notice, how behaviour differs.
 
+## 0.27.6 — 2026-10-07
+
+### The file view's code mode reads as the code's story
+
+Asked: arrange a file's functions, objects and calls to tell the story left
+to right — what runs first, what it calls, what it passes. The order was
+already roughly right (call depth as columns), but nothing said why: the call
+lines were off by default, a callee sat top-aligned with its caller wherever
+the call was, and the story stopped at the file's edge. Now, all from the IR:
+
+- **What runs first leads.** Module-level code that runs (`if __name__ ==
+  "__main__":`, a bare call) is badged "runs first", and its group is laid
+  out first; the card view gets the same ordering.
+- **Every call is its own line**, drawn by default in code mode, leaving from
+  the line that makes it and ending at what it calls, labelled with what it
+  passes — the call's arguments (`model, train_x, train_y`).
+- **Level with the call:** a callee sits with its header on the line that
+  calls it, in call order, so the lines run straight across.
+- **The story does not stop at the file's edge:** a call into another file
+  ends at a stub beside its line — `load()` · `data.py` — in a lane of its
+  own right of the caller, clear of the rows where its in-file calls leave.
+- Edge labels render on the file canvas at all (its default edge had dropped
+  them).
+- The semantic-zoom e2e now pins 0.27.2's rule that a zoomed-out chip grows
+  only into the room reserved for it (it asserted the old unbounded growth).
+
 ## 0.27.5 — 2026-10-07
 
 ### `view` loads in seconds, and re-reads only what changed

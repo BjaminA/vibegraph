@@ -98,3 +98,60 @@ test("wrapCount wraps like pre-wrap: newlines kept, breaks between words, long w
   assert.equal(wrapCount("x".repeat(25), 10), 3, "a word longer than a line breaks anywhere");
   assert.equal(wrapCount("{\n    \"concept\": concept,\n    \"ctx\": ctx\n}", 80), 4);
 });
+
+// 2026-10-07 — the story, left to right: what runs first, each call from its
+// own line saying what it passes, callees level with the call, calls into
+// other files as stubs beside the line that makes them.
+const STORY_SRC = [
+  "from data import load",          // 1
+  "",                               // 2
+  "def train(model, xs):",          // 3
+  "    return model",               // 4
+  "",                               // 5
+  "def main():",                    // 6
+  "    xs = load()",                // 7
+  "    m = 1",                      // 8
+  "    train(m, xs)",               // 9
+  "",                               // 10
+  "if __name__ == '__main__':",     // 11
+  "    main()",                     // 12
+].join("\n");
+const STORY = [
+  { id: "module/data.import_from", type: "import_from", line: 1, endLine: 1, parentId: null },
+  { id: "module/train.fn", type: "function_def", name: "train", line: 3, endLine: 4, parentId: null },
+  { id: "module/main.fn", type: "function_def", name: "main", line: 6, endLine: 9, parentId: null },
+  { id: "module/main.fn/xs.assign", type: "assignment", name: "xs", line: 7, endLine: 7, parentId: "module/main.fn", args: [] },
+  { id: "module/main.fn/train.call", type: "call", funcName: "train", line: 9, endLine: 9, parentId: "module/main.fn", args: ["m", "xs"] },
+  { id: "module/if@0", type: "if_stmt", line: 11, endLine: 12, parentId: null },
+  { id: "module/if@0/main.call", type: "call", funcName: "main", line: 12, endLine: 12, parentId: "module/if@0", args: [] },
+];
+const STORY_REF = [
+  { source: "module/if@0/main.call", target: "module/main.fn" },
+  { source: "module/main.fn/train.call", target: "module/train.fn" },
+  { source: "module/main.fn/xs.assign", target: "module/load.fn", targetFile: "/p/data.py" },
+];
+
+test("the story: what runs first leads, every call leaves its own line saying what it passes", () => {
+  const { nodes, callEdges } = buildCodeLayout(STORY, STORY_REF, STORY_SRC, "python");
+  const by = new Map(nodes.map((n) => [n.id, n]));
+  assert.equal(by.get("module/if@0").data.entry, true, "the __main__ block is marked");
+  assert.ok(by.get("module/if@0").position.x < by.get("module/main.fn").position.x, "it comes first");
+  assert.ok(by.get("module/main.fn").position.x < by.get("module/train.fn").position.x, "then main, then what main calls");
+  assert.deepEqual(by.get("module/main.fn").data.callLines, [7, 9]);
+  const toTrain = callEdges.find((e) => e.target === "module/train.fn");
+  assert.deepEqual([toTrain.sourceHandle, toTrain.targetHandle, toTrain.label], ["L9", "in", "m, xs"]);
+});
+
+test("a callee sits level with the line that calls it; a call into another file is a stub beside its line", () => {
+  const { nodes, callEdges } = buildCodeLayout(STORY, STORY_REF, STORY_SRC, "python");
+  const by = new Map(nodes.map((n) => [n.id, n]));
+  const main = by.get("module/main.fn"), train = by.get("module/train.fn");
+  const line9 = main.position.y + 30 + 10 + (9 - 6) * 18 + 9;
+  assert.ok(Math.abs(train.position.y + 15 - line9) < 1, "train's header is on main's line 9");
+  const stub = nodes.find((n) => n.type === "codeStub");
+  assert.deepEqual([stub.data.label, stub.data.file], ["load()", "data.py"]);
+  assert.ok(stub.position.x > main.position.x + main.width && stub.position.x < train.position.x, "in main's lane, before the next block");
+  const line7 = main.position.y + 30 + 10 + (7 - 6) * 18 + 9;
+  assert.ok(Math.abs(stub.position.y + 24 - line7) < 1, "level with line 7");
+  assert.equal(callEdges.find((e) => e.target === stub.id).sourceHandle, "L7");
+});

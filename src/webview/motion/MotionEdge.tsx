@@ -25,9 +25,10 @@ export function MotionEdge(props: EdgeProps) {
     style,
     markerEnd,
     data,
+    label, labelStyle, labelShowBg, labelBgStyle, labelBgPadding, labelBgBorderRadius,
   } = props;
 
-  const [path] = getBezierPath({
+  const [path, labelX, labelY] = getBezierPath({
     sourceX,
     sourceY,
     targetX,
@@ -59,6 +60,9 @@ export function MotionEdge(props: EdgeProps) {
   }, [id, path]);
 
   return (
-    <BaseEdge id={id} path={path} markerEnd={markerEnd} style={style} className={className} />
+    // 2026-10-07 — a label when the edge carries one (the code view's calls say
+    // what they pass); the default edge drew none, so it was silently dropped
+    <BaseEdge id={id} path={path} markerEnd={markerEnd} style={style} className={className}
+      {...(label ? { label, labelX, labelY, labelStyle, labelShowBg: labelShowBg ?? true, labelBgStyle, labelBgPadding, labelBgBorderRadius } : {})} />
   );
 }

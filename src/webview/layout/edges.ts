@@ -65,7 +65,8 @@ export function astEdgesToFlow(astEdges: AstEdge[]): Edge[] {
       // Flow edges adopt the thread-view luminous treatment (see
       // .vg-flow-edge in motion.css) for cross-view parity.
       ...(family === "flow" ? { className: "vg-flow-edge" } : {}),
-      data: { kind: e.type, family },
+      // targetFile: a call into another file (the code view draws it as a stub)
+      data: { kind: e.type, family, ...(e.targetFile ? { targetFile: e.targetFile } : {}) },
       ...style,
     } as Edge;
   });

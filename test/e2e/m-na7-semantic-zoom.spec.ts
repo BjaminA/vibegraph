@@ -66,11 +66,16 @@ test.describe("M-NA7 — semantic zoom tiers", () => {
     const stepLabel = page.locator('.react-flow__node[data-id="cli:cmd_create"] [data-lod-label]');
     await expect(stepLabel).toHaveCount(0);
 
-    // Container chips are landmarks too: their font scales with
-    // inverse zoom (computed style is in flow px — full tier is 11px).
+    // Container chips scale with inverse zoom ONLY into the room the layout
+    // reserves for them (2026-10-07, 0.27.2: a chip that grew past it slid
+    // over the nested chip and the first card — thread-chip-long pins that
+    // nothing overlaps). One line, at least the full-tier 11px, at most the
+    // height its slot allows (a one-line slot: 11px; a two-line slot: ~22px).
     const chip = page.locator(".vg-thread-container-chip").first();
     const chipFont = await chip.evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
-    expect(chipFont, "container chip should scale up at overview").toBeGreaterThan(20);
+    expect(chipFont, "container chip keeps at least its full-tier size").toBeGreaterThanOrEqual(11);
+    expect(chipFont, "and grows only into its reserved room").toBeLessThanOrEqual(23);
+    expect(await chip.evaluate((el) => getComputedStyle(el).whiteSpace), "one line at overview").toBe("nowrap");
   });
 
   test("mid zoom is the compact tier: every label rides outside its card, readably", async ({ page }) => {

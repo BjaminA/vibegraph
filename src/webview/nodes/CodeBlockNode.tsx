@@ -8,7 +8,8 @@ import React, { useEffect, useState } from "react";
 import { Handle, Position } from "@xyflow/react";
 import { loader } from "@monaco-editor/react";
 import { defineVibegraphDark, VIBEGRAPH_DARK } from "../themes/vibegraph-dark";
-import { CODE_LINE_H, CODE_HEAD_H, CODE_PAD_Y, CODE_GUTTER_L, CODE_GUTTER_R, CODE_PAD_R, type CodeBlockData } from "../layout/code_layout";
+import { Play } from "lucide-react";
+import { CODE_LINE_H, CODE_HEAD_H, CODE_PAD_Y, CODE_GUTTER_L, CODE_GUTTER_R, CODE_PAD_R, lineMid, type CodeBlockData } from "../layout/code_layout";
 
 const cache = new Map<string, string>();
 let themed: Promise<unknown> | null = null;
@@ -49,11 +50,23 @@ export function CodeBlockNode({ data, selected }: { data: CodeBlockData; selecte
     }}>
       <Handle type="target" position={Position.Left} style={{ opacity: 0, pointerEvents: "none" }} />
       <Handle type="source" position={Position.Right} style={{ opacity: 0, pointerEvents: "none" }} />
+      {/* 2026-10-07 — a call arrives at the header and leaves from its own line */}
+      <Handle id="in" type="target" position={Position.Left} style={{ top: CODE_HEAD_H / 2, opacity: 0, pointerEvents: "none" }} />
+      {(data.callLines ?? []).map((l) => (
+        <Handle key={l} id={`L${l}`} type="source" position={Position.Right} style={{ top: lineMid(l, data.firstLine), opacity: 0, pointerEvents: "none" }} />
+      ))}
       <div style={{
         height: CODE_HEAD_H, boxSizing: "border-box", flexShrink: 0, display: "flex", alignItems: "center", gap: 8, padding: "0 12px",
         borderBottom: "1px solid var(--border-edge)", color: accent,
         fontFamily: "var(--font-ui)", fontSize: "var(--fs-12)", fontWeight: 600,
       }}>
+        {data.entry && (
+          <span data-code-block-entry title="Runs when the file runs: the story starts here" style={{
+            display: "inline-flex", alignItems: "center", gap: 4, flexShrink: 0, padding: "1px 8px", borderRadius: 999,
+            background: "color-mix(in oklab, var(--accent-thread) 16%, transparent)", color: "var(--accent-thread)",
+            fontSize: "var(--fs-11)", fontWeight: 600,
+          }}><Play size={12} strokeWidth={1.5} />runs first</span>
+        )}
         <span style={{ color: "var(--text-primary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{data.label}</span>
         <span style={{ marginLeft: "auto", color: "var(--text-muted)", fontFamily: "var(--font-mono)", fontSize: "var(--fs-11)", fontWeight: 400 }}>
           {`L${data.firstLine}`}

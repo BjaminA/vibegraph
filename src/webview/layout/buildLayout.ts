@@ -1,7 +1,7 @@
 import type { Node } from "@xyflow/react";
 import type { AstNode } from "../types";
 import { docSummary, docLineCount, DOC_WRAP_CHARS, DOC_LINE_H } from "../util/docSummary";
-import { layoutDefinitions } from "./defs_layout";
+import { layoutDefinitions, runsFirst } from "./defs_layout";
 import { wrapCount, charsIn } from "../util/wrapCount";
 
 // ── size constants ────────────────────────────────────────────────────────────
@@ -483,6 +483,8 @@ export function buildLayout(
       besideHeight: Math.max(0, ...columns.filter((_, c) => c !== defsBand).map(columnH)),
       width: (id) => widthCache.get(id) ?? 260,
       height: (id) => heightCache.get(id) ?? 40,
+      // 2026-10-07 — what runs when the file runs leads the story (defs_layout.ts)
+      entries: runsFirst(columns[defsBand]),
     });
     for (const [id, p] of rel) topLevelPositions.set(id, { x: COLUMN_X[defsBand] + p.x, y: 40 + p.y });
   }

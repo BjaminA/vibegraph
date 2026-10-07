@@ -83,7 +83,7 @@ export function useFileCodeView(args: {
     if (!enabled || !fileSource || !activeFilePath || !astNodes.length) return null;
     const refEdges = edges
       .filter((e) => (e.data as { kind?: string } | undefined)?.kind === "reference")
-      .map((e) => ({ source: e.source, target: e.target }));
+      .map((e) => ({ source: e.source, target: e.target, targetFile: (e.data as { targetFile?: string } | undefined)?.targetFile }));
     const language = languageForPath(activeFilePath)?.monacoLanguage ?? "plaintext";
     return buildCodeLayout(applyFilters(astNodes, hiddenNodeIds, nodeFilters), refEdges, fileSource, language, measure);
     // cardNodes: the trigger that astNodes (a ref) changed.
@@ -92,7 +92,12 @@ export function useFileCodeView(args: {
 
   return useMemo(() => {
     if (!layout) return null;
-    const mapped = displayedEdges.map(layout.mapEdge).filter((e): e is Edge => !!e);
-    return { nodes: layout.nodes, edges: mapped };
+    // 2026-10-07 — the calls are the story: always drawn, one line per call
+    // site with what it passes (code_layout.ts); the other flow edges follow
+    // the edge toggles as before, minus the calls already drawn
+    const mapped = displayedEdges
+      .filter((e) => (e.data as { kind?: string } | undefined)?.kind !== "reference")
+      .map(layout.mapEdge).filter((e): e is Edge => !!e);
+    return { nodes: layout.nodes, edges: [...layout.callEdges, ...mapped] };
   }, [layout, displayedEdges]);
 }

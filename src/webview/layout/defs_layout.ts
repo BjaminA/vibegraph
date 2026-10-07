@@ -16,6 +16,12 @@
 //     keeps it highest, in source order, so the file still reads top-left
 //     first.
 //
+// 2026-10-07 — and it reads as a STORY: what runs when the file runs comes
+// first (its group packed first, its block first in its column), and when the
+// caller says where in it a call sits (`callAt`, the code view knows the
+// line), each callee sits level with the line that calls it, in the order the
+// calls happen — so the flow lines run straight across.
+//
 // Pure: definitions, sizes and call edges in; positions relative to the
 // region's top-left out.
 
@@ -39,6 +45,14 @@ export interface DefsLayoutInput {
    *  the file already spends, which the definitions may fill before they
    *  spread sideways. */
   besideHeight?: number;
+  /** how far down its CALLER a call to `callee` sits (px from the caller's
+   *  top) — the callee is placed level with it */
+  callAt?: (caller: string, callee: string) => number;
+  /** what runs when the file runs (module-level code): the story starts here */
+  entries?: ReadonlySet<string>;
+  /** room to keep free to a block's right, inside its column's flow channel
+   *  (the code view puts its calls into other files there, at their lines) */
+  lane?: (id: string) => number;
 }
 
 interface Block { ids: string[]; pos: Map<string, { x: number; y: number }>; w: number; h: number }
@@ -59,7 +73,9 @@ export function layoutDefinitions(input: DefsLayoutInput): Map<string, { x: numb
       undirected.get(x)!.add(y);
     }
   }
-  const bySource = (a: string, b: string) => (line.get(a) ?? 0) - (line.get(b) ?? 0) || a.localeCompare(b);
+  const entries = input.entries ?? new Set<string>();
+  // what runs first, then the file's own order
+  const bySource = (a: string, b: string) => Number(entries.has(b)) - Number(entries.has(a)) || (line.get(a) ?? 0) - (line.get(b) ?? 0) || a.localeCompare(b);
 
   // Connected groups, in source order of their first definition.
   const seen = new Set<string>();
@@ -83,7 +99,9 @@ export function layoutDefinitions(input: DefsLayoutInput): Map<string, { x: numb
   // calling fifteen helpers) wraps into sub-columns beside itself.
   const cardArea = defs.reduce((k, d) => k + (width(d.id) + STACK_GAP) * (height(d.id) + STACK_GAP), 0);
   const maxColH = Math.max(...defs.map((d) => height(d.id)), Math.sqrt(cardArea / TARGET_ASPECT), input.besideHeight ?? 0);
-  const blocks: Block[] = groups.map((g) => layoutGroup(g, callees, callers, width, height, bySource, maxColH));
+  // the group the story starts in is packed first
+  groups.sort((a, b) => Number(b.some((id) => entries.has(id))) - Number(a.some((id) => entries.has(id))));
+  const blocks: Block[] = groups.map((g) => layoutGroup(g, callees, callers, width, height, bySource, maxColH, input.callAt, input.lane));
 
   // Pack: a region about as wide as a laptop-shaped box of the same area.
   // As wide as the area needs at the target height: a laptop-shaped box, or
@@ -113,6 +131,8 @@ function layoutGroup(
   width: (id: string) => number, height: (id: string) => number,
   bySource: (a: string, b: string) => number,
   maxColH: number,
+  callAt?: (caller: string, callee: string) => number,
+  lane: (id: string) => number = () => 0,
 ): Block {
   const members = new Set(group);
   // Layer = longest call path from a definition nobody in the group calls.
@@ -138,9 +158,11 @@ function layoutGroup(
   let x = 0;
   for (let l = 0; l < layers.length; l++) {
     const col = layers[l] ?? [];
-    // Order a column by where its callers sit (barycentre), then source.
+    // Order a column by where its callers sit (barycentre) — at the line
+    // that calls it when the caller says (callAt) — then source.
+    const at = (c: string, id: string) => (pos.get(c)?.y ?? NaN) + (callAt?.(c, id) ?? 0);
     const bary = (id: string) => {
-      const ys = (callers.get(id) ?? []).map((c) => pos.get(c)).filter((p): p is { x: number; y: number } => !!p).map((p) => p.y);
+      const ys = (callers.get(id) ?? []).map((c) => at(c, id)).filter((y) => Number.isFinite(y));
       return ys.length ? ys.reduce((a, b) => a + b, 0) / ys.length : Infinity;
     };
     col.sort((a, b) => (l === 0 ? 0 : bary(a) - bary(b)) || bySource(a, b));
@@ -148,7 +170,7 @@ function layoutGroup(
     let colW = 0;
     for (const id of col) {
       // As level with its callers as the column allows: short flow lines.
-      const want = l === 0 ? cursor : Math.min(...(callers.get(id) ?? []).map((c) => pos.get(c)?.y ?? Infinity), Infinity);
+      const want = l === 0 ? cursor : Math.min(...(callers.get(id) ?? []).map((c) => { const y = at(c, id); return Number.isFinite(y) ? y : Infinity; }), Infinity);
       let y = Math.max(cursor, isFinite(want) ? want : cursor);
       // Too tall: continue in a sub-column beside this one (same layer).
       if (colW > 0 && y + height(id) > maxColH) {
@@ -159,11 +181,19 @@ function layoutGroup(
       }
       pos.set(id, { x, y });
       cursor = y + height(id) + STACK_GAP;
-      colW = Math.max(colW, width(id));
+      colW = Math.max(colW, width(id) + lane(id));
     }
     x += colW + LAYER_GAP;
   }
   let w = 0, h = 0;
-  for (const [id, p] of pos) { w = Math.max(w, p.x + width(id)); h = Math.max(h, p.y + height(id)); }
+  for (const [id, p] of pos) { w = Math.max(w, p.x + width(id) + lane(id)); h = Math.max(h, p.y + height(id)); }
   return { ids: group, pos, w, h };
+}
+
+/** The top-level statements that RUN when the file runs (`if __name__ ==
+ *  "__main__":`, a bare call, a loop) — not a definition, an import or an
+ *  assignment, which only define things. Where the story of a script starts. */
+export function runsFirst(top: AstNode[]): Set<string> {
+  const defines = new Set(["function_def", "class_def", "import", "import_from", "assignment"]);
+  return new Set(top.filter((n) => !n.parentId && !defines.has(n.type)).map((n) => n.id));
 }
