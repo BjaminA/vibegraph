@@ -25,6 +25,7 @@ import { spawnSync } from "node:child_process";
 import { HOOK_EVENTS, runHook } from "./hooks.mjs";
 import { doctorReport, hookRunPayload, recordFired } from "./hook_tools.mjs";
 import { runConfig, CONFIG_USAGE } from "./config.mjs";
+import { hostWarnings } from "./host_check.mjs";
 import { describeClaude } from "../../src/server/find_claude.ts";
 import { LESSONS_USAGE, runLessons } from "./lessons.mjs";
 import { DIRECTION_USAGE, runDirection } from "./direction.mjs";
@@ -606,6 +607,8 @@ export function main(argv) {
   if (!command || command === "--help" || command === "-h" || command === "help") { process.stdout.write(USAGE); return 0; }
   if (command === "--version" || command === "-v" || command === "version") { process.stdout.write(`${toolLabel(locate())}\n`); return 0; }
   // 2026-09-30 — the steps that are a person's, refused when Claude Code runs them (actor.mjs).
+  // 2026-10-07 — an old Node, or the Windows install run from WSL (host_check.mjs)
+  for (const w of hostWarnings()) process.stderr.write(`note: ${w}\n`);
   const personsStep = isAgentRun() ? personOnlyStep(command, rest) : null;
   if (personsStep) return fail(`refused: \`${personsStep}\` — ${PERSONS_STEP}.`, 1);
   if (command === "view") return cmdView(rest);

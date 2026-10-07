@@ -21,6 +21,7 @@
 //
 // Every file names its KIND in README.md: derived (a script read it from
 // the code), stated (a human wrote it), observed (a consented run saw it).
+import { projectIgnore } from "../src/server/project_ignore.ts";
 import { registeredAccess } from "../src/server/registered_access.ts";
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
@@ -450,9 +451,17 @@ export function exportKnowledge({ root, out, task, envelope: envelopePath, commi
     // M-CMD.1 — never skip in silence. A project that keeps real source in a
     // directory named `build` must be able to see that it was passed over,
     // and a partially-read file must be nameable before anything trusts it.
-    ...(Object.keys(skippedDirs ?? {}).length
-      ? ["", `**Not read:** ${Object.entries(skippedDirs).map(([d, n]) => `\`${d}/\` (${n} file(s))`).join(", ")} — skipped as compiled output. If any of that is real source, it is missing from everything below.`]
-      : []),
+    // 2026-10-07 — and say WHY: compiled output, or named in .vibegraphignore
+    ...(() => {
+      const ig = projectIgnore(root);
+      const all = Object.entries(skippedDirs ?? {});
+      const named = all.filter(([d]) => ig.skipDir(d)), built = all.filter(([d]) => !ig.skipDir(d));
+      const list = (xs) => xs.map(([d, n]) => `\`${d}/\` (${n} file(s))`).join(", ");
+      return [
+        ...(built.length ? ["", `**Not read:** ${list(built)} — skipped as compiled output. If any of that is real source, it is missing from everything below.`] : []),
+        ...(named.length ? ["", `**Not read, as the project asks** (\`.vibegraphignore\`): ${list(named)}. Nothing below describes them.`] : []),
+      ];
+    })(),
     ...(degradedFiles.length
       ? ["", `**Partially read:** ${degradedFiles.map((d) => `\`${d.file}\` (${d.dropped} construct(s) dropped)`).join(", ")} — the parser could not read part of these files. Their IR is INCOMPLETE: something absent from it may still exist in the source, so read those files directly before concluding anything about them.`]
       : []),

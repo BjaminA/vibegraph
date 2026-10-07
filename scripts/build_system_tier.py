@@ -84,6 +84,30 @@ _COMPONENT_EXT = (".jsx", ".tsx", ".vue", ".svelte")
 _SCAN_EXT = (".jsx", ".tsx", ".vue", ".svelte", ".js", ".ts", ".mjs")
 _SKIP_DIRS = {"node_modules", "__pycache__", ".git", ".vibegraph", "dist", "build"}
 
+
+def _ignored_dirs(root):
+    """Folders the project's .vibegraphignore names (src/server/project_ignore.ts
+    is the full reader): bare names anywhere, and root-relative paths. Globs
+    are the TypeScript walkers' business; this walk only scans for routes."""
+    names, prefixes = set(), []
+    lines = []
+    try:
+        with open(os.path.join(root, ".vibegraphignore"), encoding="utf-8") as fh:
+            lines = fh.read().splitlines()
+    except OSError:
+        pass
+    lines += [x for x in os.environ.get("VG_IGNORE", "").split(",") if x]
+    for raw in lines:
+        p = raw.strip()
+        if not p or p.startswith("#") or "*" in p or "?" in p:
+            continue
+        p = p.lstrip("./").rstrip("/") if p.startswith("./") else p.lstrip("/").rstrip("/")
+        if "/" in p:
+            prefixes.append(p)
+        elif p:
+            names.add(p)
+    return names, prefixes
+
 # An effectKind already classified upstream maps to a subsystem.
 #
 # PLAN-v5 5.4 parked fs/subprocess/log as "intra-backend detail". On a
@@ -205,8 +229,14 @@ def _detect_frontend(root):
     pkg_dir = None
     component_count = 0
     scan_files = []
+    ig_names, ig_prefixes = _ignored_dirs(root)
+
+    def _kept(dirpath, d):
+        rel = os.path.relpath(os.path.join(dirpath, d), root).replace(os.sep, "/")
+        return d not in ig_names and not any(rel == p or rel.startswith(p + "/") for p in ig_prefixes)
+
     for dirpath, dirnames, filenames in os.walk(root):
-        dirnames[:] = [d for d in dirnames if d not in _SKIP_DIRS and not d.startswith(".")]
+        dirnames[:] = [d for d in dirnames if d not in _SKIP_DIRS and not d.startswith(".") and _kept(dirpath, d)]
         for fn in sorted(filenames):
             full = os.path.join(dirpath, fn)
             if fn == "package.json" and framework is None:

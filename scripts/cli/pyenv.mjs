@@ -117,12 +117,16 @@ const BLACK_PROBE = "import black, sys\nmajor = int(black.__version__.split('.')
 export function ensureBlack(py, loc, { log = () => {} } = {}) {
   if (spawnSync(py.bin, ["-c", BLACK_PROBE], { env: py.env }).status === 0) return { ok: true, env: py.env };
   const ownDeps = ownDepsFor(py.bin);
-  log(`black >= 24 not found for ${py.bin}; installing into ${ownDeps} (one time) — edits are formatted with it`);
-  mkdirSync(ownDeps, { recursive: true });
-  const pip = spawnSync(py.bin, ["-m", "pip", "install", "--quiet", "--only-binary=:all:", "--target", ownDeps, "--upgrade", "black>=24,<27"], { encoding: "utf-8", stdio: ["ignore", "inherit", "inherit"] });
   // On top of the environment libcst was found in, not in place of it.
   const sepChar = process.platform === "win32" ? ";" : ":";
   const env = { ...py.env, PYTHONPATH: py.env.PYTHONPATH ? `${ownDeps}${sepChar}${py.env.PYTHONPATH}` : ownDeps };
+  // 2026-10-07 — the "one time" install ran on EVERY start: libcst was found in
+  // the interpreter's own environment, black in this directory, and only the
+  // former was probed. A black installed here before is used as it is.
+  if (existsSync(ownDeps) && spawnSync(py.bin, ["-c", BLACK_PROBE], { env }).status === 0) return { ok: true, env };
+  log(`black >= 24 not found for ${py.bin}; installing into ${ownDeps} (one time) — edits are formatted with it`);
+  mkdirSync(ownDeps, { recursive: true });
+  const pip = spawnSync(py.bin, ["-m", "pip", "install", "--quiet", "--only-binary=:all:", "--target", ownDeps, "--upgrade", "black>=24,<27"], { encoding: "utf-8", stdio: ["ignore", "inherit", "inherit"] });
   if (pip.status === 0 && spawnSync(py.bin, ["-c", BLACK_PROBE], { env }).status === 0) return { ok: true, env };
   return { ok: false, env: py.env, error: `could not install black >= 24: editing will be refused until it is importable (${py.bin} -m pip install --target "${ownDeps}" "black>=24")` };
 }

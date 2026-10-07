@@ -28,14 +28,23 @@ VibeGraph derives from your source. Neither needs the other.
 |---|---|---|
 | **Node.js** | 20 or newer (24 is what VibeGraph is developed on) | everything |
 | **npm** | the one that ships with Node | installing |
-| **Python 3** | 3.10 or newer, as `python3` on your PATH | parsing Python, the edit chokepoint, runs |
+| **Python 3** | 3.10 or newer, as `python3` or `python` on your PATH (or `VG_PYTHON`) | parsing Python, the edit chokepoint, runs |
 | **git** | any recent | commit stamps in exports; cloning, only to work on VibeGraph itself |
 | **Claude Code** (`claude` CLI) | logged in (`claude` works in a terminal) | *optional* — chat, drafting, proposals, agent runs. Everything else works without it. |
 | **pip** | the one with your Python | the first run installs `libcst` and `black` with it |
 
-Operating systems: Linux and macOS work as-is. On **Windows, use WSL2**
-(Ubuntu) and run every command inside the WSL shell — the parsers and the
-launcher are POSIX shell and Python.
+Operating systems: Linux, macOS, Windows and WSL2. One module decides what
+differs by machine (`src/server/host_os.ts`): how the browser is opened (on
+WSL, the Windows browser through interop), which Claude is used (on WSL a Linux
+one before a Windows one reached through `/mnt/c`), and which Python every
+spawn uses (the one `view` resolved). `view` prints the host, Node and Python
+it runs with.
+
+**On WSL, install inside WSL.** A Windows `npm install -g` puts a
+`vibegraph-knowledge` on the WSL PATH too (`/mnt/c/…/npm`); run from WSL it is
+slow, and it runs whichever `node` comes first — often the system's Node 18.
+The CLI says so when it happens. Install it from a WSL shell with a WSL Node
+20+ (nvm: `nvm use 24`) so the WSL one comes first.
 
 You do **not** need an `ANTHROPIC_API_KEY`: VibeGraph shells out to your
 already-authenticated `claude` CLI.
@@ -169,6 +178,16 @@ Skipped: `node_modules`, virtual environments, `.git`, and compiled output
 (`dist/`, `build/`, `.next/`, `.d.ts` files…). Anything skipped is **counted and
 reported**, never dropped silently — the export's README names it.
 
+**Skip more with `.vibegraphignore`** at the project root, one pattern a line:
+a bare name skips that folder or file anywhere (`_archive/`, with the slash
+for folders only), a path with a `/` is from the project root
+(`legacy/old/`), and a glob matches project paths (`**/*.gen.py`); `#` starts
+a comment. `VG_IGNORE=_archive/,scratch/` adds patterns for one run. Use it
+for code that is not live — old copies, vendored or generated trees: a repo
+with 188 archived copies of its Python parsed to 163 MB and took 11 minutes;
+with `_archive/` ignored the same export took 32 seconds. The parse stops with a
+message naming this file if its output ever passes 384 MB.
+
 What VibeGraph writes into **your** project, all under `.vibegraph/`:
 
 | File | What it is | Who writes it |
@@ -227,6 +246,10 @@ pip: `python3 -m ensurepip --user`, or install your system's `python3-pip`).
 Behind a proxy, set `HTTPS_PROXY` before the first run. To use an environment
 that already has them, point `VIBEGRAPH_PYDEPS` at it. Without `black`, `view`
 still starts — it says so — and refuses edits until `black` 24+ is importable.
+
+**`parse_cst.py produced more than … MB of parse output`.** The project holds
+more Python than one parse can return — usually old copies or generated
+code. Name those folders in `.vibegraphignore` (see §5).
 
 **`view` says python3 is not on your PATH.** The app runs its parser, edits
 and runs through `python3` by that name; install Python 3.10+ so `python3

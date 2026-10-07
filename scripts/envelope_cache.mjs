@@ -31,6 +31,7 @@
 // it. The cache lives outside the project, under ~/.cache, so it can never be
 // committed.
 
+import { projectIgnore } from "../src/server/project_ignore.ts";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
@@ -54,12 +55,13 @@ export function cacheDirFor(absRoot, env = process.env) {
 }
 
 /** Every file the pipeline's walk can see (the walk skips the same dirs). */
-function walkAll(dir, root, out) {
+function walkAll(dir, root, out, ig = projectIgnore(root)) {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     const full = join(dir, entry.name);
-    if (entry.isDirectory()) { if (!shouldSkipDir(entry.name)) walkAll(full, root, out); continue; }
-    if (!entry.isFile()) continue;
-    out.push({ rel: relative(root, full).split(sep).join("/"), full, name: entry.name });
+    const rel = relative(root, full).split(sep).join("/");
+    if (entry.isDirectory()) { if (!shouldSkipDir(entry.name) && !ig.skipDir(rel)) walkAll(full, root, out, ig); continue; }
+    if (!entry.isFile() || ig.skipFile(rel)) continue;
+    out.push({ rel, full, name: entry.name });
   }
   return out;
 }

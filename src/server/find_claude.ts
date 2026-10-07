@@ -22,6 +22,7 @@
 // It never uses a shell: a prompt with quotes, %, & or ^ reaches Claude as
 // written. `checkClaude` runs `--version` once and caches it by mtime.
 
+import { detectHost, isWindowsSide } from "./host_os.ts";
 import * as fs from "node:fs";
 import * as nodePath from "node:path";
 import * as os from "node:os";
@@ -33,6 +34,8 @@ export interface ClaudeMissing { error: string; tried: string[] }
 /** The filesystem and platform, injectable so every platform is testable anywhere. */
 export interface FindIO {
   platform: NodeJS.Platform;
+  /** Linux inside WSL: a Windows program on PATH (/mnt/c/…) is the last resort */
+  wsl?: boolean;
   home: string;
   execPath: string;
   isFile(p: string): boolean;
@@ -45,7 +48,7 @@ export interface FindIO {
 export function realIO(): FindIO {
   const platform = process.platform;
   return {
-    platform, home: os.homedir(), execPath: process.execPath,
+    platform, home: os.homedir(), execPath: process.execPath, wsl: detectHost().kind === "wsl",
     isFile: (p) => { try { return fs.statSync(p).isFile(); } catch { return false; } },
     isExecutable: (p) => { try { if (!fs.statSync(p).isFile()) return false; if (platform === "win32") return true; fs.accessSync(p, fs.constants.X_OK); return true; } catch { return false; } },
     read: (p) => { try { return fs.readFileSync(p, "utf-8"); } catch { return null; } },
@@ -90,6 +93,9 @@ export function onPath(io: FindIO, name: string, env: NodeJS.ProcessEnv, tried: 
   if (io.platform !== "win32") {
     for (const d of dirs) {
       const p = P.join(d, name);
+      // WSL: a Windows program here would run against Windows paths and a
+      // Windows login — keep looking for a Linux one; it is the last resort
+      if (io.wsl && isWindowsSide(p) && io.isExecutable(p)) { tried.push(`${p} — a Windows program seen from WSL (used only if no Linux one is found)`); continue; }
       if (io.isExecutable(p)) return { cmd: p, args: [], via: `PATH (${d})` };
       if (io.isFile(p)) tried.push(`${p} — not executable`);
     }
@@ -213,6 +219,14 @@ export function findClaude(env: NodeJS.ProcessEnv = process.env, io: FindIO = re
   for (const k of knownPlaces(io, env)) {
     if (io.platform === "win32" ? io.isFile(k.path) : (isJs(k.path) ? io.isFile(k.path) : io.isExecutable(k.path))) return asTarget(io, k.path, extra, k.via);
     tried.push(`${k.path} (${k.via})`);
+  }
+  // WSL, nothing Linux-side: the Windows Claude on PATH still runs (through interop)
+  if (io.wsl) {
+    const P = pathOf(io);
+    for (const d of (env.PATH ?? "").split(":").filter((x) => isWindowsSide(x))) {
+      const p = P.join(d, "claude");
+      if (io.isExecutable(p)) return asTarget(io, p, extra, `PATH (${d}) — the Windows Claude, through WSL interop; install Claude Code inside WSL for one that sees Linux paths`);
+    }
   }
   return {
     tried,

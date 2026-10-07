@@ -1,4 +1,6 @@
 import { bootMarkup } from "./src/shared/boot_markup";
+import { pythonBin } from "./src/server/host_os";
+import { projectIgnore, IGNORE_FILE, type ProjectIgnore } from "./src/server/project_ignore";
 import { findClaude, isMissing, describeClaude } from "./src/server/find_claude";
 import * as http from "http";
 import * as fs from "fs";
@@ -796,7 +798,7 @@ async function runDiscoverEntryPoints(files: typeof projectParse): Promise<any[]
 // the parse pipeline less reliable than it was without it.
 function runCheckProjectDeps(files: typeof projectParse): Promise<{ module: string; files: string[] }[]> {
   return new Promise((resolve) => {
-    const child = spawn("python3", [CHECK_PROJECT_DEPS_SCRIPT], {
+    const child = spawn(pythonBin(), [CHECK_PROJECT_DEPS_SCRIPT], {
       stdio: ["pipe", "pipe", "pipe"],
       env: pythonEnv(),
     });
@@ -835,7 +837,7 @@ function runExtractAllThreads(
 ): Promise<any[]> {
   if (entryPoints.length === 0) return Promise.resolve([]);
   return new Promise((resolve) => {
-    const child = spawn("python3", [EXTRACT_THREAD_SCRIPT, "--batch-seeds"], {
+    const child = spawn(pythonBin(), [EXTRACT_THREAD_SCRIPT, "--batch-seeds"], {
       stdio: ["pipe", "pipe", "pipe"],
       env: pythonEnv(),
     });
@@ -873,7 +875,7 @@ function runBuildSystemTier(
 ): Promise<{ subsystems: any[]; edges: any[] }> {
   const empty = { subsystems: [], edges: [] };
   return new Promise((resolve) => {
-    const child = spawn("python3", [BUILD_SYSTEM_TIER_SCRIPT], {
+    const child = spawn(pythonBin(), [BUILD_SYSTEM_TIER_SCRIPT], {
       stdio: ["pipe", "pipe", "pipe"],
       env: pythonEnv(),
     });
@@ -904,13 +906,15 @@ function runBuildSystemTier(
 // M-LANG1 — walks for every REGISTERED language's extensions (just .py
 // until M-LANG2 registers bash), so discovery cannot change before a
 // frontend exists. Skip rules live in the registry alongside the table.
-function findSourceFiles(dir: string): string[] {
+function findSourceFiles(dir: string, root: string = dir, ig: ProjectIgnore = projectIgnore(root)): string[] {
   const results: string[] = [];
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const full = path.join(dir, entry.name);
-    if (entry.isDirectory() && !shouldSkipDir(entry.name)) {
-      results.push(...findSourceFiles(full));
-    } else if (entry.isFile() && isSourceFile(entry.name, full)) {
+    const rel = path.relative(root, full).split(path.sep).join("/");
+    // 2026-10-07 — the project's .vibegraphignore (src/server/project_ignore.ts)
+    if (entry.isDirectory() && !shouldSkipDir(entry.name) && !ig.skipDir(rel)) {
+      results.push(...findSourceFiles(full, root, ig));
+    } else if (entry.isFile() && !ig.skipFile(rel) && isSourceFile(entry.name, full)) {
       results.push(full);
       noteExtensionless(full);
     }
@@ -3281,7 +3285,7 @@ async function changesetProposeCore(raw: unknown, effectConsentToken?: string, t
 
     // Effect floor: scan the check path; run ONLY when confidently pure.
     const scan = await new Promise<{ pure: boolean; offenses: any[]; reason: string }>((resolve) => {
-      const child = spawn("python3", [SCAN_EFFECTS_SCRIPT, "--seed-file", CHECK_MODULE, "--seed-id", CHECK_FN_ID, "--list-effects"],
+      const child = spawn(pythonBin(), [SCAN_EFFECTS_SCRIPT, "--seed-file", CHECK_MODULE, "--seed-id", CHECK_FN_ID, "--list-effects"],
         { stdio: ["pipe", "pipe", "pipe"], env: pythonEnv() });
       let stdout = "";
       let stderr = "";
@@ -3341,7 +3345,7 @@ async function changesetProposeCore(raw: unknown, effectConsentToken?: string, t
     const run = await new Promise<{ code: number | null; output: string }>((resolve) => {
       const env = pythonEnv();
       env.PYTHONPATH = `${sandbox}:${env.PYTHONPATH ?? ""}`;
-      const child = spawn("python3", ["-c", "from __vg_check__ import __vg_check__; __vg_check__()"],
+      const child = spawn(pythonBin(), ["-c", "from __vg_check__ import __vg_check__; __vg_check__()"],
         { cwd: sandbox, env, timeout: 15000 });
       let out = "";
       child.stdout.on("data", (b) => { out += b.toString(); });
@@ -3906,7 +3910,7 @@ const externalResolveCache = new Map<string, unknown>();
 
 function spawnExternalResolve(qualifiedName: string): Promise<unknown> {
   return new Promise((resolve) => {
-    const child = spawn("python3", [RESOLVE_EXTERNAL_SCRIPT, qualifiedName], {
+    const child = spawn(pythonBin(), [RESOLVE_EXTERNAL_SCRIPT, qualifiedName], {
       stdio: ["ignore", "pipe", "pipe"],
       env: pythonEnv(),
     });
@@ -4097,7 +4101,7 @@ async function handleReplaceBodySave(
 
 function _spawnJson(script: string, stdin: string): Promise<any> {
   return new Promise((resolve) => {
-    const child = spawn("python3", [script], { stdio: ["pipe", "pipe", "pipe"], env: pythonEnv() });
+    const child = spawn(pythonBin(), [script], { stdio: ["pipe", "pipe", "pipe"], env: pythonEnv() });
     let out = "";
     child.stdout.on("data", (d: Buffer) => { out += d.toString(); });
     child.stdin.write(stdin);
@@ -5067,7 +5071,7 @@ function runBlockCore(
     const runStart = node.line ?? node.lineno;
     const runEnd = node.endLine ?? node.endLineno;
     execFile(
-      "python3",
+      pythonBin(),
       [RUN_BLOCK_SCRIPT, runFile, String(runStart), String(runEnd)],
       { timeout: 15000 },
       (err, stdout, stderr) => {
@@ -5199,7 +5203,7 @@ function scanEffectsToNode(
     }
     // --list-effects: the FULL offense set (for informed consent), not just
     // the first. A scan failure stays fail-safe (refuse, empty list).
-    const child = spawn("python3", [SCAN_EFFECTS_SCRIPT, "--stop-file", stopFile, "--stop-id", nodeId, "--list-effects"],
+    const child = spawn(pythonBin(), [SCAN_EFFECTS_SCRIPT, "--stop-file", stopFile, "--stop-id", nodeId, "--list-effects"],
       { stdio: ["pipe", "pipe", "pipe"], env: pythonEnv() });
     let stdout = "";
     let stderr = "";
@@ -5257,7 +5261,7 @@ function scanConstructorEffects(
     const init = nodes.find((n) => n.type === "function_def" && n.name === "__init__" && n.parentId === cls.id);
     if (!init) { resolve({ pure: true, offenses: [], reason: "no __init__ — default constructor" }); return; }
 
-    const child = spawn("python3", [SCAN_EFFECTS_SCRIPT, "--seed-file", seedFile, "--seed-id", init.id, "--list-effects"],
+    const child = spawn(pythonBin(), [SCAN_EFFECTS_SCRIPT, "--seed-file", seedFile, "--seed-id", init.id, "--list-effects"],
       { stdio: ["pipe", "pipe", "pipe"], env: pythonEnv() });
     let stdout = "";
     let stderr = "";
@@ -5317,7 +5321,7 @@ async function scanEffectsForRun(
 // (check_literals --mode instance): exactly `ClassName(<literal kwargs>)`.
 function _validateInstance(className: string, args: Record<string, string>): Promise<{ ok: boolean; call: string; error?: string }> {
   return new Promise((resolve) => {
-    const child = spawn("python3", [CHECK_LITERALS_SCRIPT, "--mode", "instance"],
+    const child = spawn(pythonBin(), [CHECK_LITERALS_SCRIPT, "--mode", "instance"],
       { stdio: ["pipe", "pipe", "pipe"], env: pythonEnv() });
     let out = "";
     let err = "";
@@ -5433,7 +5437,7 @@ function refreshArtifactIndex(): void {
 // validated, but the server never injects an unvalidated string.
 function _validateLiterals(args: Record<string, string>): Promise<{ ok: boolean; call: string; error?: string }> {
   return new Promise((resolve) => {
-    const child = spawn("python3", [CHECK_LITERALS_SCRIPT],
+    const child = spawn(pythonBin(), [CHECK_LITERALS_SCRIPT],
       { stdio: ["pipe", "pipe", "pipe"], env: pythonEnv() });
     let out = "";
     let err = "";
@@ -5644,7 +5648,7 @@ function runThreadToNodeCore(
       const env = pythonEnv();
       env.PYTHONPATH = `${runRoot}:${env.PYTHONPATH ?? ""}`;
       const raw = await new Promise<string>((resolve) => {
-        execFile("python3", [RUN_TO_NODE_SCRIPT, tmp],
+        execFile(pythonBin(), [RUN_TO_NODE_SCRIPT, tmp],
           { cwd: runRoot, env, timeout: 15000 },
           (err, stdout) => resolve(stdout || (err ? `{"outcome":"harness-error","error":${JSON.stringify(err.message)}}` : "")),
         );
@@ -5890,7 +5894,7 @@ function runObserveDynamicTarget(
       const env = pythonEnv();
       env.PYTHONPATH = `${analyzedRoot()}:${env.PYTHONPATH ?? ""}`;
       const raw = await new Promise<string>((resolve) => {
-        execFile("python3", [RUN_TO_NODE_SCRIPT, tmp],
+        execFile(pythonBin(), [RUN_TO_NODE_SCRIPT, tmp],
           { cwd: analyzedRoot(), env, timeout: 15000 },
           (err, stdout) => resolve(stdout || (err ? `{"outcome":"harness-error","error":${JSON.stringify(err.message)}}` : "")),
         );
@@ -6140,7 +6144,7 @@ async function runTraceEntryPoint(
   const env = pythonEnv();
   env.PYTHONPATH = `${root}:${env.PYTHONPATH ?? ""}`;
   const raw = await new Promise<string>((resolve) => {
-    execFile("python3", [TRACE_RUN_SCRIPT, abs, fnName, root],
+    execFile(pythonBin(), [TRACE_RUN_SCRIPT, abs, fnName, root],
       { cwd: root, env, timeout: 30000, maxBuffer: 16 * 1024 * 1024 },
       (err, stdout) => resolve(
         stdout || JSON.stringify({
@@ -6367,7 +6371,7 @@ function handleSynthThreadArgs(
 // (full accepted/rejected detail, not just ok/call).
 function _validateLiteralsRaw(args: Record<string, string>): Promise<{ ok: boolean; call: string; accepted: Record<string, string>; rejected: any[]; error?: string }> {
   return new Promise((resolve) => {
-    const child = spawn("python3", [CHECK_LITERALS_SCRIPT], { stdio: ["pipe", "pipe", "pipe"], env: pythonEnv() });
+    const child = spawn(pythonBin(), [CHECK_LITERALS_SCRIPT], { stdio: ["pipe", "pipe", "pipe"], env: pythonEnv() });
     let out = "";
     child.stdout.on("data", (b) => { out += b.toString(); });
     child.on("close", () => {
@@ -7885,7 +7889,7 @@ function extractThreadCore(filePath: string, irNodeId: string): Promise<unknown>
       return;
     }
 
-    const child = spawn("python3", [EXTRACT_THREAD_SCRIPT,
+    const child = spawn(pythonBin(), [EXTRACT_THREAD_SCRIPT,
       "--seed-file", seedFile, "--seed-id", irNodeId],
       { stdio: ["pipe", "pipe", "pipe"], env: pythonEnv() });
     let stdout = "";
@@ -8532,6 +8536,7 @@ if (isDirectory) {
   for (const rel of [".vibegraph/plan.json", ".vibegraph/architecture.json"]) {
     fs.watchFile(path.join(inputPath, rel), { interval: 700 }, (cur, prev) => { if (cur.mtimeMs !== prev.mtimeMs) debounceStoreBroadcast(); });
   }
+  let watchIgnore = projectIgnore(inputPath);
   try {
     guardWatcher(fs.watch(inputPath, { recursive: true }, (_, filename) => {
       if (!filename) return;
@@ -8539,6 +8544,10 @@ if (isDirectory) {
       // CLI and other sessions too: an open panel follows them.
       const rel = filename.split(path.sep).join("/");
       if (rel === ".vibegraph/plan.json" || rel === ".vibegraph/architecture.json") { debounceStoreBroadcast(); return; }
+      // a change under what .vibegraphignore names is not ours to re-parse;
+      // a change to the ignore file itself re-walks the project
+      if (rel === IGNORE_FILE) { watchIgnore = projectIgnore(inputPath); debounceReparse(); return; }
+      if (watchIgnore.skipFile(rel)) return;
       if (!isSourceFile(filename, path.join(inputPath, filename))) {
         // Not source in any REGISTERED language (M-LANG1) — but an artifact
         // write still changes what the chip must say (see

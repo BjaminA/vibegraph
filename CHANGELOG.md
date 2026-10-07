@@ -3,6 +3,44 @@
 `vibegraph-knowledge` and the VibeGraph app. Newest first. Each entry says what
 changed and, where an existing user would notice, how behaviour differs.
 
+## 0.27.4 — 2026-10-07
+
+### One answer to "which machine is this"; skipping what is not live code
+
+From running `view` in WSL (a Python project) and on Windows (a TypeScript project):
+
+- **`src/server/host_os.ts`** decides what differs by machine — Windows, WSL,
+  Linux, macOS — and every OS-dependent choice asks it:
+  - **the browser:** on WSL, the Windows browser through interop (`wslview`,
+    then `rundll32.exe`, then `powershell.exe`), started from a Windows folder;
+    `xdg-open` in WSL usually opened nothing. On Windows, `rundll32`, so a `&`
+    in the URL is never parsed by `cmd`;
+  - **Claude:** on WSL a Linux Claude (e.g. `~/.local/bin/claude`) is used
+    before a Windows one on the PATH (`/mnt/c/…`), which stays the last resort;
+  - **Python:** the server spawns the interpreter `view` resolved (`python3`,
+    else `python`, else `VG_PYTHON`) instead of the bare name `python3`
+    everywhere — a Windows install with only `python.exe` works.
+  `view` prints the host, Node and Python it runs with.
+- **The CLI warns** (never stops) when Node is older than 20, and when the
+  Windows install of the package is being run from inside WSL through `/mnt/c`
+  — the cause of a slow `view` on the system's Node 18.
+- **`.vibegraphignore`** at the project root: folders and files the project
+  says not to read (a name anywhere, a root path, a glob; `VG_IGNORE` for one
+  run). Every walker honours it — the parse, the envelope cache, the server
+  and its watcher, the hooks, the system tier — and what it skipped is
+  reported with the build folders already reported.
+- **A parse too big for its buffer no longer fails in silence.** The output
+  limit is 384 MB (was 64), and past it the error says how big and names
+  `.vibegraphignore`; before, "parse_cst.py failed:" with an empty message.
+  Measured on a copy of a project with 188 archived copies of its Python: the
+  export now completes either way — 11 minutes and 10,198 thread contracts with
+  `_archive/` read; 32 seconds and 1,178 without it. The export README says
+  why each folder was not read (compiled output, or named in the file).
+- **`view` no longer reinstalls black on every start.** The "one time"
+  install probed only the environment libcst was found in, never the folder
+  black had been installed into, so pip ran at each launch; it is now found
+  there (129 ms).
+
 ## 0.27.3 — 2026-10-07
 
 ### Scrollbars

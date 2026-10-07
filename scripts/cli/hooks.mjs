@@ -29,7 +29,8 @@
 // written to the project (state under ~/.cache); a failing hook tells the
 // person (`systemMessage`) and never blocks — silence would look like a pass.
 
-import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { sourceStamp } from "./source_stamp.mjs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, isAbsolute, join, relative, resolve } from "node:path";
 import { loadEnvelope } from "../quality_check.mjs";
 import { cacheDirFor } from "../envelope_cache.mjs";
@@ -50,7 +51,7 @@ import { planAffectedNote, planForPrompt, plannedThreadsForPrompt } from "./plan
 import { softwareForPrompt } from "./software_context.mjs";
 import { directionForPrompt, directionForFindings } from "./direction.mjs";
 import { untrustedBaseline, newUntrustedNote } from "../dataflow_cache.mjs";
-import { languageForFile, shouldSkipDir } from "../../src/server/languages.ts";
+import { languageForFile } from "../../src/server/languages.ts";
 
 export const HOOK_EVENTS = ["session-start", "prompt", "post-edit", "stop"];
 const MIN_PROMPT_CHARS = 12;
@@ -369,25 +370,6 @@ function newFindings(absRoot, loaded, state, textById, sessionId) {
   state.lastKeys = now.map((f) => f.key);
   const fresh = now.filter((f) => !base.has(f.key));
   return { fresh, introduced: fresh.filter((f) => !before.has(f.key)), earlier: fresh.filter((f) => before.has(f.key)), note };
-}
-
-/** A cheap stamp of every source file (path, size, mtime): whether a Bash
- *  command changed code at all. h2h4 found why this matters: a headless
- *  session made all 18 of its tool calls through Bash — `cat >`, `sed -i`,
- *  python — so a hook on Write|Edit alone never saw an edit. */
-function sourceStamp(absRoot) {
-  const parts = [];
-  const walk = (dir) => {
-    for (const e of readdirSync(dir, { withFileTypes: true })) {
-      const full = join(dir, e.name);
-      if (e.isDirectory()) { if (!shouldSkipDir(e.name)) walk(full); continue; }
-      if (!e.isFile() || !languageForFile(e.name, full)) continue;
-      const s = statSync(full);
-      parts.push(`${relative(absRoot, full)}:${s.size}:${s.mtimeMs}`);
-    }
-  };
-  walk(absRoot);
-  return parts.sort().join("\n");
 }
 
 function onPostEdit(input, { absRoot, loaded: load, state, constraints }) {

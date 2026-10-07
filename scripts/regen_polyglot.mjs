@@ -14,6 +14,7 @@
 // Run:  node --experimental-strip-types --no-warnings scripts/regen_polyglot.mjs
 // Test: npm run test:polyglot (imports buildPolyglotEnvelope from here).
 
+import { projectIgnore, IGNORE_FILE } from "../src/server/project_ignore.ts";
 import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -73,17 +74,19 @@ export const POLYGLOT_PROJECT = join(POLYGLOT_DIR, "shop_demo.project.json");
  *
  * @returns {{ files: Array<{rel: string, langId: string}>, skipped: Record<string, number> }}
  */
-function walk(dir, root, skipped = {}) {
+function walk(dir, root, skipped = {}, ig = projectIgnore(root)) {
   const out = [];
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     const full = join(dir, entry.name);
     const rel = relative(root, full).split(sep).join("/");
     if (entry.isDirectory()) {
-      if (!shouldSkipDir(entry.name)) { out.push(...walk(full, root, skipped).files); continue; }
+      // 2026-10-07 — what the project's .vibegraphignore names is skipped and reported
+      if (ig.skipDir(rel)) { skipped[rel] = countFiles(full); continue; }
+      if (!shouldSkipDir(entry.name)) { out.push(...walk(full, root, skipped, ig).files); continue; }
       if (COMPILED_OUTPUT_DIRS.includes(entry.name)) skipped[rel] = countFiles(full);
       continue;
     }
-    if (!entry.isFile()) continue;
+    if (!entry.isFile() || ig.skipFile(rel)) continue;
     const lang = languageForFile(entry.name, full);
     if (lang) out.push({ rel, langId: lang.id });
   }
@@ -107,6 +110,10 @@ function walk(dir, root, skipped = {}) {
  * Shape (both accepted): `{"seeds": [{file, irNodeId}]}` or a bare array.
  */
 
+/** The parse step's output limit: a large project's IR is big, and a string
+ *  much past this is past what Node can hold. */
+const PARSE_BUFFER = 384 * 1024 * 1024;
+
 /** How much a skipped directory held, so the report can be specific. */
 function countFiles(dir) {
   let n = 0;
@@ -122,10 +129,15 @@ function run(cmd, { input, cwd, pipeline }) {
   // directory, the python binary and its environment come from the caller.
   const bin = cmd.needsPythonEnv && pipeline.pythonBin ? pipeline.pythonBin : cmd.bin;
   const r = spawnSync(bin, cmd.argv, {
-    input, cwd, encoding: "utf-8", maxBuffer: 64 * 1024 * 1024,
+    input, cwd, encoding: "utf-8", maxBuffer: PARSE_BUFFER,
     env: cmd.needsPythonEnv ? pipeline.pythonEnv : process.env,
   });
-  if (r.status !== 0) throw new Error(`${cmd.argv[0]} failed: ${r.stderr}`);
+  // 2026-10-07 — an output past the buffer KILLS the parser and leaves stderr
+  // empty: "parse_cst.py failed:" and nothing else. Say what happened and the fix.
+  if (r.error?.code === "ENOBUFS") {
+    throw new Error(`${cmd.argv[0]} produced more than ${Math.round(PARSE_BUFFER / 1048576)} MB of parse output, so it was stopped. Skip folders that are not live code (old copies, vendored or generated trees) in ${IGNORE_FILE} at the project root — one per line, e.g. \`_archive/\` — or for one run: VG_IGNORE=_archive/`);
+  }
+  if (r.status !== 0) throw new Error(`${cmd.argv[0]} failed: ${(r.stderr || r.error?.message || `exit ${r.status}${r.signal ? `, signal ${r.signal}` : ""}`).trim()}`);
   return JSON.parse(r.stdout);
 }
 

@@ -22,6 +22,7 @@ import { existsSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { ensureBlack, resolvePython } from "./pyenv.mjs";
 import { cliPath } from "./winpath.mjs";
+import { detectHost, openUrlCommands } from "../../src/server/host_os.ts";
 
 export const VIEW_USAGE = `view [<path>] [--port <n>] [--open]   THE VISUALISATION: start the web app on a project (or one file)
                                                and serve it at http://localhost:4200; Ctrl-C stops it`;
@@ -37,13 +38,13 @@ export function serverPath(loc) {
   return null;
 }
 
+/** The browser, the way this host opens one (host_os.ts): on WSL the
+ *  Windows browser through interop — `xdg-open` there usually opens nothing. */
 function openBrowser(url) {
-  const tries = process.platform === "darwin" ? [["open", [url]]]
-    : process.platform === "win32" ? [["cmd", ["/c", "start", "", url]]]
-    : [["wslview", [url]], ["xdg-open", [url]]];
-  for (const [cmd, args] of tries) {
-    const r = spawnSync(cmd, args, { stdio: "ignore" });
-    if (!r.error && r.status === 0) return true;
+  for (const { cmd, args, cwd } of openUrlCommands(url)) {
+    const r = spawnSync(cmd, args, { stdio: "ignore", shell: false, ...(cwd && existsSync(cwd) ? { cwd } : {}) });
+    // explorer.exe answers 1 even when it opened the page
+    if (!r.error && (r.status === 0 || /explorer\.exe$/i.test(cmd))) return true;
   }
   return false;
 }
@@ -57,20 +58,20 @@ export function runView({ loc, target, port, open, log = (m) => process.stderr.w
     log("the visualisation is not built into this install (vendor/dist/server.js is missing). In a checkout run `npm run build` (or `npm run build:cli`) first.");
     return Promise.resolve(3);
   }
-  if (spawnSync("python3", ["--version"], { stdio: "ignore" }).status !== 0) {
-    log("python3 is not on your PATH. The visualisation runs its parser, edits and runs through `python3`; install Python 3.10+ and retry.");
-    return Promise.resolve(3);
-  }
   let env;
   try {
+    // python3, else python (a Windows install often has only python.exe), else
+    // VG_PYTHON; the server then uses the SAME interpreter for every spawn
     const py = resolvePython({ ...loc }, { log });
     const black = ensureBlack(py, loc, { log });
     if (!black.ok) log(black.error);
-    env = black.env;
+    env = { ...black.env, VG_PYTHON: process.env.VG_PYTHON || py.bin };
   } catch (e) {
-    log(e.message);
+    log(`${e.message}\nThe visualisation runs its parser, edits and runs through Python; install Python 3.10+ and retry.`);
     return Promise.resolve(3);
   }
+  const host = detectHost();
+  log(`host: ${host.kind === "wsl" ? `WSL${host.distro ? ` (${host.distro})` : ""}` : host.kind} · node ${process.version} · python ${env.VG_PYTHON}`);
   const p = port ?? process.env.PORT ?? "4200";
   env = { ...env, PORT: String(p) };
   const url = `http://localhost:${p}`;

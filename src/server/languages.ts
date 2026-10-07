@@ -11,6 +11,7 @@
 //   batch:   <bin> <script> --batch                        → stdin "path\tmoduleId"
 //                                                             lines, {files, errors} out
 
+import { pythonBin } from "./host_os.ts";
 import * as path from "path";
 // .ts extension: required by the node --experimental-strip-types test
 // harness (ESM needs explicit extensions); esbuild resolves it the same.
@@ -125,7 +126,7 @@ export function parseCommand(
     case "python": {
       const argv = [path.join(scriptsDir, "parse_cst.py"), filePath];
       if (moduleId) argv.push("--module-path", moduleId);
-      return { bin: "python3", fallbackBin: "python", argv, needsPythonEnv: true };
+      return { bin: pythonBin(), fallbackBin: "python", argv, needsPythonEnv: true };
     }
     case "bash": {
       const argv = [path.join(scriptsDir, "frontends", "bash", "parse_bash.mjs"), filePath];
@@ -157,7 +158,7 @@ export function batchParseCommand(lang: LanguageInfo, scriptsDir: string): Parse
   switch (lang.id) {
     case "python":
       return {
-        bin: "python3",
+        bin: pythonBin(),
         fallbackBin: "python",
         argv: [path.join(scriptsDir, "parse_cst.py"), "--batch"],
         needsPythonEnv: true,
@@ -202,7 +203,7 @@ export function batchParseCommand(lang: LanguageInfo, scriptsDir: string): Parse
 export function linkCommand(lang: LanguageInfo, scriptsDir: string): ParseCommand | null {
   switch (lang.id) {
     case "python":
-      return { bin: "python3", argv: [path.join(scriptsDir, "cross_file_link.py")], needsPythonEnv: true };
+      return { bin: pythonBin(), argv: [path.join(scriptsDir, "cross_file_link.py")], needsPythonEnv: true };
     case "bash":
       return { bin: process.execPath, argv: [path.join(scriptsDir, "frontends", "bash", "link_bash.mjs")], needsPythonEnv: false };
     case "jsts":
@@ -228,7 +229,7 @@ export function linkCommand(lang: LanguageInfo, scriptsDir: string): ParseComman
 export function rewriteCommand(lang: LanguageInfo, scriptsDir: string): ParseCommand | null {
   switch (lang.id) {
     case "python":
-      return { bin: "python3", argv: [path.join(scriptsDir, "cst_rewrite.py")], needsPythonEnv: true };
+      return { bin: pythonBin(), argv: [path.join(scriptsDir, "cst_rewrite.py")], needsPythonEnv: true };
     case "bash":
       return { bin: process.execPath, argv: [path.join(scriptsDir, "frontends", "bash", "rewrite_bash.mjs")], needsPythonEnv: false };
     case "jsts":
@@ -254,7 +255,7 @@ export function discoverProjectCommand(scriptsDir: string): ParseCommand {
 export function discoverCommand(lang: LanguageInfo, scriptsDir: string): ParseCommand | null {
   switch (lang.id) {
     case "python":
-      return { bin: "python3", argv: [path.join(scriptsDir, "discover_entry_points.py")], needsPythonEnv: true };
+      return { bin: pythonBin(), argv: [path.join(scriptsDir, "discover_entry_points.py")], needsPythonEnv: true };
     case "bash":
       return { bin: process.execPath, argv: [path.join(scriptsDir, "frontends", "bash", "discover_bash.mjs")], needsPythonEnv: false };
     case "jsts":
