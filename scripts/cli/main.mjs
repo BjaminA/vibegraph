@@ -25,14 +25,14 @@ import { spawnSync } from "node:child_process";
 import { HOOK_EVENTS, runHook } from "./hooks.mjs";
 import { doctorReport, hookRunPayload, recordFired } from "./hook_tools.mjs";
 import { runConfig, CONFIG_USAGE } from "./config.mjs";
-import { hostWarnings } from "./host_check.mjs";
+import { hostWarnings, installMismatch, nodeTooOld } from "./host_check.mjs";
 import { describeClaude } from "../../src/server/find_claude.ts";
 import { LESSONS_USAGE, runLessons } from "./lessons.mjs";
 import { DIRECTION_USAGE, runDirection } from "./direction.mjs";
 import { DATAFLOW_USAGE, runDataflow } from "./dataflow.mjs";
 import { PLAN_USAGE, runPlan } from "./plan.mjs";
 import { runPlanDraft } from "./plan_draft.mjs";
-import { isAgentRun, personOnlyStep, PERSONS_STEP } from "./actor.mjs";
+import { personOnlyStep, personRefusal, wslMarkAdvice } from "./actor.mjs";
 import { pipelineFor, pipelineHere } from "./pipeline.mjs";
 import { SOFTWARE_USAGE, runSoftware } from "./software.mjs";
 import { BRIEF_USAGE, runBrief } from "./brief.mjs";
@@ -296,7 +296,16 @@ function installHooks(loc, absRoot, { remove = false, windows = false } = {}) {
       ? windowsHookCommand(root, event, env)
       : hookCommand(root, event, env, process.argv, process.execPath, process.execArgv, version) });
   } catch (e) { return fail(e.message); }
-  process.stdout.write(`${h.path}: hooks ${h.state}${h.state === "removed" ? "" : ` (prompt → routed contracts, rules and skills; post-edit and stop → every stated rule re-checked, a new violation blocks). Claude Code reads hooks when a session starts: they apply from the NEXT session (review them with /hooks; \`${PACKAGE_NAME} doctor\` says whether they have fired).${windows ? "" : " A Claude Code running on Windows against this WSL folder cannot run these: use \`hook install --target wsl\`."}`}\n`);
+  process.stdout.write(`${h.path}: hooks ${h.state}${h.state === "removed" ? "" : ` (prompt → routed contracts, rules and skills; post-edit and stop → every stated rule re-checked, a new violation blocks). They apply from the next Claude Code session, or sooner when Claude Code reloads its settings (review them with /hooks; \`${PACKAGE_NAME} doctor\` says when each last fired).${windows ? "" : " A Claude Code running on Windows against this WSL folder cannot run these: use \`hook install --target wsl\`."}`}\n`);
+  // 2026-10-07 (field report) — the hooks name this Node by path; an nvm
+  // Node is gone after the next `nvm` upgrade, and the hooks with it
+  if (!remove && /[\\/]\.nvm[\\/]versions[\\/]/.test(process.execPath)) {
+    process.stdout.write(`note: the hooks run ${process.execPath}, an nvm-managed Node. After an \`nvm\` upgrade it is gone and every hook fails — re-run this command with the new Node (\`${PACKAGE_NAME} doctor\` says when that has happened).\n`);
+  }
+  if (!remove && windows) {
+    const mark = wslMarkAdvice();
+    if (mark) process.stdout.write(`note: ${mark}\n`);
+  }
   return 0;
 }
 
@@ -344,6 +353,8 @@ function cmdInit(args) {
   process.stdout.write(`${r.paths.claudeMd}: ${r.claudeMd} (the block between ${"<!-- vibegraph-knowledge:begin/end -->"} is replaced on re-run)\n`);
   process.stdout.write(`${r.paths.gitignore}: ${r.gitignore} (.vibegraph/knowledge/ is generated; never commit it)\n`);
   if (r.claudeMd !== "unchanged") process.stdout.write(`next: ${PACKAGE_NAME} export${existsSync(join(absRoot, ".vibegraph", "knowledge")) ? " (the folder exists; re-run to refresh it)" : ""}\n`);
+  const twoInstalls = installMismatch(absRoot, packageVersion(loc));
+  if (twoInstalls) process.stderr.write(`note: ${twoInstalls}\n`);
   return 0;
 }
 
@@ -443,12 +454,14 @@ function cmdConstraints(argsIn) {
         kind: { type: "string" }, text: { type: "string" }, note: { type: "string" }, check: { type: "string" }, policy: { type: "string" },
         json: { type: "string" }, all: { type: "boolean" }, threads: { type: "string" }, files: { type: "string" }, tools: { type: "string" },
         checks: { type: "string" }, why: { type: "string" }, as: { type: "string" },
+        force: { type: "boolean" }, "dry-run": { type: "boolean" },
       },
     });
   } catch (e) { return fail(`${e.message}\n\n${USAGE}`); }
   const { sub, args: rest, root } = subAndRoot(parsed.positionals);
   const values = { ...parsed.values, ...(listJson ? { json: true } : {}), pid: rest[1] };
-  return report(runConstraints({ root, sub, id: rest[0], values }));
+  const pipeline = sub === "add" && (values.check || values.json) ? (() => { try { return pipelineFor(locate(), resolve(cliPath(root ?? "."))); } catch { return {}; } })() : undefined;
+  return report(runConstraints({ root, sub, id: rest[0], values, pipeline }));
 }
 
 function cmdSeeds(args) {
@@ -545,6 +558,14 @@ function cmdHook(args) {
   }
   if (r?.block) { process.stderr.write(`${r.block}\n`); return 2; }
   if (r?.json) process.stdout.write(JSON.stringify(r.json));
+  // 2026-10-07 (field report) — by hand, silence read as a failure: say what
+  // the hook did, on stderr so the JSON on stdout stays what Claude Code reads
+  if (manual) {
+    const ctx = r?.json?.hookSpecificOutput?.additionalContext ?? r?.json?.systemMessage ?? "";
+    process.stderr.write(`hook run ${event}: ${!r ? "nothing to report (no source file changed since the last check, or nothing routed)"
+      : /baseline/.test(ctx) ? "baseline recorded; no new findings"
+      : ctx ? `delivered ${ctx.length} chars of context (above)` : "ran; no new findings"} — exit 0\n`);
+  }
   return 0;
 }
 
@@ -608,9 +629,17 @@ export function main(argv) {
   if (command === "--version" || command === "-v" || command === "version") { process.stdout.write(`${toolLabel(locate())}\n`); return 0; }
   // 2026-09-30 — the steps that are a person's, refused when Claude Code runs them (actor.mjs).
   // 2026-10-07 — an old Node, or the Windows install run from WSL (host_check.mjs)
+  const old = nodeTooOld();
+  if (old) return fail(old, 3);
+  // what the stores stamp into .vibegraph/writer.json (writer_stamp.ts)
+  process.env.VG_VERSION ??= packageVersion(locate()) ?? undefined;
+  if (!process.env.VG_VERSION) delete process.env.VG_VERSION;
   for (const w of hostWarnings()) process.stderr.write(`note: ${w}\n`);
-  const personsStep = isAgentRun() ? personOnlyStep(command, rest) : null;
-  if (personsStep) return fail(`refused: \`${personsStep}\` — ${PERSONS_STEP}.`, 1);
+  // 2026-10-07 — and when no terminal is attached (an agent's tool call,
+  // either side of the Windows → WSL hop, whatever its environment says)
+  const personsStep = personOnlyStep(command, rest);
+  const refusal = personsStep ? personRefusal() : null;
+  if (refusal) return fail(`refused: \`${personsStep}\` — ${refusal}.`, 1);
   if (command === "view") return cmdView(rest);
   if (command === "export") return cmdExport(rest);
   if (command === "check") return cmdCheck(rest);

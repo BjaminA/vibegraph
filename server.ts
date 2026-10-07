@@ -2,6 +2,11 @@ import { bootMarkup } from "./src/shared/boot_markup";
 import { pythonBin } from "./src/server/host_os";
 import { PipelineCache, toolParts, readLastMessage, writeLastMessage } from "./src/server/pipeline_cache";
 import { projectIgnore, IGNORE_FILE, type ProjectIgnore } from "./src/server/project_ignore";
+import { watchProject, type WatchResult } from "./src/server/watch_project";
+import { writerWarning } from "./src/server/writer_stamp";
+import { historicalAdvice, historicalFolders } from "./src/server/historical_copies";
+import { DEFAULT_PHASE_TEXT, phaseTexter } from "./src/server/pass_progress";
+import { probeOtherServer, servedUrl, ABOUT_PATH, aboutPayload } from "./src/server/serve_address";
 import { findClaude, isMissing, describeClaude } from "./src/server/find_claude";
 import * as http from "http";
 import * as fs from "fs";
@@ -1009,7 +1014,18 @@ let fullPassRunning = false;
 async function parseAllFiles(): Promise<void> {
   if (!isDirectory) return;
   fullPassRunning = true;
-  try { await parseAllFilesInner(); } finally { fullPassRunning = false; }
+  try { await parseAllFilesInner(); } finally { fullPassRunning = false; passProgress = null; }
+}
+
+// 2026-10-07 — the boot screen's status line (src/webview/boot.ts): the
+// phase the full pass is in, sent as it starts; a client that connects
+// mid-pass is sent the latest one.
+let passProgress: string | null = null;
+let passPhaseText: (phase: string) => string = DEFAULT_PHASE_TEXT;
+function announcePhase(phase: string): void {
+  passProgress = passPhaseText(phase);
+  const msg = JSON.stringify({ type: "pass-progress", payload: { text: passProgress } });
+  for (const c of clients) { try { c.send(msg); } catch { /* a closing socket */ } }
 }
 async function parseAllFilesInner(): Promise<void> {
   const genSnap = parseGens.snapshot();
@@ -1018,11 +1034,14 @@ async function parseAllFilesInner(): Promise<void> {
   const passT0 = Date.now();
   const took: Array<[string, number]> = [];
   let threadsReason = "not run";
-  const timed = async <T,>(label: string, f: () => T | Promise<T>): Promise<T> => { const t = Date.now(); try { return await f(); } finally { took.push([label, Date.now() - t]); } };
+  const timed = async <T,>(label: string, f: () => T | Promise<T>): Promise<T> => { const t = Date.now(); announcePhase(label); try { return await f(); } finally { took.push([label, Date.now() - t]); } };
   const files = await timed("walk", () => findSourceFiles(inputPath));
   // 2026-10-07 — only what moved is parsed again (src/server/pipeline_cache.ts)
   const cache = pipelineCacheFor();
   const plan = cache.beginParse(files, path.join(inputPath, ".vibegraph", "manual_seeds.json"));
+  // 2026-10-07 (field report: a first view ran 2+ minutes behind a silent
+  // spinner) — what each phase is doing, and why a big tree takes a while
+  passPhaseText = phaseTexter(files.length, plan.toParse.length, () => latestEntryPoints.length);
   const fresh = plan.toParse.length ? await timed("parse", () => parseAllFilesBatch(plan.toParse)) : {};
   cache.storeParsed(fresh);
   let next: typeof projectParse = { ...(plan.reuse as typeof projectParse), ...fresh };
@@ -7713,7 +7732,7 @@ const mcpContext: VibegraphMcpContext = {
     const rels = paths.map((p) => (path.isAbsolute(p) ? path.relative(inputPath, p) : p).split(path.sep).join("/"));
     return {
       rows: coverageFor(rels, {
-        env, reach: computeReachability(env), surface: latestEnvSurface, exported,
+        env, reach: computeReachability(env, { root: inputPath }), surface: latestEnvSurface, exported,
         readFile: (p) => { try { return fs.readFileSync(path.join(inputPath, p), "utf-8"); } catch { return null; } },
       }),
     };
@@ -7818,6 +7837,14 @@ const server = http.createServer((req, res) => {
   if (!hostAllowed(req.headers.host, guardCfg())) {
     res.writeHead(403, { "Content-Type": "text/plain" });
     res.end("VibeGraph answers only as localhost (Host header refused).");
+    return;
+  }
+  // 2026-10-07 — what this server is serving, for another viewer that found
+  // the port busy (src/server/serve_address.ts). No CORS header: a page on
+  // another origin cannot read it.
+  if (req.url === ABOUT_PATH && req.method === "GET") {
+    res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": NO_STORE });
+    res.end(JSON.stringify(aboutPayload(inputPath, process.env.VG_VERSION || null)));
     return;
   }
   if (req.url === "/" || req.url === "/index.html") {
@@ -8081,6 +8108,8 @@ function setupWebSocket() {
 
   wss.on("connection", (ws) => {
     clients.add(ws);
+    // 2026-10-07 — mid-pass, the boot screen hears what the pass is doing now
+    if (fullPassRunning && passProgress) ws.send(JSON.stringify({ type: "pass-progress", payload: { text: passProgress } }));
     // M6 wave 1 — surface runtime feature flags so the webview can show
     // a banner when Analyze/Intent are silently disabled. M7 wave 2:
     // the flag now reflects whether the Claude Code CLI is on PATH, not
@@ -8561,6 +8590,7 @@ function debounceStoreBroadcast(): void {
   }, 250);
 }
 
+let watchResult: WatchResult = { mode: "off", note: null };
 if (isDirectory) {
   // The two stores are replaced atomically (write a temp file, rename it):
   // the recursive watcher follows the old inode and misses every later
@@ -8569,12 +8599,14 @@ if (isDirectory) {
     fs.watchFile(path.join(inputPath, rel), { interval: 700 }, (cur, prev) => { if (cur.mtimeMs !== prev.mtimeMs) debounceStoreBroadcast(); });
   }
   let watchIgnore = projectIgnore(inputPath);
-  try {
-    guardWatcher(fs.watch(inputPath, { recursive: true }, (_, filename) => {
-      if (!filename) return;
+  // 2026-10-07 — recursive, then per-file (each guarded), then polling, then
+  // off: a watch that fails never stops the server (src/server/watch_project.ts)
+  watchResult = watchProject(inputPath, {
+    files: () => findSourceFiles(inputPath),
+    onChange: (rel) => {
+      const filename = rel;
       // 2026-10-05 — the plan and the architecture store are edited from the
       // CLI and other sessions too: an open panel follows them.
-      const rel = filename.split(path.sep).join("/");
       if (rel === ".vibegraph/plan.json" || rel === ".vibegraph/architecture.json") { debounceStoreBroadcast(); return; }
       // a change under what .vibegraphignore names is not ours to re-parse;
       // a change to the ignore file itself re-walks the project
@@ -8593,18 +8625,14 @@ if (isDirectory) {
       if (isRecentSelfEdit(filename)) return;
       if (process.env.VG_TRACE_WATCH) console.log(`  [Watch] re-parse for ${rel}`);
       debounceReparse();
-    }));
-  } catch {
-    // Fallback: watch individual files
-    for (const f of findSourceFiles(inputPath)) {
-      guardWatcher(fs.watch(f, (_, filename) => {
-        if (filename && isRecentSelfEdit(filename)) return;
-        debounceReparse();
-      }));
-    }
-  }
+    },
+  });
 } else {
-  guardWatcher(fs.watch(resolvedPyFile, debounceReparse));
+  try { guardWatcher(fs.watch(resolvedPyFile, debounceReparse)); }
+  catch (e: any) {
+    fs.watchFile(resolvedPyFile, { interval: 2000 }, (cur, prev) => { if (cur.mtimeMs !== prev.mtimeMs) debounceReparse(); });
+    watchResult = { mode: "polling", note: `watching ${resolvedPyFile} by polling (${e?.code ?? e?.message ?? e})` };
+  }
 }
 
 // ── Start ─────────────────────────────────────────────────────────────────────
@@ -8622,10 +8650,17 @@ let booted = false;
 function tryListen() {
   server.once("error", (err: NodeJS.ErrnoException) => {
     if (err.code === "EADDRINUSE") {
-      console.log(`  Port ${port} in use, trying ${port + 1}...`);
-      port++;
-      server.close();
-      tryListen();
+      // say WHAT holds the port when it is another viewer: the next port is
+      // a different page, and the old one serves a different project
+      const busy = port;
+      void probeOtherServer(busy).then((other) => {
+        console.log(other
+          ? `  Port ${busy} is another VibeGraph${other.version ? ` ${other.version}` : ""} serving ${other.project}; trying ${busy + 1}...`
+          : `  Port ${busy} in use, trying ${busy + 1}...`);
+        port = busy + 1;
+        server.close();
+        tryListen();
+      });
     } else {
       throw err;
     }
@@ -8657,11 +8692,23 @@ function tryListen() {
       }
       const breakdown = [...perLang].sort((a, b) => b[1] - a[1]).map(([l, n]) => `${n} ${l}`).join(", ");
       console.log(`  Project:  ${inputPath} (${files.length} source files${perLang.size > 1 ? `: ${breakdown}` : ""})`);
+      // 2026-10-07 — folders of old copies, parsed with the rest unless ignored
+      const oldCopies = historicalAdvice(historicalFolders(files.map((f) => path.relative(inputPath, f).split(path.sep).join("/"))));
+      if (oldCopies) console.log(`  Note:     ${oldCopies}`);
     } else {
       console.log(`  Watching: ${resolvedPyFile}`);
     }
-    console.log(`  Open:     http://localhost:${port}`);
-    console.log(`  MCP:      http://localhost:${port}/mcp\n`);
+    // 2026-10-07 — the address actually bound, never `localhost`: under WSL's
+    // mirrored networking Windows tries ::1 for that name first and hangs.
+    // `view` opens exactly this line's URL.
+    const url = servedUrl(host, port);
+    console.log(`  Open:     ${url}`);
+    console.log(`  MCP:      ${url}/mcp`);
+    if (watchResult.note) console.log(`  Reload:   ${watchResult.mode} — ${watchResult.note}`);
+    // 2026-10-07 — a newer version wrote .vibegraph/ (src/server/writer_stamp.ts)
+    const newerWriter = isDirectory ? writerWarning(inputPath) : null;
+    if (newerWriter) console.log(`  WARNING:  ${newerWriter}`);
+    console.log("");
     // M7 wave 1 — eager parse at boot so MCP clients (Claude Code) can
     // read the IR before any webview connects. Per-connection sendParse
     // calls remain for WS clients; this just primes the cache.

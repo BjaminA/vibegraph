@@ -22,6 +22,7 @@
 // Every file names its KIND in README.md: derived (a script read it from
 // the code), stated (a human wrote it), observed (a consented run saw it).
 import { projectIgnore } from "../src/server/project_ignore.ts";
+import { historicalAdvice, historicalFolders } from "../src/server/historical_copies.ts";
 import { registeredAccess } from "../src/server/registered_access.ts";
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
@@ -260,7 +261,7 @@ export function exportKnowledge({ root, out, task, envelope: envelopePath, commi
   // 2b-ii. 2026-09-28 — REACHABILITY: the functions no entry point reaches,
   //     each with the reason it is unreached (src/server/reachability.ts).
   //     Unreached is not unused, and the report says which is which.
-  const reach = computeReachability(env);
+  const reach = computeReachability(env, { root: absRoot });
   write("reachability.md", formatReachabilityMd(reach));
   if (withIr) write("reachability.json", json(reach));
   // 2026-09-28 — the CONFIGURATION surface: which environment variables the
@@ -462,6 +463,8 @@ export function exportKnowledge({ root, out, task, envelope: envelopePath, commi
         ...(named.length ? ["", `**Not read, as the project asks** (\`.vibegraphignore\`): ${list(named)}. Nothing below describes them.`] : []),
       ];
     })(),
+    // 2026-10-07 — folders of old copies are read with the rest unless ignored
+    ...(() => { const a = historicalAdvice(historicalFolders(Object.keys(env.files))); return a ? ["", `**Old copies read as code:** ${a}`] : []; })(),
     ...(degradedFiles.length
       ? ["", `**Partially read:** ${degradedFiles.map((d) => `\`${d.file}\` (${d.dropped} construct(s) dropped)`).join(", ")} — the parser could not read part of these files. Their IR is INCOMPLETE: something absent from it may still exist in the source, so read those files directly before concluding anything about them.`]
       : []),

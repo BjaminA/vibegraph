@@ -123,6 +123,10 @@ export function buildQualityFacts(input: FactsInput): QualityFacts {
   const unresolved: UnresolvedFact[] = [];
   const externalCalls: ExternalCallFact[] = [];
   const definedNames = new Set<string>();
+  // 2026-10-07 — each definition with its file, and each file's module path:
+  // a rule target resolves to ONE definition (check_targets.ts)
+  const definitions: Array<{ name: string; file: string }> = [];
+  const modules: Record<string, string> = {};
   const nodesByFile = new Map<string, FactNode[]>();
   const referenceTargets = new Map<string, { toFile: string | null; toNodeId: string }>();
   const callSites: CallSiteFact[] = [];
@@ -143,8 +147,16 @@ export function buildQualityFacts(input: FactsInput): QualityFacts {
       if (typeof e.target === "string") referenceTargets.set(`${file}:${e.source}`, { toFile, toNodeId: e.target });
     }
     const facts: FactNode[] = [];
+    if (typeof (ir as { modulePath?: unknown }).modulePath === "string") modules[file] = (ir as { modulePath: string }).modulePath;
+    else modules[file] = file.replace(/\.[A-Za-z0-9]+$/, "").split("/").join(".");
+    const byIdHere = new Map((ir.nodes ?? []).map((m) => [m.id, m]));
     for (const n of ir.nodes ?? []) {
-      if (n.type === "function_def" && typeof n.name === "string") definedNames.add(n.name);
+      if (n.type === "function_def" && typeof n.name === "string") {
+        definedNames.add(n.name);
+        // a method is `Cls.m` (how the linker names its calls), never `m`
+        const parent = n.parentId ? byIdHere.get(n.parentId) : undefined;
+        definitions.push({ name: parent?.type === "class_def" && typeof parent.name === "string" ? `${parent.name}.${n.name}` : n.name, file });
+      }
       facts.push(toFactNode(n, resolved));
       // payload-keys: every call site with the keys it spells. An assignment
       // whose value is a call IS that call's node (parse_cst claims it).
@@ -205,6 +217,8 @@ export function buildQualityFacts(input: FactsInput): QualityFacts {
     get topology() { return (topologyMemo ??= topologyFor(root, env as never, stack)); },
     get importEdges() { return (importEdgesMemo ??= importGraph(env.files as never, workspacePackages(root))); },
     definedNames: [...definedNames],
+    definitions,
+    modules,
     unresolved,
     externalCalls,
     callSites,

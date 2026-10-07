@@ -34,13 +34,17 @@ export interface PathCoverage {
   envVars: string[];
   /** true / false against the export's sources.json; null when there is no export to compare with. */
   changedSinceExport: boolean | null;
+  /** 2026-10-07 - how this file binds names at RUN time (`from m import *`,
+   *  `globals().update(...)`): calls through them link only when m is a
+   *  project module, so its contracts may be incomplete. */
+  runtimeBinds?: string[];
   action: string;
 }
 
 interface EnvLike {
-  files: Record<string, { language?: string; degraded?: { dropped?: number }; nodes?: Array<{ type?: string }> }>;
+  files: Record<string, { language?: string; degraded?: { dropped?: number }; nodes?: Array<{ type?: string; module?: string; names?: string[]; funcName?: string; args?: string[]; parentId?: string | null }> }>;
   threads: ReadonlyArray<{ entryPointId?: string | null; nodes: ReadonlyArray<{ file?: string | null }>; filesReached?: ReadonlyArray<string> }>;
-  entryPoints: ReadonlyArray<{ id: string; kind?: string }>;
+  entryPoints: ReadonlyArray<{ id: string; kind?: string; metadata?: { runBy?: string[] } }>;
 }
 
 export interface CoverageInputs {
@@ -67,6 +71,9 @@ export function coverageFor(paths: ReadonlyArray<string>, inp: CoverageInputs): 
       if (!t.entryPointId) continue;
       if ((t.filesReached ?? []).includes(path) || t.nodes.some((n) => n.file === path)) threads.add(t.entryPointId);
     }
+    // 2026-10-07 — a thin script runs the entry its `__main__` imports
+    // (discover_entry_points.py `runBy`): that thread is the script's
+    for (const e of inp.env.entryPoints) if (e.metadata?.runBy?.includes(path)) threads.add(e.id);
     const all = [...threads].sort();
     const unreached = inp.reach.unreached.filter((u) => u.file === path);
     const defs = (ir?.nodes ?? []).filter((n) => n.type === "function_def").length;
@@ -76,6 +83,10 @@ export function coverageFor(paths: ReadonlyArray<string>, inp: CoverageInputs): 
       ? (inp.exported[path] === undefined ? true : current === null ? null : inp.exported[path] !== sha1(current))
       : null;
     const envVars = (inp.surface?.vars ?? []).filter((v) => v.readers.some((r) => r.file === path)).map((v) => v.name);
+    const runtimeBinds = (ir?.nodes ?? []).flatMap((n) =>
+      n.type === "import_from" && n.names?.length === 1 && n.names[0] === "*" ? [`from ${n.module} import *`]
+      : n.type === "call" && /^(globals|locals)\(\)\.update$/.test(n.funcName ?? "") ? [`${n.funcName}(${(n.args ?? []).join(", ")})`]
+      : []);
     const cov: PathCoverage = {
       path, status, language: ir?.language ?? null,
       ...(ir?.degraded?.dropped ? { dropped: ir.degraded.dropped } : {}),
@@ -85,6 +96,7 @@ export function coverageFor(paths: ReadonlyArray<string>, inp: CoverageInputs): 
       tests: all.filter((t) => tests.has(t)),
       envVars,
       changedSinceExport,
+      ...(runtimeBinds.length ? { runtimeBinds } : {}),
       action: "",
     };
     cov.action = actionFor(cov, current !== null);
@@ -112,6 +124,7 @@ export function formatCoverage(rows: PathCoverage[]): string {
       lines.push(`  functions: ${c.functions.reached} of ${c.functions.defs} on a thread${c.unreached.length ? ` — unreached: ${c.unreached.map((u) => `${u.name}:${u.line} (${u.reason})`).join(", ")}` : ""}`);
       lines.push(`  tests: ${c.tests.length ? c.tests.join(", ") : "no discovered test reaches it"}`);
       if (c.envVars.length) lines.push(`  reads env: ${c.envVars.join(", ")}`);
+      if (c.runtimeBinds?.length) lines.push(`  binds names at runtime: ${c.runtimeBinds.join("; ")} — calls through them link only when the module is this project's; contracts may be incomplete`);
     }
     lines.push(`  changed since export: ${c.changedSinceExport === null ? "no export to compare with" : c.changedSinceExport ? "YES" : "no"}`);
     lines.push("");

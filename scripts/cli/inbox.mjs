@@ -9,9 +9,10 @@ import { parseArgs } from "node:util";
 import { cliPath } from "./winpath.mjs";
 import { buildInbox, decideInbox } from "../../src/server/inbox.ts";
 
-export const INBOX_USAGE = `inbox [--json] [--quick] | inbox agree|reject <id>… | inbox agree|reject --kind <kind>   [--root <dir>]
+export const INBOX_USAGE = `inbox [--json] [--sensors] | inbox agree|reject <id>… | inbox agree|reject --kind <kind>   [--root <dir>]
                                   every decision waiting for a person — plan proposals, rule changes, rules an agent
-                                  stated, groups, scopes, skill and spec drafts — and agree / reject (a person's step)`;
+                                  stated, groups, scopes, skill and spec drafts — and agree / reject (a person's step).
+                                  Listing reads .vibegraph/ only; --sensors also parses the code (drift, regrouping)`;
 
 // the derived map and the plan reconcile — the sensors read both; ratifying
 // groups records what the map holds now, as architecture --ratify does
@@ -39,14 +40,18 @@ async function mapFor(root) {
 
 export async function runInbox(args) {
   let parsed;
-  try { parsed = parseArgs({ args, allowPositionals: true, options: { root: { type: "string" }, json: { type: "boolean" }, kind: { type: "string" }, quick: { type: "boolean" } } }); }
+  try { parsed = parseArgs({ args, allowPositionals: true, options: { root: { type: "string" }, json: { type: "boolean" }, kind: { type: "string" }, quick: { type: "boolean" }, sensors: { type: "boolean" } } }); }
   catch (e) { return { exitCode: 2, text: `${e.message}\n\nusage: vibegraph-knowledge ${INBOX_USAGE}\n` }; }
   const root = resolve(cliPath(parsed.values.root ?? "."));
   const [sub, ...ids] = parsed.positionals;
   const done = (text, exitCode = 0) => ({ exitCode, text: text.endsWith("\n") ? text : `${text}\n` });
-  // --quick skips parsing the project: no sensor that reads the code's map
+  // 2026-10-07 (field report: `inbox` took over two minutes in a pipeline that
+  // only listed decisions) — listing reads .vibegraph/ alone; the sensors that
+  // read the code's map (drift, regroup) parse the project, so they run with
+  // --sensors, or when a decision needs the map (agree / reject).
+  const deciding = sub === "agree" || sub === "reject";
   let map = null;
-  if (!parsed.values.quick) {
+  if ((parsed.values.sensors || deciding) && !parsed.values.quick) {
     try { map = await mapFor(root); }
     catch (e) { process.stderr.write(`inbox: the code's map could not be built (${e.message}) — the sensors that read it are off\n`); }
   }
@@ -61,6 +66,7 @@ export async function runInbox(args) {
       for (const d of i.detail.slice(0, 4)) lines.push(`    ${d}`);
     }
     lines.push("", "decide: vibegraph-knowledge inbox agree <id>… | inbox reject <id>…  (or --kind <kind> for every item of one kind)");
+    if (!map) lines.push("(the checks that read the code — drift, regrouping — were not run: `inbox --sensors` parses the project for them)");
     return done(lines.join("\n"), decidable.length ? 1 : 0);
   }
   if (sub !== "agree" && sub !== "reject") return done(`usage: vibegraph-knowledge ${INBOX_USAGE}`, 2);

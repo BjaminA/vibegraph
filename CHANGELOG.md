@@ -3,6 +3,116 @@
 `vibegraph-knowledge` and the VibeGraph app. Newest first. Each entry says what
 changed and, where an existing user would notice, how behaviour differs.
 
+## 0.28.0 — 2026-10-07
+
+### From a field session: a Python tool set, refactored with the hooks on
+
+A maintainer's write-up of one working session on a real repository (about 25
+standard-library command-line tools, a Windows-side Claude Code against a WSL
+checkout) listed 30 problems. Each fix below has a fixture; most were
+re-checked on a throwaway copy of that repository (deleted afterwards).
+
+**The viewer on Windows with WSL**
+- **A watch that fails never stops the server.** Recursive watch, then a
+  guarded per-file watch, then polling, then off (`src/server/watch_project.ts`).
+  On a `\\wsl.localhost\…` path it polls and says why. Before, one EISDIR from
+  the per-file fallback exited the server before it listened.
+- **The URL opened is the one bound.** The server prints `Open: http://127.0.0.1:<port>`
+  after it listens, and `view` opens exactly that. It used to open `localhost`,
+  which hangs under WSL's mirrored networking, and it built the URL before a
+  busy port moved the server on, so `--open` showed another project.
+- **A busy port says what holds it:** `Port 4200 is another VibeGraph 0.28.0
+  serving /path; trying 4201` (new `GET /vg-about`).
+- **Versions.** `view` prints its version. Each write to plan.json,
+  constraints.json or architecture.json stamps `.vibegraph/writer.json` with the
+  newest version that wrote it, and an older version warns at start-up. `view`
+  and `init` warn when a local and a global install disagree. Node below 20 now
+  stops the CLI with the reason.
+- **The boot screen says what the first pass is doing,** with counts:
+  `parsing 248 of 248 files — a large tree…`, then `tracing threads from N
+  entry points`.
+
+**Python layouts**
+- **A thin script is an entry point.** `from pkg.cli import main` then
+  `sys.exit(main())` seeds at `pkg/cli.py:main`, labelled with the script, and
+  `coverage` counts the script as reached. A `__main__` call that resolves to
+  nothing still gives an entry, on the module, naming what it could not find.
+- **Sibling modules imported by bare name link.** `import envfile` in `tools/`
+  (Python puts the script's folder first on the path) already became
+  `tools.envfile`, but `envfile.load()` never matched it. Aliased project
+  imports (`import pkg.helpers as h`) had the same gap.
+- **`from m import *` and `globals().update(vars(m))`** bind every
+  module-level name of a project module, including the filtered-comprehension
+  form. The parser used to drop star imports entirely. `coverage` says when a
+  file binds names at run time.
+- **A project folder is never a third-party tool.** Methods called on project
+  classes (inherited ones too, `parser.feed()` on an `HTMLParser` subclass) are
+  attributed to the project module; the stack index carries `projectModules`.
+
+**Reachability**
+- **"Never named" reads the source**, not just 80-character previews, so
+  functions named in a long dispatch table are named. Comments and docstrings
+  don't count as uses.
+- **Framework callbacks** are their own reason: `handle_*` on HTMLParser,
+  `visit_*` on NodeVisitor, `do_GET`, `emit`, dunders. They are no longer dead
+  code.
+
+**Rules**
+- **A rule names one definition.** `callers-only` / `calls-through` targets take
+  `file.py:fn`, `pkg.module.fn` or a bare name. A bare name with several
+  definitions is UNVERIFIABLE as ambiguous, with the spellings to use; it is
+  never merged. A call counts only when it is bound to that definition.
+  Before, another file's same-named function produced false offenders.
+- **`import-only`** takes a module's plain name (`envfile`) and otherwise
+  suggests spellings ("did you mean …"). A rule on a module that exists and
+  that nothing imports now PASSES ("satisfied"); it used to read UNVERIFIABLE,
+  which exits 2.
+- **`constraints add` runs the check first.** UNVERIFIABLE is refused unless
+  `--force`; `--dry-run` shows the verdict and stores nothing; a rule the code
+  already breaks is stored, with a note.
+- **Folders of old copies** (versioned names, archive-style folder names, deeper
+  mirrors of live files) are named at boot, in the export and in `check`, with
+  the `.vibegraphignore` line. Their offenders are marked "historical copy".
+
+**Hooks and the person gate**
+- **A person's step also needs a terminal.** CLAUDECODE does not cross
+  `wsl.exe`, so a Windows-side Claude's commands inside WSL looked like a
+  person's. Person-only steps (plan agree, constraints ratify, …) are now
+  refused when no terminal is attached; `VG_PERSON_NO_TTY=1` is the escape for
+  a person's own script. `doctor` and `hook install --target wsl` say how to
+  carry CLAUDECODE through WSLENV.
+- **Edits through Claude Code's PowerShell tool are checked**: the post-edit
+  matcher includes `PowerShell`.
+- **`doctor`** names a hook whose Node or CLI path no longer exists (an nvm
+  upgrade) and reports when each hook last fired. `hook install` warns when the
+  Node it records is nvm's. The docs say hooks start "from the next session, or
+  when Claude Code reloads its settings".
+- **Less noise.** The prompt hook needs two distinctive words, or every word
+  of a seed's name. Everyday words ("line", "keep", "date") route nothing, and
+  test threads only come up for a prompt about tests. More than 8 affected
+  tests are summarised by file. `hook run` always prints what it did.
+
+**Plan and inbox**
+- An open question that an agreed module or a promoted rule may already answer
+  is marked "possibly answered by …", by location: a rule naming a new
+  top-level folder answers "at the repository root".
+- `inbox` lists without parsing (0.4 s on the field repository); `--sensors`
+  runs the code-reading checks.
+
+**Not done, with reasons:** streaming the parser's output (output size still
+counts against the 384 MB buffer; ignoring is the fix today); naming an
+external program run by path (`shutil.which("x")` stored on `self`, then
+passed to `subprocess.run`) needs value flow through an attribute, which
+VibeGraph does not guess; and a mixed-up loop effect (a pure helper charged
+with a same-named function's file-system call) did not reproduce, so the
+case is pinned by a fixture and nothing changed. The release-side item (wait
+until npm serves a new version before announcing it) belongs to the publish
+step.
+
+Tests: test:serve-watch (5), test:python-layouts (12), test:field-hooks (6),
+test:writer-stamp (3), test:historical-copies (2), test:plan-answered (2);
+fixture `test/fixtures/python_layout/scripts_demo`.
+
 ## 0.27.8 — 2026-10-07
 
 ### Arrows say what they carry

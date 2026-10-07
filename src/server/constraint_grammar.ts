@@ -34,6 +34,7 @@ import {
 import { checkAlwaysWith, checkIdScheme, checkLayer, checkSingleWriter, describeAuthority, describeLayer, isAuthorityCheck, isLayerCheck, type AlwaysWithCheck, type ArchCheckFacts, type IdSchemeCheck, type LayerCheck, type SingleWriterCheck } from "./arch_checks.ts";
 import { checkTopology, describeTopologyCheck, isTopologyCheck, type TopologyCheck } from "./topology_checks.ts";
 import { pathAllowed, describeAllowList } from "../shared/path_match.ts";
+import { callReaches, modulesNamed, resolveTarget, type TargetFacts } from "./check_targets.ts";
 
 /** What a human can say that the IR can check.
  *
@@ -88,7 +89,7 @@ export interface ExternalCallFact {
   nodeId: string;
 }
 
-export interface CheckFacts extends ArchCheckFacts {
+export interface CheckFacts extends ArchCheckFacts, TargetFacts {
   references: ReferenceFact[];
   /** file -> the tool names imported there (the stack index's view). */
   importsByFile: Record<string, string[]>;
@@ -132,19 +133,29 @@ function externalMatches(target: string, label: string): boolean {
 
 function callersOf(facts: CheckFacts, target: string): Array<{ fn: string; file: string; nodeId: string }> {
   const out: Array<{ fn: string; file: string; nodeId: string }> = [];
-  if (isExternalTarget(target)) {
+  const t = resolveTarget(facts, target);
+  if (t.kind === "external") {
     for (const c of facts.externalCalls ?? []) {
       if (!externalMatches(target, c.label)) continue;
       const fn = enclosingFunction(c.nodeId);
       if (fn) out.push({ fn, file: c.file, nodeId: c.nodeId });
     }
   }
+  // 2026-10-07 — a call counts only when it is bound to THIS definition
+  // (check_targets.ts): another file's same-named function is not it
+  const def = t.kind === "project" ? t : { name: target, file: null };
   for (const r of facts.references) {
-    if (r.toName !== target) continue;
+    if (!callReaches(r, def)) continue;
     const fn = enclosingFunction(r.fromNodeId);
     if (fn) out.push({ fn, file: r.fromFile, nodeId: r.fromNodeId });
   }
   return out;
+}
+
+/** The name a target's definition goes by (`tools/x.py:fn` -> fn). */
+function targetName(facts: CheckFacts, target: string): string {
+  const t = resolveTarget(facts, target);
+  return t.kind === "project" ? t.name : target;
 }
 
 function checkCallsThrough(
@@ -153,15 +164,19 @@ function checkCallsThrough(
 ): CheckResult {
   const { target, through } = check;
   const known = new Set(facts.definedNames);
+  for (const spelled of [target, through]) {
+    const t = resolveTarget(facts, spelled);
+    if (t.kind === "error") return { verdict: "unverifiable", reason: `${t.reason}. NOT treated as satisfied.`, offenders: [] };
+  }
   const callers = callersOf(facts, target);
-  if (!known.has(target) && callers.length === 0) {
+  if (!known.has(targetName(facts, target)) && callers.length === 0) {
     return {
       verdict: "unverifiable",
       reason: `the IR knows no definition of \`${target}\` and no call to it. NOT treated as satisfied.`,
       offenders: [],
     };
   }
-  if (!known.has(through)) {
+  if (!known.has(targetName(facts, through))) {
     return {
       verdict: "unverifiable",
       reason: `the IR knows no definition of \`${through}\` — the guard this constraint names `
@@ -174,10 +189,11 @@ function checkCallsThrough(
   const guardCallers = new Set(
     callersOf(facts, through).map((c) => `${c.file}::${c.fn}`),
   );
+  const throughName = targetName(facts, through);
   const offenders = callers
-    .filter((c) => c.fn !== through && !guardCallers.has(`${c.file}::${c.fn}`))
+    .filter((c) => c.fn !== throughName && !guardCallers.has(`${c.file}::${c.fn}`))
     .map((c) => `${c.file}:${c.nodeId}`);
-  const hidden = hiddenCandidates(facts, target);
+  const hidden = hiddenCandidates(facts, targetName(facts, target));
   if (offenders.length) {
     return {
       verdict: "violated",
@@ -249,17 +265,21 @@ function checkCallersOnly(
 ): CheckResult {
   const { target } = check;
   const known = new Set(facts.definedNames);
+  const t = resolveTarget(facts, target);
+  if (t.kind === "error") return { verdict: "unverifiable", reason: `${t.reason}. NOT treated as satisfied.`, offenders: [] };
+  const def = t.kind === "project" ? t : { name: target, file: null };
   const calls: ReferenceFact[] = [
-    ...facts.references.filter((r) => r.toName === target),
+    // 2026-10-07 — bound to THIS definition (check_targets.ts), not by name
+    ...facts.references.filter((r) => callReaches(r, def)),
     // An external API target (`lib.fn`, `*.fn`) counts its own call sites.
-    ...(isExternalTarget(target)
+    ...(t.kind === "external"
       ? (facts.externalCalls ?? []).filter((c) => externalMatches(target, c.label))
         .map((c) => ({ fromFile: c.file, fromNodeId: c.nodeId, toFile: null, toName: target }))
       : []),
   ];
-  const hidden = hiddenCandidates(facts, target);
+  const hidden = hiddenCandidates(facts, def.name);
 
-  if (!known.has(target) && calls.length === 0) {
+  if (!known.has(def.name) && calls.length === 0) {
     return {
       verdict: "unverifiable",
       reason: `the IR knows no definition of \`${target}\` and no call to it — `
@@ -317,14 +337,36 @@ function checkImportOnly(
   facts: CheckFacts,
   check: Extract<ConstraintCheck, { rule: "import-only" }>,
 ): CheckResult {
-  const importers = Object.entries(facts.importsByFile)
-    .filter(([, tools]) => tools.includes(check.tool))
-    .map(([file]) => file);
+  // 2026-10-07 (field report) — a project module may be named plainly
+  // (`collect` for tools/collect.py, imported as `from collect import …`):
+  // the one project module it names stands for it.
+  const importersOf = (tool: string) => Object.entries(facts.importsByFile)
+    .filter(([, tools]) => tools.includes(tool)).map(([file]) => file);
+  let tool = check.tool;
+  let importers = importersOf(tool);
+  const named = modulesNamed(facts, check.tool);
+  if (importers.length === 0 && named.length === 1 && named[0].module !== tool) {
+    tool = named[0].module;
+    importers = importersOf(tool);
+  }
+  const spelled = tool === check.tool ? `\`${check.tool}\`` : `\`${check.tool}\` (the project module ${tool})`;
   if (importers.length === 0) {
+    // the module EXISTS and nothing imports it: the rule holds — that absence
+    // is what it asks for. Only a module VibeGraph cannot find is unverifiable.
+    if (named.length === 1) {
+      return {
+        verdict: "pass",
+        reason: `satisfied: ${spelled} exists (${named[0].file}) and no file outside ${describeAllowList(check.files, check.allowTests)} imports it — no file imports it at all`,
+        offenders: [],
+      };
+    }
+    const alternatives = named.length > 1
+      ? ` Several project modules are called that: ${named.map((m) => `\`${m.module}\``).join(", ")} — name one.`
+      : suggestImport(facts, check.tool);
     return {
       verdict: "unverifiable",
       reason: `no file in the IR imports \`${check.tool}\` — the constraint may be about a `
-        + "tool this project does not use yet. NOT treated as satisfied.",
+        + `tool this project does not use yet.${alternatives} NOT treated as satisfied.`,
       offenders: [],
     };
   }
@@ -333,15 +375,25 @@ function checkImportOnly(
   if (offenders.length) {
     return {
       verdict: "violated",
-      reason: `\`${check.tool}\` is imported outside ${describeAllowList(check.files, check.allowTests)}: ${offenders.join(", ")}.`,
+      reason: `${spelled} is imported outside ${describeAllowList(check.files, check.allowTests)}: ${offenders.join(", ")}.`,
       offenders,
     };
   }
   return {
     verdict: "pass",
-    reason: `\`${check.tool}\` is imported only in ${importers.join(", ")}`,
+    reason: `${spelled} is imported only in ${importers.join(", ")}`,
     offenders: [],
   };
+}
+
+/** "did you mean `tools.collect`? 3 files import it" — the imported names
+ *  that end with, or contain, what was asked for. */
+function suggestImport(facts: CheckFacts, asked: string): string {
+  const counts = new Map<string, number>();
+  for (const tools of Object.values(facts.importsByFile)) for (const t of new Set(tools)) counts.set(t, (counts.get(t) ?? 0) + 1);
+  const near = [...counts].filter(([t]) => t !== asked && (t.endsWith(`.${asked}`) || t.endsWith(`/${asked}`) || t.includes(asked)))
+    .sort((a, b) => b[1] - a[1]).slice(0, 3);
+  return near.length ? ` Did you mean ${near.map(([t, n]) => `\`${t}\` (${n} file${n === 1 ? "" : "s"} import it)`).join(" or ")}?` : "";
 }
 
 /** Evaluate one constraint's structured half against the project's facts. */

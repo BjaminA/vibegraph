@@ -25,12 +25,16 @@ import { isAgentRun } from "./actor.mjs";
 import { ratifyConstraint } from "../../src/server/constraint_edit.ts";
 import { personName } from "../../src/server/person.ts";
 import { AMEND_SUBS, runConstraintAmend } from "./constraint_amend.mjs";
+import { checkStatedRules } from "../../src/server/constraint_report.ts";
+import { loadEnvelope } from "../quality_check.mjs";
 
 export const CONSTRAINTS_USAGE = `constraint(s) list|add|remove|ratify|show|edit|propose|accept|reject [...]   the stated rules (.vibegraph/constraints.json); zero tokens
       list [<root>] [--json]
       add [<root>] --kind <${CONSTRAINT_KINDS.join("|")}> --text "<the rule, with its reason>"
           scope: --all | --threads <entry ids> | --files <paths> | --tools <names>   (comma-separated)
           [--note "<why>"] [--check '<json>'] [--policy '<json>']   or the whole object: --json '<object>'
+          a check is run against the code first: UNVERIFIABLE is refused (store anyway: --force);
+          --dry-run shows the verdict and stores nothing
       remove <id> [<root>]
       ratify <id> [<root>]    an agent- or orchestrator-stated rule becomes human-stated
       show <id> [--json]      the rule, its history (who, when, before → after) and open proposals
@@ -62,8 +66,18 @@ export function formatConstraint(c) {
   return lines.join("\n");
 }
 
+/** A new rule's checks against the code as it is now (the `check` loop). */
+function precheck(root, value, source, pipeline) {
+  try {
+    const { absRoot, envelope } = loadEnvelope(root, undefined, pipeline ?? {});
+    return checkStatedRules({ envelope, root: absRoot, constraints: [{ ...value, id: "new", source, createdAt: new Date().toISOString() }] });
+  } catch (e) {
+    return { results: [{ verdict: "unverifiable", described: "the project", reason: `could not parse it to check (${e.message})` }] };
+  }
+}
+
 /** @returns {{ lines: string[], messages: string[], exitCode: number }} */
-export function runConstraints({ root, sub, id, values }) {
+export function runConstraints({ root, sub, id, values, pipeline }) {
   const lines = [];
   const messages = [];
   if (sub === "list") {
@@ -100,8 +114,21 @@ export function runConstraints({ root, sub, id, values }) {
     // Run by Claude Code (actor.mjs): the rule is the model's, labelled so,
     // until a person ratifies it — the same label an MCP-stated rule carries.
     const source = isAgentRun() ? "agent" : "human";
+    // 2026-10-07 (field report) — a check is evaluated BEFORE it is stored: a
+    // rule that cannot be checked was only found on its first `check`, and
+    // fixing it took a proposal and a person's accept.
+    const pre = v.value.check || v.value.checks?.length ? precheck(root, v.value, source, pipeline) : null;
+    if (pre) {
+      for (const r of pre.results) lines.push(`  ${r.verdict.toUpperCase()} — ${r.described}: ${r.reason}`);
+      const unverifiable = pre.results.filter((r) => r.verdict === "unverifiable");
+      if (values["dry-run"]) return { lines: ["dry run — nothing stored. Against the current code:", ...lines], messages, exitCode: pre.results.some((r) => r.verdict === "violated") ? 1 : unverifiable.length ? 2 : 0 };
+      if (unverifiable.length && !values.force) {
+        return { lines, messages: ["refused: this check is UNVERIFIABLE against the current code (above) — fix the spelling, or store it anyway with --force"], exitCode: 2 };
+      }
+    }
     const c = addConstraint(root, v.value, source);
-    lines.push(`stated ${c.id} (${source}${source === "agent" ? " — a person ratifies it with `constraints ratify`" : ""}):`, formatConstraint(c));
+    lines.unshift(`stated ${c.id} (${source}${source === "agent" ? " — a person ratifies it with `constraints ratify`" : ""}):`, formatConstraint(c), ...(pre ? ["against the current code:"] : []));
+    if (pre?.results.some((r) => r.verdict === "violated")) messages.push(`note: the code VIOLATES ${c.id} today — \`check\` will fail until the offenders above are fixed`);
     return { lines, messages, exitCode: 0 };
   }
   if (sub === "remove") {

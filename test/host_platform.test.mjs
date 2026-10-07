@@ -20,7 +20,7 @@ import { detectHost, openUrlCommands, isWindowsSide, pythonBin } from "../src/se
 import { projectIgnore, parseIgnore } from "../src/server/project_ignore.ts";
 import { findClaude } from "../src/server/find_claude.ts";
 import { buildPolyglotEnvelope } from "../scripts/regen_polyglot.mjs";
-import { hostWarnings } from "../scripts/cli/host_check.mjs";
+import { hostWarnings, nodeTooOld } from "../scripts/cli/host_check.mjs";
 
 const tmp = mkdtempSync(join(tmpdir(), "vg-host-"));
 after(() => rmSync(tmp, { recursive: true, force: true }));
@@ -93,7 +93,9 @@ test("WSL: a Linux Claude before a Windows one on PATH; the Windows one only as 
 });
 
 test("host warnings: an old Node; the Windows install run from WSL", () => {
-  assert.match(hostWarnings({}, "/home/u/x/dist/cli.mjs", "18.19.1").join("\n"), /Node 18\.19\.1.*Node 20 or newer/);
+  // 2026-10-07 — a Node below 20 STOPS the command (nodeTooOld), not a note
+  assert.match(nodeTooOld("18.19.1"), /Node 18\.19\.1.*Node 20 or newer, and stops here/);
+  assert.equal(nodeTooOld("20.0.0"), null);
   const wsl = hostWarnings({ WSL_DISTRO_NAME: "Ubuntu" }, "/mnt/c/Users/u/AppData/Roaming/npm/node_modules/vibegraph-knowledge/dist/cli.mjs", "24.1.0");
   assert.match(wsl.join("\n"), /WINDOWS install .* run from WSL/);
   assert.deepEqual(hostWarnings({ WSL_DISTRO_NAME: "Ubuntu" }, "/home/u/.nvm/x/dist/cli.mjs", "24.1.0"), []);

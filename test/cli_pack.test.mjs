@@ -187,7 +187,7 @@ test("init --hooks --skill from the package: the installed hook commands run on 
   assert.equal(init.status, 0, init.stderr);
   assert.match(init.stdout, /hooks installed/);
   assert.match(init.stdout, /skill installed/);
-  assert.match(init.stdout, /apply from the NEXT session/, "says when the hooks start to work");
+  assert.match(init.stdout, /apply from the next Claude Code session, or sooner when Claude Code reloads its settings/, "says when the hooks start to work");
 
   const skill = readFileSync(join(proj, ".claude", "skills", "vibegraph", "SKILL.md"), "utf-8");
   assert.match(skill, /^---\nname: vibegraph\ndescription: /, "a Claude Code skill: frontmatter with name and description");

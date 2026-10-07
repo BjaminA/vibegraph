@@ -15,6 +15,7 @@
 // a plan about its objective.
 
 import { validateDecisions } from "./plan_decisions.ts";
+import { stampWriter } from "./writer_stamp.ts";
 import * as fs from "fs";
 import * as path from "path";
 import type {
@@ -251,6 +252,7 @@ export function savePlan(root: string, plan: Plan): { path?: string; error?: str
     if (!(out.resolved as unknown[] | undefined)?.length) delete out.resolved;
     fs.writeFileSync(`${file}.tmp`, JSON.stringify(out, null, 2) + "\n", "utf-8");
     fs.renameSync(`${file}.tmp`, file);
+    stampWriter(root, "plan.json");
     // The converted legacy file is now a second, stale copy: remove it.
     fs.rmSync(path.join(root, LEGACY_PLAN_FILE), { force: true });
   } catch (e: any) {

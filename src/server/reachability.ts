@@ -27,9 +27,58 @@
 // Test files are left out — every function in one is a test or a fixture. A
 // test is found by its entry point or by naming convention.
 
+//   framework-callback         a method its BASE class calls — `handle_starttag`
+//                              on an HTMLParser subclass, `visit_Name` on an
+//                              ast.NodeVisitor (2026-10-07, field report: they
+//                              were listed as the strongest dead-code
+//                              candidates). The table is FRAMEWORK_CALLBACKS.
+//
+// 2026-10-07 — "never named" is a claim about the SOURCE, and node previews are
+// cut at ~80 characters: the functions in a long dispatch table
+// (`{"rows": "jobs", "parse": _row_jobs}`, many lines) were never in any
+// preview. Given the project root, a name the IR did not see is looked for in
+// the source text before it is called never named.
+
+import * as fs from "fs";
+import * as path from "path";
+
 export type UnreachedReason =
   | "never-named" | "exported-never-named" | "called-only-from-unreached"
-  | "named-not-linked" | "walk-gap-nested";
+  | "named-not-linked" | "walk-gap-nested" | "framework-callback";
+
+/** Base class (last dotted segment) → the methods the framework calls on a subclass. */
+export const FRAMEWORK_CALLBACKS: Record<string, RegExp> = {
+  HTMLParser: /^(handle_\w+|unknown_decl|error|reset|close)$/,
+  TestCase: /^(setUp|tearDown|setUpClass|tearDownClass|asyncSetUp|asyncTearDown|test\w*|run|debug)$/,
+  IsolatedAsyncioTestCase: /^(asyncSetUp|asyncTearDown|setUp|tearDown|test\w*)$/,
+  JSONEncoder: /^(default|encode|iterencode)$/,
+  JSONDecoder: /^(decode|raw_decode)$/,
+  NodeVisitor: /^(visit\w*|generic_visit)$/,
+  NodeTransformer: /^(visit\w*|generic_visit)$/,
+  BaseRequestHandler: /^(handle|setup|finish)$/,
+  StreamRequestHandler: /^(handle|setup|finish)$/,
+  DatagramRequestHandler: /^(handle|setup|finish)$/,
+  BaseHTTPRequestHandler: /^(do_[A-Z]+|log_message|log_request|log_error|handle\w*|send_\w+|end_headers)$/,
+  SimpleHTTPRequestHandler: /^(do_[A-Z]+|log_message|log_request|log_error|list_directory|translate_path|send_head|end_headers)$/,
+  Handler: /^(emit|handle|format|flush|close|createLock|acquire|release|filter)$/,
+  StreamHandler: /^(emit|handle|format|flush|close)$/,
+  FileHandler: /^(emit|handle|format|flush|close)$/,
+  Formatter: /^(format\w*|usesTime|converter)$/,
+  Filter: /^filter$/,
+  Thread: /^run$/,
+  Process: /^run$/,
+  Cmd: /^(do_\w+|help_\w+|complete_\w+|default|emptyline|precmd|postcmd|preloop|postloop|onecmd|completedefault)$/,
+  Action: /^(__call__|format_usage)$/,
+  ArgumentParser: /^(error|exit|format_\w+|print_\w+|parse_\w+|convert_arg_line_to_args)$/,
+  Enum: /^(_generate_next_value_|_missing_)$/,
+  Exception: /^(__str__|__repr__|__reduce__)$/,
+  ContextDecorator: /^(__enter__|__exit__)$/,
+  Protocol: /^\w+$/,
+};
+/** A dunder the language itself calls (`__repr__`, `__iter__`, `__enter__`…) on any class. */
+const DUNDER = /^__\w+__$/;
+
+export const FRAMEWORK_CALLBACK_REASON = "called by its base class";
 
 export interface UnreachedDef { file: string; id: string; name: string; line: number; reason: UnreachedReason; callers: number }
 
@@ -46,7 +95,7 @@ export interface Reachability {
 
 interface IrNode { id: string; type?: string; name?: string; line?: number; parentId?: string | null;
   isExported?: boolean; isDefaultExport?: boolean; funcName?: string; preview?: string; callTarget?: string;
-  args?: unknown[]; names?: unknown[] }
+  args?: unknown[]; names?: unknown[]; bases?: unknown[]; literals?: unknown[] }
 interface IrEdge { type?: string; source: string; target: string; targetFile?: string }
 interface EnvLike {
   files: Record<string, { nodes?: IrNode[]; edges?: IrEdge[] }>;
@@ -58,7 +107,48 @@ export const TEST_FILE = /(^|\/)(tests?|__tests__|spec)\/|(^|\/)test_[^/]*$|_tes
 
 const WORD = /[A-Za-z_$][\w$]*/g;
 
-export function computeReachability(env: EnvLike): Reachability {
+/** Source minus block docstrings and comments (`"""…"""`, `'''…'''`, `/* … *\/`,
+ *  `# …` and `// …` to the end of the line). Approximate on purpose: a `#`
+ *  inside a string loses the rest of that line, which can only make a name
+ *  look LESS used, never invent a use. */
+export function withoutCommentary(src: string): string {
+  return src
+    .replace(/"""[\s\S]*?"""|'''[\s\S]*?'''/g, " ")
+    .replace(/\/\*[\s\S]*?\*\//g, " ")
+    .replace(/(^|[^:\w"'])\/\/[^\n]*/g, "$1")
+    .replace(/(^|\s)#[^\n!][^\n]*/g, "$1");
+}
+
+/** The source text, for the names the IR's previews did not carry. */
+function sourceNameCounter(root: string | undefined, files: string[]): ((name: string) => number) | null {
+  if (!root) return null;
+  let texts: string[] | null = null;
+  const counts = new Map<string, number>();
+  return (name) => {
+    if (counts.has(name)) return counts.get(name)!;
+    // a comment or a docstring that mentions a name ("`old` is named nowhere")
+    // is not a use; a one-line string can be (`getattr(mod, "name")`), so it stays
+    texts ??= files.map((f) => { try { return withoutCommentary(fs.readFileSync(path.join(root, f), "utf-8")); } catch { return ""; } });
+    const re = new RegExp(`(?<![\\w$])${name.replace(/[$]/g, "\\$")}(?![\\w$])`, "g");
+    let n = 0;
+    for (const t of texts) n += (t.match(re) ?? []).length;
+    counts.set(name, n);
+    return n;
+  };
+}
+
+function frameworkCallback(name: string, klass: IrNode | undefined): boolean {
+  if (!klass) return false;
+  // a constructor is reached through its class's name, not called back
+  if (DUNDER.test(name) && name !== "__init__" && name !== "__new__") return true;
+  for (const b of klass.bases ?? []) {
+    const base = String(b).replace(/\[.*$/, "").split(".").pop() ?? "";
+    if (FRAMEWORK_CALLBACKS[base]?.test(name)) return true;
+  }
+  return false;
+}
+
+export function computeReachability(env: EnvLike, opts: { root?: string } = {}): Reachability {
   const reached = new Set<string>();
   for (const t of env.threads) for (const n of t.nodes) if (n.file && n.irNodeId) reached.add(`${n.file}::${n.irNodeId}`);
   for (const e of env.entryPoints) reached.add(`${e.file}::${e.irNodeId}`);
@@ -69,6 +159,7 @@ export function computeReachability(env: EnvLike): Reachability {
   // written anywhere a name can be USED (not where it is defined).
   const callers = new Map<string, string[]>();
   const named = new Set<string>();
+  const defsNamed = new Map<string, number>();
   for (const [file, ir] of Object.entries(env.files)) {
     for (const e of ir.edges ?? []) {
       if (e.type !== "reference") continue;
@@ -76,11 +167,15 @@ export function computeReachability(env: EnvLike): Reachability {
       (callers.get(k) ?? callers.set(k, []).get(k)!).push(`${file}::${e.source}`);
     }
     for (const n of ir.nodes ?? []) {
-      if (n.type === "function_def" || n.type === "class_def") continue;
-      const texts = [n.funcName, n.preview, n.callTarget, ...(n.args ?? []), ...(n.names ?? [])];
+      if (n.type === "function_def" || n.type === "class_def") { defsNamed.set(String(n.name ?? ""), (defsNamed.get(String(n.name ?? "")) ?? 0) + 1); continue; }
+      const texts = [n.funcName, n.preview, n.callTarget, ...(n.args ?? []), ...(n.names ?? []), ...(n.literals ?? [])];
       for (const s of texts) for (const w of String(s ?? "").match(WORD) ?? []) named.add(w);
     }
   }
+  // written more often than it is defined = used somewhere the IR did not
+  // spell out (a long literal, a decorator argument, a string-free reference)
+  const sourceCount = sourceNameCounter(opts.root, Object.keys(env.files));
+  const isNamed = (name: string) => named.has(name) || (!!sourceCount && !!name && sourceCount(name) > (defsNamed.get(name) ?? 1));
 
   const unreached: UnreachedDef[] = [];
   const filesUnreached: Array<{ file: string; defs: number }> = [];
@@ -110,15 +205,16 @@ export function computeReachability(env: EnvLike): Reachability {
       // A constructor is reached through its class's name (`new X`, `X()`).
       const useName = (name === "constructor" || name === "__init__") && klass?.name ? String(klass.name) : name;
       const reason: UnreachedReason = enclosing ? "walk-gap-nested"
+        : frameworkCallback(name, klass) ? "framework-callback"
         : cs.length ? "called-only-from-unreached"
-        : named.has(useName) ? "named-not-linked"
+        : isNamed(useName) ? "named-not-linked"
         : (n.isExported || n.isDefaultExport) ? "exported-never-named"
         : "never-named";
       unreached.push({ file, id: n.id, name, line: n.line ?? 0, reason, callers: cs.length });
     }
     if (fileDefs > 0 && fileReached === 0) filesUnreached.push({ file, defs: fileDefs });
   }
-  const counts = { "never-named": 0, "exported-never-named": 0, "called-only-from-unreached": 0, "named-not-linked": 0, "walk-gap-nested": 0 } as Record<UnreachedReason, number>;
+  const counts = { "never-named": 0, "exported-never-named": 0, "called-only-from-unreached": 0, "named-not-linked": 0, "walk-gap-nested": 0, "framework-callback": 0 } as Record<UnreachedReason, number>;
   for (const u of unreached) counts[u.reason]++;
   unreached.sort((a, b) => a.file.localeCompare(b.file) || a.line - b.line);
   filesUnreached.sort((a, b) => a.file.localeCompare(b.file));
@@ -136,6 +232,8 @@ const SECTION: Array<[UnreachedReason, string, string, string]> = [
     "A RESOLUTION GAP, not dead code: the name is written somewhere (a handler passed by name, a chained call, a tag the linker did not bind). Treat it as used."],
   ["walk-gap-nested", "Helpers nested inside reached functions", "a VibeGraph limit: treat as reached",
     "A LIMIT of VibeGraph, not of the code: declared inside a function a thread reaches and called there, but the thread walk does not follow a locally declared helper yet. Treat it as reached."],
+  ["framework-callback", "Framework callbacks", "called by its base class: treat as used",
+    "Methods the base class calls on a subclass (HTMLParser's handle_starttag, NodeVisitor's visit_*, a request handler's do_GET) or the language calls (__repr__, __enter__). Not dead: whatever reaches the class reaches them."],
 ];
 
 /** The report a reader acts on: files first, then each reason in turn. */
@@ -167,7 +265,7 @@ export function formatReachabilityMd(r: Reachability): string {
     // they are not candidates for anything, and on a real codebase they are
     // most of the report (a private production codebase: 1,087 of 1,907). The full list rides
     // reachability.json with --with-ir.
-    const brief = k === "named-not-linked" || k === "walk-gap-nested";
+    const brief = k === "named-not-linked" || k === "walk-gap-nested" || k === "framework-callback";
     for (const [file, us] of byFile) {
       lines.push(brief
         ? `- \`${file}\` — ${us.length}`

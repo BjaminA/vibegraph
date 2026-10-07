@@ -4,7 +4,7 @@
 
 ```
 npm install -g vibegraph-knowledge
-vibegraph-knowledge view /path/to/project     # the visualisation at http://localhost:4200
+vibegraph-knowledge view /path/to/project     # the visualisation, at the URL it prints (http://127.0.0.1:4200)
 vibegraph-knowledge init --hooks --skill && vibegraph-knowledge export   # Claude Code, enforced
 ```
 

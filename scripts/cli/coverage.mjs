@@ -24,7 +24,7 @@ export function runCoverage({ root, files, envelope, pipeline, cache = false }) 
   if (existsSync(sourcesPath)) { try { exported = JSON.parse(readFileSync(sourcesPath, "utf-8")); } catch { exported = null; } }
   return coverageFor(rels, {
     env, parseErrors,
-    reach: computeReachability(env),
+    reach: computeReachability(env, { root: absRoot }),
     surface: buildEnvSurface(env, envDeclarations(absRoot)),
     exported,
     readFile: (p) => { try { return readFileSync(join(absRoot, p), "utf-8"); } catch { return null; } },

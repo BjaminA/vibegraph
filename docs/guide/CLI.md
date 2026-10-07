@@ -196,7 +196,7 @@ vibegraph-knowledge view [<path>] [--port <n>] [--open]
 ```
 
 Starts the web app on a project (or one file) and serves it at
-<http://localhost:4200> until `Ctrl-C`. The same app `./runVis.sh` builds
+<http://127.0.0.1:4200> (or the next free port — it prints the one it bound) until `Ctrl-C`. The same app `./runVis.sh` builds
 from a clone, shipped prebuilt in this package. The first run installs
 `libcst` and `black` 24+ into `~/.cache/vibegraph-knowledge`; `python3` must be
 on your PATH. `--open` opens your browser once it is ready; `--port` (or

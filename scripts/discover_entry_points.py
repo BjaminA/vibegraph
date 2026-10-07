@@ -40,6 +40,8 @@ for _s in (sys.stdin, sys.stdout, sys.stderr):
 from pathlib import Path
 from typing import Optional
 
+from thin_script_entry import add_thin_entry, could_be_program, imported_heads, linked_def, unresolved_entry
+
 # ─────────────────────────────────────────── classification tables ──
 
 ROUTE_DECORATOR_RE = re.compile(
@@ -168,16 +170,24 @@ def _enclosing_top_level_fn(node, ir, by_id):
 # ─────────────────────────────────────────── per-kind detectors ─────
 
 
-def detect_cli(file, ir):
+def detect_cli(file, ir, all_files=None):
     """`if __name__ == "__main__":` and CLI-framework constructor calls.
 
     Both signals resolve to the *enclosing top-level function* and
     dedupe on it — `argparse.ArgumentParser()` inside `main()` plus a
     `if __name__: main()` at the bottom emits one entry, not two.
+
+    2026-10-07 (field report): a THIN script — `from pkg.cli import main`
+    then `sys.exit(main())` — defines no main of its own. The call is followed
+    through the linker's cross-file edge and the entry seeds at the function
+    it runs, with `runBy` naming the script. A block whose call resolves to
+    nothing still gets an entry, on the module, saying which name it could
+    not find: the gap is visible instead of the script vanishing.
     """
     by_id = {n["id"]: n for n in ir["nodes"]}
     fn_by_name = {f["name"]: f for f in find_function_defs(ir)}
     seen = {}  # fn_id -> entry index
+    imported = imported_heads(ir)
 
     # Signal 1: top-level `if __name__ == "__main__":` block.
     for n in ir["nodes"]:
@@ -194,18 +204,34 @@ def detect_cli(file, ir):
         # call one level down as an M-NEST minted NESTED call node
         # (parentId = the wrapping call), and the direct-child test
         # silently dropped the entry point.
+        found = False
+        unresolved = []
         for c in ir["nodes"]:
             if not _inside_block(c, n["id"], by_id):
                 continue
-            target_name = None
+            target = None
             if c["type"] == "call":
-                target_name = (c.get("funcName") or "").split(".")[0]
+                target = c.get("funcName") or ""
             elif c["type"] == "assignment" and c.get("valueKind") == "call":
-                target_name = (c.get("callTarget") or "").split(".")[0]
+                target = c.get("callTarget") or ""
+            target_name = (target or "").split(".")[0]
             if target_name and target_name in fn_by_name:
+                found = True
                 fn = fn_by_name[target_name]
                 if fn["id"] not in seen:
                     seen[fn["id"]] = make_entry(file, fn, kind="cli")
+                continue
+            if not target_name:
+                continue
+            linked = linked_def(c, ir, all_files)
+            if linked:
+                found = True
+                add_thin_entry(seen, file, linked[0], linked[1], make_entry)
+                continue
+            if could_be_program(target, imported):
+                unresolved.append(target)
+        if not found and unresolved:
+            seen[(file, "module")] = unresolved_entry(file, unresolved)
 
     # Signal 2: argparse / click / typer construction anywhere in the
     # file. Resolves to the enclosing top-level function (the `main`
@@ -507,7 +533,7 @@ def discover(all_files, manual_seeds_path: Optional[str] = None):
     for file, ir in all_files.items():
         claim(detect_model_forward(file, ir), "model")
     for file, ir in all_files.items():
-        claim(detect_cli(file, ir), "cli")
+        claim(detect_cli(file, ir, all_files), "cli")
     for file, ir in all_files.items():
         claim(detect_test(file, ir), "test")
     # public_api needs the seeded set to skip route/cli/test entries.

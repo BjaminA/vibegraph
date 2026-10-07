@@ -87,7 +87,7 @@ vibegraph-knowledge view . --open --port 4300     # open the browser for you, on
 
 The first run provisions Python (about a minute); later starts take a few
 seconds. When it prints **VibeGraph is running!**, open
-**<http://localhost:4200>**. You should see a boot animation, then the
+**<http://127.0.0.1:4200>** (the URL `view` prints; the next free port if 4200 is taken). You should see a boot animation, then the
 **architecture map** of your project. `Ctrl-C` stops it.
 
 The code editor (Monaco) loads from a CDN, so viewing and editing code needs an

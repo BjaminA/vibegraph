@@ -12,7 +12,7 @@ import type { Thread } from "../threads";
 import type { ReadmeStatus } from "../ReadmeBadge";
 import type { ThreadSkillRecord, ArtifactRecordWire } from "../types";
 import { buildLayout, buildProjectLayout, astEdgesToFlow, applyFilters } from "../layout";
-import { dismissBootScreen } from "../boot";
+import { dismissBootScreen, setBootStatus } from "../boot";
 
 /** The server's choice of first view (VG_START_VIEW, a meta tag in the page
  *  shell): "architecture" (default) or "index". */
@@ -155,6 +155,8 @@ export function useWebSocketHandler(actions: WebSocketHandlerActions, deps: WebS
       // The boot screen (server-painted, src/shared/boot_markup.ts) stays up
       // until the first parse result — or an error, which must be readable.
       if (msg.type === "ast-update" || msg.type === "project-update" || msg.type === "error") dismissBootScreen();
+      // 2026-10-07 — what the first pass is doing (server pass_progress.ts)
+      if (msg.type === "pass-progress") { setBootStatus(String(msg.payload?.text ?? "")); return; }
       if (msg.type === "model-tiers") {
         // M-PROVIDER — the server owns the settings; the panel renders them.
         setModelTiers?.(msg.payload);

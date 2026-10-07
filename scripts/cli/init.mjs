@@ -121,7 +121,7 @@ const HOOK_SPECS = [
   // delivered" means, since that context is gone (2026-09-29).
   { claudeEvent: "SessionStart", event: "session-start", timeout: 60 },
   { claudeEvent: "UserPromptSubmit", event: "prompt", timeout: 60 },
-  { claudeEvent: "PostToolUse", event: "post-edit", timeout: 120, matcher: "Write|Edit|MultiEdit|NotebookEdit|Bash" },
+  { claudeEvent: "PostToolUse", event: "post-edit", timeout: 120, matcher: "Write|Edit|MultiEdit|NotebookEdit|Bash|PowerShell" },
   { claudeEvent: "Stop", event: "stop", timeout: 180 },
 ];
 

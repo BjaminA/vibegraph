@@ -123,6 +123,11 @@
           "type": "object",
           "additionalProperties": { "type": "array", "items": { "type": "string" } }
         },
+        "projectModules": {
+          "description": "2026-10-07 (additive, OPTIONAL): every parsed file's module path (python `tools.page`). A linker-qualified boundary target inside one of these dotted modules is the project's own code, never a third-party package named after the project's folder.",
+          "type": "array",
+          "items": { "type": "string" }
+        },
         "localsByFile": {
           "description": "M-RESOLVE (additive, OPTIONAL): per file, the local names its ASSIGNMENTS bind and what each was bound from (`valueKind`, plus `callTarget` when it was a call). A third of every unresolved receiver in the real fixtures is bound to a literal three lines up - `problems = []` above `problems.push` - so this is what makes that class free to resolve, with no run and no model. A name bound twice with different shapes is refused rather than guessed.",
           "type": "object",

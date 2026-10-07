@@ -5,6 +5,7 @@
 import type { Plan, PlanFinding, PlanReconcile, PlanSection } from "../shared/plan_types.ts";
 import { planItemId, sectionItems } from "../shared/plan_types.ts";
 import { assumptionState } from "./plan_assumptions.ts";
+import { possiblyAnswered } from "./plan_answered.ts";
 
 export const PLAN_BANNER = "HYPOTHETICAL — a plan, not the code. It will change; nothing in it is true of the project until the code says so.";
 
@@ -126,8 +127,11 @@ export function formatPlanMd(plan: Plan, rec?: PlanReconcile | null): string {
   }
   if (plan.open.length) {
     out.push("## Open questions (and assumptions)", "");
+    // 2026-10-07 — a decision taken since may already answer one (plan_answered.ts)
+    const answered = new Map(possiblyAnswered(plan).map((a) => [a.question, a]));
     for (const q of plan.open) {
-      out.push(`- **${q.id}** ${q.text}${v(verdictOf(rec, "open", q.id))}`);
+      const a = answered.get(q.id);
+      out.push(`- **${q.id}** ${q.text}${v(verdictOf(rec, "open", q.id))}${a ? ` — *possibly answered by ${a.how}; close it if so*` : ""}`);
       for (const e of q.evidence ?? []) out.push(`  - evidence ${e.at.slice(0, 10)}: \`${e.command}\` — expect: ${e.expect}${e.result ? ` → **${e.result.toUpperCase()}**` : " (not run yet)"}${e.note ? ` — ${e.note}` : ""}`);
     }
     out.push("");
@@ -204,7 +208,10 @@ export function compactPlan(plan: Plan, sinceRevision?: number): string {
   for (const f of live(plan.flows ?? [])) lines.push(`Flow ${f.id}${tag(f.status)} (through the store): ${f.steps.map((st) => `${st.process} ${st.op} ${st.zone}${st.family ? `(${st.family})` : ""}`).join(" → ")}`);
   const pols = live(plan.policies);
   if (pols.length) lines.push(`Planned rules (advice — they block nothing until promoted): ${pols.map((p) => `${p.id}${tag(p.status)} ${p.text} (why: ${p.why})`).join("; ")}`);
-  if (plan.open.length) lines.push(`Open questions: ${plan.open.map((q) => `${q.id} ${q.text}${q.evidence?.some((e) => e.result) ? ` [${assumptionState(q).toUpperCase()}]` : ""}`).join("; ")}`);
+  if (plan.open.length) {
+    const answered = new Map(possiblyAnswered(plan).map((a) => [a.question, a]));
+    lines.push(`Open questions: ${plan.open.map((q) => `${q.id} ${q.text}${q.evidence?.some((e) => e.result) ? ` [${assumptionState(q).toUpperCase()}]` : ""}${answered.has(q.id) ? ` [possibly answered by ${answered.get(q.id)!.by}]` : ""}`).join("; ")}`);
+  }
   const assumed = [...new Set(([] as Array<{ assumes?: string[] }>).concat(plan.processes, plan.boundaries, plan.stack, plan.threads, plan.policies, plan.stores ?? [], plan.flows ?? [], plan.modules ?? []).flatMap((x) => x.assumes ?? []))];
   const refuted = assumed.filter((q) => assumptionState(plan.open.find((x) => x.id === q)) === "refuted");
   const pending = (plan.decisions ?? []).filter((d) => d.status === "proposed");

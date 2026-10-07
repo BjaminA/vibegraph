@@ -10,13 +10,46 @@
 // purpose, and a command you type in Claude Code's own `!` shell carries the
 // mark too — do your steps in your own terminal, or the Plan panel.
 
+//
+// 2026-10-07 (field report) — the mark did not survive the Windows → WSL hop:
+// `wsl.exe` passes only what WSLENV lists, so every command a Windows-side
+// Claude ran inside WSL looked like a person's. Two changes:
+//   - more than one mark: CLAUDECODE, and Claude Code's CLAUDE_CODE_ENTRYPOINT;
+//   - a person's step also needs an INTERACTIVE TERMINAL. An agent's tool call
+//     runs with no terminal attached, on either side of the hop, whatever its
+//     environment says. VG_PERSON_NO_TTY=1 is the escape for a person's own
+//     script or CI — setting it from an agent is deliberate circumvention, the
+//     same as stripping CLAUDECODE. Tests run under node's test runner count
+//     as that escape (NODE_TEST_CONTEXT).
+
 export function isAgentRun(env = process.env) {
-  return env.CLAUDECODE === "1";
+  return env.CLAUDECODE === "1" || !!env.CLAUDE_CODE_ENTRYPOINT;
 }
 
 export const PERSONS_STEP =
   "this is a person's step, and Claude Code is running this command (CLAUDECODE is set). "
   + "Run it in your own terminal, or use the Plan panel in `vibegraph-knowledge view`";
+
+export const NO_TERMINAL =
+  "this is a person's step, and no terminal is attached — an agent's tool call looks like this, from Windows or inside WSL. "
+  + "Run it in your own terminal (in Git Bash on Windows, through `winpty`), use the Plan panel in `vibegraph-knowledge view`, "
+  + "or, in a script of your own, set VG_PERSON_NO_TTY=1";
+
+/** Why a person's step must be refused here, or null when it may run. */
+export function personRefusal(env = process.env, io = { stdinTTY: !!process.stdin.isTTY }) {
+  if (isAgentRun(env)) return PERSONS_STEP;
+  if (io.stdinTTY || env.VG_PERSON_NO_TTY === "1" || env.NODE_TEST_CONTEXT) return null;
+  return NO_TERMINAL;
+}
+
+/** For `doctor`: inside WSL, does a Windows-side Claude's mark reach us? */
+export function wslMarkAdvice(env = process.env) {
+  if (!env.WSL_DISTRO_NAME) return null;
+  const carried = (env.WSLENV ?? "").split(":").some((v) => v.split("/")[0] === "CLAUDECODE");
+  return carried ? null
+    : "WSLENV does not carry CLAUDECODE, so a Windows-side Claude's commands here do not say they are Claude's. "
+      + "Person-only steps still need your terminal; to mark the rest, run once in Windows: setx WSLENV \"CLAUDECODE/u:%WSLENV%\"";
+}
 
 /** The person-only steps, by command. `rest` = the arguments after the command. */
 export function personOnlyStep(command, rest) {

@@ -17,6 +17,17 @@
 //
 // Named limit: words are not meaning. "Tell the operators" does not reach a
 // function called `notify`; a prompt in the code's own vocabulary does.
+//
+// 2026-10-07 (field report: most prompts arrived with one or two unrelated
+// test-thread contracts, matched on "line", "keep", "bits", "date", "left",
+// "problem", "place"). One word of a multi-word seed name used to qualify a
+// thread on its own — `keep` named `test_keep_line`. Now:
+//   - a seed name counts only when ALL its words are in the prompt;
+//   - the two-word floor counts DISTINCTIVE words only (in under a third of
+//     the threads);
+//   - everyday words are stop words;
+//   - a test thread is left out unless the prompt is about tests.
+// Nothing is sent when nothing clears that.
 
 export interface KeywordThread {
   entryPointId?: string | null;
@@ -32,7 +43,7 @@ export interface KeywordMatch {
   score: number;
 }
 
-interface Doc { entryPointId: string; qualifiedName: string; tf: Map<string, number>; len: number; seedName: string }
+interface Doc { entryPointId: string; qualifiedName: string; tf: Map<string, number>; len: number; seedName: string; isTest: boolean }
 
 const STOP = new Set([
   "the", "and", "for", "with", "that", "this", "from", "into", "when", "then", "than", "them", "they", "their",
@@ -42,7 +53,17 @@ const STOP = new Set([
   "what", "which", "who", "how", "why", "where", "there", "here", "does", "did", "done", "want", "need", "needs",
   "please", "let", "lets", "know", "sure", "like", "more", "less", "code", "file", "files", "function", "change",
   "changes", "fix", "bug", "update", "include", "includes", "show", "shows",
+  // everyday words that also name things in code (field report, 2026-10-07)
+  "line", "lines", "keep", "bit", "bits", "date", "left", "right", "problem", "place", "time", "thing", "way",
+  "work", "first", "last", "next", "good", "well", "one", "two", "still", "see", "look", "think", "try",
+  "part", "case", "point", "start", "end", "back", "take", "give", "same", "other", "again", "already",
+  "better", "instead", "maybe", "might", "must", "really", "right", "think", "thing", "while", "after", "before",
+  "because", "around", "over", "under", "out", "off", "down", "up", "too", "very", "much", "many",
+  "few", "lot", "able", "bit", "issue", "issues", "test", "tests", "testing", "working",
 ]);
+
+const TESTISH = /(^|[\/_.-])(tests?|spec|__tests__)([\/_.-]|$)|(^|[:/])test_|\.(test|spec)\.[a-z]+$/i;
+const PROMPT_ABOUT_TESTS = /\b(tests?|testing|spec|specs|pytest|unittest|vitest|jest|coverage|fixture)\b/i;
 
 /** Words of an identifier, a path or a sentence: camelCase and snake_case
  *  split, lower-cased, a plural `s` folded, stop words and short words out. */
@@ -78,7 +99,11 @@ export function buildKeywordIndex(
     ];
     const tf = new Map<string, number>();
     for (const w of words) tf.set(w, (tf.get(w) ?? 0) + 1);
-    docs.push({ entryPointId: t.entryPointId, qualifiedName: t.seed.qualifiedName, tf, len: words.length, seedName: keywordTerms(seedFunctionName(t.seed.qualifiedName)).join(" ") });
+    docs.push({
+      entryPointId: t.entryPointId, qualifiedName: t.seed.qualifiedName, tf, len: words.length,
+      seedName: keywordTerms(seedFunctionName(t.seed.qualifiedName)).join(" "),
+      isTest: TESTISH.test(t.seed.file) || TESTISH.test(t.seed.qualifiedName),
+    });
   }
   return docs;
 }
@@ -88,6 +113,8 @@ export function buildKeywordIndex(
 export function matchKeywords(prompt: string, docs: Doc[], { limit = 2 }: { limit?: number } = {}): KeywordMatch[] {
   const q = [...new Set(keywordTerms(prompt))];
   if (!q.length || !docs.length) return [];
+  if (!PROMPT_ABOUT_TESTS.test(prompt)) docs = docs.filter((d) => !d.isTest);
+  if (!docs.length) return [];
   const N = docs.length;
   const avg = docs.reduce((s, d) => s + d.len, 0) / N || 1;
   const df = new Map<string, number>();
@@ -106,9 +133,11 @@ export function matchKeywords(prompt: string, docs: Doc[], { limit = 2 }: { limi
       score += s;
       hits.push([w, s]);
     }
-    const seedWords = d.seedName.split(" ");
-    const namesSeed = hits.some(([w]) => seedWords.includes(w));
-    if (hits.length < 2 && !namesSeed) continue;
+    // the WHOLE seed name, not one word of it; and two DISTINCTIVE words
+    const seedWords = d.seedName.split(" ").filter(Boolean);
+    const namesSeed = seedWords.length > 0 && seedWords.every((w) => q.includes(w));
+    const distinctive = hits.filter(([w]) => (df.get(w) ?? 0) <= Math.max(1, Math.floor(N / 3)));
+    if (distinctive.length < 2 && !namesSeed) continue;
     hits.sort((a, b2) => b2[1] - a[1]);
     scored.push({ entryPointId: d.entryPointId, qualifiedName: d.qualifiedName, terms: hits.map(([w]) => w), score });
   }

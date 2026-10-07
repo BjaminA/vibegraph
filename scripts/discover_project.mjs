@@ -70,7 +70,9 @@ function executesAtTop(ir) {
 
 export function discoverProject(files, entryPoints, manifests = []) {
   const fileKeys = Object.keys(files);
-  const haveEntry = new Set((entryPoints ?? []).map((e) => e.file));
+  // a thin script whose `__main__` runs an imported main is seeded at that
+  // main (discover_entry_points.py), and `runBy` names the script: it has one
+  const haveEntry = new Set((entryPoints ?? []).flatMap((e) => [e.file, ...(e.metadata?.runBy ?? [])]));
   // 2026-10-01 — what a package.json runs (scripts/package_entries.mjs): a
   // `bin`, or a script whose runner names the file. The package's own words
   // are the evidence, so it needs no literal elsewhere and no top-level code.

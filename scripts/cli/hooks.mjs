@@ -16,7 +16,7 @@
 //              session each: contract, routed rules, ratified skill, the
 //              STATED architecture (arch_context.mjs) and enabled generic
 //              direction as rule headlines (direction.mjs).
-//   post-edit  Write|Edit|MultiEdit|NotebookEdit|Bash — re-check every stated
+//   post-edit  Write|Edit|MultiEdit|NotebookEdit|Bash|PowerShell — re-check every stated
 //              rule; a NEW violation of a gating verb BLOCKS with the rule,
 //              the offending call and, once, an enabled skill's why for it.
 //   stop       the same check once more before the turn may end.
@@ -374,7 +374,9 @@ function newFindings(absRoot, loaded, state, textById, sessionId) {
 
 function onPostEdit(input, { absRoot, loaded: load, state, constraints }) {
   // Bash: no file path to key on. Check only when some source file moved.
-  if (input.tool_name === "Bash") {
+  // 2026-10-07 — Claude Code on Windows edits through its PowerShell tool too
+  // (field report: those edits were never checked); the same, by the stamp.
+  if (input.tool_name === "Bash" || input.tool_name === "PowerShell") {
     const stamp = sourceStamp(absRoot);
     if (state.sourceStamp === stamp) return null;
     state.sourceStamp = stamp;
@@ -423,15 +425,25 @@ function afterEdit(rel, input, { absRoot, loaded, state, constraints }) {
   if (files.length) {
     const what = files.length === 1 ? files[0] : `the ${files.length} changed source files`;
     const tests = affectedTests(loaded.envelope.threads, loaded.envelope.entryPoints, files);
-    notes.push(tests.length
-      ? `Discovered tests that reach ${what}: ${tests.map((t) => t.entryPointId).join(", ")}`
-      : `No discovered test reaches ${what}.`);
+    notes.push(tests.length ? testsLine(what, tests, files) : `No discovered test reaches ${what}.`);
   }
   if (!gating.length) return { json: { hookSpecificOutput: { hookEventName: "PostToolUse", additionalContext: capped(`${HEADER}\n${notes.join("\n\n")}`) } } };
   remember(state, gating);
   return {
     block: capped(`${HEADER}\nThis edit introduced a break of a stated rule. Fix it before going on — the rule and its reason come from the people who run this code:\n${renderFindings(gating, textById)}\n${rescopeHint(gating)}\n\n${notes.join("\n\n")}`),
   };
+}
+
+/** A few tests by name; many by file (2026-10-07, field report: several
+ *  hundred names cut off at the inline limit) — the names are one command away. */
+export function testsLine(what, tests, files) {
+  const ids = tests.map((t) => t.entryPointId);
+  if (ids.length <= 8) return `Discovered tests that reach ${what}: ${ids.join(", ")}`;
+  const byFile = new Map();
+  for (const id of ids) { const f = id.slice(0, id.lastIndexOf(":")) || id; byFile.set(f, (byFile.get(f) ?? 0) + 1); }
+  const parts = [...byFile].sort((a, b) => b[1] - a[1]).map(([f, n]) => `${n} in \`${f}\``);
+  const shown = parts.slice(0, 6).join(", ") + (parts.length > 6 ? `, and ${parts.length - 6} more file(s)` : "");
+  return `${ids.length} discovered tests reach ${what}: ${shown}. Their names: \`vibegraph-knowledge affected ${files.slice(0, 3).join(" ")}${files.length > 3 ? " …" : ""}\`.`;
 }
 
 function onStop(input, { absRoot, loaded, state, constraints }) {

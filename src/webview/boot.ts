@@ -15,6 +15,13 @@ export function startBootClock(): void {
   }, 1000);
 }
 
+/** 2026-10-07 — the phase the server's first pass is in (a `pass-progress`
+ *  message): "parsing 244 files…", "tracing threads from 812 entry points…". */
+export function setBootStatus(text: string): void {
+  const el = document.querySelector<HTMLElement>("[data-boot-screen] .vg-boot-status");
+  if (el && text) el.textContent = text;
+}
+
 /** Fade the boot screen out and remove it. Idempotent. */
 export function dismissBootScreen(): void {
   const el = document.querySelector<HTMLElement>("[data-boot-screen]");

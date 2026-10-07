@@ -23,6 +23,7 @@ import { loadEnvelope, gitDelta } from "../quality_check.mjs";
 import { buildStackIndex } from "../../src/server/stack.ts";
 import { loadConstraints } from "../../src/server/constraint_store.ts";
 import { checkStatedRules } from "../../src/server/constraint_report.ts";
+import { historicalAdvice, historicalFolders, inHistorical } from "../../src/server/historical_copies.ts";
 
 /** The working tree's changes against HEAD as a run delta — what a hook
  *  after an edit has (nothing is committed yet), and what `co-changes`
@@ -65,7 +66,9 @@ export function runConstraintChecks({ root, envelope: envelopePath, pipeline, gi
   const report = checkStatedRules({ envelope: env, root: absRoot, constraints, commit, runDelta, stack: buildStackIndex(env, absRoot) });
   const { results, unchecked, summary } = report;
   const exitCode = summary.violated ? 1 : summary.unverifiable ? 2 : 0;
-  return { root: absRoot, commit, constraints: constraints.length, unchecked, results, summary, exitCode, parseErrors, deltaNote };
+  // 2026-10-07 — folders of old copies (historical_copies.ts): said, and their offenders marked
+  const historical = historicalFolders(Object.keys(env.files ?? {}));
+  return { root: absRoot, commit, constraints: constraints.length, unchecked, results, summary, exitCode, parseErrors, deltaNote, historical };
 }
 
 export function formatCheckReport(r) {
@@ -76,7 +79,7 @@ export function formatCheckReport(r) {
   }
   for (const row of r.results) {
     lines.push(`[${row.id}] ${row.rule} — ${row.described} → ${row.verdict === "pass" ? "pass" : row.verdict.toUpperCase()}`);
-    for (const o of row.offenders) lines.push(`     offender: ${o}`);
+    for (const o of row.offenders) lines.push(`     offender: ${o}${inHistorical(String(o).split(":")[0], r.historical ?? []) ? " (historical copy — in a folder of old copies)" : ""}`);
     lines.push(`     ${row.reason}`);
     if (row.verdict === "pass" && row.notFollowed.length) lines.push(`     not followed: ${row.notFollowed.join("; ")}`);
     if (row.verdict === "unverifiable") lines.push("     (unverifiable is NOT a pass: the code did not let the checker decide)");
@@ -84,6 +87,8 @@ export function formatCheckReport(r) {
   if (r.deltaNote) lines.push(r.deltaNote);
   if (r.unchecked.length) lines.push(`${r.unchecked.length} constraint${r.unchecked.length === 1 ? " has" : "s have"} no checkable half (prose only, a reader's job): ${r.unchecked.join(", ")}`);
   if (Object.keys(r.parseErrors ?? {}).length) lines.push(`parse errors — those files carry no IR and were not checked: ${Object.keys(r.parseErrors).join(", ")}`);
+  const advice = historicalAdvice(r.historical ?? []);
+  if (advice) lines.push(`note: ${advice}`);
   lines.push(`${r.summary.checked} checked: ${r.summary.violated} violated, ${r.summary.unverifiable} unverifiable, ${r.summary.pass} pass → exit ${r.exitCode}`);
   return lines.join("\n") + "\n";
 }

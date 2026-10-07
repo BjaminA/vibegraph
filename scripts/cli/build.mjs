@@ -25,7 +25,7 @@ const VENDOR = join(PKG, "vendor", "scripts");
 
 /** The Python scripts buildPolyglotEnvelope spawns (scripts/regen_polyglot.mjs
  *  + src/server/languages.ts). Each imports only the stdlib and libcst. */
-export const PYTHON_SCRIPTS = ["parse_cst.py", "literal_table.py", "cross_file_link.py", "discover_entry_points.py", "extract_thread.py", "build_system_tier.py"];
+export const PYTHON_SCRIPTS = ["parse_cst.py", "literal_table.py", "cross_file_link.py", "discover_entry_points.py", "thin_script_entry.py", "extract_thread.py", "build_system_tier.py"];
 /** M-FLOW.2 — Node scripts at scripts/ root the pipeline spawns (the
  *  frontends under scripts/frontends/ are copied whole, below). */
 export const NODE_SCRIPTS = ["discover_project.mjs"];

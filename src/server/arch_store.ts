@@ -27,6 +27,7 @@
 import { factLabel } from "../shared/arch_fact_label.ts";
 import { stampHierarchy } from "../shared/arch_hierarchy.ts";
 import { describeRule, resolveMembers, validateRule, type GroupRule } from "../shared/arch_rules.ts";
+import { stampWriter } from "./writer_stamp.ts";
 import * as fs from "fs";
 import * as path from "path";
 import type { ArchGroupRecord, ArchModelRecord } from "../shared/protocol.ts";
@@ -153,6 +154,7 @@ export function saveArchStore(root: string, store: ArchStore): void {
   const tmp = `${p}.tmp`;
   fs.writeFileSync(tmp, JSON.stringify(store, null, 2) + "\n", "utf-8");
   fs.renameSync(tmp, p);
+  stampWriter(root, "architecture.json");
 }
 
 /** An update proposal over the stated groups: a proposed group with an

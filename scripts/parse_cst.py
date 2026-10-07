@@ -551,10 +551,15 @@ class GraphBuilder(cst.CSTVisitor):
         self._emit(node_id, "import", self._pos(node), cst_node=node, names=names)
 
     def visit_ImportFrom(self, node: cst.ImportFrom) -> None:
-        if isinstance(node.names, cst.ImportStar):
-            return
         module_name = self._code(node.module) if node.module else ""
-        names = [self._code(a.name) for a in node.names if isinstance(a, cst.ImportAlias)]
+        # 2026-10-07 (field report) — `from m import *` was dropped, so the file
+        # looked as if it imported nothing from m and every name it took from
+        # there linked to nothing. Emitted with names ["*"]; the linker binds
+        # every module-level name m defines (cross_file_link.expand_star_imports).
+        if isinstance(node.names, cst.ImportStar):
+            names = ["*"]
+        else:
+            names = [self._code(a.name) for a in node.names if isinstance(a, cst.ImportAlias)]
         safe_name = module_name.replace(".", "_")
         node_id = self._make_id("import_from", safe_name)
         self._emit(node_id, "import_from", self._pos(node), cst_node=node, module=module_name, names=names)

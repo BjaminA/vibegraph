@@ -928,6 +928,9 @@ export interface StackIndexRecord {
    *  of every "unknown" receiver in the real fixtures is bound to a
    *  literal three lines up; this is what makes that free to resolve. */
   localsByFile?: Record<string, LocalBinding[]>;
+  /** 2026-10-07 — every parsed file's module path (python `tools.page`): a
+   *  linker-qualified target inside one is the project's own code. */
+  projectModules?: string[];
 }
 
 // ── M-AGENT (PLAN-M-AGENT.md) — the Agent Manager wire shapes ──────────

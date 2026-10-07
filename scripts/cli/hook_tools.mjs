@@ -17,6 +17,7 @@ import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "no
 import { join } from "node:path";
 import { cacheDirFor } from "../envelope_cache.mjs";
 import { HOOK_MARKER } from "./init.mjs";
+import { wslMarkAdvice } from "./actor.mjs";
 
 const firedPath = (absRoot) => join(cacheDirFor(absRoot), "hooks-fired.json");
 
@@ -74,15 +75,36 @@ export function doctorReport(absRoot, { platform = process.platform, now = Date.
     const why = runnableHere(h.command, platform);
     if (why) { ok = false; lines.push(["warn", `${h.event}: ${why}`]); }
   }
+  // 2026-10-07 (field report) — the node and CLI a hook names by absolute
+  // path: an `nvm` upgrade removes both, and every hook then fails silently
+  for (const why of new Set(ours.flatMap((h) => missingPaths(h.command, platform)))) { ok = false; lines.push(["warn", why]); }
   const installed = statSync(settings).mtimeMs;
   const fired = readFired(absRoot);
   const last = Object.entries(fired).map(([event, r]) => ({ event, at: Date.parse(r.at) })).filter((r) => r.at >= installed).sort((a, b) => b.at - a.at);
   if (!last.length) {
     ok = false;
-    lines.push(["warn", `the hooks have NOT fired since they were installed (${new Date(installed).toISOString()}). They apply from the NEXT Claude Code session; if one has run since, its hooks never reached this project — a Windows-side Claude against a \\\\wsl.localhost path needs \`hook install --target wsl\`, and \`hook run prompt --prompt "…"\` fires one by hand to test.`]);
+    lines.push(["warn", `the hooks have NOT fired since they were installed (${new Date(installed).toISOString()}). They apply from the next Claude Code session, or sooner when Claude Code reloads its settings; if a session has run since, its hooks never reached this project — a Windows-side Claude against a \\\\wsl.localhost path needs \`hook install --target wsl\`, and \`hook run prompt --prompt "…"\` fires one by hand to test.`]);
   } else {
-    const ago = Math.round((now - last[0].at) / 60000);
-    lines.push(["ok", `last fired: ${last[0].event}, ${ago < 1 ? "under a minute" : `${ago} min`} ago (${last.map((l) => l.event).join(", ")} since install)`]);
+    const ago = (at) => { const m = Math.round((now - at) / 60000); return m < 1 ? "under a minute ago" : m < 120 ? `${m} min ago` : `${Math.round(m / 60)} h ago`; };
+    lines.push(["ok", `last fired: ${last.map((l) => `${l.event} ${ago(l.at)}`).join(", ")}`]);
   }
+  const mark = wslMarkAdvice();
+  if (mark) lines.push(["info", mark]);
   return { lines, ok };
+}
+
+/** Absolute node / CLI paths in a hook command that no longer exist here. */
+export function missingPaths(command, platform = process.platform) {
+  const out = [];
+  const distro = /\bwsl\.exe\s+-d\s+(\S+)/.exec(command)?.[1]?.replace(/^'|'$/g, "");
+  // every absolute path before ` hook ` — the pinned python, node and the CLI
+  const head = command.split(/\s'?hook'?\s/)[0];
+  for (const m of head.matchAll(/(?:^|[\s="'])(\/{1,2}[^\s'"=]+)/g)) {
+    const posix = m[1].replace(/^\/\//, "/");
+    const here = platform === "win32" ? (distro ? `\\\\wsl.localhost\\${distro}${posix.split("/").join("\\")}` : null) : posix;
+    if (here && !existsSync(here)) {
+      out.push(`${posix} no longer exists, so every hook fails before it starts${/\/\.nvm\/versions\//.test(posix) ? " (an nvm upgrade removes the old Node and the packages installed under it)" : ""} — re-run \`vibegraph-knowledge hook install${distro ? " --target wsl" : ""}\` with the Node you use now`);
+    }
+  }
+  return out;
 }

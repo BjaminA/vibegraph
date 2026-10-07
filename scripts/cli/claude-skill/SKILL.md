@@ -118,7 +118,7 @@ enforces it. `vibegraph-knowledge constraints list` shows what is stated.
 ## Other commands
 
 - `vibegraph-knowledge view` — the visualisation (architecture map, threads,
-  code) at http://localhost:4200.
+  code) at the URL it prints (http://127.0.0.1:4200).
 - `vibegraph-knowledge seed add <file>[:<function>]` — name an entry point
   discovery cannot see (package.json bins/scripts and files that listen, read
   argv or await at the top level are found already).

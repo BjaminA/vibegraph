@@ -7,7 +7,7 @@ npm install -g vibegraph-knowledge            # once
 vibegraph-knowledge view /path/to/your/project
 ```
 
-and open <http://localhost:4200>. (From a VibeGraph clone, `./runVis.sh
+and open the URL it prints — <http://127.0.0.1:4200>, or the next free port. (From a VibeGraph clone, `./runVis.sh
 /path/to/your/project` starts the same app built from source.)
 
 ---

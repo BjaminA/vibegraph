@@ -99,7 +99,7 @@ tokens until a task matches it:
 ### The visualisation
 
 ```bash
-vibegraph-knowledge view /path/to/your/project     # then open http://localhost:4200
+vibegraph-knowledge view /path/to/your/project     # then open the URL it prints (http://127.0.0.1:4200)
 vibegraph-knowledge view . --open                  # or open the browser for you
 ```
 

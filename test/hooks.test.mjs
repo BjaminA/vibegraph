@@ -149,7 +149,7 @@ test("init --hooks merges into settings.local.json, is idempotent, and removes o
   assert.equal(applyHooks({ root: dir, command: cmd }).state, "installed");
   const s = JSON.parse(readFileSync(join(dir, ".claude", "settings.local.json"), "utf-8"));
   assert.equal(s.model, "x");
-  assert.equal(s.hooks.PostToolUse[0].matcher, "Write|Edit|MultiEdit|NotebookEdit|Bash");
+  assert.equal(s.hooks.PostToolUse[0].matcher, "Write|Edit|MultiEdit|NotebookEdit|Bash|PowerShell");
   assert.match(s.hooks.SessionStart[0].hooks[0].command, / hook session-start /);
   assert.match(s.hooks.UserPromptSubmit[0].hooks[0].command, /^VG_PYTHON="\/usr\/bin\/python3" .* hook prompt --root .* --vg-hook$/);
   assert.deepEqual(s.hooks.Stop[0].hooks[0], foreign, "a foreign hook is kept");

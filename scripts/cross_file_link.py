@@ -34,6 +34,7 @@ Resolution per PLAN.md §1.5 M4a:
 """
 import json
 import os
+import re
 import sys
 
 # 2026-10-02 — UTF-8 on the pipes, whatever the locale: on Windows Python
@@ -312,6 +313,19 @@ def resolve_callee_to_qualified(
     # is `x.y.do_thing(...)`, parts = ["x", "y", "do_thing"]; the module
     # is the prefix matching `mapped` and the trailing piece is the symbol.
     mapped_parts = mapped.split(".")
+    if mapped_parts[0] != head:
+        # 2026-10-07 (field report) - the local name stands for the WHOLE
+        # module: `import pkg.helpers as h` (h.fn), or a script-folder sibling
+        # `import envfile` that resolve_script_dir_siblings rewrote to
+        # `tools.envfile`. The call is spelled from the local name, so the
+        # prefix test below could never match and every such call read as
+        # unlinked project code.
+        trailing = parts[1:]
+        if len(trailing) == 1:
+            return f"{mapped}:{trailing[0]}"
+        if len(trailing) == 2:
+            return f"{mapped}:{trailing[0]}.{trailing[1]}"
+        return None
     if parts[: len(mapped_parts)] != mapped_parts:
         # The leading parts must match the dotted module to resolve.
         # `import x.y` then calling `x.y` directly: parts == ["x", "y"]
@@ -698,6 +712,51 @@ def resolve_script_dir_siblings(
     return out
 
 
+# `vars(m)` anywhere in the argument: `globals().update(vars(m))`, or filtered
+# through a comprehension (`{k: v for k, v in vars(m).items() if …}`)
+_VARS_ARG = re.compile(r"\bvars\(\s*([A-Za-z_][\w.]*)\s*\)")
+
+
+def expand_star_imports(
+    ir: dict,
+    import_map: Dict[str, str],
+    file_module: str,
+    project_modules: Set[str],
+    project_symbols: Dict[QualifiedPath, Tuple[str, str]],
+) -> Dict[str, str]:
+    """Names bound at RUN time that the source still spells out (2026-10-07,
+    field report: a test did `globals().update(vars(collect))` and every
+    `collect` function it then called by bare name linked to nothing).
+
+      from m import *              binds every module-level name m defines
+      globals().update(vars(m))    the same, at module level, for an imported m
+
+    Only for a PROJECT module (its symbols are known); an explicit import or
+    an earlier binding always wins over a star (`setdefault`). A star from a
+    library binds nothing we can name, and stays a gap."""
+    modules: List[str] = []
+    for node in ir.get("nodes", []):
+        if node.get("type") == "import_from" and node.get("names") == ["*"]:
+            pairs = parse_import_from_node(node, file_module)
+            star = resolve_script_dir_siblings(dict(pairs), file_module, project_modules).get("*", "")
+            if star.endswith(":*"):
+                modules.append(star[:-2])
+        elif (node.get("type") == "call" and node.get("parentId") is None
+              and node.get("funcName") == "globals().update"):
+            m = _VARS_ARG.search(" ".join(node.get("args") or []))
+            target = import_map.get(m.group(1)) if m else None
+            if target:
+                # `import x` maps to the module; `from pkg import x` to "pkg:x"
+                modules.append(target.replace(":", "."))
+    out = {k: v for k, v in import_map.items() if k != "*"}
+    for mod in modules:
+        prefix = f"{mod}:"
+        for qn in project_symbols:
+            if qn.startswith(prefix) and "." not in qn[len(prefix):]:
+                out.setdefault(qn[len(prefix):], qn)
+    return out
+
+
 def link(files: Dict[str, dict]) -> Dict[str, dict]:
     """Take a {filePath: IR} mapping (each IR already has `modulePath` set
     by parse_cst.py --module-path), return the same shape with cross-file
@@ -719,8 +778,10 @@ def link(files: Dict[str, dict]) -> Dict[str, dict]:
     out: Dict[str, dict] = {}
     for file_path, ir in files.items():
         modpath = module_paths.get(file_path, "")
-        import_map = resolve_script_dir_siblings(
-            build_import_map(ir, modpath), modpath, project_modules
+        import_map = expand_star_imports(
+            ir,
+            resolve_script_dir_siblings(build_import_map(ir, modpath), modpath, project_modules),
+            modpath, project_modules, project_symbols,
         )
         # Strip prior linker output FIRST so emit_cross_file_edges sees
         # the same edge view a fresh parse would give it (its same-file

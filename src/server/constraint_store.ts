@@ -24,6 +24,7 @@ import { isConstraintCheck, type ConstraintCheck } from "./constraint_grammar.ts
 // Quality layer — the five Run 1 verbs, validated by their own operand checks.
 import { isRun1Check, type Run1Check } from "./quality/verbs/index.ts";
 import { demoteOrphanedPromotions } from "./plan_store.ts";
+import { stampWriter } from "./writer_stamp.ts";
 export type AnyConstraintCheck = ConstraintCheck | Run1Check;
 
 export type Constraint = ConstraintRecord;
@@ -244,6 +245,7 @@ export function saveConstraints(root: string, list: Constraint[]): void {
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(`${file}.tmp`, JSON.stringify({ version: "1", constraints: out }, null, 2) + "\n", "utf-8");
   fs.renameSync(`${file}.tmp`, file);
+  stampWriter(root, "constraints.json");
 }
 
 function nextId(list: Constraint[]): string {

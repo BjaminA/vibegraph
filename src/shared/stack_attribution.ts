@@ -70,6 +70,8 @@ export interface StackToolLike {
 
 export interface StackLike {
   tools: ReadonlyArray<StackToolLike>;
+  /** the project's module paths (stack.ts), when the index carries them */
+  projectModules?: ReadonlyArray<string>;
 }
 
 /** M-RESOLVE - one local name a file binds, and what it was bound FROM.
@@ -246,10 +248,28 @@ const WIRING_METHODS = /\.(on|once|off|addListener|removeListener|removeAllListe
 /** `module:Sym.method` (the IR's cross-file form) and `a.b.c` alike →
  *  the dotted root the taxonomy keys on. A target carrying a path
  *  separator or a source extension is PROJECT code, not a tool. */
-function rootOfQualified(qt: string): { root: string; project: boolean } {
+function rootOfQualified(qt: string, ctx: { file?: string | null; projectModules?: ReadonlyArray<string> } = {}): { root: string; project: boolean; module?: string } {
   const dotted = qt.replace(/:/g, ".");
   const first = dotted.split(".")[0] ?? dotted;
-  const project = /[\\/]/.test(qt) || /\.(py|ts|tsx|mjs|cjs|js|sh|cpp|cc|h|hpp)\b/.test(qt);
+  let project = /[\\/]/.test(qt) || /\.(py|ts|tsx|mjs|cjs|js|sh|cpp|cc|h|hpp)\b/.test(qt);
+  // 2026-10-07 (field report) — a Python target spells its module with dots
+  // (`tools.page:TitleParser.feed`, a method a project class inherits), so the
+  // test above read the project's own `tools/` folder as a third-party package.
+  // The module of the calling file, or one the project imports as its own, is
+  // project code.
+  // (a module this file IMPORTS as project code is answered by the binding
+  // step below, which names it by its binding). The thread terminal spells the
+  // target all in dots (`tools.page.TitleParser.feed`), the edge with a colon.
+  const own = ctx.file ? ctx.file.replace(/\.[A-Za-z0-9]+$/, "").split("/").join(".") : null;
+  if (!project && own && (qt.startsWith(`${own}:`) || qt.startsWith(`${own}.`))) return { root: first, project: true, module: own };
+  // …or any of this project's modules the index knows (an instance of a
+  // project class from another file: `validator.validate`). Only a dotted
+  // module path counts: a top-level `json.py` must never hide the library.
+  if (!project) {
+    const hit = (ctx.projectModules ?? []).filter((m) => m.includes(".") && (qt.startsWith(`${m}:`) || qt.startsWith(`${m}.`)))
+      .sort((a, b) => b.length - a.length)[0];
+    if (hit) return { root: first, project: true, module: hit };
+  }
   return { root: first, project };
 }
 
@@ -363,10 +383,11 @@ export function attributeBoundary(input: BoundaryInput): Attribution | null {
       .map((b) => b.spec)
       .sort((a, b) => b.length - a.length)[0];
     if (spec) return decorate(classified(language, toolNameFor(language, spec), "qualified", stack));
-    const { root, project } = rootOfQualified(qualifiedTarget);
+    const { root, project, module } = rootOfQualified(qualifiedTarget, { file, projectModules: stack?.projectModules });
     if (project) {
+      // the calling file's own module is named whole: `tools.page`, not the folder
       return decorate({
-        tool: root, role: "unknown", origin: "project", how: "qualified",
+        tool: module ?? root, role: "unknown", origin: "project", how: "qualified",
         projectModule: qualifiedTarget,
       });
     }

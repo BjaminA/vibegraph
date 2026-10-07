@@ -655,7 +655,10 @@ export function buildStackIndex(env: StackEnvelopeLike, projectRoot?: string): S
       if (list) list.push(file); else ownersOf.set(id, [file]);
     }
   }
-  const index: StackIndex = { tools: all, byFile, byThread, importsByFile, localsByFile };
+  // 2026-10-07 — this project's module paths: a linker target inside one is
+  // project code at the boundary (stack_attribution.ts), however it is spelled
+  const projectModules = [...new Set(Object.values(env.files).map((ir) => (typeof ir.modulePath === "string" ? ir.modulePath : "")).filter(Boolean))].sort();
+  const index: StackIndex = { tools: all, byFile, byThread, importsByFile, localsByFile, projectModules };
   const byThreadCalled: Record<string, string[]> = {};
   const calledOn = new Map<string, Set<string>>();
   let anyThreadNodes = false;

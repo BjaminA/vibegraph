@@ -18,14 +18,17 @@
 // loudly (the server says so). Everything it writes into the project lives
 // under <project>/.vibegraph/.
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync, statSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { ensureBlack, resolvePython } from "./pyenv.mjs";
 import { cliPath } from "./winpath.mjs";
 import { detectHost, openUrlCommands } from "../../src/server/host_os.ts";
+import { writerWarning } from "../../src/server/writer_stamp.ts";
+import { installMismatch } from "./host_check.mjs";
 
 export const VIEW_USAGE = `view [<path>] [--port <n>] [--open]   THE VISUALISATION: start the web app on a project (or one file)
-                                               and serve it at http://localhost:4200; Ctrl-C stops it`;
+                                               and serve it at http://127.0.0.1:4200 (or the next free port —
+                                               it prints the one it bound); Ctrl-C stops it`;
 
 /** The prebuilt server, installed or dev. */
 export function serverPath(loc) {
@@ -47,6 +50,16 @@ function openBrowser(url) {
     if (!r.error && (r.status === 0 || /explorer\.exe$/i.test(cmd))) return true;
   }
   return false;
+}
+
+/** The URL on the server's `Open:` line, once the banner has printed it. */
+export function servedUrlFrom(stdout) {
+  const m = /VibeGraph is running[\s\S]*?\n\s*Open:\s+(https?:\/\/\S+)/.exec(stdout);
+  return m ? m[1] : null;
+}
+
+function packageVersion(loc) {
+  try { return JSON.parse(readFileSync(join(loc.packageRoot, "package.json"), "utf-8")).version ?? null; } catch { return null; }
 }
 
 /** @returns {Promise<number>} the exit code */
@@ -71,19 +84,29 @@ export function runView({ loc, target, port, open, log = (m) => process.stderr.w
     return Promise.resolve(3);
   }
   const host = detectHost();
-  log(`host: ${host.kind === "wsl" ? `WSL${host.distro ? ` (${host.distro})` : ""}` : host.kind} · node ${process.version} · python ${env.VG_PYTHON}`);
+  const version = packageVersion(loc);
+  log(`vibegraph-knowledge ${version ?? "(version unknown)"} · host: ${host.kind === "wsl" ? `WSL${host.distro ? ` (${host.distro})` : ""}` : host.kind} · node ${process.version} · python ${env.VG_PYTHON}`);
   const p = port ?? process.env.PORT ?? "4200";
-  env = { ...env, PORT: String(p) };
-  const url = `http://localhost:${p}`;
+  env = { ...env, PORT: String(p), ...(version ? { VG_VERSION: version } : {}) };
   log(`${statSync(abs).isDirectory() ? "project" : "file"}: ${abs}`);
-  log(`starting VibeGraph at ${url} — Ctrl-C to stop`);
+  // 2026-10-07 — an older install serving what a newer one wrote misread it
+  if (statSync(abs).isDirectory()) {
+    for (const w of [writerWarning(abs, version ?? undefined), installMismatch(abs, version)]) if (w) log(`WARNING: ${w}`);
+  }
+  // the port may be busy: the server moves on and prints the URL it bound
+  log(`starting VibeGraph (port ${p}, or the next free one) — Ctrl-C to stop`);
 
   return new Promise((done) => {
     const child = spawn(process.execPath, [server, abs], { stdio: ["inherit", "pipe", "inherit"], env });
     let opened = !open;
+    let out = "";
     child.stdout.on("data", (buf) => {
       process.stdout.write(buf);
-      if (!opened && /VibeGraph is running/.test(buf.toString())) {
+      if (opened) return;
+      out += buf.toString();
+      // open the address the server BOUND (serve_address.ts), never one built here
+      const url = servedUrlFrom(out);
+      if (url) {
         opened = true;
         if (!openBrowser(url)) log(`open ${url} in your browser`);
       }

@@ -18,7 +18,7 @@ export function buildInsight(
   env: { files: Record<string, any>; threads: any[]; entryPoints: any[] },
   envSurface: EnvSurface | null,
 ): InsightRecord {
-  const r = computeReachability(env);
+  const r = computeReachability(env, { root: root ?? undefined });
   let freshness: InsightRecord["freshness"] = { exported: false, changed: [] };
   if (root) {
     const p = path.join(root, ".vibegraph", "knowledge", "sources.json");
