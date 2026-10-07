@@ -115,9 +115,13 @@ export function NodeActionStrip({ nodeId, accentColor, showPin, showExpand = tru
     <div
       data-action-strip
       style={{
+        // 2026-10-07 — above the card, not inside it: a card no longer keeps
+        // 108px empty for the strip; on hover it rises over the top edge
+        // (a child of the card, so moving onto it keeps the card hovered)
         position: "absolute",
-        top: 5,
-        right: 5,
+        bottom: "100%",
+        right: 4,
+        marginBottom: -2,
         display: "flex",
         gap: 3,
         padding: "2px 3px",

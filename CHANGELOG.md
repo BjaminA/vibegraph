@@ -3,6 +3,32 @@
 `vibegraph-knowledge` and the VibeGraph app. Newest first. Each entry says what
 changed and, where an existing user would notice, how behaviour differs.
 
+## 0.27.7 — 2026-10-07
+
+### Cards fit their content
+
+Reported: in the file view's card mode, cards stretched sideways with dead
+space. Measured on the pump-wear example, a median of 109px of nothing per
+card — a 108px right reserve every card kept for the hover action strip,
+240px minimum widths, and import / call / return text counted at 7px a
+character when it paints at 6–6.7.
+
+- **The action strip rises above the card on hover** (a child of the card,
+  so moving onto it keeps the card hovered) instead of being given 108px of
+  every card; a card keeps a 16px right margin (`--node-action-reserve` and
+  buildLayout's `ACTION_RESERVE`, one value).
+- **Sized from the fonts painted:** import, return, raise and call cards
+  measure their small label and their 11px / 10px text; an `except` block
+  measures its label; the minimum widths come down (a short card is no longer
+  held at 240px).
+- **Long text wraps onto a new line in the card** (cap 560px, was 1000), and
+  a card whose text wraps is as wide as its longest WRAPPED line — a long
+  token moved whole to the next line no longer leaves the card at the cap.
+- Median dead space a card: 109px → 26–37px (the margin and the arrow tips
+  included). `test:e2e-big` gains `fileview-tight-cards.spec.ts`: the median
+  card ends within 48px of its text, no leaf card carries more than 130px,
+  and the strip on hover sits above its card.
+
 ## 0.27.6 — 2026-10-07
 
 ### The file view's code mode reads as the code's story

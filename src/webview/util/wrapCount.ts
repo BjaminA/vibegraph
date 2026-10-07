@@ -28,3 +28,24 @@ export function wrapCount(text: string, charsPerLine: number): number {
 
 /** Characters that fit in `px` at a monospace advance of `charPx`. */
 export const charsIn = (px: number, charPx: number): number => Math.max(1, Math.floor(px / charPx));
+
+/** The longest line, in characters, once `text` is wrapped at `charsPerLine`
+ *  exactly as wrapCount wraps it (2026-10-07): a card whose text must wrap is
+ *  sized to that line, not to the cap, so a long token moved whole to the
+ *  next line does not leave the card a cap wide around a short line. */
+export function wrapWidth(text: string, charsPerLine: number): number {
+  const cpl = Math.max(1, Math.floor(charsPerLine));
+  let widest = 0;
+  for (const src of (text ?? "").split("\n")) {
+    let used = 0;
+    for (const word of src.split(/(?<=\s)/)) {
+      let len = word.length;
+      if (used + len <= cpl) { used += len; continue; }
+      if (used > 0) { widest = Math.max(widest, used); used = 0; }
+      while (len > cpl) { widest = cpl; len -= cpl; }
+      used = len;
+    }
+    widest = Math.max(widest, used);
+  }
+  return widest;
+}

@@ -2,7 +2,7 @@ import type { Node } from "@xyflow/react";
 import type { AstNode } from "../types";
 import { docSummary, docLineCount, DOC_WRAP_CHARS, DOC_LINE_H } from "../util/docSummary";
 import { layoutDefinitions, runsFirst } from "./defs_layout";
-import { wrapCount, charsIn } from "../util/wrapCount";
+import { wrapCount, wrapWidth, charsIn } from "../util/wrapCount";
 
 // ── size constants ────────────────────────────────────────────────────────────
 
@@ -11,22 +11,33 @@ import { wrapCount, charsIn } from "../util/wrapCount";
 // fit the longest line it shows — see ownWidth()/calcWidth(). There is no
 // fixed horizontal cap; width is dynamic to content, clamped only at
 // MAX_NODE_W to bound pathological one-liners.
+// 2026-10-07 — lowered: a short card (`import torch`, `len()`) was held at
+// 240px with ~165px of nothing in it; the content now decides.
 const NODE_W: Record<string, number> = {
-  import: 240, import_from: 270,
-  assignment: 260,
-  function_def: 290, class_def: 310,
-  for_loop: 280, if_stmt: 270,
-  return_stmt: 240, raise_stmt: 230,
-  call: 240,
+  import: 110, import_from: 130,
+  assignment: 150,
+  function_def: 200, class_def: 220,
+  for_loop: 180, if_stmt: 160,
+  return_stmt: 110, raise_stmt: 110,
+  call: 110,
   try_stmt: 160, finally_block: 160,
   comprehension: 200,
 };
 
 // Content-fit sizing. CHAR_W ≈ a monospace advance at the node's body font
-// size; W_RESERVE covers the icon, the action strip and horizontal padding.
+// size; W_RESERVE covers the icon, the gaps and horizontal padding.
+//
+// 2026-10-07 — every card used to keep 108px on its right for the hover
+// action strip, empty unless hovered (median 109px of dead space a card,
+// measured on the pump-wear example). The strip now rises ABOVE the card on
+// hover (NodeActionStrip / depth.css) and a card keeps a normal margin,
+// ACTION_RESERVE — the same value as the --node-action-reserve token the
+// components pad with. MAX_NODE_W 560 (was 1000): a long line wraps onto a
+// new line in the card instead of stretching it; heights follow the wrap.
+const ACTION_RESERVE = 16;
 const CHAR_W = 7;
-const W_RESERVE = 96;
-const MAX_NODE_W = 1000;
+const W_RESERVE = 12 + 16 + 8 + 4 + ACTION_RESERVE;   // pad-left, icon, gap, borders, right margin
+const MAX_NODE_W = 560;
 const COLUMN_CHANNEL = 120; // inter-column gap (matches the prior ~100–130px channels)
 
 // Header height with NO docstring. function_def was 76 — a constant that had
@@ -196,16 +207,16 @@ function previewLines(n: AstNode, w: number, compact: boolean): number {
 }
 const PREVIEW_LINE_H = 15; // fontSize-11 monospace line + breathing room
 // What each renderer paints beside its text, in px — the width its text does
-// NOT get. Read off the components (pads, icon, gaps, the 108px action-strip
-// reserve, borders), rounded up so a prediction can only over-reserve.
+// NOT get. Read off the components (pads, icon, gaps, the ACTION_RESERVE
+// right margin, borders), rounded up so a prediction can only over-reserve.
 const PREVIEW_CHAR_W = 6.7;          // 11px monospace (0.6em) + rounding
 const ASSIGN_PREVIEW_CHROME = 32;    // AssignmentNode body row: 2 × 12 pad + border
-const STMT_PREVIEW_CHROME = 152;     // Return/Raise: 12 pad + 16 icon + 8 gap + 108 + border
-const COMPACT_ROW_CHROME = 180;      // CompactRow: pads, icon, op, gaps, 108 reserve
+const STMT_PREVIEW_CHROME = 40 + ACTION_RESERVE;   // Return/Raise: 12 pad + 16 icon + 8 gap + border
+const COMPACT_ROW_CHROME = 72 + ACTION_RESERVE;    // CompactRow: pads, icon, op, gaps
 const COMPACT_NAME_CHAR_W = 7.3;     // its 12px semibold name
 const ARGS_CHAR_W = 6.1;             // CallNode args: 10px monospace
 const ARGS_LINE_H = 13;
-const CALL_ARGS_CHROME = 164;        // 20 pad + 108 + 24 inset + clip + border
+const CALL_ARGS_CHROME = 56 + ACTION_RESERVE;      // 20 pad + 24 inset + clip + border
 const FN_DOC_CHROME = 96;            // title band: 2 × 12 pad + 26 icon + gaps + return port
 
 // Character length of the dominant text line for a node — what the node's
@@ -240,7 +251,7 @@ function contentLen(n: AstNode): number {
       // +12: the hexagon's real chrome (20px clip inset + 108px action
       // reserve + icon + gap ≈ 158px) exceeds W_RESERVE by ~9 chars, which
       // made e.g. `super().__init__` soft-break mid-identifier ("__in/it__").
-      return Math.max((n.funcName?.length ?? 0) + 12, (n.args ?? []).join(", ").length + 4);
+      return Math.max((n.funcName?.length ?? 0) + 3, (n.args ?? []).join(", ").length + 4);
     case "return_stmt":
       return 7 + longestLineLen(n.value ?? "None");
     case "raise_stmt":
@@ -252,20 +263,58 @@ function contentLen(n: AstNode): number {
       return 3; // "TRY" chip — real width comes from the nested children
     case "finally_block":
       return 7; // "FINALLY" chip
+    case "except_handler":
+      // "EXCEPT TypeError" — was the 24-char default, a 224px box round a short label
+      return 7 + String((n as { exceptType?: string }).exceptType ?? "").length;
     default:
       return 24;
   }
 }
 
+// 2026-10-07 — the cards whose text is NOT 7px/char, sized from the fonts they
+// paint: an import / return / raise is a small 8.5px label over 11px mono
+// beside an icon, ending in an arrow point; a call's arguments are 10px mono.
+// Counting all of it at CHAR_W left ~100px of nothing in an import card.
+const LABEL_CHAR_W = 6.0;   // 8.5px bold mono, 0.07em tracking
+const ARROW_TIP = 18;       // the clip-path point an import / return ends in
+// Text that must wrap is sized to its longest WRAPPED line (wrapWidth wraps as
+// wrapCount does, and as the card paints): a long token moved whole to the
+// next line otherwise left the card at the cap around a short line.
+function fitWrapped(text: string, chrome: number, charW: number): number {
+  const whole = chrome + longestLineLen(text) * charW;
+  if (whole <= MAX_NODE_W) return whole;
+  return chrome + wrapWidth(text, charsIn(MAX_NODE_W - chrome, charW)) * charW;
+}
+const SHELL_CHROME = 12 + 16 + 8 + ARROW_TIP + ACTION_RESERVE + 4;  // pad, icon, gap, arrow point, margin, border
+function pixelFit(n: AstNode, byId: Map<string, AstNode>): number | null {
+  switch (n.type) {
+    case "import":
+    case "import_from": {
+      const label = n.type === "import_from" ? `from ${n.module ?? ""}` : "import";
+      return Math.ceil(Math.max(SHELL_CHROME + label.length * LABEL_CHAR_W, fitWrapped((n.names ?? []).join(", "), SHELL_CHROME, PREVIEW_CHAR_W)));
+    }
+    case "return_stmt": return Math.ceil(Math.max(SHELL_CHROME + 6 * LABEL_CHAR_W, fitWrapped(n.value ?? "None", SHELL_CHROME, PREVIEW_CHAR_W)));
+    case "raise_stmt": return Math.ceil(Math.max(SHELL_CHROME + 5 * LABEL_CHAR_W, fitWrapped(n.exc ?? "", SHELL_CHROME, PREVIEW_CHAR_W)));
+    case "call": return Math.ceil(Math.max(titleWidth(n), fitWrapped((n.args ?? []).join(", "), CALL_ARGS_CHROME, ARGS_CHAR_W)));
+    case "assignment": {
+      // the compact class-field row lays its value inline with the name: the char path below
+      if (isClassFieldAssignment(n, byId)) return null;
+      const rhs = n.preview && n.preview.length > 0 ? n.preview : (n.annotation ?? "");
+      return Math.ceil(Math.max(titleWidth(n), fitWrapped(rhs, ASSIGN_PREVIEW_CHROME, PREVIEW_CHAR_W)));
+    }
+    default: return null;
+  }
+}
+
 // A node's own width before accounting for children: clamp(min, fit, max).
 function ownWidth(n: AstNode, byId: Map<string, AstNode>): number {
-  const min = NODE_W[n.type] ?? 260;
+  const min = NODE_W[n.type] ?? 160;
   // Compact class-field rows lay icon + name + op + the 108px action
   // reserve INLINE with the value — ~170px of chrome where W_RESERVE
   // budgets 96 — so without this the value column soft-wraps ~11 chars
   // short of the fit (the `nn.Sequential(` → `nn.Sequential` + `(` split).
-  const compactExtra = n.type === "assignment" && isClassFieldAssignment(n, byId) ? 11 : 0;
-  const fit = W_RESERVE + (contentLen(n) + compactExtra) * CHAR_W;
+  const compactExtra = n.type === "assignment" && isClassFieldAssignment(n, byId) ? 3 : 0;
+  const fit = pixelFit(n, byId) ?? W_RESERVE + (contentLen(n) + compactExtra) * CHAR_W;
   // The title row never wraps or ellipsises, so it is a floor even past
   // MAX_NODE_W: body text wraps (and the height grows for it), a name cannot.
   return Math.max(Math.min(MAX_NODE_W, Math.max(min, fit)), titleWidth(n));
@@ -277,14 +326,14 @@ function ownWidth(n: AstNode, byId: Map<string, AstNode>): number {
 function titleWidth(n: AstNode): number {
   const name = n.name?.length ?? 0;
   switch (n.type) {
-    // pads 12 + icon 16 + gaps 3 × 8 + op 10 + the 108 action reserve + border
-    case "assignment": return 176 + 8 * 5.6 + name * 7.9;
+    // pads 12 + icon 16 + gaps 3 × 8 + op 10 + the right margin + border
+    case "assignment": return 68 + ACTION_RESERVE + 8 * 5.6 + name * 7.9;
     // pads 2 × 12 + icon 26 + gap 8 + return port 24 + border
     case "function_def": return 90 + name * 8.8;
     // pads 2 × 12 + icon 20 + gap 12 + border; 16px black mono, 0.04em tracking
     case "class_def": return 64 + name * 10.3;
-    // 20 pad + icon 16 + gap 8 + the 108 reserve + clip insets; 12px heavy mono
-    case "call": return 176 + (n.funcName?.length ?? 0) * 7.5;
+    // 20 pad + icon 16 + gap 8 + the right margin + clip insets; 12px heavy mono
+    case "call": return 68 + ACTION_RESERVE + (n.funcName?.length ?? 0) * 7.5;
     default: return 0;
   }
 }

@@ -138,7 +138,7 @@
   --node-meta-pad-y:      var(--sp-1);   /*  4px — meta sections (e.g. fn params) */
   --node-row-gap:         var(--sp-1);   /*  4px — between sibling rows */
   --node-inline-gap:      var(--sp-2);   /*  8px — between icon/text/badge inline */
-  --node-action-reserve:  108px;         /* right-pad hack for absolute NodeActionStrip (4 buttons × 22px + gaps) */
+  --node-action-reserve:  16px;          /* a card's right margin (buildLayout ACTION_RESERVE); the hover strip rises above the card */
 
   /* ── Thread view (U4 — top-down layered layout) ─────────────────────────
      Row height drives BFS-depth → y mapping in useThreadLayout. Gap is the
