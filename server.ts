@@ -1,5 +1,6 @@
 import { bootMarkup } from "./src/shared/boot_markup";
 import { pythonBin } from "./src/server/host_os";
+import { PipelineCache, toolParts, readLastMessage, writeLastMessage } from "./src/server/pipeline_cache";
 import { projectIgnore, IGNORE_FILE, type ProjectIgnore } from "./src/server/project_ignore";
 import { findClaude, isMissing, describeClaude } from "./src/server/find_claude";
 import * as http from "http";
@@ -996,6 +997,14 @@ async function parseAllFilesBatch(files: string[]): Promise<typeof projectParse>
   return merged;
 }
 
+// The pipeline cache for the analyzed project, made once (it holds the last
+// pass in memory and on disk under ~/.cache).
+let pipelineCacheMemo: PipelineCache | null = null;
+function pipelineCacheFor(): PipelineCache {
+  pipelineCacheMemo ??= new PipelineCache(inputPath, toolParts(path.join(PROJECT_ROOT, "scripts"), [pythonBin(), pythonEnv().PYTHONPATH ?? ""]));
+  return pipelineCacheMemo;
+}
+
 let fullPassRunning = false;
 async function parseAllFiles(): Promise<void> {
   if (!isDirectory) return;
@@ -1005,8 +1014,18 @@ async function parseAllFiles(): Promise<void> {
 async function parseAllFilesInner(): Promise<void> {
   const genSnap = parseGens.snapshot();
   traceMap("fullpass start");
-  const files = findSourceFiles(inputPath);
-  let next = await parseAllFilesBatch(files);
+  // 2026-10-07 — one line per full pass saying where its time went
+  const passT0 = Date.now();
+  const took: Array<[string, number]> = [];
+  let threadsReason = "not run";
+  const timed = async <T,>(label: string, f: () => T | Promise<T>): Promise<T> => { const t = Date.now(); try { return await f(); } finally { took.push([label, Date.now() - t]); } };
+  const files = await timed("walk", () => findSourceFiles(inputPath));
+  // 2026-10-07 — only what moved is parsed again (src/server/pipeline_cache.ts)
+  const cache = pipelineCacheFor();
+  const plan = cache.beginParse(files, path.join(inputPath, ".vibegraph", "manual_seeds.json"));
+  const fresh = plan.toParse.length ? await timed("parse", () => parseAllFilesBatch(plan.toParse)) : {};
+  cache.storeParsed(fresh);
+  let next: typeof projectParse = { ...(plan.reuse as typeof projectParse), ...fresh };
   // Per-file fallback covers the case where the batch run failed
   // entirely (empty result) -- preserves the previous behaviour rather
   // than handing the client an empty project.
@@ -1026,7 +1045,7 @@ async function parseAllFilesInner(): Promise<void> {
   }
   // M4a: run the cross-file linker before broadcasting so the renderer
   // gets cross-file `reference` edges in the same project-update payload.
-  const linkedNext = await runCrossFileLink(next);
+  const linkedNext = await timed("link", () => runCrossFileLink(next));
   // M26.1 follow-up: a full pass races the edit chokepoint. The batch read
   // each file from disk at some unknown time after it started, so an
   // in-memory patch that landed since (before OR during the link) may be
@@ -1046,18 +1065,26 @@ async function parseAllFilesInner(): Promise<void> {
   const relFiles = relativeProjectFiles();
   broadcastGraphRefresh("started");
   try {
-    latestEntryPoints = await runDiscoverEntryPoints(relFiles);
-    latestThreads = await runExtractAllThreads(relFiles, latestEntryPoints);
-    latestSystem = await runBuildSystemTier(relFiles, latestEntryPoints, latestThreads);
-    rebuildStack(relFiles);
-    rebuildCrossings(relFiles);
-    rebuildArch(relFiles);
-    latestMissingDeps = await runCheckProjectDeps(relFiles);
-    broadcastProjectUpdate();
+    latestEntryPoints = await timed("discover", () => runDiscoverEntryPoints(relFiles));
+    latestThreads = await timed("threads", async () => {
+      const seeds = latestEntryPoints.map((e: any) => ({ id: e.id, file: e.file, irNodeId: e.irNodeId }));
+      const sel = cache.selectThreads(relFiles as any, seeds);
+      threadsReason = sel.reason;
+      const fresh = await runExtractAllThreads(relFiles, latestEntryPoints.filter((e: any) => sel.toExtract.some((s) => s.id === e.id)));
+      return cache.mergeThreads(seeds, sel.cached as any, fresh);
+    });
+    cache.save();
+    latestSystem = await timed("system", () => runBuildSystemTier(relFiles, latestEntryPoints, latestThreads));
+    await timed("stack", () => rebuildStack(relFiles));
+    await timed("crossings", () => rebuildCrossings(relFiles));
+    await timed("map", () => rebuildArch(relFiles));
+    latestMissingDeps = await timed("deps", () => runCheckProjectDeps(relFiles));
+    await timed("send", () => broadcastProjectUpdate());
     broadcastProjectWarnings();
   } finally {
     broadcastGraphRefresh("done");
     traceMap("fullpass end");
+    console.log(`  [Project] full pass ${((Date.now() - passT0) / 1000).toFixed(1)} s — ${took.map(([l, ms]) => `${l} ${(ms / 1000).toFixed(1)}`).join(", ")} (parse: ${plan.reason}; threads: ${threadsReason})`);
   }
 }
 
@@ -2631,6 +2658,7 @@ function broadcastProjectUpdate(ws?: WebSocket) {
     ws.send(msg);
   } else {
     for (const c of clients) c.send(msg);
+    if (isDirectory) writeLastMessage(inputPath, msg);
   }
   // M7 wave 1 — fan out to MCP subscribers via vibegraph://project/ir
   // resource-updated notifications.
@@ -8461,6 +8489,10 @@ async function sendParse(ws?: WebSocket) {
     // webview dismissed its boot screen onto a raw file grid. (It also kept
     // an early connect from launching a second, concurrent full pass.)
     if (ws && fullPass && !fullPassDone) {
+      // 2026-10-07 — the last run's project, at once, while this one is built
+      // (the graph-refresh pulse is already on); replaced when the pass ends
+      const last = isDirectory ? readLastMessage(inputPath) : null;
+      if (last) ws.send(last);
       await fullPass.catch(() => {});
       broadcastProjectUpdate(ws);
       return;
@@ -8559,6 +8591,7 @@ if (isDirectory) {
       // scheduled the incremental derived refresh; the full pipeline is
       // only for edits made outside VibeGraph.
       if (isRecentSelfEdit(filename)) return;
+      if (process.env.VG_TRACE_WATCH) console.log(`  [Watch] re-parse for ${rel}`);
       debounceReparse();
     }));
   } catch {

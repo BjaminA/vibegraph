@@ -178,6 +178,15 @@ Skipped: `node_modules`, virtual environments, `.git`, and compiled output
 (`dist/`, `build/`, `.next/`, `.d.ts` files…). Anything skipped is **counted and
 reported**, never dropped silently — the export's README names it.
 
+**How `view` stays quick.** The server parses a file again only when its
+CONTENT changed, and re-extracts a thread only when its seed or a file it
+walks changed (`~/.cache/vibegraph-knowledge/server/`, never in the
+project); a new file, a changed `tsconfig`/`package.json`/`Cargo.toml` or a
+new VibeGraph version parses everything once. A tab opened while the server
+starts is shown the last run's map at once and the fresh one when it is
+ready. Each pass logs where its time went (`[Project] full pass 7.6 s —
+parse 0.9, …`); `VG_TRACE_WATCH=1` names the file each re-parse came from.
+
 **Skip more with `.vibegraphignore`** at the project root, one pattern a line:
 a bare name skips that folder or file anywhere (`_archive/`, with the slash
 for folders only), a path with a `/` is from the project root

@@ -63,7 +63,7 @@ const HELP = `usage: vibegraph-knowledge ${PLAN_USAGE}
   drop open <qN> [--note "…"]    a person drops a question that is not needed (kept the same way)
   reopen open <qN>            a closed or dropped question is open again
   promote <rule id>           copy a planned rule into .vibegraph/constraints.json (human-stated), where it is checked and may gate
-  review [--agree <s:id,…>] [--reject <s:id,…>]   every pending proposal on one page — a new item in full, a change to an
+  review [--agree <s:id,…|all|s:*>] [--reject <…>]   every pending proposal on one page — a new item in full, a change to an
                               agreed item as a diff, the evidence for each; decide several at once (rejecting a change
                               restores the agreed version)
   affected [--uncommitted] [<file>…]   the plan items whose named steps, routers, access functions, rule

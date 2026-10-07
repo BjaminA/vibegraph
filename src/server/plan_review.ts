@@ -101,7 +101,15 @@ export function formatBacklog(b: Backlog): string {
 export function reviewOps(b: Backlog, agree: string[], reject: string[]): { ops: Array<{ op: "agree" | "reject"; section: PlanSection; id: string }>; error?: string } {
   const pending = new Map(b.proposals.map((p) => [`${p.section}:${p.id}`, p]));
   const ops: Array<{ op: "agree" | "reject"; section: PlanSection; id: string }> = [];
-  for (const [op, keys] of [["agree", agree], ["reject", reject]] as const) {
+  // 2026-10-07 — `all` and `<section>:*` stand for every pending proposal (in
+  // that section); what the OTHER list names explicitly is left to it
+  const named = new Set([...agree, ...reject].filter((k) => k !== "all" && !k.endsWith(":*")));
+  const expand = (keys: string[]) => keys.flatMap((k) =>
+    k === "all" ? [...pending.keys()].filter((x) => !named.has(x))
+      : k.endsWith(":*") ? [...pending.keys()].filter((x) => x.startsWith(k.slice(0, -1)) && !named.has(x))
+        : [k]);
+  if (agree.includes("all") && reject.includes("all")) return { ops: [], error: "agree all and reject all at once" };
+  for (const [op, keys] of [["agree", expand(agree)], ["reject", expand(reject)]] as const) {
     for (const k of keys) {
       const p = pending.get(k);
       if (!p) return { ops: [], error: `${k} is not a pending proposal (see \`plan review\`)` };

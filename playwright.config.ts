@@ -1,5 +1,6 @@
 import { defineConfig } from "@playwright/test";
 import * as path from "path";
+import * as os from "os";
 
 // Default fixture is the M2/M3 stalwart `sample_advanced.py`. M4b capture
 // specs override via env so they can point the server at aero_demo or
@@ -40,6 +41,10 @@ export default defineConfig({
     // stays explicit so libcst resolves out of .pydeps/.
     env: {
       PYTHONPATH: ".pydeps",
+      // 2026-10-07 — the server's pipeline cache and last-run replay
+      // (src/server/pipeline_cache.ts) start COLD for every run: a spec that
+      // resets .vibegraph/ state must never be shown the previous run's map.
+      VG_CACHE_DIR: process.env.VG_CACHE_DIR ?? path.join(os.tmpdir(), `vg-e2e-cache-${process.pid}`),
       // The suites were written against the thread-index launchpad as the
       // first view; users boot into the architecture overview (server.ts
       // START_VIEW). A spec that wants the overview overrides this.

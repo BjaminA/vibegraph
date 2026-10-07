@@ -3,6 +3,43 @@
 `vibegraph-knowledge` and the VibeGraph app. Newest first. Each entry says what
 changed and, where an existing user would notice, how behaviour differs.
 
+## 0.27.5 — 2026-10-07
+
+### `view` loads in seconds, and re-reads only what changed
+
+Reported on a 58-file Python project in WSL: `view` took minutes to show
+anything. Measured: the server was up in 3.6 s, but every start and every
+external save (another session was editing four files) ran the WHOLE pipeline
+— all files re-parsed, all 1,180 threads re-extracted, 24–41 s a pass — and
+the first draw waited for two of them.
+
+- **The server's pipeline cache** (`src/server/pipeline_cache.ts`, the CLI
+  envelope cache's rules): a file is parsed again only when its CONTENT
+  changed; a thread is extracted again only when its seed or a file it walks
+  changed after linking (every thread when a module path or a method moved);
+  a new path, a changed parse-context file or a new tool parses everything.
+  Kept in memory and under `~/.cache/vibegraph-knowledge/server/`, so a
+  restart starts warm. Content hashes rather than git: an uncommitted edit is
+  exactly what the watcher reports.
+- **The last run's map at once:** a tab opened while the server starts is
+  sent the previous run's project immediately (the "re-linking…" pulse is
+  on), and the fresh one when the pass ends.
+- **Each pass says where its time went:** `[Project] full pass 7.6 s — parse
+  0.9, link 0.9, …` with why it parsed or extracted what it did;
+  `VG_TRACE_WATCH=1` names the file that set off each re-parse.
+- Measured (a copy of the project): a cold pass 26.7 s; a restart with
+  nothing changed 9–11 s, with the map on screen at 3.8 s; one file edited
+  while running 7.6 s (that file parsed in 0.9 s, no thread re-extracted).
+  The e2e suites start every run on a fresh cache (`playwright.config.ts`).
+- Still large: the project message is 32 MB for 1,180 threads; sending only
+  what changed is the next step.
+
+### `plan review --agree all`
+
+`--agree` / `--reject` take `all` and a whole section (`processes:*`), beside
+`section:id` lists; what the other flag names explicitly stays its own
+(`--agree all --reject stack:yjs`).
+
 ## 0.27.4 — 2026-10-07
 
 ### One answer to "which machine is this"; skipping what is not live code

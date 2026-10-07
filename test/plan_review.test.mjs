@@ -92,4 +92,10 @@ test("ACCEPTANCE: decided in one action — a rejected change restores the agree
   const added = applyPlanOps(plan, [{ op: "add", section: "stack", item: { tool: "lodash", role: "utility" } }], "agent").plan;
   const ops = reviewOps(planBacklog(added, null, []), [], ["stack:lodash"]).ops;
   assert.equal(applyPlanOps(added, ops, "human").plan.stack.find((t) => t.tool === "lodash").status, "dropped");
+  // 2026-10-07 — `all` and `<section>:*`; what the other list names stays its own
+  const more = applyPlanOps(added, [{ op: "add", section: "stack", item: { tool: "zx", role: "utility" } }, { op: "add", section: "principals", item: { id: "ops", kind: "service" } }], "agent").plan;
+  const all = reviewOps(planBacklog(more, null, []), ["all"], ["stack:zx"]).ops;
+  assert.deepEqual(all.map((o) => `${o.op} ${o.section}:${o.id}`).sort(), ["agree principals:ops", "agree stack:lodash", "reject stack:zx"]);
+  assert.deepEqual(reviewOps(planBacklog(more, null, []), ["stack:*"], []).ops.map((o) => o.id).sort(), ["lodash", "zx"]);
+  assert.match(reviewOps(planBacklog(more, null, []), ["all"], ["all"]).error, /at once/);
 });
