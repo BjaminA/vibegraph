@@ -28,7 +28,7 @@ import React, { useRef } from "react";
 import { Handle, Position, useStore, type NodeProps } from "@xyflow/react";
 import type { ContainerKind } from "./types";
 import { tierForZoom, lodLabelFontSize } from "./lod";
-import { chipLabel, chipMaxWidth, CHIP_LEFT, CHIP_MAX_LINES, MIN_BOX_W } from "./chipPlacement";
+import { chipHeight, chipLabel, chipMaxWidth, CHIP_LEFT, CHIP_MAX_LINES, MIN_BOX_W } from "./chipPlacement";
 
 // §5.6 — number of target ports distributed along the container's entry
 // border. Multiple flow/fork edges converging on one container would
@@ -108,6 +108,14 @@ export function ThreadContainerNode({ data }: NodeProps) {
   // stay readable landmarks in the overview. Quantized selector — one
   // re-render per tier change.
   const tier = useStore((s) => tierForZoom(s.transform[2]));
+  // 2026-10-07 — but never past the room the layout reserved for it: the
+  // boxes are spaced for the chip at 11px (chipHeight), so a chip that grew
+  // with zoom-out wrapped taller and slid over the nested chip and the first
+  // card below it (two nested for-of loops in a test). Below full zoom the
+  // chip is ONE line ending in "…", grown only until that line fills its
+  // reserved height; the whole label stays its title and its tooltip.
+  const reservedH = chipHeight(chipText, d.boxWidth);
+  const lodCapPx = Math.max(11, Math.floor((reservedH - 6) / 1.35));
 
   return (
     <div
@@ -173,7 +181,7 @@ export function ThreadContainerNode({ data }: NodeProps) {
           borderRadius: 4,
           color: `var(${accentVar})`,
           fontFamily: "var(--font-ui)",
-          fontSize: tier === "full" ? 11 : lodLabelFontSize(11, 64),
+          fontSize: tier === "full" ? 11 : lodLabelFontSize(11, lodCapPx),
           fontWeight: 600,
           letterSpacing: "0.08em",
           lineHeight: 1.35,
@@ -183,13 +191,14 @@ export function ThreadContainerNode({ data }: NodeProps) {
           // 2026-10-02 — capped and WRAPPED (at most two lines, chipLabel
           // ends the rest in "…"), never wider than its own container: a
           // long for-of header used to run far off to the right.
-          whiteSpace: "normal",
-          overflowWrap: "anywhere",
+          // border-box: the cap includes the padding (chipPlacement's line
+          // estimate already subtracts it) — a one-line chip fills its cap
+          boxSizing: "border-box",
           maxWidth: Math.min(chipMaxWidth(d.boxWidth), Math.max(80, (d.boxWidth ?? MIN_BOX_W) - (d.chipLeft ?? CHIP_LEFT) - 12)),
-          display: "-webkit-box",
-          WebkitBoxOrient: "vertical",
-          WebkitLineClamp: CHIP_MAX_LINES,
           overflow: "hidden",
+          ...(tier === "full"
+            ? { whiteSpace: "normal", overflowWrap: "anywhere", display: "-webkit-box", WebkitBoxOrient: "vertical", WebkitLineClamp: CHIP_MAX_LINES }
+            : { whiteSpace: "nowrap", textOverflow: "ellipsis", display: "block" }),
           pointerEvents: "auto",
         }}
       >

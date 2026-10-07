@@ -3,6 +3,22 @@
 `vibegraph-knowledge` and the VibeGraph app. Newest first. Each entry says what
 changed and, where an existing user would notice, how behaviour differs.
 
+## 0.27.2 — 2026-10-07
+
+### Zoomed out, a container chip stays in its room
+
+Reported with a screenshot: in a test with a loop over files holding a loop
+over an awaited plan, the outer `FOR` chip's second line slid under the inner
+chip, and the inner chip sat on the first card. Boxes are spaced for a chip
+at 11px; below full zoom the chip's font grew with zoom-out (up to 64px)
+inside the same width, so it wrapped taller than the room it was given. Now,
+below full zoom, a chip is one line ending in "…", grown only until that line
+fills its reserved height; the whole label stays its title and its tooltip.
+The chip's width cap includes its padding (`border-box`), so a one-line chip
+never runs past its container. `test:e2e-chip-long` now checks both shapes at
+the overview tier too, with a fixture of the reported shape (red on 0.27.1:
+chips on chips and on cards).
+
 ## 0.27.1 — 2026-10-07
 
 ### Finding Claude on every platform

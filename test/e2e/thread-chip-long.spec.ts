@@ -9,6 +9,11 @@
  *   - no chip overlaps another chip or a card;
  *   - no two cards overlap;
  *   - no label carries mojibake.
+ * And zoomed out (2026-10-07, Ben's screenshot: two nested `for … of` loops in
+ * a test, the outer chip's second line under the inner chip, the inner chip
+ * over the first card): below full zoom a chip grows only into the room the
+ * layout reserved for it, on one line — the same checks hold at the
+ * overview tier.
  *
  *   VG_FIXTURE=test/fixtures/threads/chip_long_demo VG_PORT=4267 PORT=4267 \
  *     npx playwright test test/e2e/thread-chip-long.spec.ts --workers=1
@@ -36,14 +41,22 @@ async function measure(page: Page) {
   });
 }
 
-async function check(page: Page) {
+const scale = (page: Page) => page.locator(".react-flow__viewport").evaluate((el) => Number(/scale\(([\d.]+)\)/.exec((el as HTMLElement).style.transform)?.[1] ?? 1));
+
+async function check(page: Page, expectChip: string, zoomedOut = false) {
   const zoom = 1;
   await page.waitForTimeout(1400);
   // Measure at 1:1 so a chip's two-line cap is in screen pixels.
   await page.evaluate(() => document.dispatchEvent(new CustomEvent("vg-thread-zoom-reset")));
+  if (zoomedOut) {
+    // the overview tier (lod.ts: below 0.28), where chips grow with zoom-out
+    for (let i = 0; i < 20 && (await scale(page)) >= 0.27; i++) { await page.locator(".react-flow__controls-zoomout").click(); await page.waitForTimeout(120); }
+    expect(await scale(page)).toBeLessThan(0.28);
+    await page.waitForTimeout(600);
+  }
   const { containers, cards } = await measure(page);
   const chips = containers.filter((c) => c.chip).map((c) => ({ ...c.chip!, owner: c.box }));
-  expect(chips.some((c) => c.text.startsWith("FOR  [label, sid, doc] of")), `the long chip renders: ${chips.map((c) => c.text).join(" | ")}`).toBe(true);
+  expect(chips.some((c) => c.text.startsWith(expectChip)), `the chip renders: ${chips.map((c) => c.text).join(" | ")}`).toBe(true);
   const problems: string[] = [];
   for (const c of chips) {
     if (/â|Ã/.test(c.text)) problems.push(`mojibake in "${c.text}"`);
@@ -75,7 +88,20 @@ test.describe("long container labels", () => {
       await page.waitForSelector("[data-thread-index]", { timeout: 15_000 });
       await page.click('[data-thread-index-row][data-entry-id="probe.ts:module"]');
       await expect(page.locator("[data-thread-view]")).toBeVisible({ timeout: 10_000 });
-      await check(page);
+      await check(page, "FOR  [label, sid, doc] of");
+      await check(page, "FOR  [label, sid, doc] of", true);
+    });
+  }
+
+  for (const zoomedOut of [false, true]) {
+    test(`nested for-of loops in a test: no chip on a chip or a card${zoomedOut ? ", zoomed out" : ""}`, async ({ page }) => {
+      await page.goto("/");
+      await page.waitForSelector("[data-thread-index]", { timeout: 15_000 });
+      await page.locator('[data-thread-index-row][data-entry-id^="catalog.test.ts"]').first().click();
+      await expect(page.locator("[data-thread-view]")).toBeVisible({ timeout: 10_000 });
+      const all = page.getByRole("button", { name: "All", exact: true });
+      if (await all.count()) await all.first().click();
+      await check(page, "FOR  w of", zoomedOut);
     });
   }
 });

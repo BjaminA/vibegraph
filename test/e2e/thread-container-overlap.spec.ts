@@ -28,8 +28,9 @@ test.describe("thread containers and cards", () => {
     if (await all.count()) await all.first().click();
     await expect(page.locator("[data-thread-container]").first()).toBeVisible({ timeout: 15_000 });
     await page.waitForTimeout(1500); // cards measured, rows re-spaced, boxes re-sized
-    // At reading zoom: zoomed far out a container chip keeps a legible
-    // minimum size on screen and covers its own box's first card by design.
+    // At reading zoom (cards and boxes at full size). Zoomed out, a chip grows
+    // only into the room reserved for it — thread-chip-long.spec.ts checks
+    // that tier.
     const scale = () => page.locator(".react-flow__viewport").evaluate((el) => Number(/scale\(([\d.]+)\)/.exec((el as HTMLElement).style.transform)?.[1] ?? 1));
     for (let i = 0; i < 12 && (await scale()) < 0.75; i++) { await page.locator(".react-flow__controls-zoomin").click(); await page.waitForTimeout(150); }
     expect(await scale()).toBeGreaterThanOrEqual(0.75);
