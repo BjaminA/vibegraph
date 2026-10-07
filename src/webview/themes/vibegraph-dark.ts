@@ -141,9 +141,11 @@ function buildTheme(): Parameters<Monaco["editor"]["defineTheme"]>[1] {
     "editorIndentGuide.activeBackground":      tokenHex("--border-edge"),
     "editorBracketMatch.background":           tokenHex("--bg-node-hover"),
     "editorBracketMatch.border":               tokenHex("--accent-thread", 0.4),
-    "scrollbarSlider.background":              tokenHex("--bg-node-hover"),
-    "scrollbarSlider.hoverBackground":         tokenHex("--border-edge"),
-    "scrollbarSlider.activeBackground":        tokenHex("--text-muted"),
+    // the same three states as the app's scrollbars (tokens.css)
+    "scrollbarSlider.background":              tokenHex("--text-muted", 0.34),
+    "scrollbarSlider.hoverBackground":         tokenHex("--text-muted", 0.62),
+    "scrollbarSlider.activeBackground":        tokenHex("--accent-thread", 0.72),
+    "scrollbar.shadow":                        tokenHex("--bg-canvas", 0),
   };
 
   return {

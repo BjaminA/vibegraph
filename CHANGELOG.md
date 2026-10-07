@@ -3,6 +3,17 @@
 `vibegraph-knowledge` and the VibeGraph app. Newest first. Each entry says what
 changed and, where an existing user would notice, how behaviour differs.
 
+## 0.27.3 — 2026-10-07
+
+### Scrollbars
+
+Every scrolling panel (the threads column, the side panels, the sheets) now
+draws a slim rounded pill instead of the browser's default bar: muted at rest,
+brighter and a little wider under the cursor, the thread accent while dragged,
+floating in a clear track. Colours are tokens, so the light theme follows;
+Firefox gets the closest it draws (thin, same colours). The code editor's
+scrollbar uses the same three states.
+
 ## 0.27.2 — 2026-10-07
 
 ### Zoomed out, a container chip stays in its room

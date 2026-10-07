@@ -256,6 +256,49 @@ code, pre, kbd {
   word-break: break-word;
 }
 
+/* Scrollbars (2026-10-07) — one slim pill everywhere outside Monaco (which
+   themes its own in vibegraph-dark.ts to match): a muted thumb floating in a
+   clear track, brighter under the cursor, the thread accent while dragged.
+   The thumb is inset by a transparent border (background-clip), so it never
+   touches the panel edge. Colours are tokens, so the light theme follows. */
+::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  min-height: 32px;
+  min-width: 32px;
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--text-muted) 34%, transparent);
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  border-width: 2px; /* a touch wider under the cursor: easier to grab */
+  background: color-mix(in oklab, var(--text-muted) 62%, transparent);
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:active {
+  border-width: 2px;
+  background: color-mix(in oklab, var(--accent-thread) 72%, transparent);
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-button {
+  display: none;
+}
+/* Firefox has no pseudo-elements: the closest it draws. Scoped away from
+   Chromium, where these standard properties would replace the pill above. */
+@supports not selector(::-webkit-scrollbar) {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in oklab, var(--text-muted) 40%, transparent) transparent;
+  }
+}
+
 /* M-CHAT-POLISH.3 — inline-code chip for rendered markdown (chat replies,
    skill bodies). Promotes the de-facto chip styling AddComponentModal
    hand-rolled: code artifacts are Family 1, so the teal accent is right.
