@@ -4,7 +4,8 @@
 // _validate / _store); server.ts only routes the WS messages here.
 
 import type { ArchModelRecord } from "../shared/protocol.ts";
-import { BRIEF_SECTIONS, type BriefSection } from "../shared/brief_types.ts";
+import { BRIEF_SECTIONS, type BriefBody, type BriefSection } from "../shared/brief_types.ts";
+import { reviewBrief } from "./brief_review.ts";
 import { briefInputs, briefEstimate } from "./brief_inputs.ts";
 import { buildBriefPrompt, type BriefOnly } from "./brief_prompt.ts";
 import { parseBrief } from "./brief_validate.ts";
@@ -20,19 +21,24 @@ export interface BriefCtx {
   changed: () => void;
 }
 
-/** What the card draws: the ratified spec (stale lines marked) and the pending sections. */
+/** What the card draws: the ratified spec (stale lines marked, with what
+ *  changed), the pending sections, and the review sheet of each (B13). */
 export function briefState(ctx: BriefCtx): Record<string, unknown> {
   const root = ctx.root(), model = ctx.model();
   if (!root) return { available: false, reason: "the Brief needs a project directory" };
   const rec = loadBrief(root);
-  const ratified = model && rec.ratified?.spec ? briefWithStaleness(rec, briefInputs(root, model).facts) : rec.ratified;
   const p = rec.proposed;
+  const inp = model ? briefInputs(root, model, { notes: p?.notes }) : null;
+  const ratified = inp && rec.ratified?.spec ? briefWithStaleness(rec, inp.facts) : rec.ratified;
+  const review = (spec: BriefBody["spec"] | undefined, omitted?: string[]) => (inp && spec && allLines(spec).length ? reviewBrief(spec, inp.facts, { omitted, absolutes: inp.absolutes }) : null);
   return {
     available: true, claude: ctx.claudeAvailable(),
     ratified: ratified ?? null,
+    ratifiedReview: review(ratified?.spec),
     proposed: p ? {
-      model: p.model, at: p.at, spec: p.spec, refused: p.refused.length, omitted: p.omitted,
+      model: p.model, at: p.at, spec: p.spec, refused: p.refused.length, refusedList: p.refused.slice(0, 30), omitted: p.omitted, notes: p.notes ?? [],
       sections: BRIEF_SECTIONS.map((s) => ({ section: s, summary: sectionSummary(p, s) })).filter((x) => x.summary),
+      review: review(p.spec, p.omitted),
     } : null,
   };
 }
@@ -44,13 +50,14 @@ export function briefEstimateFor(ctx: BriefCtx): { ok: boolean; calls?: number; 
 }
 
 /** One call: a draft (or `only` a section, or `stale` lines), stored PROPOSED. */
-export async function briefDraft(ctx: BriefCtx, opts: { only?: BriefOnly; stale?: boolean; guidance?: string } = {}): Promise<{ ok: boolean; error?: string; detail?: string }> {
+export async function briefDraft(ctx: BriefCtx, opts: { only?: BriefOnly; stale?: boolean; guidance?: string; notes?: string[] } = {}): Promise<{ ok: boolean; error?: string; detail?: string }> {
   const root = ctx.root(), model = ctx.model();
   if (!root || !model) return { ok: false, error: "the map is not built yet" };
   if (!ctx.claudeAvailable()) return { ok: false, error: "the claude CLI is unavailable — the Brief needs one model call" };
   const rec = loadBrief(root);
   const only: BriefOnly | undefined = opts.stale ? "spec" : opts.only;
-  const inp = briefInputs(root, model, { only, pending: rec.proposed });
+  const notes = (opts.notes ?? []).filter((n) => typeof n === "string" && n.trim()).map((n) => n.trim().slice(0, 400)).slice(0, 12);
+  const inp = briefInputs(root, model, { only, pending: rec.proposed, notes });
   let restate: string[] | undefined;
   if (opts.stale) {
     const r = briefWithStaleness(rec, inp.facts);
@@ -58,9 +65,10 @@ export async function briefDraft(ctx: BriefCtx, opts: { only?: BriefOnly; stale?
     if (!restate.length) return { ok: false, error: "no ratified line of the Brief is stale" };
   }
   if (only === "scopes" && !inp.facts.silent.length) return { ok: false, error: "every silent box is scoped already" };
-  const text = await ctx.run(buildBriefPrompt(inp.facts, inp.vocab, inp.opVocab, { only, guidance: opts.guidance?.slice(0, 400), restate }));
+  const current = rec.proposed && allLines(rec.proposed.spec).length ? rec.proposed.spec : rec.ratified?.spec ?? null;
+  const text = await ctx.run(buildBriefPrompt(inp.facts, inp.vocab, inp.opVocab, { only, guidance: opts.guidance?.slice(0, 400), restate, current, absolutes: inp.absolutes }));
   if (text === null) return { ok: false, error: "the model returned nothing" };
-  const parsed = parseBrief(text, inp.facts, inp.vocab, inp.opVocab, { model: ctx.modelLabel(), only });
+  const parsed = parseBrief(text, inp.facts, inp.vocab, inp.opVocab, { model: ctx.modelLabel(), only, absolutes: inp.absolutes });
   if (!parsed.brief) return { ok: false, error: parsed.error };
   if (restate) parsed.brief.restates = restate;
   const next = proposeBrief(rec, parsed.brief, only);

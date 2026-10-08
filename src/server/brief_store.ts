@@ -10,12 +10,14 @@
 //   scopes   ratified into architecture.json's scopes (In → Process → Out)
 //   path     ratified into architecture.json's primary path
 //
-// A ratified line is STALE when a citation it rests on changed: the hash kept
-// at proposal time no longer matches the facts now (briefWithStaleness).
+// A ratified line is STALE when exactly what it cites changed (B7): the hash
+// kept at proposal time no longer matches the item's content now, or the code
+// a cited rule guards changed — each said apart, with what it was. A source
+// that cannot be read now is NOT KNOWN, never "changed" (briefWithStaleness).
 
 import * as fs from "fs";
 import * as path from "path";
-import type { BriefBody, BriefLine, BriefRecord, BriefSection } from "../shared/brief_types.ts";
+import type { BriefBody, BriefHashes, BriefLine, BriefRecord, BriefSection } from "../shared/brief_types.ts";
 import { loadArchStore, saveArchStore, type ArchStore, type StatedGroup } from "./arch_store.ts";
 import { hash16, type BriefFacts } from "./brief_facts.ts";
 
@@ -38,17 +40,20 @@ export function saveBrief(root: string, rec: BriefRecord): void {
 
 /** A new proposal. A scopes batch (`only: "scopes"`) ADDS to a pending one. */
 export function proposeBrief(rec: BriefRecord, proposed: NonNullable<BriefRecord["proposed"]>, only?: string): BriefRecord {
+  const mergeHashes = (a: NonNullable<BriefRecord["proposed"]>, b: NonNullable<BriefRecord["proposed"]>) => ({
+    hashes: { ...a.hashes, ...b.hashes }, basis: { ...(a.basis ?? {}), ...(b.basis ?? {}) }, codeHashes: { ...(a.codeHashes ?? {}), ...(b.codeHashes ?? {}) }, scheme: b.scheme,
+  });
   if (only === "scopes" && rec.proposed) {
     const have = new Set(rec.proposed.scopes.map((s) => s.box));
-    return { ...rec, proposed: { ...rec.proposed, scopes: [...rec.proposed.scopes, ...proposed.scopes.filter((s) => !have.has(s.box))], refused: [...rec.proposed.refused, ...proposed.refused], hashes: { ...rec.proposed.hashes, ...proposed.hashes } } };
+    return { ...rec, proposed: { ...rec.proposed, scopes: [...rec.proposed.scopes, ...proposed.scopes.filter((s) => !have.has(s.box))], refused: [...rec.proposed.refused, ...proposed.refused], ...mergeHashes(rec.proposed, proposed) } };
   }
   if (only && rec.proposed) {
     // one section re-asked: replace that section, keep the rest of the pending proposal
     const p = { ...rec.proposed };
-    if (only === "spec") p.spec = proposed.spec;
+    if (only === "spec") { p.spec = proposed.spec; p.notes = proposed.notes; }
     if (only === "groups") { p.groups = proposed.groups; p.names = proposed.names; }
     if (only === "path") p.primaryPath = proposed.primaryPath;
-    return { ...rec, proposed: { ...p, refused: [...p.refused, ...proposed.refused], hashes: { ...p.hashes, ...proposed.hashes }, model: proposed.model, at: proposed.at } };
+    return { ...rec, proposed: { ...p, refused: [...p.refused, ...proposed.refused], ...mergeHashes(rec.proposed, proposed), model: proposed.model, at: proposed.at } };
   }
   return { ...rec, proposed };
 }
@@ -100,7 +105,16 @@ export function decideBrief(root: string, section: BriefSection | "all", decisio
         ratified.spec = p.restates && ratified.spec
           ? { function: [...keep("function"), ...p.spec.function], method: [...keep("method"), ...p.spec.method], feature: [...keep("feature"), ...p.spec.feature] }
           : p.spec;
-        for (const l of allLines(p.spec)) for (const c of l.cites) if (p.hashes[c]) ratified.hashes[c] = p.hashes[c];
+        // per citation: its hash, its content as it was (scheme 2) and the
+        // code a cited rule guards — a citation with no `basis` is 0.29.0's
+        for (const l of allLines(p.spec)) for (const c of l.cites) {
+          if (p.hashes[c]) ratified.hashes[c] = p.hashes[c];
+          if (p.basis?.[c] !== undefined) (ratified.basis ??= {})[c] = p.basis[c];
+          else if (ratified.basis) delete ratified.basis[c];
+          if (p.codeHashes?.[c]) (ratified.codeHashes ??= {})[c] = p.codeHashes[c];
+          else if (ratified.codeHashes) delete ratified.codeHashes[c];
+        }
+        if (p.scheme) ratified.scheme = p.scheme;
       }
       if (s === "groups") { arch = applyBriefGroups(arch ?? loadArchStore(root), p.groups, p.names, p.model); }
       if (s === "scopes") {
@@ -135,13 +149,37 @@ export function decideBrief(root: string, section: BriefSection | "all", decisio
 
 export const allLines = (spec: BriefBody["spec"]): BriefLine[] => [...spec.function, ...spec.method, ...spec.feature];
 
+const oneLine = (s: string, n = 90) => { const t = s.replace(/\s+/g, " ").trim(); return t.length > n ? `${t.slice(0, n - 1)}…` : t; };
+
+/** What changed under one citation, or null when nothing did (B7). */
+export function citationChange(c: string, saved: BriefHashes, facts: Pick<BriefFacts, "cites" | "code" | "legacy">): string | null {
+  if (!facts.cites.has(c)) return `${c} is no longer among the facts (removed, or out of the facts pack)`;
+  const now = facts.cites.get(c) ?? "";
+  const was = saved.hashes[c];
+  if (was) {
+    if (saved.basis?.[c] !== undefined) {
+      if (was !== hash16(now)) return c.startsWith("rule:") ? `${c} changed — its text, check or scope (was: "${oneLine(saved.basis[c])}")` : `${c} changed — was: "${oneLine(saved.basis[c])}", now: "${oneLine(now)}"`;
+    } else {
+      // written by 0.29.0: fresh if it matches any way that version hashed it
+      const ok = was === hash16(now) || (facts.legacy.get(c) ?? []).some((b) => hash16(b) === was);
+      if (!ok) return `${c} changed (written before 0.29.1, which kept no record of what it was)`;
+    }
+  }
+  const code = saved.codeHashes?.[c];
+  const nowCode = facts.code.get(c);
+  // the code is compared only when it can be read now: not known is not changed
+  if (code && nowCode && code.hash !== nowCode.hash) return `the code ${c} guards changed: ${code.names.slice(0, 3).join(", ") || "its functions"}`;
+  return null;
+}
+
 /** The ratified spec with each line's STALE citations marked against the facts now. */
-export function briefWithStaleness(rec: BriefRecord, facts: Pick<BriefFacts, "cites"> | null): BriefRecord["ratified"] {
+export function briefWithStaleness(rec: BriefRecord, facts: Pick<BriefFacts, "cites" | "code" | "legacy"> | null): BriefRecord["ratified"] {
   const r = rec.ratified;
   if (!r?.spec || !facts) return r;
   const mark = (l: BriefLine): BriefLine => {
-    const stale = l.cites.filter((c) => !facts.cites.has(c) || (r.hashes[c] && r.hashes[c] !== hash16(facts.cites.get(c) ?? "")));
-    return stale.length ? { ...l, stale } : l;
+    const why: string[] = [], stale: string[] = [];
+    for (const c of l.cites) { const w = citationChange(c, r, facts); if (w) { stale.push(c); why.push(w); } }
+    return stale.length ? { ...l, stale, staleWhy: why } : l;
   };
   return { ...r, spec: { function: r.spec.function.map(mark), method: r.spec.method.map(mark), feature: r.spec.feature.map(mark) } };
 }
@@ -149,7 +187,7 @@ export function briefWithStaleness(rec: BriefRecord, facts: Pick<BriefFacts, "ci
 /** The ratified spec as the page an agent reads first (architecture.md). */
 export function briefMarkdown(r: BriefRecord["ratified"]): string[] {
   if (!r?.spec || !allLines(r.spec).length) return [];
-  const line = (l: BriefLine) => `- ${l.text}${l.stale?.length ? " **[STALE: a line it cites changed]**" : ""}${l.cites.length ? ` _(${l.cites.slice(0, 4).join(", ")}${l.cites.length > 4 ? ", …" : ""})_` : " _(INFERRED — no citation)_"}`;
+  const line = (l: BriefLine) => `- ${l.text}${l.stale?.length ? ` **[STALE: ${(l.staleWhy ?? ["a line it cites changed"])[0]}]**` : ""}${l.cites.length ? ` _(${l.cites.slice(0, 4).join(", ")}${l.cites.length > 4 ? ", …" : ""})_` : " _(INFERRED — no citation)_"}`;
   const out = ["## Brief", "", `> Written by ${r.model}, ratified by ${r.by} on ${r.at.slice(0, 10)}. Every line cites what the model was shown; a STALE line rests on code that changed since.`, ""];
   for (const [title, part] of [["Function", "function"], ["Method", "method"], ["Key features", "feature"]] as const) {
     if (!r.spec[part].length) continue;

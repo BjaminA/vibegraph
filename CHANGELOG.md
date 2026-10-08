@@ -3,6 +3,66 @@
 `vibegraph-knowledge` and the VibeGraph app. Newest first. Each entry says what
 changed and, where an existing user would notice, how behaviour differs.
 
+## 0.30.0 — 2026-10-08 — the Brief checks itself: what changed, what the evidence is, what the map says
+
+A field review of the first Brief found it read well and still described the
+core loosely, and that nine lines read STALE straight after drafting. Each fix
+is one rule in one place (`src/server/brief_checks.ts`): drafting refuses a
+line it names, and the review sheet shows the same findings on any brief,
+including one ratified before these checks existed.
+
+- **STALE means what it says (B7).** A citation is hashed from exactly what it
+  cites: a rule's text, check and scope; a source line and its neighbours; an
+  edge's ends and operation (moving code is not a change). The code a cited
+  rule guards is hashed apart, so the card says which changed — "rule c13
+  changed — its text, check or scope (was: …)" or "the code rule:c10 guards
+  changed: approve (…)". A source that cannot be read is not known, never
+  changed: the nine false markers came from the server's map copy losing the
+  parsed code it was built from (fixed, `model_source.ts`). A brief ratified
+  on 0.29.x is checked against how that version hashed it, so the upgrade
+  stales nothing. Every `file:line` the facts print is citable — the prompt and
+  the allow-list are one source.
+- **Evidence has a role (B8).** Each cited item is enforce (where a rule is
+  applied: a function a stated rule guards, a declared grant, a grant or admin
+  call), verify (a test, probe, demo or refused attempt), use, declare, doc or
+  note. A Method line resting only on tests, rules, the plan or docs is
+  refused; a mechanism word (`enforces`, `partitions`, …) with no enforce
+  citation is flagged. A mechanism is never described by its test.
+- **Data claims are checked (B9).** A line that says who writes, reads,
+  watches, creates or owns a zone carries the claim as a fact — checked
+  against the map's zone edges, the plan's flows (a feed over a declared
+  family the code cannot show is "declared, not seen in the code") and the
+  zone's partitions (`request_{Role}` has no single owner). Contradicted
+  refuses the line; plan-only and unverifiable are shown.
+- **Main jobs (B10).** Each process's main job is where its part starts in the
+  plan's flows (else what it does most); a line naming a secondary job as the
+  process's work is flagged, and a main job no line states is on the sheet.
+- **Absolutes (B11).** only / never / no / none / nothing / without / all /
+  every / always need a stated rule that says them, or a `not` claim the map
+  confirms. A project adds its own in `.vibegraph/brief-vocabulary.json`
+  (`absolutes`).
+- **Coverage (B12).** Every rule a person stated, and the salient mechanisms
+  (ranked by how many rules name a file and how many threads reach it), is
+  cited or named in `omitted`. Doc lines are ranked by how much they talk about
+  this code, a tool's own feedback and reference folders left out
+  (`excludeDocs` for more).
+- **The review sheet and notes (B13).** Before Ratify the card, `brief
+  codebase show` and the inbox show each line's warnings, citations by role,
+  what no line covers and the facts gaps; the button says "Ratify 15 lines, 2
+  with warnings". **Brief again with notes** (`--note "…"`, repeatable, or the
+  card) sends the person's corrections as stated input; a note no line cites
+  and `omitted` does not answer is reported.
+
+Measured on a throwaway copy of the repository that reported it: one STALE
+line where there were nine (a citation written by 0.29.0, said as such);
+editing a rule's text stales exactly the lines citing it; a brief again with
+three notes rewrote the four wrong lines correctly, covered the missing core,
+and its sheet showed five warnings, each true.
+
+Tests: test:brief (8), test:brief-checks (7, fixture
+`test/brief_checks_setup.mjs` on views_demo), test:e2e-brief (the sheet, the
+Ratify label, notes).
+
 ## 0.29.1 — 2026-10-08 — panels in the app's colours; the inbox as chips, decisions at once
 
 - **One surface.** The panel sheet (Inbox, Plan, Rules, Stack, Agent
@@ -26,7 +86,7 @@ changed and, where an existing user would notice, how behaviour differs.
   times a click (`src/server/reconcile_memo.ts`; ~400 ms each on a 116-file
   repository), which the Plan panel's Agree shares.
 
-Tests: test:inbox-view (5); test:e2e-gui-design (the panels now share one
+Tests: test:inbox-view (4); test:e2e-gui-design (the panels now share one
 surface; a person's CLI step in it sets `VG_PERSON_NO_TTY`, which 0.28's
 no-terminal guard requires); test:e2e-inbox (the subject chip).
 

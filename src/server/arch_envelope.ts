@@ -57,7 +57,7 @@ export function archModelForEnvelope(
   contractFor?: (ep: string) => ThreadContract | null,
   opts2: { applyStore?: boolean } = {},
 ): ArchModelRecord {
-  const derived = recordModelSource(derivedArchModel(env, stack, crossings, root, contractFor), env.files);
+  const derived = recordModelSource(derivedArchModel(env, stack, crossings, root, contractFor), { files: env.files, stack, threads: env.threads });
   // M-ARCH.4 — the stated half and any pending proposal, each element
   // keeping its source. The server holds the derived model apart so a
   // ratify/reject re-applies without re-deriving.

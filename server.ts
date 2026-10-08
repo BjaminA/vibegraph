@@ -5,7 +5,7 @@ import { projectIgnore, IGNORE_FILE, type ProjectIgnore } from "./src/server/pro
 import { watchProject, type WatchResult } from "./src/server/watch_project";
 import { writerWarning } from "./src/server/writer_stamp";
 import { declaredTopology } from "./src/server/arch_label_drift";
-import { staleBriefLines } from "./src/server/brief_inputs";
+import { staleBriefLines, pendingBriefReview } from "./src/server/brief_inputs";
 import { historicalAdvice, historicalFolders } from "./src/server/historical_copies";
 import { DEFAULT_PHASE_TEXT, phaseTexter } from "./src/server/pass_progress";
 import { probeOtherServer, servedUrl, ABOUT_PATH, aboutPayload } from "./src/server/serve_address";
@@ -45,6 +45,7 @@ import { scopeNode, decideNodeScope, type ScopeCtx } from "./src/server/node_sco
 import { briefState, briefEstimateFor, briefDraft, briefDecide, type BriefCtx } from "./src/server/brief_server";
 import { buildInbox, decideInbox } from "./src/server/inbox";
 import { applyArchStore, loadArchStore, saveArchStore, ratifyProposal, rejectProposal, proposalGate } from "./src/server/arch_store";
+import { carryModelSource } from "./src/server/model_source";
 import { archBaseline, archDrift } from "./src/server/arch_drift";
 import { testReach, affectedTests } from "./src/shared/test_reach";
 import { buildEnvSurface, configuredByFor, type EnvSurface } from "./src/shared/env_surface";
@@ -361,7 +362,10 @@ function reapplyArchStore(): void {
     // 2026-10-05 — how far the map moved since the groups were ratified
     // (src/server/arch_drift.ts): zero tokens, on every re-derive.
     const drift = archDrift(applied, store, readInfraManifests(inputPath).facts, loadPlan(inputPath), declaredTopology(inputPath));
-    latestArch = drift ? { ...applied, drift } : applied;
+    // 2026-10-08 — the copy keeps the parsed code it came from (model_source.ts):
+    // without it the Brief hashed every rule citation against "no code" and
+    // marked each line resting on a rule STALE straight after drafting
+    latestArch = drift ? carryModelSource(applied, { ...applied, drift }) : applied;
   } catch (e: any) {
     console.warn(`  [Architecture] stated layer failed to apply: ${e?.message ?? e}`);
     latestArch = latestArchDerived;
@@ -8348,7 +8352,7 @@ function setupWebSocket() {
             }
             const after = loadPlan(root);
             const rec = after ? reconcilePlanMemo(after, planEnv() as any, latestStack, root) : null;
-            ws.send(JSON.stringify({ type: "inbox-state", payload: { items: buildInbox(root, { rec, model: latestArchDerived, briefStale: latestArch ? staleBriefLines(root, latestArch) : [] }), ...reply } }));
+            ws.send(JSON.stringify({ type: "inbox-state", payload: { items: buildInbox(root, { rec, model: latestArchDerived, briefStale: latestArch ? staleBriefLines(root, latestArch) : [], briefReview: latestArch ? pendingBriefReview(root, latestArch) : [] }), ...reply } }));
           }
         } else if (msg.type === "rules-get" || msg.type === "rules-op") {
           // 2026-10-05 — the Rules panel (src/server/rules_server.ts): live
@@ -8396,7 +8400,8 @@ function setupWebSocket() {
           else if (t === "brief-estimate") result(briefEstimateFor(briefCtx));
           else if (t === "brief-run") {
             const only = ["spec", "groups", "scopes", "path"].includes(msg.payload?.only) ? msg.payload.only : undefined;
-            briefDraft(briefCtx, { only, stale: msg.payload?.stale === true, guidance: typeof msg.payload?.guidance === "string" ? msg.payload.guidance : undefined })
+            const notes = Array.isArray(msg.payload?.notes) ? msg.payload.notes.filter((n: unknown): n is string => typeof n === "string") : undefined;
+            briefDraft(briefCtx, { only, stale: msg.payload?.stale === true, guidance: typeof msg.payload?.guidance === "string" ? msg.payload.guidance : undefined, notes })
               .then(result, (e) => result({ ok: false, error: String(e?.message ?? e) }));
           } else {
             const decision = msg.payload?.decision === "reject" ? "reject" : "ratify";

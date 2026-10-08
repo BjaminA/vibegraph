@@ -16,7 +16,7 @@ const reply = {
       { text: "Partitions the ledger so the decider alone writes status.", words: ["partitions"], cites: ["topology:store:ledger", "cluster:scripts:decider->zone:ledger/status:uses:write"], boxes: ["cluster:scripts:decider", "zone:ledger/status"] },
       { text: "Teleports orders between hosts.", words: ["teleports"], cites: ["tool:fetch"] },
     ],
-    feature: [{ text: "Every decision is kept for audit.", words: ["audit-trail"], cites: ["docs/AUDIT.md:3"] }],
+    feature: [{ text: "Decisions are kept for audit.", words: ["audit-trail"], cites: ["docs/AUDIT.md:3"] }],
   },
   omitted: ["the archiver: planned, not built"],
 };

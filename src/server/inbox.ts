@@ -44,7 +44,7 @@ const short = (v: unknown) => { const s = JSON.stringify(v); return s.length > 1
 
 /** `model` (the derived map) turns on the sensors that read it — new
  *  processes and identities, placement, groups and scope drift. */
-export function buildInbox(root: string, opts: { rec?: PlanReconcile | null; model?: ArchModelRecord | null; git?: boolean; briefStale?: string[] } = {}): InboxItem[] {
+export function buildInbox(root: string, opts: { rec?: PlanReconcile | null; model?: ArchModelRecord | null; git?: boolean; briefStale?: string[]; briefReview?: string[] } = {}): InboxItem[] {
   const out: InboxItem[] = [];
   const plan = loadPlan(root);
   let constraints: ReturnType<typeof loadConstraints> = [];
@@ -106,7 +106,8 @@ export function buildInbox(root: string, opts: { rec?: PlanReconcile | null; mod
     for (const s of BRIEF_SECTIONS) {
       const t = sectionSummary(brief.proposed, s);
       if (!t) continue;
-      const lines = s === "spec" ? allLines(brief.proposed.spec).slice(0, 4).map((l) => `${l.text}${l.cites.length ? "" : " (INFERRED)"}`) : [];
+      // the spec's review sheet first (B13): what to look at before ratifying
+      const lines = s === "spec" ? [...(opts.briefReview ?? []), ...allLines(brief.proposed.spec).slice(0, 4).map((l) => `${l.text}${l.cites.length ? "" : " (INFERRED)"}`)] : [];
       out.push({ id: `brief:${s}`, kind: "brief", decidable: true, title: `Brief (PROPOSED, ${brief.proposed.model}): ${t}`, detail: lines });
     }
   }

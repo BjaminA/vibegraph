@@ -21,6 +21,30 @@ export const CORE_BRIEF_VOCABULARY = core as BriefVocabulary;
 
 export const BRIEF_LIMITS = { function: 3, method: 6, feature: 6, text: 200, groups: 12, names: 16, scopes: 15, path: 8, omitted: 12 };
 
+/** What a piece of evidence IS (B8, 2026-10-08): where a rule is applied
+ *  (enforce), a test / probe / refused attempt (verify), a runtime call (use),
+ *  a schema, topology, plan or stated rule (declare), prose (doc), or the
+ *  person's own correction (note). */
+export type EvidenceRole = "enforce" | "verify" | "use" | "declare" | "doc" | "note";
+export const EVIDENCE_ROLES: EvidenceRole[] = ["enforce", "verify", "use", "declare", "doc", "note"];
+
+/** B9 — a data claim written as a fact the map can check: who writes, reads,
+ *  watches, creates or owns which zone (or family), optionally naming the
+ *  partition keys; `not` for a claim of absence ("writes nothing"). */
+export type ClaimVerb = "writes" | "reads" | "watches" | "creates" | "owns";
+export const CLAIM_VERBS: ClaimVerb[] = ["writes", "reads", "watches", "creates", "owns"];
+export interface BriefClaim {
+  subject: string;
+  verb: ClaimVerb;
+  /** a zone id, a family, or "*" (anything — only with `not`) */
+  object: string;
+  partition?: string[];
+  not?: boolean;
+  /** set by the check: what the facts say about it */
+  verdict?: "supported" | "declared" | "unverifiable" | "contradicted";
+  why?: string;
+}
+
 /** One cited claim. `boxes`: the map boxes it happens in (the GUI lights them). */
 export interface BriefLine {
   text: string;
@@ -32,8 +56,14 @@ export interface BriefLine {
   entries?: string[];
   /** the citations the validator dropped (not shown, or circular) */
   dropped?: string[];
-  /** set on read when a cited line changed since it was written */
+  /** B9: the line's data claims, each with its verdict */
+  claims?: BriefClaim[];
+  /** set on read when a cited item changed since it was written */
   stale?: string[];
+  /** B7: what changed, one line per stale citation */
+  staleWhy?: string[];
+  /** B13: what the review found (computed on read; never decides alone) */
+  warnings?: string[];
 }
 
 export interface BriefGroupOp {
@@ -59,14 +89,29 @@ export interface BriefBody {
 export type BriefSection = "spec" | "groups" | "scopes" | "path";
 export const BRIEF_SECTIONS: BriefSection[] = ["spec", "groups", "scopes", "path"];
 
+/** B7 — how a citation was hashed. 2: the cited item's own canonical content
+ *  (a rule's text, check and scope; a source line and its neighbours; an
+ *  edge's ends and operation), with a rule's guarded code hashed APART in
+ *  `codeHashes`. A record with no scheme was written by 0.29.0. */
+export interface BriefHashes {
+  scheme?: 2;
+  hashes: Record<string, string>;
+  /** the cited content as it was, shortened (what the card's "was" shows) */
+  basis?: Record<string, string>;
+  /** rule id → the hash of the code its check guards, and the functions */
+  codeHashes?: Record<string, { hash: string; names: string[] }>;
+}
+
 export interface BriefRecord {
   version: "1";
   /** the proposal waiting for a person, if any */
-  proposed?: BriefBody & { model: string; at: string; refused: Array<{ item: string; reason: string }>; hashes: Record<string, string>; estimate?: number;
+  proposed?: BriefBody & BriefHashes & { model: string; at: string; refused: Array<{ item: string; reason: string }>; estimate?: number;
     /** a re-brief of STALE lines: ratifying replaces only these (by text) */
-    restates?: string[] };
+    restates?: string[];
+    /** B13: the person's notes this draft was asked to reconcile */
+    notes?: string[] };
   /** what a person ratified, by section */
-  ratified?: Partial<{ spec: BriefBody["spec"]; scopes: BriefScope[]; path: BriefBody["primaryPath"] }> & { at: string; by: string; model: string; hashes: Record<string, string> };
+  ratified?: Partial<{ spec: BriefBody["spec"]; scopes: BriefScope[]; path: BriefBody["primaryPath"] }> & BriefHashes & { at: string; by: string; model: string };
   /** a short record of decisions */
   history?: Array<{ at: string; by: string; section: string; decision: "ratify" | "reject"; model: string }>;
 }

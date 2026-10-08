@@ -45,7 +45,7 @@ const reply = {
       { text: "Teleports orders between hosts.", words: ["teleports"], cites: ["tool:fetch"] },
       { text: "Partitions the ledger so the decider alone writes status.", words: ["partitions", "levitates"], cites: ["topology:store:ledger", "cluster:scripts:decider->zone:ledger/status:uses:write"], boxes: ["cluster:scripts:decider", "zone:ledger/status", "no:such:box"] },
     ],
-    feature: [{ text: "Every decision is kept for audit.", words: ["audit-trail"], cites: ["docs/AUDIT.md:3"] }],
+    feature: [{ text: "Decisions are kept for audit.", words: ["audit-trail"], cites: ["docs/AUDIT.md:3"] }],
   },
   groups: [
     { op: "add", id: "g-ledger-writers", label: "Ledger writers", kind: "trust", members: ["cluster:scripts:.", "cluster:scripts:decider", "no:such:box"], cites: ["cluster:scripts:.->zone:ledger/approver:uses:write"] },
@@ -118,16 +118,23 @@ test("a person ratifies; an agent cannot; groups land in architecture.json; arch
   const at = md.indexOf("## Brief");
   assert.ok(at > 0 && at < md.indexOf("\n## ", at + 3), "the Brief is the first section");
   assert.match(md, /\*\*Function\*\*\n- Decides when an order is released/);
-  assert.match(md, /Every decision is kept for audit\. _\(INFERRED — no citation\)_/);
+  assert.match(md, /Decisions are kept for audit\. _\(INFERRED — no citation\)_/);
 });
 
-test("a ratified line goes STALE when a line it cites changes", () => {
+test("B7: a line goes STALE only when exactly what it cites changes, and says what changed", () => {
+  // moving code is not a change: the cited edge is the same write
   const f = join(proj, "decider/src/transitions.ts");
   writeFileSync(f, `// a line added above the write\n${readFileSync(f, "utf-8")}`);
+  assert.doesNotMatch(cli(["brief", "codebase", "show", proj]).stdout, /STALE/, "nothing a line cites changed");
+  // the state machine it cites changes
+  const topo = join(proj, ".vibegraph/topology/ledger.json");
+  writeFileSync(topo, readFileSync(topo, "utf-8").replace(/"to": "held"/, '"to": "parked"'));
   const show = cli(["brief", "codebase", "show", proj]);
   assert.equal(show.status, 0, show.stderr);
-  assert.match(show.stdout, /Function: Decides when an order is released[^\n]*\[STALE: cluster:scripts:decider->zone:ledger\/status:uses:write changed\]/);
+  assert.match(show.stdout, /Function: Decides when an order is released[^\n]*\[STALE: topology:sm:order-phase changed\]/);
+  assert.match(show.stdout, /topology:sm:order-phase changed — was: "state machine order-phase: filed→held[^"]*", now: "state machine order-phase: filed→parked/, "the card says what changed");
   assert.doesNotMatch(show.stdout, /Function: Serves clerks[^\n]*STALE/, "a line whose citations did not change stays fresh");
+  assert.doesNotMatch(show.stdout, /Method: Partitions[^\n]*STALE/);
 });
 
 test("the hooks: session start carries the function and method lines; a prompt on a box's thread brings its method line once", () => {
@@ -162,7 +169,15 @@ test("a line resting on a rule goes STALE when the code the rule's check names c
   assert.doesNotMatch(cli(["brief", "codebase", "show", p2]).stdout, /STALE: rule:c1/, "the named function moved, unchanged");
   const tr = join(p2, "decider/src/transitions.ts");
   writeFileSync(tr, readFileSync(tr, "utf-8").replace(`readDoc("approver", "current")`, `readDoc("approver", "acting")`));
-  assert.match(cli(["brief", "codebase", "show", p2]).stdout, /Decides releases only once an approver is appointed\.\s+\[STALE: rule:c1 changed\]/);
+  const shown = cli(["brief", "codebase", "show", p2]).stdout;
+  assert.match(shown, /Decides releases only once an approver is appointed\.\s+\[STALE: rule:c1 changed\]/);
+  assert.match(shown, /the code rule:c1 guards changed: checkApprover \(decider\/src\/transitions\.ts\)/, "the guarded code, said apart from the rule");
+  // the rule's own text: said as a change to the rule
+  writeFileSync(tr, readFileSync(tr, "utf-8").replace(`readDoc("approver", "acting")`, `readDoc("approver", "current")`));
+  assert.doesNotMatch(cli(["brief", "codebase", "show", p2]).stdout, /STALE/, "the code is back as it was");
+  const cfile = join(p2, ".vibegraph/constraints.json");
+  writeFileSync(cfile, readFileSync(cfile, "utf-8").replace("Only the decider asks", "Only the decider ever asks"));
+  assert.match(cli(["brief", "codebase", "show", p2]).stdout, /rule:c1 changed — its text, check or scope \(was: "Only the decider asks/);
 });
 
 test("--stale re-briefs only the stale lines; ratifying replaces exactly those", () => {
@@ -171,12 +186,12 @@ test("--stale re-briefs only the stale lines; ratifying replaces exactly those",
   const r = cli(["brief", "codebase", proj, "--stale", "--reply", join(tmp, "reply2.json")]);
   assert.equal(r.status, 0, r.stderr + r.stdout);
   const p = JSON.parse(readFileSync(join(proj, ".vibegraph/brief.json"), "utf-8")).proposed;
-  // both lines cite the edge whose code moved: both are stale, both restated
-  assert.deepEqual(p.restates, ["Decides when an order is released, by a state machine run in the decider.", "Partitions the ledger so the decider alone writes status."]);
+  // only the line citing the changed state machine is stale, and restated
+  assert.deepEqual(p.restates, ["Decides when an order is released, by a state machine run in the decider."]);
   assert.equal(cli(["brief", "codebase", "ratify", "spec", proj]).status, 0);
   const spec = JSON.parse(readFileSync(join(proj, ".vibegraph/brief.json"), "utf-8")).ratified.spec;
   assert.deepEqual(spec.function.map((l) => l.text), ["Serves clerks and partners who file order requests.", "A third function line.", "Decides order releases in the decider's state machine."]);
-  assert.deepEqual(spec.method, [], "a stale line the re-brief did not restate is gone, not kept stale");
+  assert.equal(spec.method.length, 1, "a line that was not stale is kept");
   assert.equal(spec.feature.length, 1, "a line that was not stale is kept");
   const show = cli(["brief", "codebase", "show", proj]);
   assert.doesNotMatch(show.stdout, /STALE/, "the re-brief rests on the code as it is now");

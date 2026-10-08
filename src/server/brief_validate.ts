@@ -12,17 +12,41 @@
 //   limits      3 function / 6 method / 6 feature lines, short text
 //   left out    the model's own `omitted`, plus what the facts pack left out
 //
+//   checks      every spec line passes brief_checks.ts (B8 evidence roles, B9
+//               data claims against the map, B11 absolute words): an error
+//               refuses the line with its reason
+//   notes       a note the person gave ("brief again with notes") that no line
+//               cites and `omitted` does not answer is reported as refused
+//
 // A claim left with no citation is INFERRED (empty `cites`), drawn faded. The
-// result carries a hash per kept citation: a cited line that changes later
-// makes the line STALE (brief_store.ts).
+// result carries a hash per kept citation, taken from exactly what it cites
+// (scheme 2, brief_facts.ts), the content shortened (what the card's "was"
+// shows) and the hash of the code each cited rule guards: a cited item that
+// changes later makes the line STALE, saying what changed (brief_store.ts).
 
 import type { BriefFacts } from "./brief_facts.ts";
 import { hash16 } from "./brief_facts.ts";
-import { BRIEF_LIMITS, type BriefBody, type BriefGroupOp, type BriefLine, type BriefRecord, type BriefScope, type BriefVocabulary, type BriefPart } from "../shared/brief_types.ts";
+import { BRIEF_LIMITS, CLAIM_VERBS, type BriefBody, type BriefClaim, type BriefGroupOp, type BriefLine, type BriefRecord, type BriefScope, type BriefVocabulary, type BriefPart, type ClaimVerb } from "../shared/brief_types.ts";
 import type { Vocabulary } from "../shared/node_io.ts";
 import { boundLabel } from "./arch_propose.ts";
 import { GROUP_KINDS } from "./arch_store.ts";
 import type { BriefOnly } from "./brief_prompt.ts";
+import { briefCoverage, checkLine } from "./brief_checks.ts";
+
+/** A claim as the model wrote it, shape-checked (its verdict comes from the map). */
+function parseClaims(raw: unknown, item: string, refused: Array<{ item: string; reason: string }>): BriefClaim[] {
+  if (!Array.isArray(raw)) return [];
+  const out: BriefClaim[] = [];
+  raw.slice(0, 8).forEach((c: any, i: number) => {
+    const subject = typeof c?.subject === "string" ? c.subject.trim() : "";
+    const verb = typeof c?.verb === "string" ? c.verb.trim().toLowerCase() : "";
+    const object = typeof c?.object === "string" ? c.object.trim() : "";
+    if (!subject || !object || !CLAIM_VERBS.includes(verb as ClaimVerb)) { refused.push({ item: `${item}.claims[${i}]`, reason: `a claim needs a subject box, a verb (${CLAIM_VERBS.join(" / ")}) and an object zone` }); return; }
+    const partition = Array.isArray(c?.partition) ? c.partition.filter((p: unknown): p is string => typeof p === "string" && !!p.trim()).slice(0, 4) : [];
+    out.push({ subject, verb: verb as ClaimVerb, object, ...(partition.length ? { partition } : {}), ...(c?.not === true ? { not: true } : {}) });
+  });
+  return out;
+}
 
 type Proposed = NonNullable<BriefRecord["proposed"]>;
 
@@ -38,7 +62,7 @@ export function extractJson(text: string): unknown {
   try { return JSON.parse(src.slice(a, b + 1)); } catch { return null; }
 }
 
-export function parseBrief(text: string, facts: BriefFacts, vocab: BriefVocabulary, opVocab: Vocabulary, meta: { model: string; only?: BriefOnly; now?: () => Date }): { brief: Proposed | null; error?: string } {
+export function parseBrief(text: string, facts: BriefFacts, vocab: BriefVocabulary, opVocab: Vocabulary, meta: { model: string; only?: BriefOnly; now?: () => Date; absolutes?: string[] }): { brief: Proposed | null; error?: string } {
   const raw = extractJson(text) as Record<string, any> | null;
   if (!raw || typeof raw !== "object") return { brief: null, error: "the reply holds no JSON object" };
   const refused: Proposed["refused"] = [];
@@ -67,10 +91,15 @@ export function parseBrief(text: string, facts: BriefFacts, vocab: BriefVocabula
       const unknown = words.filter((w) => !vocab[part][w]);
       if (unknown.length) refused.push({ item, reason: `word(s) not in the ${part} vocabulary: ${unknown.join(", ")}` });
       if (!known.length) { refused.push({ item, reason: `"${t.slice(0, 60)}" uses no ${part} word from the vocabulary — refused` }); return; }
+      const lineRefused: Proposed["refused"] = [];
       const { cites, dropped } = keepCites(l?.cites, item);
       const boxes = strs(l?.boxes).filter((b) => facts.boxes.has(b));
       const entries = [...new Set(boxes.flatMap((b) => facts.boxEntries.get(b) ?? []))];
-      const line: BriefLine = { text: t.length > BRIEF_LIMITS.text ? boundLabelTo(t, BRIEF_LIMITS.text) : t, words: known, cites, ...(boxes.length ? { boxes } : {}), ...(entries.length ? { entries } : {}), ...(dropped.length ? { dropped } : {}) };
+      const claims = parseClaims(l?.claims, item, lineRefused);
+      const line: BriefLine = { text: t.length > BRIEF_LIMITS.text ? boundLabelTo(t, BRIEF_LIMITS.text) : t, words: known, cites, ...(boxes.length ? { boxes } : {}), ...(entries.length ? { entries } : {}), ...(dropped.length ? { dropped } : {}), ...(claims.length ? { claims } : {}) };
+      const checked = checkLine(part, line, facts, { absolutes: meta.absolutes });
+      refused.push(...lineRefused);
+      if (checked.errors.length) { for (const e of checked.errors) refused.push({ item, reason: `"${t.slice(0, 60)}" refused: ${e}` }); return; }
       spec[part].push(line);
     });
   }
@@ -140,14 +169,27 @@ export function parseBrief(text: string, facts: BriefFacts, vocab: BriefVocabula
   const asked = (s: BriefOnly) => !meta.only || meta.only === s;
   const empty = !spec.function.length && !spec.method.length && !spec.feature.length && !groups.length && !Object.keys(names).length && !scopes.length && !primaryPath;
   if (empty) return { brief: null, error: `nothing in the reply survived the checks${refused.length ? `: ${refused.slice(0, 3).map((r) => `${r.item} — ${r.reason}`).join("; ")}` : ""}` };
+  // a note no line follows and `omitted` does not answer
+  if (facts.notes.length && asked("spec")) {
+    for (const n of briefCoverage(spec, facts, omitted).notes) refused.push({ item: `note:${n}`, reason: `the person's note "${facts.notes[n - 1].slice(0, 80)}" is not answered — no line cites note:${n} and omitted does not say why` });
+  }
   const hashes: Record<string, string> = {};
-  for (const c of kept) hashes[c] = hash16(facts.cites.get(c) ?? "");
+  const basis: Record<string, string> = {};
+  const codeHashes: NonNullable<Proposed["codeHashes"]> = {};
+  for (const c of kept) {
+    const content = facts.cites.get(c) ?? "";
+    hashes[c] = hash16(content);
+    basis[c] = content.replace(/\s+/g, " ").slice(0, 160);
+    const code = facts.code.get(c);
+    if (code) codeHashes[c] = code;
+  }
   return {
     brief: {
       spec: asked("spec") ? spec : { function: [], method: [], feature: [] },
       groups: asked("groups") ? groups : [], names: asked("groups") ? names : {},
       scopes: asked("scopes") ? scopes : [], primaryPath: asked("path") ? primaryPath : null,
-      omitted, model: meta.model, at: (meta.now ?? (() => new Date()))().toISOString(), refused, hashes, estimate: facts.estimate,
+      omitted, model: meta.model, at: (meta.now ?? (() => new Date()))().toISOString(), refused, scheme: 2, hashes, basis, codeHashes, estimate: facts.estimate,
+      ...(facts.notes.length ? { notes: facts.notes } : {}),
     },
   };
 }

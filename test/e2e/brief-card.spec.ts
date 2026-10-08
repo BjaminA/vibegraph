@@ -46,6 +46,10 @@ test.describe("the Brief card", () => {
     await expect(proposal.locator('[data-brief-line="feature"]')).toHaveAttribute("data-brief-inferred", "true");
     // refused: the teleport word, its line (no method word left), the unshown citation
     await expect(proposal).toContainText("3 item(s) refused");
+    // the review sheet (B13): what the checks see, before Ratify; Ratify names what it accepts
+    await expect(proposal.locator("[data-brief-review-summary]")).toContainText(/Review: 3 lines, \d with warnings/);
+    await expect(proposal.locator('[data-brief-line="feature"]').locator("xpath=..").locator("[data-brief-warning]")).toContainText("INFERRED");
+    await expect(card.locator('[data-brief-ratify="spec"]')).toContainText(/Ratify 3 lines, \d with warnings/);
     // a line lights the boxes it names, and dims the rest
     await proposal.locator('[data-brief-line="method"]').click();
     await expect(page.locator('[data-arch-id="cluster:scripts:decider"]')).not.toHaveAttribute("data-arch-dim", "true");
@@ -55,5 +59,14 @@ test.describe("the Brief card", () => {
     await expect(card).toHaveAttribute("data-brief-state", "ratified", { timeout: 15_000 });
     await expect(card.locator('[data-brief-line="method"]')).toContainText("Partitions the ledger");
     await expect(card.locator("[data-brief-proposal]")).toHaveCount(0);
+    // brief again with notes: the correction goes to the model as stated input,
+    // and a note the reply does not answer is reported
+    await card.locator("[data-brief-again]").click();
+    await card.locator("[data-brief-notes-input]").fill("the decider alone writes status");
+    await card.locator("[data-brief-again-run]").click();
+    await expect(card).toHaveAttribute("data-brief-state", "proposed", { timeout: 20_000 });
+    await expect(card.locator("[data-brief-proposal]")).toContainText("asked to answer 1 note: note:1 the decider alone writes status");
+    await card.locator("[data-brief-proposal] details summary").last().click();
+    await expect(card.locator("[data-brief-refused]").filter({ hasText: "note:1" })).toContainText("is not answered");
   });
 });
