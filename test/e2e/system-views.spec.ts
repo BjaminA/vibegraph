@@ -113,7 +113,11 @@ test.describe("system views", () => {
     for (const b of ["in", "process", "out"]) await expect(card.locator(`[data-io-band="${b}"]`)).toBeVisible();
     const approver = card.locator('[data-io-row="in"]', { hasText: "the appointed approver" });
     await expect(approver).toContainText("read");
-    await expect(approver.locator("[data-io-path]")).toContainText("admin appointer");
+    // 2026-10-07 — the box holding tools/appoint.ts also holds the topology
+    // generator, so it keeps its own name ("Scripts") and says it contains the
+    // plan's admin appointer (arch_real.ts): a plan name only on a box it IS
+    await expect(approver.locator("[data-io-path]")).toContainText("Scripts");
+    await expect(page.locator('[data-arch-id="cluster:scripts:."]')).toContainText("contains the plan's admin appointer");
     const status = card.locator('[data-io-row="out"]', { hasText: "order status" });
     await expect(status.locator('[data-chip="json"]')).toHaveText("phase");
     await expect(status.locator("[data-io-path]")).toContainText("partner gateway");

@@ -151,6 +151,9 @@ export function birdseyeModel(input: ArchModelRecord): BirdseyeResult {
 
   // one arrow per pair, the protocol that carries most of it
   const keep = new Set([...keptProc, ...keptTools, ...essential.map((n) => n.id)]);
+  // the Browser IS the outside caller of a web app: the generic "Outside
+  // callers" box arch_real.ts put in front of it would say it twice
+  for (const a of actors) keep.delete(`actor:outside:${a.id.slice("actor:browser:".length)}`);
   const pairs = new Map<string, ArchEdgeRecord[]>();
   for (const e of full.edges) {
     if (!keep.has(e.from) || !keep.has(e.to)) continue;

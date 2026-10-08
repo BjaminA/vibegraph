@@ -397,6 +397,8 @@ CLI) and says so; everything else is deterministic.
 | `software plan <tool> [--param name=value]` | Put a ratified spec's tool and rules into the plan, proposed, with the project's names filled in | `.vibegraph/plan.json` | — |
 | `architecture --propose \| --modify "<text>"` | Deployment / trust groups and a start-here path, every item citing what it saw; stored pending | `.vibegraph/architecture.json` | **yes** |
 | `architecture --ratify \| --reject` | Makes the pending proposal stated / drops it | `.vibegraph/architecture.json` | — |
+| `brief codebase [--estimate \| --dry-run \| --stale \| --reply <file>]` | The Brief: the system's function / method / key features, group changes, names, scopes and a start-here path — every line cited and vocabulary-checked; stored PROPOSED (`--estimate` first says the cost) | `.vibegraph/brief.json` | **yes** |
+| `brief codebase show` / `ratify \| reject [spec\|groups\|names\|scopes\|path]` | The pending and ratified Brief (STALE lines marked) / a person decides a section | `.vibegraph/brief.json`, `.vibegraph/architecture.json` | — |
 | `classify [--dry-run \| --apply]` | The role of tools no table knows; `--apply` stores each as a model-stated policy | `.vibegraph/constraints.json` | **yes** |
 | `--version` / `--help` | The version / every command and option | nothing | — |
 

@@ -6,11 +6,12 @@
 import { useMemo, useState } from "react";
 import { useTopologyState } from "../useTopologyState";
 import { decisionsModel, resourcesModel } from "./arch_topology";
+import type { ArchModelRecord } from "../../shared/protocol";
 
 interface ThreadLike { entryPointId: string | null; nodes: any[] }
 
-export function useTopologyLens(opts: { lens: string; onMap: boolean; threads: ThreadLike[]; selectedNodeId: string | null }) {
-  const { lens, onMap, threads, selectedNodeId } = opts;
+export function useTopologyLens(opts: { lens: string; onMap: boolean; threads: ThreadLike[]; selectedNodeId: string | null; derived?: ArchModelRecord | null }) {
+  const { lens, onMap, threads, selectedNodeId, derived } = opts;
   const topo = useTopologyState();
   const hasTopology = !!topo.model && topo.model.status.length > 0;
   const topoLens = (lens === "resources" || lens === "decisions") && hasTopology ? lens : null;
@@ -18,11 +19,11 @@ export function useTopologyLens(opts: { lens: string; onMap: boolean; threads: T
   const [traceIndex, setTraceIndex] = useState(0);
   const topoMapModel = useMemo(() => {
     if (!onMap || !topoLens || !topo.model) return null;
-    return topoLens === "resources" ? resourcesModel(topo.model, threads, topo.live?.drift) : decisionsModel(topo.model, threads);
-  }, [onMap, topoLens, topo, threads]);
+    return topoLens === "resources" ? resourcesModel(topo.model, threads, topo.live?.drift, { derived }) : decisionsModel(topo.model, threads);
+  }, [onMap, topoLens, topo, threads, derived]);
   const topoFocus = topoLens === "resources" ? selectedNodeId : null;
   const topoDrawn = useMemo(() => (topoMapModel && topoFocus && topo.model
-    ? resourcesModel(topo.model, threads, topo.live?.drift, { focus: topoFocus })
-    : topoMapModel), [topoMapModel, topoFocus, topo, threads]);
+    ? resourcesModel(topo.model, threads, topo.live?.drift, { focus: topoFocus, derived })
+    : topoMapModel), [topoMapModel, topoFocus, topo, threads, derived]);
   return { topo, hasTopology, topoMapModel, topoDrawn, traceName, setTraceName, traceIndex, setTraceIndex };
 }

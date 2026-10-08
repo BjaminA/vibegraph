@@ -1,0 +1,44 @@
+{
+  "version": "1",
+  "function": {
+    "decides": "makes a governed decision (a state change, an approval) and records it",
+    "exchanges": "carries data between this system and another, in an agreed format",
+    "monitors": "shows the system's state as it changes, without changing it",
+    "serves": "answers requests from people or other systems",
+    "ingests": "takes data in from outside and stores it",
+    "transforms": "turns data from one form into another as its main job",
+    "schedules": "runs work at set times or in a set order",
+    "notifies": "tells people or systems that something happened",
+    "provisions": "creates and configures the resources and identities others use",
+    "trains": "fits a model to data",
+    "reports": "produces summaries or documents from stored data"
+  },
+  "method": {
+    "enforces": "a rule holds because the platform refuses the alternative, not only because code checks it",
+    "signs": "attaches a cryptographic signature a reader verifies",
+    "verifies": "checks a signature or chain against a trusted record",
+    "certifies": "a named authority vouches for a component, recorded in a ledger",
+    "partitions": "splits data so each part has exactly one set of writers",
+    "replicates": "keeps copies in sync across processes or hosts",
+    "translates": "converts between formats (XML to JSON, one schema to another)",
+    "validates": "checks data against a schema before use",
+    "funnels": "sends every call of one kind through a single module",
+    "queues": "puts work on a queue for another process to take",
+    "caches": "keeps a copy of results to answer later requests faster",
+    "isolates": "runs work in a separate process or sandbox so a failure stays there",
+    "orchestrates": "starts and coordinates other processes",
+    "watches": "reacts to changes in a store or stream as they happen",
+    "batches": "groups many items into one operation",
+    "retries": "repeats a failed operation under a stated rule"
+  },
+  "feature": {
+    "audit-trail": "every decision, accepted or refused, is kept and verifiable",
+    "fail-closed": "when the authority is missing or stale, nothing is decided",
+    "per-identity-access": "each person or system acts under its own identity and rights",
+    "idempotent-writes": "repeating a write leaves the same result",
+    "offline-tolerant": "keeps working when a remote part is unreachable",
+    "live-view": "shows changes to the people watching as they happen",
+    "schema-checked": "data is checked against a published schema at the boundary",
+    "reproducible-runs": "the same inputs give the same outputs, run to run"
+  }
+}

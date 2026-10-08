@@ -19,6 +19,7 @@ import type { Plan } from "../shared/plan_types.ts";
 import type { InfraFact } from "./infra_manifests.ts";
 import type { ArchBaseline, ArchStore } from "./arch_store.ts";
 import { ratifiedAt } from "./arch_store.ts";
+import { staleLabels, type LabelFacts } from "./arch_label_drift.ts";
 
 const DEPLOY_KINDS = new Set(["service", "pm2-app", "process", "k8s", "resource"]);
 
@@ -54,7 +55,7 @@ export function archBaseline(applied: Pick<ArchModelRecord, "nodes">, facts: rea
 /** The drift since ratification, or null when nothing is ratified. A store
  *  ratified before baselines existed is measured from an empty baseline of
  *  deployment units and plan items it cannot know: it says so. */
-export function archDrift(applied: ArchModelRecord, store: ArchStore, facts: readonly InfraFact[], plan: Plan | null): ArchDrift | null {
+export function archDrift(applied: ArchModelRecord, store: ArchStore, facts: readonly InfraFact[], plan: Plan | null, labelFacts: LabelFacts | null = null): ArchDrift | null {
   const r = ratifiedAt(store);
   if (!r) return null;
   const b = store.baseline;
@@ -80,11 +81,16 @@ export function archDrift(applied: ArchModelRecord, store: ArchStore, facts: rea
   if (placedByRule.length) reasons.push(`${placedByRule.length} new cluster${placedByRule.length === 1 ? "" : "s"} placed by the groups' rules: ${placedByRule.slice(0, 4).join(", ")}`);
   if (removed.length) reasons.push(`${removed.length} cluster${removed.length === 1 ? "" : "s"} gone`);
   if (!b) reasons.push("ratified before baselines were kept: deployment units and plan items are measured from now on");
-  const substantial = deployAdded.length > 0 || plannedAdded.length > 0 || emptied.length > 0 || (unplaced.length > 0 && manyUnplaced);
+  // 2026-10-07 — a ratified LABEL the facts no longer support (arch_label_drift.ts):
+  // membership can stand still while the words go stale
+  const labels = staleLabels(applied, store, labelFacts);
+  for (const l of labels) reasons.push(`the label "${l.label}" ${l.why}`);
+  const substantial = deployAdded.length > 0 || plannedAdded.length > 0 || emptied.length > 0 || (unplaced.length > 0 && manyUnplaced) || labels.length > 0;
   const moved = substantial || unplaced.length > 0 || added.length > 0 || removed.length > 0;
   return {
     level: substantial ? "substantial" : moved ? "minor" : "none",
     unplaced, added, removed, deployAdded, plannedAdded, emptied,
+    ...(labels.length ? { labels } : {}),
     reasons: moved ? reasons : [],
     since: b?.at ?? r.at,
   };

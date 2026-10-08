@@ -37,6 +37,8 @@ import { buildCrossingIndex } from "../src/server/crossings.ts";
 import { archModelForEnvelope } from "../src/server/arch_envelope.ts";
 import { repositoryFor, systemMapFor, writeArchArtifacts } from "./arch_artifacts.mjs";
 import { renderSystemMapMd } from "../src/server/system_map_md.ts";
+import { briefMarkdown, briefWithStaleness, loadBrief } from "../src/server/brief_store.ts";
+import { briefInputs } from "../src/server/brief_inputs.ts";
 import { loadVocabulary, scopesNow } from "../src/server/operation_vocab.ts";
 import { deriveThreadCalls } from "../src/webview/system/threadInteraction.ts";
 import { planWork } from "../src/server/plan_work.ts";
@@ -287,7 +289,8 @@ export function exportKnowledge({ root, out, task, envelope: envelopePath, commi
   if (hasDataArch(dataArch)) write("data-architecture.md", formatDataArchMd(dataArch));
   if (withIr) write("data_topology.json", json(dataArch));
   const topo = loadTopology(absRoot, dataArch.topology);
-  if (topo.status.length) write("topology.md", formatTopologyMd(topo, env.threads ?? [], env.files ?? {}));
+  // (topology.md is written after the derived map below: each declared zone
+  // says which processes the code shows reading and writing it)
   // 2026-09-30 — SOFTWARE SPECS: each ratified one, every item beside its
   // quote and where this code calls it; drafts are withheld and named.
   const specs = listSpecs(absRoot);
@@ -314,6 +317,7 @@ export function exportKnowledge({ root, out, task, envelope: envelopePath, commi
   //     and the self-contained picture.
   const architecture = archModelForEnvelope(env, stack, crossings, absRoot, (ep) => contracts.get(ep) ?? null);
   if (withIr) write("architecture.json", json(architecture));
+  if (topo.status.length) write("topology.md", formatTopologyMd(topo, env.threads ?? [], env.files ?? {}, architecture));
   // 2026-09-25 — the SYSTEM MAP as prose is part of the default bundle: it is
   // the one page that says how the whole system fits together, and a plain
   // Claude reads prose. The data twin, the picture (and Archify's file, only
@@ -322,7 +326,12 @@ export function exportKnowledge({ root, out, task, envelope: envelopePath, commi
   if (withArch || archify) {
     writeArchArtifacts(architecture, { write, ...archArgs, repository: repositoryFor(absRoot), skipJson: withIr, archify });
   } else {
-    write("architecture.md", renderSystemMapMd(systemMapFor(architecture, archArgs), loadVocabulary(absRoot).vocab, scopesNow(absRoot, architecture)));
+    // 2026-10-08 — the ratified Brief first (brief_store.ts), each line with its
+    // citations, STALE where a line it cites changed
+    const mapMd = renderSystemMapMd(systemMapFor(architecture, archArgs), loadVocabulary(absRoot).vocab, scopesNow(absRoot, architecture));
+    const briefMd = briefMarkdown(briefWithStaleness(loadBrief(absRoot), loadBrief(absRoot).ratified?.spec ? briefInputs(absRoot, architecture).facts : null));
+    const at = mapMd.indexOf("\n## ");
+    write("architecture.md", briefMd.length && at > 0 ? `${mapMd.slice(0, at + 1)}${briefMd.join("\n")}\n${mapMd.slice(at + 1)}` : mapMd);
   }
 
   // 3. Project-level renderings: the system spec and every stated constraint.

@@ -86,6 +86,8 @@ CLI) and says so; everything else is deterministic.
 | `software plan <tool> [--param name=value] [--rules s1,s4]` | Put a ratified spec's tool and rules into the plan, proposed, with the project's names filled in — core rules first, as many as the plan's cap leaves room for; the rest are named, `--rules` chooses | `.vibegraph/plan.json` | — |
 | `architecture --propose \| --modify "<text>"` | Deployment / trust groups and a start-here path, every item citing what it saw; stored pending | `.vibegraph/architecture.json` | **yes** |
 | `architecture --ratify \| --reject` | Makes the pending proposal stated / drops it (ratifying stores the drift baseline) | `.vibegraph/architecture.json` | — |
+| `brief codebase [--estimate \| --dry-run \| --stale \| --reply <file>]` | The Brief: the system's function / method / key features, group changes, names, scopes and a start-here path — every line cited and vocabulary-checked; stored PROPOSED (`--estimate` first says the cost) | `.vibegraph/brief.json` | **yes** |
+| `brief codebase show` / `ratify \| reject [spec\|groups\|names\|scopes\|path]` | The pending and ratified Brief (STALE lines marked) / a person decides a section | `.vibegraph/brief.json`, `.vibegraph/architecture.json` | — |
 | `architecture --drift` | What changed since the groups were ratified; exit 0 none · 1 minor · 2 substantial | nothing | — |
 | `architecture --update` | Extend the ratified groups for what changed (they stay fixed); stored pending | `.vibegraph/architecture.json` | **yes** |
 | `scope <box> [--note "…"] [--dry-run]` | Describes one box the code says little about, in the operation vocabulary, every claim citing a line it was shown; stored PROPOSED | `.vibegraph/architecture.json` (`scopes`) | **yes** |
@@ -973,7 +975,7 @@ shares them. Leave `.vibegraph/knowledge/` uncommitted: it is regenerated.
 
 ## What costs tokens
 
-Only `classify`, `architecture --propose` / `--modify`, `scope`, and `skills draft`.
+Only `classify`, `architecture --propose` / `--modify`, `brief codebase`, `scope`, and `skills draft`.
 Each says so in `--help`, uses your `claude` CLI (or `VG_CLAUDE_BIN`), runs
 with no MCP servers and no write tools, and stores what it produced as a
 model's work until you ratify it. Everything else is deterministic.

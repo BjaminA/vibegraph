@@ -13,6 +13,7 @@ import { sendInboxDecision, type InboxState } from "./useInboxState";
 const KIND_LABEL: Record<string, string> = {
   plan: "Plan proposals", objective: "Proposed objective", "rule-change": "Changes to rules", rule: "Rules an agent stated",
   groups: "Architecture groups", scope: "Scoped boxes", skill: "Skill drafts", spec: "Software specs", questions: "Open questions",
+  brief: "The Brief",
 };
 const small: React.CSSProperties = { fontSize: "var(--fs-12)", color: "var(--text-muted)", lineHeight: 1.5 };
 const btn: React.CSSProperties = {

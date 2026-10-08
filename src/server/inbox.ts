@@ -25,8 +25,10 @@ import type { ArchModelRecord } from "../shared/protocol.ts";
 import { planSensors } from "./plan_sensors.ts";
 import { scopesNow } from "./operation_vocab.ts";
 import { regroupFromFacts } from "./arch_regroup.ts";
+import { loadBrief, sectionSummary, allLines, decideBrief } from "./brief_store.ts";
+import { BRIEF_SECTIONS, type BriefSection } from "../shared/brief_types.ts";
 
-export type InboxKind = "plan" | "objective" | "decision" | "sensor" | "rule-change" | "rule" | "scope" | "groups" | "skill" | "spec" | "questions" | "drift";
+export type InboxKind = "plan" | "objective" | "decision" | "sensor" | "rule-change" | "rule" | "scope" | "groups" | "skill" | "spec" | "questions" | "drift" | "brief";
 export interface InboxItem {
   id: string;
   kind: InboxKind;
@@ -42,7 +44,7 @@ const short = (v: unknown) => { const s = JSON.stringify(v); return s.length > 1
 
 /** `model` (the derived map) turns on the sensors that read it — new
  *  processes and identities, placement, groups and scope drift. */
-export function buildInbox(root: string, opts: { rec?: PlanReconcile | null; model?: ArchModelRecord | null; git?: boolean } = {}): InboxItem[] {
+export function buildInbox(root: string, opts: { rec?: PlanReconcile | null; model?: ArchModelRecord | null; git?: boolean; briefStale?: string[] } = {}): InboxItem[] {
   const out: InboxItem[] = [];
   const plan = loadPlan(root);
   let constraints: ReturnType<typeof loadConstraints> = [];
@@ -98,6 +100,17 @@ export function buildInbox(root: string, opts: { rec?: PlanReconcile | null; mod
   let specs: ReturnType<typeof listSpecs> = [];
   try { specs = listSpecs(root); } catch { specs = []; }
   for (const s of specs) if (s.status !== "ratified") out.push({ id: `spec:${s.tool}`, kind: "spec", decidable: true, title: `a software spec draft for ${s.tool}`, detail: [s.definition.slice(0, 140), `${s.operations.length} operations · ${s.rules.length} rules`] });
+  // 2026-10-08 — the Brief, one item per pending section (brief_store.ts)
+  const brief = loadBrief(root);
+  if (brief.proposed) {
+    for (const s of BRIEF_SECTIONS) {
+      const t = sectionSummary(brief.proposed, s);
+      if (!t) continue;
+      const lines = s === "spec" ? allLines(brief.proposed.spec).slice(0, 4).map((l) => `${l.text}${l.cites.length ? "" : " (INFERRED)"}`) : [];
+      out.push({ id: `brief:${s}`, kind: "brief", decidable: true, title: `Brief (PROPOSED, ${brief.proposed.model}): ${t}`, detail: lines });
+    }
+  }
+  if (opts.briefStale?.length) out.push({ id: "drift:brief", kind: "drift", decidable: false, title: `${opts.briefStale.length} line${opts.briefStale.length === 1 ? " of the ratified Brief is" : "s of the ratified Brief are"} STALE — code they cite changed`, detail: [...opts.briefStale.slice(0, 4), "re-brief only those: `vibegraph-knowledge brief codebase --stale` (a small call)"] });
   return out;
 }
 
@@ -180,6 +193,10 @@ export function decideInbox(root: string, id: string, decision: "agree" | "rejec
     case "spec": {
       if (decision === "agree") { const r = ratifySpec(root, arg, opts.now ?? new Date()); return r.error ? fail(r.error) : { ok: true, detail: r.message ?? `ratified ${arg}` }; }
       return removeSpec(root, arg) ? { ok: true, detail: `removed the draft spec ${arg}` } : fail(`no spec ${arg}`);
+    }
+    case "brief": {
+      if (!BRIEF_SECTIONS.includes(arg as BriefSection)) return fail(`no brief section ${arg}`);
+      return decideBrief(root, arg as BriefSection, decision === "agree" ? "ratify" : "reject", opts.who ?? "a person", opts.now ?? new Date());
     }
     case "questions": return fail("open questions are closed one by one: `plan close open <qN> --note …` or the Plan panel");
     default: return fail(`not an inbox item: ${id}`);

@@ -28,6 +28,7 @@ import { factLabel } from "../shared/arch_fact_label.ts";
 import { stampHierarchy } from "../shared/arch_hierarchy.ts";
 import { describeRule, resolveMembers, validateRule, type GroupRule } from "../shared/arch_rules.ts";
 import { stampWriter } from "./writer_stamp.ts";
+import { carryModelSource } from "./model_source.ts";
 import * as fs from "fs";
 import * as path from "path";
 import type { ArchGroupRecord, ArchModelRecord } from "../shared/protocol.ts";
@@ -268,6 +269,10 @@ export function proposalGate(
  *  pending proposal, every element keeping its source. Groups that wrap no
  *  node the model has are dropped (the code moved; the statement did not). */
 export function applyArchStore(model: ArchModelRecord, store: ArchStore): ArchModelRecord {
+  return carryModelSource(model, applyStated(model, store));
+}
+
+function applyStated(model: ArchModelRecord, store: ArchStore): ArchModelRecord {
   const ids = new Set(model.nodes.map((n) => n.id));
   const groups: ArchGroupRecord[] = [];
   const groupIds = new Set<string>();

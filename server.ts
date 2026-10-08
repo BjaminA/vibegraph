@@ -4,6 +4,8 @@ import { PipelineCache, toolParts, readLastMessage, writeLastMessage } from "./s
 import { projectIgnore, IGNORE_FILE, type ProjectIgnore } from "./src/server/project_ignore";
 import { watchProject, type WatchResult } from "./src/server/watch_project";
 import { writerWarning } from "./src/server/writer_stamp";
+import { declaredTopology } from "./src/server/arch_label_drift";
+import { staleBriefLines } from "./src/server/brief_inputs";
 import { historicalAdvice, historicalFolders } from "./src/server/historical_copies";
 import { DEFAULT_PHASE_TEXT, phaseTexter } from "./src/server/pass_progress";
 import { probeOtherServer, servedUrl, ABOUT_PATH, aboutPayload } from "./src/server/serve_address";
@@ -40,6 +42,7 @@ import { withProjectWords, loadVocabulary } from "./src/server/operation_vocab";
 import { nodeIO, ioLines } from "./src/shared/node_io";
 import { enrichReal } from "./src/webview/system/arch_real";
 import { scopeNode, decideNodeScope, type ScopeCtx } from "./src/server/node_scope_server";
+import { briefState, briefEstimateFor, briefDraft, briefDecide, type BriefCtx } from "./src/server/brief_server";
 import { buildInbox, decideInbox } from "./src/server/inbox";
 import { applyArchStore, loadArchStore, saveArchStore, ratifyProposal, rejectProposal, proposalGate } from "./src/server/arch_store";
 import { archBaseline, archDrift } from "./src/server/arch_drift";
@@ -357,7 +360,7 @@ function reapplyArchStore(): void {
     const applied = applyArchStore(latestArchDerived, store);
     // 2026-10-05 — how far the map moved since the groups were ratified
     // (src/server/arch_drift.ts): zero tokens, on every re-derive.
-    const drift = archDrift(applied, store, readInfraManifests(inputPath).facts, loadPlan(inputPath));
+    const drift = archDrift(applied, store, readInfraManifests(inputPath).facts, loadPlan(inputPath), declaredTopology(inputPath));
     latestArch = drift ? { ...applied, drift } : applied;
   } catch (e: any) {
     console.warn(`  [Architecture] stated layer failed to apply: ${e?.message ?? e}`);
@@ -427,6 +430,14 @@ const scopeCtx: ScopeCtx = {
   root: () => (isDirectory ? inputPath : null), model: () => latestArch, claudeAvailable: () => claudeCliAvailable,
   run: (prompt) => _runReadmeLlm(prompt, "thinking", "gen"), modelLabel: () => tierLabel("thinking"),
   changed: () => { broadcastProjectUpdate(); refreshArchDocs(); },
+};
+
+// 2026-10-08 — the Brief (src/server/brief_server.ts): the map's Brief card
+const briefCtx: BriefCtx = {
+  root: () => (isDirectory ? inputPath : null), model: () => latestArch, claudeAvailable: () => claudeCliAvailable,
+  run: (prompt) => _runReadmeLlm(prompt, "thinking", "gen"), modelLabel: () => tierLabel("thinking"),
+  who: () => personName(inputPath),
+  changed: () => { reapplyArchStore(); broadcastProjectUpdate(); refreshArchDocs(); const s = JSON.stringify({ type: "brief-state", payload: briefState(briefCtx) }); for (const c of clients) c.send(s); },
 };
 
 function archDecide(decision: "ratify" | "reject"): { ok: boolean; error?: string } {
@@ -8337,7 +8348,7 @@ function setupWebSocket() {
             }
             const after = loadPlan(root);
             const rec = after ? reconcilePlan(after, planEnv() as any, latestStack, root) : null;
-            ws.send(JSON.stringify({ type: "inbox-state", payload: { items: buildInbox(root, { rec, model: latestArchDerived }), ...reply } }));
+            ws.send(JSON.stringify({ type: "inbox-state", payload: { items: buildInbox(root, { rec, model: latestArchDerived, briefStale: latestArch ? staleBriefLines(root, latestArch) : [] }), ...reply } }));
           }
         } else if (msg.type === "rules-get" || msg.type === "rules-op") {
           // 2026-10-05 — the Rules panel (src/server/rules_server.ts): live
@@ -8376,6 +8387,21 @@ function setupWebSocket() {
           const reply = (payload: unknown) => ws.send(JSON.stringify({ type: "arch-proposal", payload: { action: t.slice(5), ...(payload as object) } }));
           if (t === "arch-propose") archProposeCore(typeof msg.payload?.guidance === "string" ? msg.payload.guidance : undefined, { update: msg.payload?.update === true }).then(reply, (e) => reply({ ok: false, error: String(e?.message ?? e) }));
           else reply(archDecide(t === "arch-ratify" ? "ratify" : "reject"));
+        } else if (msg.type === "brief-get" || msg.type === "brief-estimate" || msg.type === "brief-run" || msg.type === "brief-decide") {
+          // 2026-10-08 — the Brief card: state, estimate, the one token-spending
+          // draft, and a person's decision (src/server/brief_server.ts)
+          const t = msg.type as string;
+          const result = (payload: unknown) => ws.send(JSON.stringify({ type: "brief-result", payload: { action: t.slice(6), ...(payload as object) } }));
+          if (t === "brief-get") ws.send(JSON.stringify({ type: "brief-state", payload: briefState(briefCtx) }));
+          else if (t === "brief-estimate") result(briefEstimateFor(briefCtx));
+          else if (t === "brief-run") {
+            const only = ["spec", "groups", "scopes", "path"].includes(msg.payload?.only) ? msg.payload.only : undefined;
+            briefDraft(briefCtx, { only, stale: msg.payload?.stale === true, guidance: typeof msg.payload?.guidance === "string" ? msg.payload.guidance : undefined })
+              .then(result, (e) => result({ ok: false, error: String(e?.message ?? e) }));
+          } else {
+            const decision = msg.payload?.decision === "reject" ? "reject" : "ratify";
+            result(briefDecide(briefCtx, typeof msg.payload?.section === "string" ? msg.payload.section : "all", decision));
+          }
         } else if (msg.type === "arch-scope" || msg.type === "arch-scope-ratify" || msg.type === "arch-scope-reject") {
           // 2026-10-06 — scope spends tokens and stores a PROPOSED scope of one
           // box; ratify / reject are the person's. Reply: arch-scope-result.

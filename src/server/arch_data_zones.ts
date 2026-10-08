@@ -15,6 +15,9 @@ import { familyMatches } from "./call_args.ts";
 import { storeAccessSites, siteZone } from "./store_access.ts";
 import { callerPayload } from "./arch_payloads.ts";
 import { AttemptFinder } from "./attempts.ts";
+import { nameStoreBehind, declaredZoneOf } from "./store_naming.ts";
+import type { Topology } from "../shared/topology_types.ts";
+import type { SoftwareSpec } from "../shared/software_types.ts";
 
 const MAX_REFS = 8;
 
@@ -28,6 +31,9 @@ interface ZoneInputs {
   negative?: string[];
   /** operations the project registered (operations.json `paths` / `access`) */
   registered?: RegisteredAccess;
+  /** what names the store behind a client package (store_naming.ts) */
+  declared?: Topology | null;
+  specs?: SoftwareSpec[];
 }
 
 export function deriveDataZones(input: ZoneInputs): { nodes: ArchNodeRecord[]; edges: ArchEdgeRecord[]; notes: string[] } {
@@ -47,11 +53,18 @@ export function deriveDataZones(input: ZoneInputs): { nodes: ArchNodeRecord[]; e
   if (!da.operations.length && !accessOps.length) return { nodes: [], edges: [], notes: [] };
   const planZones = (input.plan?.stores ?? []).filter((s) => s.status !== "dropped")
     .flatMap((s) => (s.zones ?? []).map((z) => ({ store: s.id, zone: z.id, holds: z.holds })));
-  const derivedStore = da.topology.stores?.[0]?.id ?? "store";
-  const groupOf = (family: string) => {
+  // 2026-10-08 — the derived topology names its store after the client package;
+  // the plan, the declared topology or a ratified spec usually says what the
+  // store is (store_naming.ts), and a zone they do not name is said as such
+  const client = da.topology.stores?.[0]?.id && da.topology.stores[0].id !== "store" ? da.topology.stores[0].id : null;
+  const behind = nameStoreBehind(client, { plan: input.plan, specs: input.specs });
+  const storeLabels = new Map<string, string>([[behind.id, behind.label]]);
+  const groupOf = (family: string): { key: string; label: string; store: string; holds: string[]; planned: boolean; namedBy?: string } => {
     const z = planZones.find((x) => x.holds.some((h) => familyMatches(h, family) || covers(h, family) || covers(family, h)));
-    return z ? { key: `${z.store}/${z.zone}`, label: z.zone, store: z.store, holds: z.holds, planned: true }
-      : { key: `${derivedStore}/${family}`, label: family, store: derivedStore, holds: [family], planned: false };
+    if (z) return { key: `${z.store}/${z.zone}`, label: z.zone, store: z.store, holds: z.holds, planned: true };
+    const d = declaredZoneOf(family, input.declared);
+    if (d) return { key: `${d.store}/${d.zone}`, label: d.zone, store: d.store, holds: d.holds, planned: false, namedBy: `the declared topology places ${family} in ${d.store}/${d.zone}` };
+    return { key: `${behind.id}/${family}`, label: family, store: behind.id, holds: [family], planned: false, namedBy: behind.why };
   };
   // which clusters run an entry point
   const clustersOf = new Map<string, string[]>();
@@ -62,7 +75,12 @@ export function deriveDataZones(input: ZoneInputs): { nodes: ArchNodeRecord[]; e
       clustersOf.set(f, [...new Set([...(clustersOf.get(f) ?? []), c.id])]);
     }
   }
-  const zones = new Map<string, { label: string; store: string; holds: string[]; planned: boolean; refs: ArchRef[]; ops: Map<string, { refs: ArchRef[]; families: Set<string>; payloads: ArchPayloadRecord[] }> }>();
+  // 2026-10-07 — which of a cluster's entry points reach a file: a zone edge
+  // carries the threads that make it, so the start-here story can walk it
+  const threadsOf = new Map(input.model.nodes.filter((c) => c.kind === "cluster").map((c) => [c.id, c.threads]));
+  type ZoneOp = { refs: ArchRef[]; families: Set<string>; payloads: ArchPayloadRecord[]; threads: Set<string> };
+  type Zone = { label: string; store: string; holds: string[]; planned: boolean; namedBy?: string; refs: ArchRef[]; ops: Map<string, ZoneOp> };
+  const zones = new Map<string, Zone>();
   let unplaced = 0;
   type Op = { op: string; family: string; file: string; line: number; port?: string; entries: string[]; zoneKey?: string; zoneLabel?: string; store?: string; holds?: string[]; nodeId?: string; attemptVia?: string; stated?: string };
   // 2026-10-06 — the call's own text and keys ride the edge (node_io.ts's In / Out)
@@ -75,16 +93,17 @@ export function deriveDataZones(input: ZoneInputs): { nodes: ArchNodeRecord[]; e
   for (const raw of [...da.operations, ...accessOps] as Op[]) {
     const at = raw.op === "write" ? attempts.of(raw.file, raw.nodeId) : null;
     const o: Op = at ? { ...raw, op: "attempt", attemptVia: `${at.expect === "refused" ? "a negative test expects it REFUSED" : "a negative test's attempt"} — ${at.via}` } : raw;
-    const g = o.zoneKey ? { key: o.zoneKey, label: o.zoneLabel!, store: o.store!, holds: o.holds!, planned: true } : groupOf(o.family);
+    const g = o.zoneKey ? { key: o.zoneKey, label: o.zoneLabel!, store: o.store!, holds: o.holds!, planned: true, namedBy: undefined } : groupOf(o.family);
     const ref: ArchRef = { file: o.file, text: `${o.op} ${o.family} at line ${o.line}${o.port ? ` through ${o.port}` : ""}${o.attemptVia ? ` (${o.attemptVia})` : ""}${o.stated ? ` (STATED in .vibegraph/operations.json, not derived: ${o.stated})` : ""}` };
-    const z = zones.get(g.key) ?? { label: g.label, store: g.store, holds: g.holds, planned: g.planned, refs: [], ops: new Map() };
+    const z: Zone = zones.get(g.key) ?? { label: g.label, store: g.store, holds: g.holds, planned: g.planned, namedBy: g.namedBy, refs: [], ops: new Map() };
     z.refs.push(ref);
     const cids = [...new Set(o.entries.flatMap((e) => clustersOf.get(e) ?? []))];
     if (!cids.length) unplaced++;
     for (const cid of cids) {
       const k = `${cid}|${o.op}`;
-      const e = z.ops.get(k) ?? { refs: [], families: new Set<string>(), payloads: [] };
+      const e: ZoneOp = z.ops.get(k) ?? { refs: [], families: new Set<string>(), payloads: [], threads: new Set<string>() };
       e.refs.push(ref);
+      for (const ep of threadsOf.get(cid) ?? []) if (o.entries.includes(ep.split(":")[0])) e.threads.add(ep);
       const pay = e.payloads.length < 4 ? callerPayload(callAt(o) ?? null, { file: o.file, text: `line ${o.line}` } as ArchRef) : null;
       if (pay && !e.payloads.some((x) => x.text === pay.text)) e.payloads.push(pay);
       e.families.add(o.family);
@@ -100,7 +119,9 @@ export function deriveDataZones(input: ZoneInputs): { nodes: ArchNodeRecord[]; e
   const toolIds = new Set(input.model.nodes.filter((n) => n.kind === "tool").map((n) => n.id));
   const clientsOf = (store: string): string[] => {
     const ps = (input.plan?.stores ?? []).find((s) => s.id === store);
-    return [...new Set([...(ps?.reachedThrough ?? []), store].map((t) => `tool:${t}`))].filter((t) => toolIds.has(t));
+    // a store named for the client package (store_naming.ts) is still reached through it
+    const viaClient = client && (store === behind.id || (input.declared?.stores ?? []).some((s) => s.id === store)) ? [client] : [];
+    return [...new Set([...(ps?.reachedThrough ?? []), store, ...viaClient].map((t) => `tool:${t}`))].filter((t) => toolIds.has(t));
   };
   const hasClient = (cid: string, store: string) => {
     const cs = clientsOf(store);
@@ -112,12 +133,15 @@ export function deriveDataZones(input: ZoneInputs): { nodes: ArchNodeRecord[]; e
   for (const [key, z] of [...zones].sort((a, b) => a[0].localeCompare(b[0]))) {
     if (!z.ops.size) continue;
     const id = `zone:${key}`;
+    const storeLabel = storeLabels.get(z.store) ?? z.store;
+    const planStore = (input.plan?.stores ?? []).some((s) => s.id === z.store && s.status !== "dropped");
     nodes.push({
-      id, kind: "tool", label: z.label, sublabel: `zone of ${z.store} · ${z.holds.slice(0, 3).join(", ")}${z.holds.length > 3 ? ", …" : ""}`,
+      id, kind: "tool", label: z.label, sublabel: `zone of ${storeLabel} · ${z.holds.slice(0, 3).join(", ")}${z.holds.length > 3 ? ", …" : ""}`,
       category: "storage", source: "derived", tool: key, role: "db", origin: "project", zoneOf: { store: z.store, holds: z.holds },
       threads: [], refs: z.refs.slice(0, MAX_REFS),
       notes: [
-        `A zone of the store ${z.store}${z.planned ? " (grouped as the plan's store groups it)" : ""}: the families ${z.holds.join(", ")}.`,
+        `A zone of the store ${storeLabel}${z.planned ? " (grouped as the plan's store groups it)" : z.namedBy ? ` (${z.namedBy})` : ""}: the families ${z.holds.join(", ")}.`,
+        ...(!z.planned && planStore ? [`Not one of the plan's zones: the code uses it, the plan's store ${z.store} does not name it.`] : []),
         "Drawn from the data operations the code makes on it (data-architecture.md); the order of a write and a read is not proven.",
       ],
     } as ArchNodeRecord);
@@ -129,11 +153,14 @@ export function deriveDataZones(input: ZoneInputs): { nodes: ArchNodeRecord[]; e
         protocolBasis: op === "attempt"
           ? `a refused ATTEMPT, not a write: ${[...e.families].join(", ")} (${e.refs[0].file}: ${e.refs[0].text}) — never counted among the zone's writers`
           : `the code ${op === "write" ? "writes" : op === "read" ? "reads" : "watches"} ${[...e.families].join(", ")} (${e.refs[0].file}: ${e.refs[0].text})`,
-        count: e.refs.length, threads: [], confidence: "called", refs: e.refs.slice(0, MAX_REFS), source: "derived",
+        count: e.refs.length, threads: [...e.threads].sort(), confidence: "called", refs: e.refs.slice(0, MAX_REFS), source: "derived",
         ...(e.payloads.length ? { payloads: e.payloads } : {}),
       });
     }
   }
   const notes = nodes.length ? [`${nodes.length} store zone(s) drawn from the code's data operations${unplaced ? `; ${unplaced} operation(s) on no drawn process are not drawn` : ""}${noClient ? `; ${noClient} process × zone operation(s) left out: the process holds no client for the store (shared code run against an in-memory or test double)` : ""}.`] : [];
+  if (behind.via === "unnamed" && nodes.some((n) => n.zoneOf?.store === behind.id)) notes.push(`Zones with no named store: ${behind.why}.`);
+  const unplanned = nodes.filter((n) => n.notes?.some((x) => x.startsWith("Not one of the plan's zones"))).map((n) => n.id.slice("zone:".length));
+  if (unplanned.length) notes.push(`${unplanned.length} zone(s) the code uses that the plan's stores do not name: ${unplanned.join(", ")}.`);
   return { nodes, edges, notes };
 }

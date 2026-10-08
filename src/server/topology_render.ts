@@ -5,12 +5,16 @@
 
 import type { TopologyModel } from "../shared/topology_types.ts";
 import { whoMay, threadsTouching, threadsOfFunction, TOPOLOGY_QUERY_LIMITS } from "../shared/topology_query.ts";
+import { codeOpsByZone, codeOpsText } from "../shared/topology_code_ops.ts";
+import type { ArchModelRecord } from "../shared/protocol.ts";
 
 interface ThreadLike { entryPointId: string | null; nodes: any[] }
 const c = (x: { cite?: string }) => (x.cite ? ` _(${x.cite})_` : "");
 
-export function formatTopologyMd(m: TopologyModel, threads: ThreadLike[] = [], files: Record<string, { nodes?: any[] }> = {}): string {
+export function formatTopologyMd(m: TopologyModel, threads: ThreadLike[] = [], files: Record<string, { nodes?: any[] }> = {}, derived: ArchModelRecord | null = null): string {
   const t = m.topology;
+  // 2026-10-07 — beside who MAY write a zone (grants), which processes DO
+  const code = codeOpsByZone(t, derived);
   const out: string[] = ["# Declared topology", "",
     "> DECLARED — read from the project's own declarations (catalogues, transition tables, decision trees, a principals file) by the generator(s) it registered. The resource names are computed at run time, so this is what the CODE cannot show statically; it is as true as the declarations are.", ""];
   out.push("Sources:", ...m.status.map((s) => `- **${s.source.id}** — ${s.state}: ${s.detail} (\`${s.source.generator}\` over ${s.source.inputs.join(", ")})`), "");
@@ -21,7 +25,8 @@ export function formatTopologyMd(m: TopologyModel, threads: ThreadLike[] = [], f
       const w = [...new Set(whoMay(t, z.id, "write").map((x) => x.principal))];
       const r = [...new Set(whoMay(t, z.id, "read").map((x) => x.principal))];
       const routers = (t.routers ?? []).filter((x) => x.zones?.includes(z.id));
-      out.push(`- zone **${z.id}**${c(z)} — holds ${(z.holds ?? []).join(", ") || "(not said)"}; write: ${w.join(", ") || "NO ONE declared"}; read: ${r.join(", ") || "—"}${routers.length ? `; routed by ${routers.map((x) => x.function).join(", ")}` : ""}`);
+      const did = codeOpsText(code.get(z.id));
+      out.push(`- zone **${z.id}**${c(z)} — holds ${(z.holds ?? []).join(", ") || "(not said)"}; write: ${w.join(", ") || "NO ONE declared"}; read: ${r.join(", ") || "—"}${routers.length ? `; routed by ${routers.map((x) => x.function).join(", ")}` : ""}${derived ? `; the code: ${did ?? "no operation seen"}` : ""}`);
     }
     out.push("");
   }

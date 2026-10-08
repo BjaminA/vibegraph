@@ -3,6 +3,121 @@
 `vibegraph-knowledge` and the VibeGraph app. Newest first. Each entry says what
 changed and, where an existing user would notice, how behaviour differs.
 
+## 0.29.0 — 2026-10-08
+
+The Brief, the map facts it rests on, and zones named by the store the project
+says they belong to.
+
+### One store, not two: zones named by what the project says
+
+The code knows only that a family is written THROUGH a client package, so the
+map named its one derived store after that package: a zone the plan did not
+group read "zone of @vendor/client-sdk" beside the plan's own store, and one
+store showed as two. A zone's store is now read from the project, strongest
+first, never guessed (`src/server/store_naming.ts`):
+
+1. the declared topology places the family in a zone → that zone;
+2. exactly one planned store is `reachedThrough` the client → that store, and
+   the zone says it is one the code uses and the plan does not name (the map
+   notes list them);
+3. a RATIFIED software spec lists the client among its packages → the spec's
+   tool (a draft names nothing);
+4. otherwise the zone stays under the client, read as "the store behind
+   <client> (unnamed)", with a note saying what would name it.
+
+Two planned stores reached through one client is ambiguous: neither is chosen,
+and the note says so. A spec is needed only for a store-like package that no
+plan or declared topology names. Tests: test:store-naming (4).
+
+### The Brief: a cited account of the system, on the map
+
+One model call writes what the system is for (**Function**, ≤ 3 lines), how
+it holds together (**Method**, ≤ 6) and its **Key features** (≤ 6), and
+proposes group changes, box names, scopes for boxes the facts say nothing
+about, and a start-here path. Nothing of it survives that the facts it was
+shown do not support, and none of it is used until a person ratifies it.
+
+- **Shown, then checked.** The prompt carries the derived map, the declared
+  topology, the plan, the stated rules, the software specs and the project's
+  docs, each fact under an id. A citation to an id that was not shown is
+  dropped; a line left with none is kept as INFERRED and shown faded. A box's
+  own id is no evidence for its name. Every line must use a word from a fixed
+  vocabulary (`decides`, `partitions`, `audit-trail`, …; a project may add
+  words in `.vibegraph/brief-vocabulary.json`, never redefine one). A line
+  past a count limit is refused, never silently dropped; a line over 200
+  characters is cut at a word and ends "…". A ratified group label the facts
+  no longer support (a port, a list of names) is shown as a fact a rename can
+  cite. What the checks refused and what the model left out are listed.
+- **Ratified by section.** `brief codebase ratify|reject [spec|groups|scopes|path]`
+  (names are decided with groups), the Brief card on the map or the Inbox. A person's step,
+  refused from inside Claude Code. Groups, names, scopes and the path go into
+  `.vibegraph/architecture.json`; the spec into `.vibegraph/brief.json`.
+- **Stale, not wrong.** Each citation's content is hashed. When a cited line
+  changes, the Brief line that rests on it reads STALE (card, `brief codebase
+  show`, Inbox). A stated rule is hashed with the source of the functions its
+  check names (by structural id, not line), so an edit to the function a
+  `callers-only` rule guards stales a line resting on that rule, and moving
+  code does not.
+  `brief codebase --stale` re-briefs only those lines (`--estimate` with it
+  says what that costs), and ratifying replaces exactly them.
+- **Where it reaches.** `architecture.md` in the export opens with the
+  ratified Brief. A hooked session starts with the Function and Method lines,
+  and a prompt routed to a box's threads gets the Method lines naming that
+  box, once per session. On the map, the card is pinned top-left and a line
+  lights the boxes it names.
+- **Cost first.** `brief codebase --estimate` (and the card's first click)
+  says the calls and tokens before anything is spent; `--dry-run` prints the
+  prompt; `--reply <file>` validates a saved reply with no model call.
+- Also: the classifier sends a prompt over 24 KB on stdin, not argv.
+
+Tests: test:brief (8), test:e2e-brief (1).
+
+### The map's facts, before a Claude layer goes on top
+
+A field review of 0.28.0 on a multi-process TypeScript repository listed
+what the map gets wrong before anything model-written can cite it. Checked
+against a throwaway copy of that repository, and pinned by
+`test/fixtures/system/starters_demo` (test:field-map).
+
+- **What the code does to each declared zone.** The declared topology's
+  zones (the Resources lens, `topology.md`) said who MAY write them, never
+  which processes DO: a zone the state service writes read "in: — · out: —".
+  Each declared zone now carries the derived reads and writes, matched by name
+  or by the families it holds (a per-person zone through its
+  `request_{Role}__{Person}` pattern): "the code: written by …; read by …".
+- **Start here walks the store.** The story's steps follow edges a thread
+  takes, and the store-zone edges carried no threads, so no write or read was
+  ever a step. A process's beats now come writes first, then reads and
+  watches, then calls; a call nobody has given a role comes last instead of
+  standing for the core.
+- **Starters by path, all of them.** "started by server.ts" when three files
+  have that name now names each starter's path. A starter that spawns through
+  its own helper (`run(script)`) is listed too; such a helper does not make a
+  one-shot script a process box. Two process files with one name in one
+  package are two boxes (they had merged, the second overwriting the first's
+  starters).
+- **A plan name only on a box it is.** A planned process names a box only
+  when it accounts for every entry point there. Otherwise the box keeps its
+  name and says "contains the plan's …" (one planned item had named a box of
+  18 scripts).
+- **Stale labels are drift.** A ratified group label that lists names (2+ of
+  them the declared principals or the identities `topology live` saw) while
+  more exist, or names a port no member process shows, is substantial drift
+  with the reason.
+- **Zone counts explained.** A `{Placeholder}` zone is a name pattern, not a
+  zone: the store card reads "51 zones + 1 name pattern", and its notes break
+  the zones down by kind (21 `request_*`, 15 `record_*`, …).
+- **One spawn's keys on one edge.** A script path several files end with is
+  settled by the call's `cwd` (a literal, or a name bound to one, resolved
+  against the file's folder for `import.meta.url` / `__dirname`). A hop that
+  stays ambiguous no longer copies the call's keys onto every candidate.
+- **Bird's-eye:** a web app's derived Browser box is its outside caller; the
+  generic "Outside callers" box beside it is no longer drawn twice.
+
+Not reproduced: "the System view is blank until a thread is selected" — on
+Linux and with Windows Node against a copy, the map opens on the project
+with its boxes in view, whatever lens was last used.
+
 ## 0.28.0 — 2026-10-07
 
 ### From a field session: a Python tool set, refactored with the hooks on

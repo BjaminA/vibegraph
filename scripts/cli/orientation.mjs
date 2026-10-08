@@ -11,6 +11,7 @@ import { docsStatus } from "../../src/server/docs_registry.ts";
 import { loadSources, sourceStatus } from "../../src/server/topology_store.ts";
 import { loadPlan } from "../../src/server/plan_store.ts";
 import { buildInbox, inboxLine } from "../../src/server/inbox.ts";
+import { sessionBriefLines } from "./brief_context.mjs";
 
 const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
@@ -31,6 +32,9 @@ export function orientation(absRoot, loaded, constraints) {
       + `${plural(env.entryPoints.length, "entry point")} (${[...kinds].sort((a, b) => b[1] - a[1]).map(([k, n]) => `${n} ${k}`).join(", ")}), `
       + `each traced forward as a thread across files.`,
   ];
+  // 2026-10-08 — what the system is for and how it holds together (the ratified Brief)
+  const brief = sessionBriefLines(absRoot);
+  if (brief.length) lines.push("", ...brief);
   if (constraints.length) {
     lines.push("", `Stated rules (${constraints.length}) — from the people who run this code, with their reasons; the checkable ones are re-checked after every edit and a new violation stops the edit:`);
     let used = 0, shown = 0;

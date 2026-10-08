@@ -27,6 +27,7 @@ async function mapFor(root) {
     const { readInfraManifests } = await import("../../src/server/infra_manifests.ts");
     const { loadPlan } = await import("../../src/server/plan_store.ts");
     const { reconcilePlan } = await import("../../src/server/plan_reconcile.ts");
+    const { staleBriefLines } = await import("../../src/server/brief_inputs.ts");
     const { envelope } = loadEnvelope(root, null, pipelineHere(root), { cache: true });
     const stack = buildStackIndex(envelope, root);
     const model = archModelForEnvelope(envelope, stack, buildCrossingIndex(envelope), root, undefined, { applyStore: false });
@@ -34,6 +35,7 @@ async function mapFor(root) {
     return {
       model,
       rec: () => { const p = loadPlan(root); return p ? reconcilePlan(p, envelope, stack, root) : null; },
+      briefStale: () => { try { return staleBriefLines(root, archModelForEnvelope(envelope, stack, buildCrossingIndex(envelope), root)); } catch { return []; } },
       archBaseline: (store) => archBaseline(applyArchStore(model, store), readInfraManifests(root).facts, plan),
     };
 }
@@ -55,7 +57,7 @@ export async function runInbox(args) {
     try { map = await mapFor(root); }
     catch (e) { process.stderr.write(`inbox: the code's map could not be built (${e.message}) — the sensors that read it are off\n`); }
   }
-  const items = buildInbox(root, map ? { model: map.model, rec: map.rec() } : {});
+  const items = buildInbox(root, map ? { model: map.model, rec: map.rec(), briefStale: map.briefStale() } : {});
   if (!sub || sub === "list") {
     if (parsed.values.json) return done(JSON.stringify({ items }, null, 2));
     const decidable = items.filter((i) => i.decidable);

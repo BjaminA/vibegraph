@@ -36,6 +36,7 @@ import { personOnlyStep, personRefusal, wslMarkAdvice } from "./actor.mjs";
 import { pipelineFor, pipelineHere } from "./pipeline.mjs";
 import { SOFTWARE_USAGE, runSoftware } from "./software.mjs";
 import { BRIEF_USAGE, runBrief } from "./brief.mjs";
+import { SYSTEM_BRIEF_USAGE, runSystemBrief } from "./system_brief.mjs";
 import { formatClassifyReport, runClassify } from "./classify.mjs";
 import { runArchitecture } from "./architecture.mjs";
 import { CONSTRAINTS_USAGE, runConstraints } from "./constraints.mjs";
@@ -75,6 +76,7 @@ usage:
   ${PACKAGE_NAME} ${COVERAGE_USAGE}
   ${PACKAGE_NAME} ${LESSONS_USAGE}
   ${PACKAGE_NAME} ${BRIEF_USAGE}
+  ${PACKAGE_NAME} ${SYSTEM_BRIEF_USAGE}
   ${PACKAGE_NAME} ${DIRECTION_USAGE}
   ${PACKAGE_NAME} ${DATAFLOW_USAGE}
   ${PACKAGE_NAME} ${PLAN_USAGE}
@@ -583,7 +585,27 @@ function cmdDoctor(args) {
   return r.ok && found ? 0 : 1;
 }
 
+function cmdSystemBrief(args) {
+  const sub = ["show", "ratify", "reject"].includes(args[0]) ? args[0] : null;
+  let parsed;
+  try {
+    parsed = parseArgs({ args: sub ? args.slice(1) : args, allowPositionals: true, options: {
+      estimate: { type: "boolean" }, "dry-run": { type: "boolean" }, only: { type: "string" }, reply: { type: "string" },
+      model: { type: "string" }, guidance: { type: "string" }, envelope: { type: "string" }, stale: { type: "boolean" },
+    } });
+  } catch (e) { return fail(`${e.message}\n\n${USAGE}`); }
+  const pos = [...parsed.positionals];
+  const section = (sub === "ratify" || sub === "reject") && ["spec", "groups", "scopes", "path"].includes(pos[0]) ? pos.shift() : undefined;
+  let absRoot;
+  try { absRoot = projectRoot(pos[0]); } catch (e) { return fail(e.message); }
+  let pipeline;
+  if (!sub || sub === "show") { try { pipeline = pipelineFor(locate(), absRoot); } catch (e) { return fail(e.message, 3); } }
+  return report(runSystemBrief({ root: absRoot, sub, section, values: parsed.values, pipeline }));
+}
+
 function cmdBrief(args) {
+  // 2026-10-08 — `brief codebase …` is the Brief (system_brief.mjs); `brief <entry id>` the thread brief
+  if (args[0] === "codebase") return cmdSystemBrief(args.slice(1));
   let parsed;
   try { parsed = parseArgs({ args, allowPositionals: true, options: { max: { type: "string" } } }); }
   catch (e) { return fail(`${e.message}\n\n${USAGE}`); }

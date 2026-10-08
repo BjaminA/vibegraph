@@ -68,9 +68,14 @@ export function storyBeats(nodes: StoryNode[], edges: StoryEdge[], primary: stri
     const seen = new Set([owner.id]);
     const queue = [owner.id];
     let n = 0;
+    // 2026-10-07 (field review: the story's core step read "→ node — unknown"
+    // while the process writes the store) — what a process does to data
+    // first (writes, reads, watches), then its calls, a role-less call last
+    const rank = (e: StoryEdge) => ({ write: 0, read: 1, watch: 2 } as Record<string, number>)[e.protocol] ?? (e.protocol === "unknown" ? 9 : 5);
+    const ordered = [...edges].sort((x, y) => rank(x) - rank(y) || x.id.localeCompare(y.id));
     while (queue.length && n < maxPerEntry) {
       const cur = queue.shift()!;
-      for (const e of [...edges].sort((x, y) => x.id.localeCompare(y.id))) {
+      for (const e of ordered) {
         if (e.from !== cur || !e.threads.includes(ep) || n >= maxPerEntry) continue;
         n++;
         beats.push({

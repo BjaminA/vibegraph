@@ -23,6 +23,9 @@ import { loadPlan } from "./plan_store.ts";
 import { stampServed } from "./arch_served.ts";
 import { stampIdentity } from "./arch_identity.ts";
 import { negativeGlobs } from "./operation_vocab.ts";
+import { recordModelSource } from "./model_source.ts";
+import { listSpecs } from "./software_store.ts";
+import { declaredTopology } from "./arch_label_drift.ts";
 
 const MANIFESTS = ["package.json", "pyproject.toml", "setup.py", "Cargo.toml", "go.mod", "requirements.txt"];
 
@@ -54,7 +57,7 @@ export function archModelForEnvelope(
   contractFor?: (ep: string) => ThreadContract | null,
   opts2: { applyStore?: boolean } = {},
 ): ArchModelRecord {
-  const derived = derivedArchModel(env, stack, crossings, root, contractFor);
+  const derived = recordModelSource(derivedArchModel(env, stack, crossings, root, contractFor), env.files);
   // M-ARCH.4 — the stated half and any pending proposal, each element
   // keeping its source. The server holds the derived model apart so a
   // ratify/reject re-applies without re-deriving.
@@ -108,7 +111,9 @@ function derivedArchModel(
   const stores = deriveFileStores({ files: env.files as never, infra, threads: env.threads, model });
   // 2026-10-02 — the zones of the data stores the code writes, reads and watches
   let zones: ReturnType<typeof deriveDataZones> = { nodes: [], edges: [], notes: [] };
-  try { zones = deriveDataZones({ files: env.files, threads: env.threads, stack, model, plan: loadPlan(root), negative: negativeGlobs(root), registered: registeredAccess(root) }); } catch { /* best effort */ }
+  let specs: ReturnType<typeof listSpecs> = [];
+  try { specs = listSpecs(root); } catch { specs = []; }
+  try { zones = deriveDataZones({ files: env.files, threads: env.threads, stack, model, plan: loadPlan(root), negative: negativeGlobs(root), registered: registeredAccess(root), declared: declaredTopology(root).topology, specs }); } catch { /* best effort */ }
   const extra = { nodes: [...stores.nodes, ...zones.nodes], edges: [...stores.edges, ...zones.edges], notes: [...stores.notes, ...zones.notes] };
   if (!extra.nodes.length) return stampHierarchy(model);
   return stampHierarchy({ ...model, nodes: [...model.nodes, ...extra.nodes], edges: [...model.edges, ...extra.edges], notes: [...model.notes, ...extra.notes] });

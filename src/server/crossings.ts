@@ -298,9 +298,21 @@ function commandCrossings(
         const key = `${file}|${suffix}|${typeof n.line === "number" ? n.line : n.id}`;
         if (seenSuffix.has(key)) continue;
         seenSuffix.add(key);
-        const candidates = all.filter((f) => f !== file && !reached.includes(f));
-        const targets: CrossingTarget[] = [];
+        let candidates = all.filter((f: string) => f !== file && !reached.includes(f));
         const notes: string[] = [];
+        // 2026-10-07 (field review: `spawn(node, ["src/server.ts"], { cwd:
+        // GATEWAY })` named three servers, and the gateway's keys were drawn
+        // into all three) — the call's own `cwd` separates them when it is a
+        // literal path, or a name this file binds to one
+        if (candidates.length > 1) {
+          const dir = cwdDirOf(n, nodes, file);
+          const under = dir ? candidates.filter((f: string) => f.startsWith(`${dir.path}/`)) : [];
+          if (dir && under.length && under.length < candidates.length) {
+            notes.push(`${candidates.length} parsed files end with that path; the call's cwd (${dir.said}) names ${under.join(", ")}`);
+            candidates = under;
+          }
+        }
+        const targets: CrossingTarget[] = [];
         for (const f of candidates) {
           const e = fileEntry(entriesByFile.get(f) ?? []);
           if (e) targets.push({ entryPointId: e.id, route: f, method: "command", ...(e.framework ? { framework: e.framework } : {}) });
@@ -319,6 +331,35 @@ function commandCrossings(
     }
   }
   return out;
+}
+
+/** The folder a call's `cwd:` names, project-relative: a quoted path, or a
+ *  name the file binds to one (`const DIR = new URL("../../svc/",
+ *  import.meta.url)`). Relative to the file's own folder when spelled with
+ *  `import.meta.url` / `__dirname`, else taken as project-relative. Null when
+ *  the call has no cwd the source spells out. */
+export function cwdDirOf(n: any, nodes: any[], file: string): { path: string; said: string } | null {
+  const text = (Array.isArray(n.args) ? n.args : []).join(" ");
+  const m = /\bcwd\s*:\s*([^,}]+)/.exec(text);
+  if (!m) return null;
+  const expr = m[1].trim();
+  let lit = quotedLiterals(expr)[0] ?? null;
+  let relToFile = /import\.meta\.url|__dirname|import\.meta\.dirname/.test(expr);
+  let said = expr.slice(0, 60);
+  if (!lit && /^[A-Za-z_$][\w$]*$/.test(expr)) {
+    const binding = nodes.find((x) => x?.type === "assignment" && x.name === expr);
+    const src = binding ? [binding.preview ?? "", ...(binding.literals ?? [])].join(" ") : "";
+    lit = quotedLiterals(src).find((s: string) => /[/\\]|^\.\.?$|^[\w.-]+$/.test(s)) ?? null;
+    relToFile = /import\.meta\.url|__dirname|import\.meta\.dirname/.test(src);
+    if (lit) said = `\`${expr}\` = ${lit}`;
+  }
+  if (!lit) return null;
+  const parts = relToFile ? file.split("/").slice(0, -1) : [];
+  for (const seg of lit.replace(/\\/g, "/").split("/")) {
+    if (!seg || seg === ".") continue;
+    if (seg === "..") { if (!parts.length) return null; parts.pop(); } else parts.push(seg);
+  }
+  return parts.length ? { path: parts.join("/"), said } : null;
 }
 
 const TOOL_CALLEE = /(^|\.)callTool$/;

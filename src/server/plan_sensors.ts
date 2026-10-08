@@ -23,6 +23,7 @@
 // And information that waits on a person's next step (never decided here):
 // groups drifted from the code, a stale declared topology, stale scopes.
 
+import { declaredTopology } from "./arch_label_drift.ts";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { spawnSync } from "node:child_process";
@@ -160,7 +161,7 @@ export function planSensors(root: string, plan: Plan, opts: { model?: ArchModelR
   if (model) {
     let facts: ReturnType<typeof readInfraManifests>["facts"] = [];
     try { facts = readInfraManifests(root).facts; } catch { facts = []; }
-    const d = archDrift(applyArchStore(model, store), store, facts, plan);
+    const d = archDrift(applyArchStore(model, store), store, facts, plan, declaredTopology(root));
     if (d && d.level === "substantial") notes.push({ key: "groups", kind: "groups", title: `the ratified groups have drifted from the code (since ${d.since})`, detail: [...d.reasons.slice(0, 4), "re-form them: `vibegraph-knowledge architecture --update` (a model extends them) — or the map's Update groups"] });
   }
   for (const s of loadSources(root)) {

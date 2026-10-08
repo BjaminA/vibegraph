@@ -19,6 +19,7 @@ import type { ArchCategory } from "../../shared/arch_protocol";
 import type { TopologyModel, Topology } from "../../shared/topology_types";
 import type { TopologyDrift, TraceStep } from "../../shared/topology_analysis";
 import { grantees, whoMay, zoneOfFamily, threadsOfFunction } from "../../shared/topology_query.ts";
+import { codeOpsByZone, codeOpsText } from "../../shared/topology_code_ops.ts";
 
 export const TOPO = "topo:";
 const EMPTY: ArchModelRecord["unplaced"] = { tests: 0, unmatchedHops: 0, toolsPresentNotCalled: [], unattributedBoundaries: 0 };
@@ -70,13 +71,23 @@ function zoneCards(t: Topology, threads: ThreadLike[], nodes: ArchNodeRecord[], 
 export const READ_EDGE_CAP = 150;
 
 /** The Resources lens. `focus` — the selected card's id: its reads are drawn
- *  even where the others are folded. */
-export function resourcesModel(m: TopologyModel, threads: ThreadLike[] = [], drift?: TopologyDrift | null, opts: { focus?: string | null } = {}): ArchModelRecord {
+ *  even where the others are folded. `derived` — the derived map, whose
+ *  data operations say what the code does to each zone. */
+export function resourcesModel(m: TopologyModel, threads: ThreadLike[] = [], drift?: TopologyDrift | null, opts: { focus?: string | null; derived?: ArchModelRecord | null } = {}): ArchModelRecord {
   const t = m.topology;
   const nodes: ArchNodeRecord[] = [];
   const edges: ArchEdgeRecord[] = [];
   const groups: ArchGroupRecord[] = [];
   zoneCards(t, threads, nodes, groups, drift);
+  // 2026-10-07 — what the CODE does to each zone (grants say who MAY)
+  const code = codeOpsByZone(t, opts.derived);
+  for (const n of nodes) {
+    const ops = n.id.startsWith(`${TOPO}zone:`) ? code.get(n.id.slice(`${TOPO}zone:`.length)) : undefined;
+    if (!ops) continue;
+    n.notes = [`the code: ${codeOpsText(ops)} (derived data operations; the grants say who may)`, ...(n.notes ?? [])];
+    const w = ops.get("write");
+    n.sublabel = `${n.sublabel} · code writes: ${w?.length ? w.join(", ") : "none seen"}`;
+  }
   familyCards(t, nodes, edges);
   for (const p of t.principals ?? []) {
     nodes.push(card(prId(p.id), p.id, p.kind === "service" ? "agent" : "external", `${p.kind ?? "principal"}${p.roles?.length ? ` · ${p.roles.join(", ")}` : ""}`, [...(p.cite ? [`declared at ${p.cite}`] : [])]));

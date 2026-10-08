@@ -41,7 +41,9 @@ test("rows follow the data: a read comes IN, a write goes OUT, with the keys the
   const io = nodeIO(real, id("order decider"));
   const approver = io.in.find((r) => r.label === "the appointed approver");
   assert.equal(approver.op, "read");
-  assert.deepEqual(approver.path.map((p) => `${p.label} ${p.ops}`), ["admin appointer write"], "who put it there");
+  // the box holding the appointer also holds the topology generator: it keeps
+  // its own name (2026-10-07, arch_real.ts — a plan name only on a box it IS)
+  assert.deepEqual(approver.path.map((p) => `${p.label} ${p.ops}`), ["Scripts write"], "who put it there");
   const status = io.out.find((r) => r.label === "order status");
   assert.equal(status.op, "write");
   assert.deepEqual(status.keys, ["phase"]);

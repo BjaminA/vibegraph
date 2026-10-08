@@ -15,6 +15,7 @@
 //
 // The spawn is the classify spawn (classify.mjs spawnClassifier): no MCP, no
 // write tools, `VG_CLAUDE_BIN` stubbable.
+import { declaredTopology } from "../../src/server/arch_label_drift.ts";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { loadEnvelope } from "../quality_check.mjs";
@@ -45,7 +46,7 @@ export function runArchitecture({ root, out, envelope, pipeline, commit, tool, a
   const derived = archModelForEnvelope(envl, stack, crossings, absRoot, undefined, { applyStore: false });
   let exitCode = 0;
   const plan = loadPlan(absRoot);
-  const driftNow = () => archDrift(applyArchStore(derived, loadArchStore(absRoot)), loadArchStore(absRoot), readInfraManifests(absRoot).facts, plan);
+  const driftNow = () => archDrift(applyArchStore(derived, loadArchStore(absRoot)), loadArchStore(absRoot), readInfraManifests(absRoot).facts, plan, declaredTopology(absRoot));
 
   if (action === "drift") {
     // 2026-10-05 — zero tokens: what moved since the groups were ratified.

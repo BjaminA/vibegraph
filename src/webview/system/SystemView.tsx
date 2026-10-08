@@ -32,6 +32,7 @@ import { journeysModel } from "./arch_journeys";
 import type { PlanView } from "./arch_plan";
 import { useMapModel, layoutMap } from "./useMapModel";
 import { MapFlows, lightFlow } from "./MapFlows";
+import { BriefCard } from "./BriefCard";
 import type { LitPath } from "./NodeIOCard";
 import { PlanViewToggle } from "./PlanViewToggle";
 import { usePlanState } from "../usePlanState";
@@ -172,6 +173,7 @@ export function SystemView({
   const { topo, hasTopology, topoMapModel, topoDrawn, traceName, setTraceName, traceIndex, setTraceIndex } = useTopologyLens({
     lens, onMap: mode === "map" && !focusEntryPointId, threads,
     selectedNodeId: archSelected && "node" in archSelected ? archSelected.node.id : null,
+    derived: architecture,
   });
   // 2026-09-30 — the hypothetical plan: Real / Plan / Overlay (arch_plan.ts).
   const planState = usePlanState();
@@ -409,6 +411,8 @@ export function SystemView({
       {mode === "map" && architecture && (
         <ArchProposalBar model={architecture} state={archPropose ?? { busy: false, error: null }} onAction={onArchAction} />
       )}
+      {/* 2026-10-08 — the Brief: what the system is for and how, each line lighting its boxes */}
+      {mode === "map" && architecture && !topoMapModel && <BriefCard onLight={(boxes) => setFlowOn(boxes ? { nodes: boxes, edges: [] } : null)} />}
       {mode === "map" && archPropose?.working && <ArchProposingCard working={archPropose.working} model={architecture} />}
       {mode === "map" && architecture && (
         <ArchInspector selected={archSelected} model={architecture} ioModel={planMapModel ?? realMap ?? undefined} vocab={vocab} onLight={setFlowOn} onClose={() => { setArchSelected(null); setFlowOn(null); }} onOpenThread={onOpenThread}

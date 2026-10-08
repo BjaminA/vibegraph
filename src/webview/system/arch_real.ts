@@ -76,9 +76,28 @@ export function enrichReal(real: ArchModelRecord, inp: RealInputs = {}): RealMod
       boxOf.set(p.id, box);
       byBox.set(box, [...(byBox.get(box) ?? []), p.id]);
     }
+    // 2026-10-07 (field review: one planned process named a box of 18 entry
+    // points, mostly probes and a demo) — the plan's name goes on a box only
+    // when the plan's processes ARE the box: they account for every one of
+    // its entry points. Otherwise the box keeps its name and says what of the
+    // plan is inside it.
+    const planEps = (p: Plan["processes"][number]) => {
+      const own = p.entryPoints ?? [];
+      const found = finding("processes", p.id)?.entryPoints ?? [];
+      return [...own, ...found];
+    };
+    const covered = (n: ArchNodeRecord, ps: Plan["processes"]) => (n.entryPoints ?? []).every((e) =>
+      ps.some((p) => planEps(p).some((x) => x === e || x === fileOf(e))));
     for (const [box, ids] of byBox) {
       const n = nodes.get(box)!;
       const ps = ids.map((id) => plan.processes.find((p) => p.id === id)!);
+      if ((n.entryPoints?.length ?? 0) > 1 && !covered(n, ps)) {
+        const mine = (n.entryPoints ?? []).filter((e) => ps.some((p) => planEps(p).some((x) => x === e || x === fileOf(e))));
+        n.sublabel = `contains the plan's ${ps.map((p) => p.label).join(", ")} · ${n.sublabel}`;
+        n.notes = [`the plan's ${ps.map((p) => `${p.label} (${p.id})`).join(", ")} is inside this box: ${mine.length ? `${plural(mine.length, "entry point")} of ${n.entryPoints!.length} (${mine.slice(0, 3).join(", ")}${mine.length > 3 ? ", …" : ""})` : `placed here by its path, not by an entry point of the box's ${n.entryPoints!.length}`} — so the box keeps its own name`, ...(n.notes ?? [])];
+        for (const p of ps) key(n, `processes:${p.id}`);
+        continue;
+      }
       n.derivedLabel ??= n.label;
       n.label = ps.length === 1 ? ps[0].label : `${ps[0].label} +${ps.length - 1}`;
       n.labelSource = "plan";
@@ -130,19 +149,30 @@ export function enrichReal(real: ArchModelRecord, inp: RealInputs = {}): RealMod
     // Drawn on evidence only: a declaration, a zone the code touches, or the
     // tool it is reached through. Anything else stays the plan's ghost.
     if (!tst && !zoneNodes.length && !absorbed.length) continue;
-    const declared = (t?.zones ?? []).filter(inStore);
-    const writers = writersOf(t, declared);
+    const declaredAll = (t?.zones ?? []).filter(inStore);
+    // 2026-10-07 (field review: "52 zones", unexplained, was 51 zones and one
+    // NAME PATTERN) — a `{Placeholder}` id stands for many zones, not one
+    const patterns = declaredAll.filter((z) => /\{[^}]+\}/.test(z.id));
+    const declared = declaredAll.filter((z) => !patterns.includes(z));
+    const byKind = new Map<string, number>();
+    for (const z of declared) { const k = /^([a-z]+)_/i.exec(z.id)?.[1]; const key = k ? `${k}_*` : "named"; byKind.set(key, (byKind.get(key) ?? 0) + 1); }
+    const kinds = [...byKind].filter(([k]) => k !== "named").sort((a, b) => b[1] - a[1]);
+    const zoneBreakdown = declared.length && kinds.length
+      ? `${declared.length} declared zones: ${kinds.map(([k, n]) => `${n} ${k}`).join(", ")}${byKind.get("named") ? `, ${byKind.get("named")} named singly` : ""}${patterns.length ? `; plus ${plural(patterns.length, "name pattern")} (${patterns.map((p) => p.id).join(", ")}) that stand${patterns.length === 1 ? "s" : ""} for zones made at run time — not counted as zones` : ""}`
+      : null;
+    const writers = writersOf(t, declaredAll);
     const card = `${STORE_CARD}${sid}`;
     // M8: declared next to live — what `topology live` found provisioned
-    const lc = inventory && tst && declared.length ? countLive(declared, inventory.inventory) : null;
+    const lc = inventory && tst && declaredAll.length ? countLive(declaredAll, inventory.inventory) : null;
     const ids = inventory?.inventory.identities.length ?? 0;
     nodes.set(card, {
       id: card, kind: "tool", category: "database", source: tst ? "stated" : "derived", essential: true,
       label: pst?.label ?? tst?.label ?? sid,
-      sublabel: [lc ? `${lc.declared} declared · ${lc.provisioned.length} provisioned` : plural(declared.length || zoneNodes.length, "zone"), ...(writers.length ? [plural(writers.length, "writer")] : []), ...(absorbed.length ? [`via ${absorbed.map((a) => a.label).join(", ")}`] : [])].join(" · "),
+      sublabel: [lc ? `${lc.declared} declared · ${lc.provisioned.length} provisioned` : `${plural(declared.length || zoneNodes.length, "zone")}${patterns.length ? ` + ${plural(patterns.length, "name pattern")}` : ""}`, ...(writers.length ? [plural(writers.length, "writer")] : []), ...(absorbed.length ? [`via ${absorbed.map((a) => a.label).join(", ")}`] : [])].join(" · "),
       threads: [], refs: [], planKeys: pst ? [`stores:${sid}`] : [],
       notes: [
         ...(tst ? [`declared by the project's topology${tst.label && tst.label !== (pst?.label ?? sid) ? ` as "${tst.label}"` : ""}: ${plural(declared.length, "zone")}${writers.length ? `, written by ${writers.join(", ")}` : ""}`] : []),
+        ...(zoneBreakdown ? [zoneBreakdown] : []),
         ...(zoneNodes.length ? [`the code reads and writes ${plural(zoneNodes.length, "zone group")} of it (drawn in its box)`] : []),
         ...(absorbed.length ? [`reached through ${absorbed.map((a) => a.label).join(", ")} — folded into this card at Bird's-eye`] : []),
         ...(lc ? [`live (${inventory!.at.slice(0, 16)}, \`${inventory!.command}\`): ${lc.provisioned.length} of ${lc.declared} declared zones provisioned${ids ? `, read as ${ids} identit${ids === 1 ? "y" : "ies"}` : ""}`,
@@ -185,7 +215,10 @@ export function enrichReal(real: ArchModelRecord, inp: RealInputs = {}): RealMod
 
   // ── outside callers ──
   const clusterIds = new Set([...nodes.values()].filter((n) => n.kind === "cluster").map((n) => n.id));
-  const called = new Set(edges.filter((e) => e.kind !== "uses" && e.from !== e.to && clusterIds.has(e.from)).map((e) => e.to));
+  // a box an actor already calls (the derived Browser, M-ARCH) has its caller:
+  // a second "Outside callers" box beside it would say the same thing twice
+  const actorIds = new Set([...nodes.values()].filter((n) => n.kind === "actor").map((n) => n.id));
+  const called = new Set(edges.filter((e) => e.kind !== "uses" && e.from !== e.to && (clusterIds.has(e.from) || actorIds.has(e.from))).map((e) => e.to));
   const claimedBy = new Map<string, string>(); // box → actor
   for (const ext of live(plan?.processes).filter((p) => p.kind === "external_http")) {
     const targets = uniq(live(plan?.boundaries).filter((b) => b.from === ext.id).map((b) => boxOf.get(b.to)).filter((x): x is string => !!x));

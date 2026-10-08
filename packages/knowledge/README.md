@@ -74,8 +74,8 @@ is [docs/guide/VISUALISATION.md](https://github.com/BjaminA/vibegraph/blob/main/
 codebase, and what the people who run it have stated about it, to
 disk for a Claude that has no VibeGraph. Zero tokens by default: nothing
 `init`, `export`, `check`, `constraints` or `seeds` writes comes from a model.
-Three things do spend tokens — `classify`, `architecture --propose/--modify`
-and `skills draft` — and each says so in its usage line.
+Four things do spend tokens — `classify`, `architecture --propose/--modify`,
+`brief codebase` and `skills draft` — and each says so in its usage line.
 
 The full guide, with every command and a team workflow, is
 [docs/guide/CLI.md](https://github.com/BjaminA/vibegraph/blob/main/docs/guide/CLI.md).

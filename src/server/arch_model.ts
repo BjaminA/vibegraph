@@ -140,12 +140,37 @@ export function buildArchModel(input: ArchInputs): ArchModelRecord {
   // a LOCAL process start: a bare call, or one on a child-process module —
   // never a platform's remote command (`stream.exec(…)` runs elsewhere)
   const SPAWN = /^((child_process|childProcess|cp|proc|Bun|execa)\.)?(spawn|spawnSync|fork|exec|execFile|execa|execSync|execFileSync|execaNode)$/;
+  // 2026-10-07 (field review: a demo script that starts processes through its
+  // own `run()` helper was not listed as a starter) — a function in the
+  // calling file whose body makes a local process start is a spawn too
+  const wrappers = new Map<string, Set<string>>();
+  const viaHelper: Array<{ file: string; targets: Array<{ entryPointId: string }> }> = [];
+  const spawnWrappersOf = (file: string): Set<string> => {
+    let w = wrappers.get(file);
+    if (w) return w;
+    w = new Set();
+    const ns = (input.fileNodes?.(file) ?? []) as Array<{ id?: string; type?: string; name?: string; funcName?: string; callTarget?: string; parentId?: string | null }>;
+    const byId = new Map(ns.filter((n) => n.id).map((n) => [n.id!, n]));
+    for (const n of ns) {
+      const callee = String(n.funcName ?? n.callTarget ?? "").replace(/\(.*$/, "");
+      if (!callee || !SPAWN.test(callee)) continue;
+      for (let p = n.parentId ? byId.get(n.parentId) : undefined; p; p = p.parentId ? byId.get(p.parentId) : undefined) {
+        if (p.type === "function_def" && p.name) { w.add(p.name); break; }
+      }
+    }
+    wrappers.set(file, w);
+    return w;
+  };
   for (const h of input.crossings?.all ?? []) {
     // an ambiguous hop (one literal, several parsed files) names none of them
     // a shell script that runs another script is one step of a one-shot job,
     // not a process starting another (bash  even replaces itself)
     const shell = (input.languageOf?.(h.file) ?? languageForPath(h.file)?.id) === "bash";
-    if (h.kind !== "command" || shell || h.targets.length !== 1 || !SPAWN.test(String(h.callee).replace(/\(.*$/, ""))) continue;
+    const callee = String(h.callee).replace(/\(.*$/, "");
+    if (h.kind !== "command" || shell || h.targets.length !== 1) continue;
+    // through a helper: a STARTER of a box that is a process for its own
+    // reasons, never a new process box (a demo's run() of one-shot scripts)
+    if (!SPAWN.test(callee)) { if (spawnWrappersOf(h.file).has(callee)) viaHelper.push(h); continue; }
     for (const t of h.targets) {
       const target = epById.get(t.entryPointId);
       if (!target || target.file === h.file) continue;
@@ -166,6 +191,14 @@ export function buildArchModel(input: ArchInputs): ArchModelRecord {
       runtimeOf.set(e.id, r);
     }
   }
+  // starters through a helper, onto boxes already processes (spawned or listening)
+  for (const h of viaHelper) {
+    const target = epById.get(h.targets[0].entryPointId);
+    const r = target ? runtimeOf.get(target.id) : undefined;
+    if (!target || !r || target.file === h.file) continue;
+    if (!r.how.includes("spawned")) r.how.push("spawned");
+    if (!r.by!.includes(h.file)) r.by!.push(h.file);
+  }
   const keyOf = new Map<string, { id: string; root: string; fam: Family }>();
   const perKey = new Map<string, number>();
   for (const e of input.entryPoints) {
@@ -177,6 +210,22 @@ export function buildArchModel(input: ArchInputs): ArchModelRecord {
     perKey.set(id, (perKey.get(id) ?? 0) + 1);
   }
   const base = (f: string) => f.split("/").pop()!.replace(/\.[^.]+$/, "");
+  // 2026-10-07 — two process FILES with one name in one package (two
+  // `src/server.ts` beside each other) are two processes: the key gains the
+  // folder only then, so every other box keeps the id stored names refer to
+  const procFiles = new Map<string, Set<string>>();
+  for (const e of input.entryPoints) {
+    const k = keyOf.get(e.id);
+    if (!k || !runtimeOf.get(e.id) || (perKey.get(k.id) ?? 0) <= 1) continue;
+    const key = `${k.root || "."}:${base(e.file)}`;
+    (procFiles.get(key) ?? procFiles.set(key, new Set()).get(key)!).add(e.file);
+  }
+  const procKey = (root: string, file: string) => {
+    const key = `${root || "."}:${base(file)}`;
+    if ((procFiles.get(key)?.size ?? 0) <= 1) return key;
+    const rel = root ? file.slice(root.length + 1) : file;
+    return `${root || "."}:${rel.replace(/\.[^.]+$/, "")}`;
+  };
   for (const e of input.entryPoints) {
     const fam = familyOf(e, input.languageOf?.(e.file) ?? null);
     if (!fam) { tests++; continue; }
@@ -185,7 +234,7 @@ export function buildArchModel(input: ArchInputs): ArchModelRecord {
     const own = !!runtime && (perKey.get(k.id) ?? 0) > 1;
     const root = k.root;
     // one box per process FILE, whatever family its entry points come from
-    const id = own ? `cluster:process:${root || "."}:${base(e.file)}` : k.id;
+    const id = own ? `cluster:process:${procKey(root, e.file)}` : k.id;
     clusterOf.set(e.id, id);
     let c = clusters.get(id);
     if (!c) {
@@ -460,7 +509,9 @@ export function buildArchModel(input: ArchInputs): ArchModelRecord {
         if (kind === "tool") e._details.add(h.path);
         const hopRef = { file: h.file, nodeId: h.nodeId, text: `${h.callee} ${h.path}`.slice(0, 160) };
         if (e.refs.length < MAX_REFS) e.refs.push(hopRef);
-        addPayload(e, callerPayload(nodeAt(h.file, h.nodeId, h.line), hopRef));
+        // an AMBIGUOUS hop's call carries keys for one of its targets, not all
+        // (2026-10-07: one spawn's env keys were drawn into three boxes)
+        if (h.targets.length === 1) addPayload(e, callerPayload(nodeAt(h.file, h.nodeId, h.line), hopRef));
         const targetEp = epById.get(t.entryPointId);
         const targetNodes = targetEp?.irNodeId === "module" && input.nodeFor
           ? scriptNodes(input, targetEp.file) : undefined;
@@ -492,7 +543,9 @@ export function buildArchModel(input: ArchInputs): ArchModelRecord {
     nodes.push({
       ...c, files: _files.size,
       sublabel: c.runtime && c.id.startsWith("cluster:process:")
-        ? `process · ${c.runtime.how.map((h) => (h === "spawned" ? `started by ${(c.runtime!.by ?? []).map((f) => f.split("/").pop()).join(", ")}` : "listens")).join(" · ")} · ${_files.size} file${_files.size === 1 ? "" : "s"}`
+        // 2026-10-07 (field review: "started by server.ts" when three files are
+        // called that) — every starter, by its path
+        ? `process · ${c.runtime.how.map((h) => (h === "spawned" ? `started by ${(c.runtime!.by ?? []).join(", ")}` : "listens")).join(" · ")} · ${_files.size} file${_files.size === 1 ? "" : "s"}`
         : `${n} entry point${n === 1 ? "" : "s"} · ${_files.size} file${_files.size === 1 ? "" : "s"}${c.frameworks!.length ? ` · ${c.frameworks!.join(", ")}` : ""}`,
     });
   }

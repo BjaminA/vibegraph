@@ -45,6 +45,8 @@ export function classifierTarget(env = process.env) {
 }
 
 /** One reasoning spawn. Returns the model's reply TEXT, or the failure. */
+const STDIN_ABOVE = 24 * 1024;
+
 export function spawnClassifier({ prompt, model, cwd, timeoutMs = 10 * 60 * 1000, env = process.env }) {
   const target = classifierTarget(env);
   if (!target.cmd) return { ok: false, error: target.missing, label: "claude" };
@@ -56,9 +58,12 @@ export function spawnClassifier({ prompt, model, cwd, timeoutMs = 10 * 60 * 1000
     "--allowedTools", CLASSIFY_ALLOWED_TOOLS.join(","),
     "--disallowedTools", CLASSIFY_DENIED_TOOLS.join(","),
     ...(model ? ["--model", model] : []),
-    "--", prompt,
+    // 2026-10-08 — a long prompt (a brief's facts run past 100 KB) goes on
+    // stdin: Linux caps ONE argument at 128 KB, Windows a whole command line
+    // at 32 K; `claude -p` reads its prompt from stdin when none is given
+    ...(prompt.length > STDIN_ABOVE ? [] : ["--", prompt]),
   ];
-  const r = spawnSync(target.cmd, args, { cwd, encoding: "utf-8", timeout: timeoutMs, maxBuffer: 64 * 1024 * 1024, env, shell: false });
+  const r = spawnSync(target.cmd, args, { cwd, encoding: "utf-8", timeout: timeoutMs, maxBuffer: 64 * 1024 * 1024, env, shell: false, ...(prompt.length > STDIN_ABOVE ? { input: prompt } : {}) });
   if (r.error) return { ok: false, error: `could not spawn ${target.label}: ${r.error.message}`, label: target.label };
   let parsed = null;
   try { parsed = JSON.parse(r.stdout); } catch { parsed = null; }

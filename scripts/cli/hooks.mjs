@@ -46,6 +46,7 @@ import { getThreadSkill, injectableSkillText } from "../../src/server/thread_ski
 import { affectedTests } from "../../src/shared/test_reach.ts";
 import { verbMayGate } from "../../src/server/quality/standings.ts";
 import { archForPrompt } from "./arch_context.mjs";
+import { promptBriefLines } from "./brief_context.mjs";
 import { orientation, inboxNote } from "./orientation.mjs";
 import { planAffectedNote, planForPrompt, plannedThreadsForPrompt } from "./plan_context.mjs";
 import { softwareForPrompt } from "./software_context.mjs";
@@ -247,6 +248,7 @@ function onPrompt(input, { absRoot, loaded, state, constraints }) {
     routedForSoftware = routedEps;
     const archFor = archForPrompt(absRoot, env, routedEps, state, constraints);
     const dirFor = directionForPrompt(absRoot, env, routedEps, state);
+    let briefFor = promptBriefLines(absRoot, routedEps, state); // the ratified Brief's method lines for these threads, once
     for (const r of applied.routed) {
       const c = ctx.byEntry.get(r.entryPointId);
       const terms = weakBy.get(r.entryPointId);
@@ -259,6 +261,7 @@ function onPrompt(input, { absRoot, loaded, state, constraints }) {
       if (rules) parts.push(rules);
       const before = JSON.stringify([state.arch ?? null, state.direction ?? null]);
       parts.push(...[archFor(r.entryPointId), dirFor(r.entryPointId)].filter(Boolean));
+      if (briefFor.length) { parts.push(briefFor.join("\n")); briefFor = []; }
       let block = parts.join("\n");
       // Not sent: nothing about it may be remembered as sent.
       if (block.length > room) { [state.arch, state.direction] = JSON.parse(before).map((x) => x ?? undefined); deferred.push(r.qualifiedName); continue; }

@@ -62,6 +62,8 @@ export function personOnlyStep(command, rest) {
     case "software": return ["ratify", "remove"].includes(sub) ? `software ${sub}` : null;
     case "scope": return ["ratify", "reject"].includes(sub) ? `scope ${sub}` : null;
     case "inbox": return ["agree", "reject"].includes(sub) ? `inbox ${sub}` : null;
+    // 2026-10-08 — deciding the Brief (`brief codebase ratify|reject`)
+    case "brief": return sub === "codebase" && ["ratify", "reject"].includes(rest[1]) ? `brief codebase ${rest[1]}` : null;
     case "constraints": case "constraint": return ["ratify", "remove", "accept", "reject"].includes(sub) ? `constraints ${sub}` : null;
     case "skills": return ["ratify", "reaffirm", "auto-reaffirm"].includes(sub) ? `skills ${sub}` : null;
     case "architecture": return has("--ratify") || has("--reject") ? `architecture ${has("--ratify") ? "--ratify" : "--reject"}` : null;
