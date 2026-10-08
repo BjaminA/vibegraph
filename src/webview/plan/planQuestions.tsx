@@ -132,7 +132,7 @@ export function AddQuestion({ plan }: { plan: Plan }) {
         <button className="vg-btn" data-question-add-go disabled={!text.trim() || full} onClick={add}><Plus size={12} strokeWidth={1.5} /> Add question</button>
       </div>
       {full && (
-        <div data-question-cap className="vg-queue" style={{ "--p": 210 } as React.CSSProperties}>
+        <div data-question-cap className="vg-queue">
           <b>{`${plan.open.length} open questions — the cap is ${PLAN_CAPS.open}. Close or drop one to add another.`}</b>
           {answered.length ? (
             <>

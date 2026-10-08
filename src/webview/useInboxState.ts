@@ -6,14 +6,16 @@ import { useEffect, useState } from "react";
 import { bridge, type ExtensionMessage } from "./types";
 
 export interface InboxItemView { id: string; kind: string; title: string; detail: string[]; decidable: boolean }
-export interface InboxState { items: InboxItemView[]; pending: number; message?: string; error?: string; loaded: boolean }
+/** `answered` counts replies to a decision (they carry a message or an
+ *  error): the panel clears what it was waiting on when it moves. */
+export interface InboxState { items: InboxItemView[]; pending: number; message?: string; error?: string; loaded: boolean; answered: number }
 
 export function sendInboxDecision(id: string, decision: "agree" | "reject"): void {
   bridge.postMessage({ type: "inbox-decide", payload: { id, decision } } as never);
 }
 
 export function useInboxState(enabled: boolean): InboxState {
-  const [state, setState] = useState<InboxState>({ items: [], pending: 0, loaded: false });
+  const [state, setState] = useState<InboxState>({ items: [], pending: 0, loaded: false, answered: 0 });
   useEffect(() => {
     if (!enabled) return;
     const ask = () => bridge.postMessage({ type: "inbox-get" } as never);
@@ -27,6 +29,7 @@ export function useInboxState(enabled: boolean): InboxState {
         setState((prev) => ({
           items, pending: items.filter((i) => i.decidable).length, loaded: true,
           message: said ? m.payload?.message : prev.message, error: said ? m.payload?.error : prev.error,
+          answered: prev.answered + (said ? 1 : 0),
         }));
       } else if (m.type === "project-update" || m.type === "plan-state") ask();
     };

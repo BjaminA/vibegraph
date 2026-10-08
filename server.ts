@@ -112,7 +112,7 @@ import { arraylikeParams, arraylikeDeclineReason } from "./src/server/run/arg_sh
 import { draftInsertion } from "./src/server/compose_draft";
 import { validateSystemPlan, loadSystemPlan, persistSystemPlan } from "./src/server/system_plan";
 import { planMtime, loadPlan } from "./src/server/plan_store";
-import { reconcilePlan } from "./src/server/plan_reconcile";
+import { reconcilePlanMemo } from "./src/server/reconcile_memo";
 import { seedArchFromPlan } from "./src/server/plan_arch_seed";
 import { handlePlanMessage, planToolText, planToolEdit } from "./src/server/plan_server";
 import { rulesState, handleRulesOp } from "./src/server/rules_server";
@@ -464,7 +464,7 @@ function archSeedFromPlan(force: boolean): { ok: boolean; error?: string; lines?
   if (!isDirectory || !latestArchDerived) return { ok: false, error: "the architecture layer needs a project directory and a derived map" };
   const plan = loadPlan(inputPath);
   if (!plan) return { ok: false, error: "no plan (.vibegraph/plan.json) to seed from" };
-  const rec = reconcilePlan(plan, planEnv() as any, latestStack, inputPath);
+  const rec = reconcilePlanMemo(plan, planEnv() as any, latestStack, inputPath);
   const r = seedArchFromPlan(plan, rec, latestArchDerived, loadArchStore(inputPath), { force, project: path.basename(inputPath) });
   if (r.error || !r.store) return { ok: false, error: r.error };
   saveArchStore(inputPath, r.store);
@@ -7763,7 +7763,7 @@ const mcpContext: VibegraphMcpContext = {
     // The map the GUI's Real view draws: the plan's names, the declared
     // topology's stores and decision structures, outside callers (arch_real.ts).
     const plan = loadPlan(inputPath);
-    const rec = plan ? reconcilePlan(plan, planEnv() as any, latestStack, inputPath) : null;
+    const rec = plan ? reconcilePlanMemo(plan, planEnv() as any, latestStack, inputPath) : null;
     let topology = null;
     try { topology = topologyState(analyzedRoot(), derivedTopologyOnce(latestStack, latestThreads, () => deriveDataArchitecture(relativeProjectFiles() as any, latestStack as any, latestThreads as any).topology)).model?.topology ?? null; } catch { topology = null; }
     const real = enrichReal(withProjectWords(latestArch, inputPath), { plan, rec, topology, threads: latestThreads as any });
@@ -8337,7 +8337,7 @@ function setupWebSocket() {
             const root = analyzedRoot();
             const plan = loadPlan(root);
             let reply: { message?: string; error?: string } = {};
-            const recNow = () => (plan ? reconcilePlan(plan, planEnv() as any, latestStack, root) : null);
+            const recNow = () => (plan ? reconcilePlanMemo(plan, planEnv() as any, latestStack, root) : null);
             if (msg.type === "inbox-decide" && typeof msg.payload?.id === "string" && (msg.payload?.decision === "agree" || msg.payload?.decision === "reject")) {
               const r = decideInbox(root, msg.payload.id, msg.payload.decision, {
                 who: personName(root), model: latestArchDerived, rec: recNow(),
@@ -8347,7 +8347,7 @@ function setupWebSocket() {
               if (r.ok) { reapplyArchStore(); broadcastProjectUpdate(); refreshArchDocs(); }
             }
             const after = loadPlan(root);
-            const rec = after ? reconcilePlan(after, planEnv() as any, latestStack, root) : null;
+            const rec = after ? reconcilePlanMemo(after, planEnv() as any, latestStack, root) : null;
             ws.send(JSON.stringify({ type: "inbox-state", payload: { items: buildInbox(root, { rec, model: latestArchDerived, briefStale: latestArch ? staleBriefLines(root, latestArch) : [] }), ...reply } }));
           }
         } else if (msg.type === "rules-get" || msg.type === "rules-op") {

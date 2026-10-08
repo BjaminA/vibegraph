@@ -49,15 +49,38 @@ button.vg-verdict { cursor: pointer; }
 button.vg-verdict[aria-pressed="true"] { border-color: hsl(var(--h) var(--s) var(--l-vfg)); }
 
 /* ── the panel sheet ────────────────────────────────────────────────────── */
+/* 2026-10-08 (Ben: "remove multi colour — keep in theme with the app"): every
+   panel is the app's own surface; the panels are told apart by their title
+   and icon, the colour stays with the chips. A selected tab or section is a
+   neutral highlight, never a hue. */
+/* Inside a panel, only the chips, the pills and the operation words carry
+   colour (Ben, same day: "just the chips and the bubble around the core
+   terminology"). Every panel colours its prose, borders and icons through the
+   accent tokens, so the sheet redefines those tokens as neutral — one rule
+   instead of one edit per panel — and gives the real ones back inside the
+   bubbles. A custom property resolves where it is declared, so these hold the
+   theme's real accents (dark or light) for the bubbles to restore. Errors stay
+   red: a refusal must stand out. */
+:root { --keep-thread: var(--accent-thread); --keep-warning: var(--accent-warning); --keep-chat: var(--accent-chat); --keep-proposed: var(--proposed-border); }
+.vg-sheet {
+  --accent-thread: var(--text-secondary);
+  --accent-warning: var(--text-secondary);
+  --accent-chat: var(--text-secondary);
+  --proposed-border: var(--border-edge);
+}
+.vg-sheet .vg-chip, .vg-sheet .vg-verdict, .vg-sheet .vg-op {
+  --accent-thread: var(--keep-thread); --accent-warning: var(--keep-warning); --accent-chat: var(--keep-chat); --proposed-border: var(--keep-proposed);
+}
 .vg-sheet-scrim { position: fixed; inset: 0; z-index: 1148; background: hsl(222 40% 2% / 0.5); }
 .vg-sheet {
-  --p: 210;
+  --sel: color-mix(in oklab, var(--text-primary) 10%, transparent);
+  --hov: color-mix(in oklab, var(--text-primary) 6%, transparent);
   position: fixed; z-index: 1149; box-sizing: border-box;
   left: 50%; top: 50%; transform: translate(-50%, -50%);
   width: min(1100px, 92vw); height: min(820px, 88vh);
   display: flex; flex-direction: column; overflow: hidden; border-radius: 14px;
-  background: color-mix(in oklab, hsl(var(--p) 60% 55%) 6%, var(--bg-node));
-  border: 1px solid color-mix(in oklab, hsl(var(--p) 60% 60%) 30%, var(--border-edge));
+  background: var(--bg-node);
+  border: 1px solid var(--border-edge);
   box-shadow: 0 24px 80px hsl(222 40% 2% / 0.55);
   color: var(--text-primary); font-family: var(--font-ui);
 }
@@ -69,8 +92,7 @@ button.vg-verdict[aria-pressed="true"] { border-color: hsl(var(--h) var(--s) var
 }
 .vg-sheet-head {
   display: flex; align-items: center; gap: 8px; padding: 12px 20px;
-  border-bottom: 1px solid var(--border-edge); border-top: 3px solid hsl(var(--p) 60% 62%);
-  background: color-mix(in oklab, hsl(var(--p) 60% 55%) 13%, var(--bg-node));
+  border-bottom: 1px solid var(--border-edge);
 }
 .vg-sheet-head b { font-size: var(--fs-16); }
 .vg-sheet-head .vg-sheet-sub { color: var(--text-muted); font-size: var(--fs-12); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -82,11 +104,12 @@ button.vg-verdict[aria-pressed="true"] { border-color: hsl(var(--h) var(--s) var
 .vg-sheet-btn:hover { color: var(--text-primary); border-color: var(--border-edge); }
 .vg-switcher { display: flex; gap: 4px; padding: 8px 20px; border-bottom: 1px solid var(--border-edge); flex-wrap: wrap; }
 .vg-switcher button {
-  --p: 210; display: inline-flex; align-items: center; gap: 4px;
+  display: inline-flex; align-items: center; gap: 4px;
   padding: 4px 12px; border-radius: 8px; font: var(--fs-12) var(--font-ui); cursor: pointer;
-  color: var(--text-secondary); background: hsl(var(--p) 60% 55% / 0.10); border: 1px solid hsl(var(--p) 60% 60% / 0.25);
+  color: var(--text-secondary); background: none; border: 1px solid transparent;
 }
-.vg-switcher button[aria-selected="true"] { color: var(--text-primary); background: hsl(var(--p) 60% 55% / 0.24); border-color: hsl(var(--p) 60% 62% / 0.7); }
+.vg-switcher button:hover { color: var(--text-primary); background: var(--hov); }
+.vg-switcher button[aria-selected="true"] { color: var(--text-primary); background: var(--sel); border-color: var(--border-edge); }
 .vg-switcher .vg-badge { font-weight: 600; color: var(--text-primary); }
 .vg-sheet-body { display: grid; grid-template-columns: 200px minmax(0, 1fr); min-height: 0; }
 .vg-sheet-body[data-nav="none"] { grid-template-columns: minmax(0, 1fr); }
@@ -95,7 +118,8 @@ button.vg-verdict[aria-pressed="true"] { border-color: hsl(var(--h) var(--s) var
   display: flex; justify-content: space-between; gap: 8px; text-align: left; background: none; border: none; cursor: pointer;
   color: var(--text-secondary); padding: 4px 12px; border-radius: 6px; font: var(--fs-13) var(--font-ui);
 }
-.vg-sheet-nav button[aria-current="true"] { background: color-mix(in oklab, hsl(var(--p) 60% 55%) 16%, transparent); color: var(--text-primary); }
+.vg-sheet-nav button:hover { background: var(--hov); color: var(--text-primary); }
+.vg-sheet-nav button[aria-current="true"] { background: var(--sel); color: var(--text-primary); }
 .vg-sheet-nav button i { font-style: normal; color: var(--text-muted); font-size: var(--fs-12); }
 .vg-sheet-content { padding: 16px 20px; display: flex; flex-direction: column; gap: 12px; overflow: auto; min-width: 0; }
 @media (max-width: 760px) {
@@ -126,10 +150,14 @@ button.vg-verdict[aria-pressed="true"] { border-color: hsl(var(--h) var(--s) var
   font: 600 var(--fs-12)/1 var(--font-ui); padding: 8px 12px; border-radius: 8px; cursor: pointer;
   border: 1px solid var(--border-edge); color: var(--text-primary); background: var(--bg-node);
 }
+.vg-btn { display: inline-flex; align-items: center; gap: 4px; transition: background 0.12s, border-color 0.12s; }
+.vg-btn:hover:not(:disabled) { background: color-mix(in oklab, var(--text-primary) 8%, var(--bg-node)); }
+.vg-btn:active:not(:disabled) { background: color-mix(in oklab, var(--text-primary) 14%, var(--bg-node)); }
 .vg-btn:disabled { opacity: 0.5; cursor: default; }
-.vg-btn[data-tone="go"] { border-color: hsl(140 60% 50% / 0.6); background: hsl(140 60% 45% / 0.16); }
-.vg-btn[data-tone="no"] { border-color: hsl(356 70% 60% / 0.5); }
-.vg-queue { border: 1px solid hsl(var(--p) 60% 60% / 0.5); border-radius: 10px; padding: 12px; background: hsl(var(--p) 60% 55% / 0.07); display: grid; gap: 12px; }
+/* the yes / no of a decision: the app's accent and a plain outline, no fills */
+.vg-btn[data-tone="go"] { border-color: color-mix(in oklab, var(--accent-thread) 70%, transparent); }
+.vg-btn[data-tone="no"] { color: var(--text-secondary); }
+.vg-queue { border: 1px solid var(--border-edge); border-radius: 10px; padding: 12px; display: grid; gap: 12px; }
 .vg-queue > b { font-size: var(--fs-13); }
 .vg-diff { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font: var(--fs-12)/1.5 var(--font-mono); padding: 0 12px 8px; }
 .vg-diff > div { padding: 8px; border-radius: 6px; overflow-wrap: anywhere; min-width: 0; }

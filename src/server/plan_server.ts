@@ -13,7 +13,7 @@ import { loadPlan, savePlan, demoteOrphanedPromotions } from "./plan_store.ts";
 import { loadConstraints } from "./constraint_store.ts";
 import { applyPlanOps, parsePlanOp, type PlanOp } from "./plan_ops.ts";
 import { formatPlanMd } from "./plan_render.ts";
-import { reconcilePlan } from "./plan_reconcile.ts";
+import { reconcilePlanMemo } from "./reconcile_memo.ts";
 import { promotePolicy } from "./plan_promote.ts";
 
 export interface PlanEnv { files: Record<string, any>; entryPoints: any[]; threads: any[] }
@@ -25,7 +25,7 @@ function stateOf(root: string, env: PlanEnv | null, stack: StackIndex | null, ex
   const plan = loadPlan(root);
   let reconcile: PlanReconcile | null = null;
   if (plan && env && stack) {
-    try { reconcile = reconcilePlan(plan, env, stack, root); } catch (e: any) { extra.error ??= `plan vs code failed: ${e.message}`; }
+    try { reconcile = reconcilePlanMemo(plan, env as never, stack, root); } catch (e: any) { extra.error ??= `plan vs code failed: ${e.message}`; }
   }
   return { plan, reconcile, ...extra };
 }

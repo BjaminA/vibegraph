@@ -20,7 +20,7 @@ const ROOT = resolve(FIXTURE || ".");
 const RULES_FILE = join(ROOT, ".vibegraph", "constraints.json");
 const CLI = resolve("scripts/cli/main.mjs");
 const cli = (args: string[], cwd: string) =>
-  execFileSync(process.execPath, ["--experimental-strip-types", "--no-warnings", CLI, ...args], { cwd, encoding: "utf-8", env: { ...process.env, CLAUDECODE: "" } });
+  execFileSync(process.execPath, ["--experimental-strip-types", "--no-warnings", CLI, ...args], { cwd, encoding: "utf-8", env: { ...process.env, CLAUDECODE: "", VG_PERSON_NO_TTY: "1" } }); // the test acts as the person (0.28's no-terminal guard)
 const person = () => { try { return execFileSync("git", ["config", "user.name"], { cwd: ROOT, encoding: "utf-8" }).trim() || userInfo().username; } catch { return userInfo().username; } };
 
 async function openApp(page: Page) {
@@ -111,7 +111,10 @@ test.describe("the GUI brief: kinds, one panel sheet, concise plan, rules", () =
     await expect(page.locator("[data-rules-history]").first()).toContainText(person());
   });
 
-  test("3. Plan, Rules, Stack and Agent Manager share one frame; the switcher moves between them; each is tinted apart", async ({ page }) => {
+  // 2026-10-08 (Ben: "remove multi colour — keep in theme with the app"): the
+  // panels were tinted apart; they now share the app's surface, told apart by
+  // title and icon, so all four backgrounds are the same.
+  test("3. Plan, Rules, Stack and Agent Manager share one frame; the switcher moves between them; one surface colour", async ({ page }) => {
     await openApp(page);
     await page.locator("[data-plan-toggle]").click();
     const first = (await sheetBox(page))!;
@@ -126,7 +129,7 @@ test.describe("the GUI brief: kinds, one panel sheet, concise plan, rules", () =
       const [a, b] = [await rgbOver(page, bg, "black"), await rgbOver(page, node, "black")];
       for (let i = 0; i < 3; i++) expect(Math.abs(a[i] - b[i]) / 255).toBeLessThanOrEqual(0.07);
     }
-    expect(new Set(bgs).size).toBe(4);
+    expect(new Set(bgs).size).toBe(1);
   });
 
   test("4. a plan item has at most three bullets above its fold, none wraps past two lines, the prose is folded", async ({ page }) => {

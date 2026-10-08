@@ -31,6 +31,9 @@ test.describe("decision inbox", () => {
     const item = page.locator('[data-inbox-item="plan:processes:archiver"]');
     await expect(item).toContainText("new plan process archiver");
     await expect(item).toContainText("order archiver");
+    // chip-ified (2026-10-08): the item's subject is a process chip
+    await expect(item.locator('.vg-item-head [data-chip="process"]')).toHaveText("archiver");
+    await expect(item.locator("[data-inbox-reject]")).toBeEnabled();
     await item.locator("[data-inbox-reject]").click();
     await expect(page.locator("[data-inbox-message]")).toContainText("archiver", { timeout: 15_000 });
     await expect(page.locator('[data-inbox-item="plan:processes:archiver"]')).toHaveCount(0);

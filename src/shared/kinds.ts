@@ -49,7 +49,8 @@ export interface ChipRef { kind: KindId; id: string; label?: string; at?: string
 
 /** One bullet of an item: a small-caps label and either chips joined by short
  *  verbs (a string part is a verb or a word, a ChipRef is an object) or text. */
-export type FactLabel = "does" | "where" | "runs as" | "speaks" | "blocked" | "rule" | "why" | "scope" | "steps" | "holds" | "carries" | "uses" | "asks";
+export type FactLabel = "does" | "where" | "runs as" | "speaks" | "blocked" | "rule" | "why" | "scope" | "steps" | "holds" | "carries" | "uses" | "asks"
+  | "says" | "changes" | "effect" | "evidence" | "do";
 export interface ItemFact { label: FactLabel; parts?: Array<ChipRef | string>; text?: string }
 
 /** A judgement, never an object: drawn as a pill with a dot (Verdict.tsx). */

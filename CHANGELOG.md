@@ -3,6 +3,33 @@
 `vibegraph-knowledge` and the VibeGraph app. Newest first. Each entry says what
 changed and, where an existing user would notice, how behaviour differs.
 
+## 0.29.1 — 2026-10-08 — panels in the app's colours; the inbox as chips, decisions at once
+
+- **One surface.** The panel sheet (Inbox, Plan, Rules, Stack, Agent
+  Manager, …) is no longer tinted per panel: it is the app's own surface, the
+  panel told apart by its title and icon. The selected tab and section are a
+  neutral highlight; the toolbar's buttons no longer fill with an accent when
+  chosen. Inside a panel only the chips, the verdict pills and the operation
+  words carry colour: the sheet redefines the accent tokens as neutral (one
+  rule in `styles/kinds.css`, not an edit per panel) and gives the real ones
+  back inside those bubbles, so prose, banners, borders and status icons are
+  neutral. Errors stay red.
+- **The inbox as chips.** Every inbox item is the panels' one item frame: its
+  subject as a chip read off its id, each detail line a labelled bullet
+  (`says`, `changes`, `effect`, `evidence`, `do`) with its file paths and box
+  ids as chips; a proposed item sent whole reads as its fields, not JSON
+  (`src/shared/inbox_view.ts`, so a new kind of item needs one table row).
+- **Agree / Reject answer the click.** The item leaves the list at once and
+  comes back with the reason if the server refused it; before, the buttons
+  stayed disabled until a reply that, on a refusal, never cleared them. The
+  server reconciles the plan once per plan state instead of three or four
+  times a click (`src/server/reconcile_memo.ts`; ~400 ms each on a 116-file
+  repository), which the Plan panel's Agree shares.
+
+Tests: test:inbox-view (5); test:e2e-gui-design (the panels now share one
+surface; a person's CLI step in it sets `VG_PERSON_NO_TTY`, which 0.28's
+no-terminal guard requires); test:e2e-inbox (the subject chip).
+
 ## 0.29.0 — 2026-10-08
 
 The Brief, the map facts it rests on, and zones named by the store the project

@@ -1,5 +1,6 @@
 // The one frame every panel opens in (GUI brief M3): a centred, near-square
-// sheet over a dimmed canvas, tinted by the panel's row in PANELS, with a
+// sheet over a dimmed canvas, in the app's own surface colour (2026-10-08: no
+// per-panel tint — the title and icon say which panel it is), with a
 // switcher row so moving between panels never closes and reopens. "Dock"
 // keeps the old side-drawer placement for a person who wants the graph in
 // view (remembered per browser). Esc closes.
@@ -57,7 +58,6 @@ export function PanelSheet({ active, available, badges, onSwitch, onClose, onSlo
       <section
         className="vg-sheet" role="dialog" aria-modal={!docked} aria-label={spec.title}
         data-panel-sheet={active} data-docked={docked ? "true" : undefined}
-        style={{ "--p": spec.hue } as React.CSSProperties}
       >
         <header className="vg-sheet-head">
           <Icon size={16} strokeWidth={1.5} aria-hidden />
@@ -79,7 +79,7 @@ export function PanelSheet({ active, available, badges, onSwitch, onClose, onSlo
         <nav className="vg-switcher" role="tablist" aria-label="Panels">
           {PANELS.filter((p) => available.includes(p.id)).map((p) => (
             <button key={p.id} type="button" role="tab" aria-selected={p.id === active} data-sheet-tab={p.id}
-              style={{ "--p": p.hue } as React.CSSProperties} onClick={() => onSwitch(p.id)}>
+              onClick={() => onSwitch(p.id)}>
               {p.title}
               {badges?.[p.id] ? <span className="vg-badge" data-sheet-badge={p.id}>· {badges[p.id]}</span> : null}
             </button>

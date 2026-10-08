@@ -122,7 +122,10 @@ export function ToolButton({
   disabled,
   onClick,
   title,
-  accent,
+  // 2026-10-08 (Ben: "remove the colour from choosing the toggle"): the
+  // toolbar is neutral — chosen is a highlight, never a hue. `accent` is
+  // still accepted from callers and no longer drawn.
+  accent: _accent,
   children,
   ...rest
 }: {
@@ -149,13 +152,11 @@ export function ToolButton({
         alignItems: "center",
         gap: 5,
         background: active
-          ? `color-mix(in oklab, ${accent} 20%, transparent)`
-          : (hover ? `color-mix(in oklab, ${accent} 12%, transparent)` : "transparent"),
-        border: `1px solid ${active
-          ? `color-mix(in oklab, ${accent} 60%, transparent)`
-          : (hover ? `color-mix(in oklab, ${accent} 33%, transparent)` : `color-mix(in oklab, ${accent} 20%, transparent)`)}`,
+          ? "color-mix(in oklab, var(--text-primary) 12%, transparent)"
+          : (hover ? "color-mix(in oklab, var(--text-primary) 6%, transparent)" : "transparent"),
+        border: `1px solid ${active ? "color-mix(in oklab, var(--text-primary) 30%, transparent)" : "var(--border-edge)"}`,
         borderRadius: 6,
-        color: active ? "var(--text-primary)" : accent,
+        color: active || hover ? "var(--text-primary)" : "var(--text-secondary)",
         // Inter at 12, medium: the toolbar is navigation, not code
         // (2026-09-24 look pass; it was 11px bold monospace).
         fontSize: "var(--fs-12)",
