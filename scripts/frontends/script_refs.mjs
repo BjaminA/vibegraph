@@ -142,6 +142,55 @@ export function nodeScriptRefs(node) {
   return out;
 }
 
+/**
+ * INVOKED-NAME VARIANTS (2026-10-09). A script may behave by the NAME it is
+ * run as: one file installed as `tool-public` and `tool-metered`, its
+ * `case` on its own basename (`$0` with the path stripped), `tool-public) … ;; tool-metered) … ;;` choosing the tier.
+ * A caller then names the variant, not the file. Read off the IR: a case
+ * (if_stmt, `casePatterns`) whose subject is the script's own name ($0, its
+ * basename, BASH_SOURCE[0]); each plain-word pattern is a name the script
+ * answers to. Returns Map<name, [{ file, line, caseLine }]>.
+ */
+const OWN_NAME = /^case\s+"?(?:\$0|\$\{0(?:##\*\/)?\}|\$\(basename\s+"?\$(?:0|\{0\})"?\)|\$\{BASH_SOURCE\[0\](?:##\*\/)?\})"?\s*$/;
+export function invokedNameVariants(files) {
+  const out = new Map();
+  for (const [file, ir] of Object.entries(files ?? {})) {
+    for (const n of ir?.nodes ?? []) {
+      if (n?.type !== "if_stmt" || !Array.isArray(n.casePatterns) || !OWN_NAME.test(String(n.condition ?? ""))) continue;
+      for (const p of n.casePatterns) {
+        const name = String(p?.text ?? "");
+        // a plain word: a glob (`*`, `tool-*`) or an alternative is no one name
+        if (!/^[A-Za-z0-9_.][A-Za-z0-9_.\-]*$/.test(name)) continue;
+        if (!out.has(name)) out.set(name, []);
+        out.get(name).push({ file, line: p.line, caseLine: n.line });
+      }
+    }
+  }
+  return out;
+}
+
+/** The variant names a node's literals spell: the whole literal, or its last
+ *  path segment (`/opt/x/bin/tool-metered`). Returns [{ literal, name }]. */
+export function variantRefs(node, variants) {
+  if (!variants?.size || !node || typeof node !== "object") return [];
+  const texts = [];
+  if (Array.isArray(node.args)) for (const a of node.args) if (typeof a === "string") texts.push(a);
+  if (node.type === "assignment" && typeof node.preview === "string") texts.push(node.preview);
+  if (Array.isArray(node.literals)) for (const l of node.literals) if (typeof l === "string") texts.push(JSON.stringify(l));
+  const out = [], seen = new Set();
+  for (const t of texts) {
+    for (const lit of [...quotedLiterals(t), t.trim().replace(/^["'`]|["'`]$/g, "")]) {
+      const last = lit.split("/").pop() ?? "";
+      for (const name of new Set([lit, last])) {
+        if (!variants.has(name) || seen.has(name)) continue;
+        seen.add(name);
+        out.push({ literal: lit, name });
+      }
+    }
+  }
+  return out;
+}
+
 /** The callee text a node carries, for a label. */
 export function nodeCallee(node) {
   if (typeof node.funcName === "string" && node.funcName) return node.funcName;

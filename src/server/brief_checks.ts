@@ -148,6 +148,9 @@ export function checkLine(part: BriefPart, line: BriefLine, facts: BriefFacts, o
       ? `names its mechanism through a test or probe ([verify]) — cite where the rule is applied ([enforce])`
       : `"${line.words.find((w) => MECHANISM_WORDS.has(w))}" with no [enforce] citation — where is the rule applied?`);
   }
+  // 2026-10-09 — "checked" says a property is TESTED: it needs the check
+  if (line.words.includes("checked") && !roles.has("verify")) errors.push(`says the property is checked, but cites no check ([verify]) — cite the test, probe or script that checks it`);
+  else if (part === "feature" && line.cites.length && [...roles].every((r) => r === "verify") && !line.words.includes("checked")) warnings.push(`rests only on a check ([verify]) — say it is \`checked\`: a test shows the property is tested, not that it holds`);
   // B11
   const words = [...ABSOLUTE_WORDS, ...(opts.absolutes ?? [])];
   const abs = words.find((w) => new RegExp(`\\b${w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(line.text));

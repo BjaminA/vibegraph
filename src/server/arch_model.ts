@@ -507,6 +507,7 @@ export function buildArchModel(input: ArchInputs): ArchModelRecord {
         e._confs.add(h.confidence);
         if (kind === "http" && h.method) e._details.add(h.method);
         if (kind === "tool") e._details.add(h.path);
+        if (kind === "command" && h.invokedAs) e._details.add(`as ${h.invokedAs}`);
         const hopRef = { file: h.file, nodeId: h.nodeId, text: `${h.callee} ${h.path}`.slice(0, 160) };
         if (e.refs.length < MAX_REFS) e.refs.push(hopRef);
         // an AMBIGUOUS hop's call carries keys for one of its targets, not all

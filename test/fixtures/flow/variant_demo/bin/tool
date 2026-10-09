@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# One implementation installed under two names: the name it is run as
+# decides the tier (free work, or paid work), so a platform that matches
+# command names can grant each name to different callers.
+set -euo pipefail
+
+case "${0##*/}" in
+  tool-public)  readonly TIER="public" ;;
+  tool-metered) readonly TIER="metered" ;;
+  *)            readonly TIER="all" ;;
+esac
+
+run() {
+  echo "running $1 as tier ${TIER}"
+}
+
+run "$@"

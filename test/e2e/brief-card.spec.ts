@@ -38,6 +38,17 @@ test.describe("the Brief card", () => {
     await card.locator("[data-brief-ask]").click();
     await expect(card.locator("[data-brief-estimate]")).toContainText(/≈ 1 call/);
     await expect(card).toHaveAttribute("data-brief-state", "none"); // nothing spent yet
+    // groups first: no group is settled, so the first call proposes the groups alone
+    await expect(card.locator("[data-brief-run]")).toHaveText("Propose groups first");
+    await expect(card.locator("[data-brief-skip-groups]")).toBeVisible();
+    await card.locator("[data-brief-run]").click();
+    await expect(card).toHaveAttribute("data-brief-state", "proposed", { timeout: 20_000 });
+    await expect(card.locator("[data-brief-groups-first]")).toBeVisible();
+    await card.locator('[data-brief-ratify="groups"]').click();
+    await expect(card).toHaveAttribute("data-brief-state", "none", { timeout: 15_000 });
+    // the groups are settled: the brief itself
+    await card.locator("[data-brief-ask]").click();
+    await expect(card.locator("[data-brief-run]")).toHaveText("Draft it");
     await card.locator("[data-brief-run]").click();
     await expect(card).toHaveAttribute("data-brief-state", "proposed", { timeout: 20_000 });
     const proposal = card.locator("[data-brief-proposal]");

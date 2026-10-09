@@ -25,13 +25,16 @@ import { loadBrief, saveBrief, proposeBrief, decideBrief, sectionSummary, briefW
 import { BRIEF_SECTIONS } from "../../src/shared/brief_types.ts";
 import { reviewBrief, reviewText } from "../../src/server/brief_review.ts";
 import { personName } from "../../src/server/person.ts";
+import { groupsStep } from "../../src/server/brief_groups_first.ts";
 import { spawnClassifier } from "./classify.mjs";
 import { cliPath } from "./winpath.mjs";
 
-export const SYSTEM_BRIEF_USAGE = `brief codebase [<root>] [--estimate] [--dry-run] [--only spec|groups|scopes|path] [--stale] [--note "<correction>"]… [--reply <file>]
+export const SYSTEM_BRIEF_USAGE = `brief codebase [<root>] [--estimate] [--dry-run] [--only spec|groups|scopes|path] [--stale] [--note "<correction>"]… [--reply <file>] [--skip-groups]
                                   THE BRIEF: one model call (SPENDS TOKENS; --estimate says how many first) writes the system's
-                                  function / method / key features, group changes, names, scopes and a start-here path — cited,
+                                  function / method / key features, names, scopes and a start-here path — cited,
                                   vocabulary-checked, its data claims checked against the map, PROPOSED with a review sheet;
+                                  GROUPS FIRST: with no settled groups the call proposes the groups alone — decide them, then
+                                  draft again and the brief reads the codebase through them (--skip-groups: one call, as before);
                                   --note: brief again, the model must answer each correction (cited as note:<n>)
       brief codebase show [<root>]                      the pending brief and the ratified one (STALE lines marked)
       brief codebase ratify|reject [spec|groups|scopes|path] [<root>]   a person decides (all sections when none is named)`;
@@ -76,8 +79,13 @@ export function runSystemBrief({ root, sub, section, values, pipeline, env = pro
     return done(0);
   }
 
-  const only = values.only;
-  if (only && !ONLY.includes(only)) { messages.push(`--only takes ${ONLY.join(", ")}`); return done(2); }
+  if (values.only && !ONLY.includes(values.only)) { messages.push(`--only takes ${ONLY.join(", ")}`); return done(2); }
+  // groups first (brief_groups_first.ts): unsettled groups are proposed alone, and decided, before the brief
+  const gs = groupsStep(absRoot, loadBrief(absRoot), model, { only: values.only, stale: values.stale, skip: values["skip-groups"] === true });
+  if (gs.step === "wait") { messages.push(gs.why); return done(1); }
+  if (gs.step === "groups") lines.push(`groups first: ${gs.why}`);
+  const only = gs.step === "groups" ? "groups" : values.only;
+  const skipGroups = gs.step === "brief" && gs.skipGroups;
   if (values.estimate && !values.stale) {
     const e = briefEstimate(absRoot, model);
     lines.push(`a full brief: ≈ ${e.calls} call${e.calls === 1 ? "" : "s"}, ~${Math.round(e.tokens / 1000)}k input tokens (${e.silent} silent box(es) to scope); the reply adds a few thousand`);
@@ -101,7 +109,7 @@ export function runSystemBrief({ root, sub, section, values, pipeline, env = pro
     }
   }
   const current = rec.proposed && allLines(rec.proposed.spec).length ? rec.proposed.spec : rec.ratified?.spec ?? null;
-  const prompt = buildBriefPrompt(inp.facts, inp.vocab, inp.opVocab, { only: restate ? "spec" : only, guidance: values.guidance, restate, current, absolutes: inp.absolutes });
+  const prompt = buildBriefPrompt(inp.facts, inp.vocab, inp.opVocab, { only: restate ? "spec" : only, skipGroups, guidance: values.guidance, restate, current, absolutes: inp.absolutes });
   if (values["dry-run"]) { lines.push(prompt); return done(0); }
   let text, label = "saved reply";
   if (values.reply) text = readFileSync(resolve(values.reply), "utf-8");
@@ -126,5 +134,6 @@ export function runSystemBrief({ root, sub, section, values, pipeline, env = pro
   if (inp.facts.silentRest.length && only !== "scopes") lines.push(`  ${inp.facts.silentRest.length} silent box(es) left for \`brief --only scopes\``);
   if (allLines(p.spec).length) lines.push(...reviewText(reviewBrief(p.spec, inp.facts, { omitted: p.omitted, absolutes: inp.absolutes })).map((l) => `  ${l}`));
   lines.push("  decide: vibegraph-knowledge brief codebase ratify|reject [section], or the inbox — a person's step");
+  if (gs.step === "groups") lines.push("  then draft the brief: `vibegraph-knowledge brief codebase` (it reads the codebase through the groups you agreed)");
   return done(0);
 }

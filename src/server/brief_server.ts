@@ -11,6 +11,7 @@ import { proposeClaim } from "./claim_store.ts";
 import { linesReader } from "./node_scope.ts";
 import { briefInputs, briefEstimate } from "./brief_inputs.ts";
 import { buildBriefPrompt, type BriefOnly } from "./brief_prompt.ts";
+import { groupsStep } from "./brief_groups_first.ts";
 import { parseBrief } from "./brief_validate.ts";
 import { loadBrief, saveBrief, proposeBrief, decideBrief, sectionSummary, briefWithStaleness, allLines } from "./brief_store.ts";
 
@@ -34,8 +35,11 @@ export function briefState(ctx: BriefCtx): Record<string, unknown> {
   const inp = model ? briefInputs(root, model, { notes: p?.notes }) : null;
   const ratified = inp && rec.ratified?.spec ? briefWithStaleness(rec, inp.facts) : rec.ratified;
   const review = (spec: BriefBody["spec"] | undefined, omitted?: string[]) => (inp && spec && allLines(spec).length ? reviewBrief(spec, inp.facts, { omitted, absolutes: inp.absolutes }) : null);
+  // groups first: what a plain Draft does next (brief_groups_first.ts)
+  const gs = model ? groupsStep(root, rec, model) : null;
   return {
     available: true, claude: ctx.claudeAvailable(),
+    groupsFirst: gs && gs.step !== "brief" ? { step: gs.step, why: gs.why } : null,
     ratified: ratified ?? null,
     ratifiedReview: review(ratified?.spec),
     proposed: p ? {
@@ -53,12 +57,16 @@ export function briefEstimateFor(ctx: BriefCtx): { ok: boolean; calls?: number; 
 }
 
 /** One call: a draft (or `only` a section, or `stale` lines), stored PROPOSED. */
-export async function briefDraft(ctx: BriefCtx, opts: { only?: BriefOnly; stale?: boolean; guidance?: string; notes?: string[] } = {}): Promise<{ ok: boolean; error?: string; detail?: string }> {
+export async function briefDraft(ctx: BriefCtx, opts: { only?: BriefOnly; stale?: boolean; guidance?: string; notes?: string[]; skipGroups?: boolean } = {}): Promise<{ ok: boolean; error?: string; detail?: string }> {
   const root = ctx.root(), model = ctx.model();
   if (!root || !model) return { ok: false, error: "the map is not built yet" };
   if (!ctx.claudeAvailable()) return { ok: false, error: "the claude CLI is unavailable — the Brief needs one model call" };
   const rec = loadBrief(root);
-  const only: BriefOnly | undefined = opts.stale ? "spec" : opts.only;
+  // groups first (brief_groups_first.ts)
+  const gs = groupsStep(root, rec, model, { only: opts.only, stale: opts.stale, skip: opts.skipGroups });
+  if (gs.step === "wait") return { ok: false, error: gs.why };
+  const only: BriefOnly | undefined = opts.stale ? "spec" : gs.step === "groups" ? "groups" : opts.only;
+  const skipGroups = gs.step === "brief" && gs.skipGroups;
   const notes = (opts.notes ?? []).filter((n) => typeof n === "string" && n.trim()).map((n) => n.trim().slice(0, 400)).slice(0, 12);
   const inp = briefInputs(root, model, { only, pending: rec.proposed, notes });
   let restate: string[] | undefined;
@@ -69,7 +77,7 @@ export async function briefDraft(ctx: BriefCtx, opts: { only?: BriefOnly; stale?
   }
   if (only === "scopes" && !inp.facts.silent.length) return { ok: false, error: "every silent box is scoped already" };
   const current = rec.proposed && allLines(rec.proposed.spec).length ? rec.proposed.spec : rec.ratified?.spec ?? null;
-  const text = await ctx.run(buildBriefPrompt(inp.facts, inp.vocab, inp.opVocab, { only, guidance: opts.guidance?.slice(0, 400), restate, current, absolutes: inp.absolutes }));
+  const text = await ctx.run(buildBriefPrompt(inp.facts, inp.vocab, inp.opVocab, { only, skipGroups, guidance: opts.guidance?.slice(0, 400), restate, current, absolutes: inp.absolutes }));
   if (text === null) return { ok: false, error: "the model returned nothing" };
   const parsed = parseBrief(text, inp.facts, inp.vocab, inp.opVocab, { model: ctx.modelLabel(), only, absolutes: inp.absolutes });
   if (!parsed.brief) return { ok: false, error: parsed.error };
@@ -78,6 +86,7 @@ export async function briefDraft(ctx: BriefCtx, opts: { only?: BriefOnly; stale?
   if (restate && next.proposed) next.proposed.restates = restate;
   saveBrief(root, next);
   ctx.changed();
+  if (gs.step === "groups") return { ok: true, detail: `groups first — ${sectionSummary(next.proposed!, "groups") ?? "no group change proposed"}; decide them, then draft the brief` };
   return { ok: true, detail: `${allLines(parsed.brief.spec).length} spec line(s), ${parsed.brief.refused.length} refused` };
 }
 

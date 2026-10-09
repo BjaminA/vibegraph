@@ -29,7 +29,7 @@ import { languageForPath } from "../shared/languages.ts";
 import type { CrossingRecord, CrossingTargetRecord, CrossingIndexRecord } from "../shared/protocol.ts";
 // M-FLOW.2 — the script-literal join, shared with scripts/discover_project.mjs
 // (plain JS so a spawned discoverer and the server read ONE rule).
-import { nodeCallee, nodeScriptRefs, quotedLiterals, resolveScriptFiles } from "../../scripts/frontends/script_refs.mjs";
+import { nodeCallee, nodeScriptRefs, quotedLiterals, resolveScriptFiles, invokedNameVariants, variantRefs } from "../../scripts/frontends/script_refs.mjs";
 // 2026-09-29 — the navigation join (Link / router / redirect → a page).
 import { navigationCrossings } from "./navigation.ts";
 export { navPath } from "./navigation.ts";
@@ -248,12 +248,50 @@ function scopeOf(nodes: any[]): Map<string, string | null> {
   return memo;
 }
 
+/** The names scripts answer to by their own `case` on $0, once per envelope. */
+const VARIANTS = new WeakMap<object, Map<string, Array<{ file: string; line: number; caseLine: number }>>>();
+function variantsOf(env: CrossingEnvelopeLike) {
+  let v = VARIANTS.get(env.files);
+  if (!v) { v = invokedNameVariants(env.files); VARIANTS.set(env.files, v!); }
+  return v!;
+}
+
+/** A literal naming a script by the name it is RUN AS (`tool-metered`, a
+ *  variant its own `case` on its basename declares): a command hop to that script,
+ *  saying which variant. Not a path match — the script states the name. */
+function variantHops(n: any, file: string, ep: string, reached: string[], variants: ReturnType<typeof variantsOf>,
+  entriesByFile: Map<string, RouteEntryLike[]>, seen: Set<string>, inWalkedFn: boolean): Crossing[] {
+  const out: Crossing[] = [];
+  for (const { literal, name } of variantRefs(n, variants)) {
+    const decl = (variants.get(name) ?? []).filter((d) => d.file !== file);
+    const key = `${file}|as:${name}|${typeof n.line === "number" ? n.line : n.id}`;
+    if (!decl.length || seen.has(key)) continue;
+    seen.add(key);
+    const targets: CrossingTarget[] = [];
+    const notes: string[] = [];
+    for (const d of decl) {
+      const e = fileEntry(entriesByFile.get(d.file) ?? []);
+      if (e) targets.push({ entryPointId: e.id, route: d.file, method: "command", ...(e.framework ? { framework: e.framework } : {}) });
+      else notes.push(`${d.file} answers to ${name} but has no entry point`);
+    }
+    if (decl.length > 1) notes.push(`${decl.length} scripts answer to the name ${name} — all are named, none is claimed`);
+    notes.push(`${name} is a name ${decl.map((d) => `${d.file} answers to (its case on its own name at line ${d.caseLine}, the ${name} arm at line ${d.line})`).join("; ")}: the script is run AS this name, and the arm decides what that variant does; named by a string literal in ${nodeCallee(n)}${!inWalkedFn ? " (module level of a file this thread reaches)" : ""}`);
+    if (literal !== name) notes.push(`the literal (${literal}) is a path; its last segment is the name`);
+    out.push({
+      kind: "command", entryPointId: ep, file, nodeId: n.id, ...(typeof n.line === "number" ? { line: n.line } : {}), callee: nodeCallee(n),
+      path: literal, method: null, targets, confidence: targets.length === 1 ? "path" : targets.length ? "ambiguous" : "unmatched", note: notes.join("; "), invokedAs: name,
+    });
+  }
+  return out;
+}
+
 function commandCrossings(
   env: CrossingEnvelopeLike, ep: string, th: { nodes?: any[] }, reached: string[],
   entriesByFile: Map<string, RouteEntryLike[]>,
 ): Crossing[] {
   const out: Crossing[] = [];
   const fileKeys = Object.keys(env.files);
+  const variants = variantsOf(env);
   // The functions this thread EXECUTES per file (its seed and steps), so a
   // literal counts when it sits in one of their bodies or at module level of
   // a file the thread reached — a constant the file defines is in scope for
@@ -284,6 +322,7 @@ function commandCrossings(
       // run — 57 of the first real run's hops were these.
       const callee = nodeCallee(n);
       if (/(^|\.)(import|require)$/.test(callee)) continue;
+      out.push(...variantHops(n, file, ep, reached, variants, entriesByFile, seenSuffix, inWalkedFn));
       for (const { literal, suffix, scriptShaped } of nodeScriptRefs(n)) {
         const { files: all, matched } = resolveScriptFiles(fileKeys, suffix);
         // A file the thread already walked is a resolved call, not a hop; a

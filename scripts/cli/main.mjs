@@ -595,7 +595,7 @@ function cmdSystemBrief(args) {
   try {
     parsed = parseArgs({ args: sub ? args.slice(1) : args, allowPositionals: true, options: {
       estimate: { type: "boolean" }, "dry-run": { type: "boolean" }, only: { type: "string" }, reply: { type: "string" },
-      model: { type: "string" }, guidance: { type: "string" }, envelope: { type: "string" }, stale: { type: "boolean" },
+      model: { type: "string" }, guidance: { type: "string" }, envelope: { type: "string" }, stale: { type: "boolean" }, "skip-groups": { type: "boolean" },
       note: { type: "string", multiple: true },
     } });
   } catch (e) { return fail(`${e.message}\n\n${USAGE}`); }

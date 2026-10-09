@@ -16,8 +16,9 @@ import { GROUP_KINDS } from "./arch_store.ts";
 
 export type BriefOnly = "spec" | "groups" | "scopes" | "path";
 
-export function buildBriefPrompt(facts: BriefFacts, vocab: BriefVocabulary, opVocab: Vocabulary, opts: { only?: BriefOnly; guidance?: string; restate?: string[]; current?: BriefBody["spec"] | null; absolutes?: string[] } = {}): string {
-  const want = (s: BriefOnly) => !opts.only || opts.only === s;
+export function buildBriefPrompt(facts: BriefFacts, vocab: BriefVocabulary, opVocab: Vocabulary, opts: { only?: BriefOnly; skipGroups?: boolean; guidance?: string; restate?: string[]; current?: BriefBody["spec"] | null; absolutes?: string[] } = {}): string {
+  // the groups are settled (brief_groups_first.ts): a full draft does not re-propose them
+  const want = (s: BriefOnly) => (opts.only ? opts.only === s : !(s === "groups" && opts.skipGroups));
   const words = (part: keyof Omit<BriefVocabulary, "version">) => Object.entries(vocab[part]).map(([w, m]) => `  ${w} — ${m}`).join("\n");
   const abs = [...ABSOLUTE_WORDS, ...(opts.absolutes ?? [])];
   const L: string[] = [
@@ -33,6 +34,9 @@ export function buildBriefPrompt(facts: BriefFacts, vocab: BriefVocabulary, opVo
     "- A line about a process states its PRIMARY operation (PROCESSES), never a secondary one as its main job.",
     "- COVER every [human] STATED RULE (cite it in a line, or name it in `omitted` with why), every SALIENT MECHANISM, and every process's primary operation (or name it in `omitted`).",
     "- A box's own id is not evidence for a claim about naming that box.",
+    "- NAME THE TOOL. A line about how the system reaches another host, service or platform names the tool by its name (its box label or package) — never only \"a client\" or \"a platform\" — and may say what the tool IS from WHAT THE TOOLS ARE (cite tool-def:<package> with the box). A definition says what a tool can do; this code's use of it is the box's edges.",
+    "- A CHECK THE PROJECT RUNS ([verify]) may be said as a feature with the word `checked` (\"… is checked by <script>\", citing the [verify] item): it says the property is TESTED, never that it holds. Do not omit a check only because it is [verify].",
+    "- A STATED group (group:<id>) is a person's statement of where boxes run and which trust zone they share: cite it for where, never as the mechanism.",
     "- Each method line names the boxes it happens in (`boxes`, ids from BOXES), so a reader can see where.",
     `- Keep it short: at most ${BRIEF_LIMITS.function} function lines, ${BRIEF_LIMITS.method} method lines, ${BRIEF_LIMITS.feature} feature lines, each under ${BRIEF_LIMITS.text} characters, in plain words a newcomer understands.`,
     "- Say what the system does and how; never invent a component, a protocol or a guarantee the facts do not show. List what you could not cover in `omitted`.",

@@ -7,7 +7,10 @@
 //   edges       every edge                                    <edge id>           use | verify
 //   data        each zone: partitions, grants, who writes / reads / watches it
 //   processes   each process's PRIMARY operations, apart from its secondary ones
-//   groups      the groups now                                label:<g> (stale)   declare
+//   groups      the groups now: a STATED group (a person's)   group:<g>           declare
+//               is citable; a proposed one is not; stale      label:<g> (stale)   declare
+//   tools       what each tool box IS (the vendor's docs,     tool-def:<package>  declare
+//               kept in the stack taxonomy's TOOL_NOTES)
 //   rules       the stated constraints                        rule:<id>           declare
 //   applied     where rules are applied (guarded functions,   <file>:<line>       enforce
 //               declared grants, grant / admin calls)
@@ -42,6 +45,7 @@ import { nodeIO, ioLines, CORE_VOCABULARY, type Vocabulary } from "../shared/nod
 import { scopeDossier } from "./node_scope.ts";
 import { planCitations } from "./arch_propose.ts";
 import { briefData, zoneLine, isVerifyFile, verifyEdge, type BriefData, type FeedDecl } from "./brief_data.ts";
+import { toolNote } from "../shared/stack_taxonomy.ts";
 import { briefDocs, humanRules, salientFiles, type RuleSite, type SalientFile } from "./brief_salience.ts";
 
 export const BRIEF_FACT_LIMITS = { boxes: 80, edges: 160, docs: 40, silentPerCall: 6, specOps: 12, rules: 30, enforce: 24, salient: 5 };
@@ -165,7 +169,7 @@ export function buildBriefFacts(model: ArchModelRecord, opts: {
   if (model.edges.length > edges.length) leftOut.push(`${model.edges.length - edges.length} edges past the first ${edges.length}`);
   L.push("", "EDGES (cite by id; [verify] = a refused attempt or a test's call):");
   for (const e of edges) {
-    const text = `${e.from} → ${e.to} · ${e.kind} ${e.protocol ?? ""} — ${e.protocolBasis ?? ""}`.slice(0, 260);
+    const text = `${e.from} → ${e.to} · ${e.kind} ${e.protocol ?? ""}${e.details?.length ? ` (${e.details.slice(0, 6).join(", ")})` : ""} — ${e.protocolBasis ?? ""}`.slice(0, 260);
     const role: EvidenceRole = verifyEdge(e, data.verifyBoxes) ? "verify" : "use";
     cite(e.id, `${e.from}→${e.to}|${e.kind}|${e.protocol ?? ""}`, role, [text]);
     L.push(`- ${e.id}${tag(role)}: ${text}`);
@@ -181,13 +185,26 @@ export function buildBriefFacts(model: ArchModelRecord, opts: {
     for (const p of data.processes) L.push(`- ${p.box} "${p.label}": primary ${p.primary.map(op).join(", ")} (from ${p.why})${p.secondary.length ? `; secondary ${p.secondary.map(op).join(", ")}` : ""}`);
   }
 
-  const groups = (model.groups ?? []).filter((g) => g.source === "stated" || g.source === "proposed").map((g) => ({ id: g.id, label: g.label, members: g.wraps }));
+  // What each tool box IS, from the vendor's docs (the stack taxonomy's
+  // TOOL_NOTES): a box says what the code does with a tool, never what the
+  // tool is — without this a brief can only call a platform "one client".
+  const defs = boxes.filter((n) => n.id.startsWith("tool:")).map((n) => ({ n, def: toolNote(n.id.slice("tool:".length)) })).filter((x) => x.def);
+  if (defs.length) {
+    L.push("", "WHAT THE TOOLS ARE (from the vendors' docs, kept in VibeGraph's tool table; cite as tool-def:<package> beside the box — a definition says what a tool CAN do, the box's edges say what this code does with it):");
+    for (const { n, def } of defs) L.push(`- ${cite(`tool-def:${n.id.slice("tool:".length)}`, def!, "declare", [def!])} (${n.id}): ${def}`);
+  }
+
+  // 2026-10-09 — a STATED group is a person's statement (ratified, or written
+  // in architecture.json): a line may cite it for WHERE something runs and what
+  // trust zone it sits in. A proposed group is still only a suggestion.
+  const groups = (model.groups ?? []).filter((g) => g.source === "stated" || g.source === "proposed").map((g) => ({ id: g.id, label: g.label, members: g.wraps, stated: g.source === "stated", kind: g.kind }));
   if (groups.length) {
-    L.push("", "GROUPS NOW (keep, rename, add or move members — a group is not evidence; a LABEL STALE line is a fact a rename may cite):");
+    L.push("", "GROUPS NOW (a STATED group is a person's statement — cite it as group:<id> for where a box runs or which trust zone it is in, never as a mechanism; a proposed group is not evidence; a LABEL STALE line is a fact a rename may cite):");
     const stale = new Map((opts.staleLabels ?? []).map((s) => [s.group, s.why]));
     for (const g of groups) {
       const why = stale.get(g.id);
-      L.push(`- ${g.id} "${g.label}": ${g.members.join(", ")}${why ? `\n  ${cite(`label:${g.id}`, why, "declare", [why])}: LABEL STALE — the label ${why}` : ""}`);
+      const head = g.stated && !why ? `${cite(`group:${g.id}`, `${g.kind ?? "group"} ${g.label}: ${g.members.join(", ")}`, "declare")} [stated${g.kind ? ` ${g.kind}` : ""}]` : g.stated ? g.id : `${g.id} [proposed]`;
+      L.push(`- ${head} "${g.label}": ${g.members.join(", ")}${why ? `\n  ${cite(`label:${g.id}`, why, "declare", [why])}: LABEL STALE — the label ${why}` : ""}`);
     }
   }
 

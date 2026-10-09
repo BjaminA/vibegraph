@@ -8407,7 +8407,7 @@ function setupWebSocket() {
           else if (t === "brief-run") {
             const only = ["spec", "groups", "scopes", "path"].includes(msg.payload?.only) ? msg.payload.only : undefined;
             const notes = Array.isArray(msg.payload?.notes) ? msg.payload.notes.filter((n: unknown): n is string => typeof n === "string") : undefined;
-            briefDraft(briefCtx, { only, stale: msg.payload?.stale === true, guidance: typeof msg.payload?.guidance === "string" ? msg.payload.guidance : undefined, notes })
+            briefDraft(briefCtx, { only, stale: msg.payload?.stale === true, skipGroups: msg.payload?.skipGroups === true, guidance: typeof msg.payload?.guidance === "string" ? msg.payload.guidance : undefined, notes })
               .then(result, (e) => result({ ok: false, error: String(e?.message ?? e) }));
           } else {
             const decision = msg.payload?.decision === "reject" ? "reject" : "ratify";

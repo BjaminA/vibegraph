@@ -661,6 +661,9 @@ export interface CrossingRecord {
   confidence: "path+method" | "path" | "ambiguous" | "unmatched";
   /** what the match could NOT establish - always present, always read. */
   note: string;
+  /** 2026-10-09 — a command named by the NAME the script is run as (its own
+   *  `case` on $0 answers to it): `tool-metered`, one of its tiers. */
+  invokedAs?: string;
 }
 
 export interface CrossingIndexRecord {

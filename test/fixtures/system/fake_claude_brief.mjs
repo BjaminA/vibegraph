@@ -20,6 +20,12 @@ const reply = {
   },
   omitted: ["the archiver: planned, not built"],
 };
-const text = prompt.includes("You are writing the BRIEF of a codebase") ? "```json\n" + JSON.stringify(reply, null, 2) + "\n```" : "";
+// groups first (2026-10-09): asked for the groups alone, one cited group
+const groups = {
+  groups: [{ op: "add", id: "g-orders", label: "Order decisions", kind: "process", members: ["cluster:scripts:decider"], cites: ["cluster:scripts:decider->zone:ledger/status:uses:write"] }],
+  names: {}, omitted: [],
+};
+const body = prompt.includes("(only the groups section is asked for)") ? groups : reply;
+const text = prompt.includes("You are writing the BRIEF of a codebase") ? "```json\n" + JSON.stringify(body, null, 2) + "\n```" : "";
 process.stdout.write(JSON.stringify({ result: text, is_error: false, session_id: "fake-brief" }));
 process.exit(0);

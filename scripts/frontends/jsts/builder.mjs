@@ -1122,6 +1122,17 @@ export class JstsGraphBuilder {
       id, type: "return_stmt", parentId: parentId ?? null, ...this.pos(n),
       value: value ? this.preview(value) : null,
     };
+    // 2026-10-09 — the string literals of a COMPOSITE return (a template with
+    // substitutions, a ternary, a ?? / || chain), as M-FLOW.5 records them on
+    // composite assignments: `return \`${dir}${paid ? "tool-metered" :
+    // "tool-public"}\`` names the commands it picks, and nothing else did
+    if (value && (value.type === "ternary_expression" || value.type === "binary_expression"
+      || (value.type === "template_string" && value.namedChildren.some((c) => c.type === "template_substitution")))) {
+      const lits = value.type === "template_string"
+        ? [this.text(value).slice(1, -1).slice(0, 200), ...value.namedChildren.filter((c) => c.type === "template_substitution").flatMap((c) => this.stringLiterals(c))].slice(0, 8)
+        : this.stringLiterals(value);
+      if (lits.length) node.literals = lits;
+    }
     // module 4: the members of a returned object (a factory of an interface)
     const props = value ? objectProps(value, (x) => this.text(x), (x) => x.startPosition.row + 1) : null;
     if (props) node.objectProps = props;

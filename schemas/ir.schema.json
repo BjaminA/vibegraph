@@ -638,6 +638,18 @@
         },
         "elseLine": {
           "$ref": "#/$defs/Line"
+        },
+        "casePatterns": {
+          "description": "2026-10-09, field-additive (bash): a `case` statement's arm patterns as written, quotes stripped, each with its line. A case on the script's own name ($0, its basename) makes each plain-word pattern a name the script answers to (scripts/frontends/script_refs.mjs invokedNameVariants).",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "text": { "type": "string" },
+              "line": { "$ref": "#/$defs/Line" }
+            },
+            "required": ["text", "line"]
+          }
         }
       },
       "required": [
@@ -656,6 +668,11 @@
       "properties": {
         "type": {
           "const": "return_stmt"
+        },
+        "literals": {
+          "description": "2026-10-09, field-additive (JS/TS): the string literals of a COMPOSITE returned expression (a template with substitutions — its own text first — a ternary, a ?? / || chain), as M-FLOW.5 records them on composite assignments. Data, never a call.",
+          "type": "array",
+          "items": { "type": "string" }
         },
         "objectProps": {
           "description": "Injected capabilities (2026-10-02, field-additive): the KEYS of an object literal this node returns or holds — {key, line, fn: true} for a function-valued member, {key, line, value} (short source) for a forwarded one, {key, spread} for a spread; members under a conditional spread carry `conditional`. Keys and shapes, never data.",

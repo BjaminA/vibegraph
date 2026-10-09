@@ -27,6 +27,7 @@
     "caches": "keeps a copy of results to answer later requests faster",
     "isolates": "runs work in a separate process or sandbox so a failure stays there",
     "orchestrates": "starts and coordinates other processes",
+    "dispatches": "sends a request to run named work on another process or host, which runs it",
     "watches": "reacts to changes in a store or stream as they happen",
     "batches": "groups many items into one operation",
     "retries": "repeats a failed operation under a stated rule"
@@ -39,6 +40,7 @@
     "offline-tolerant": "keeps working when a remote part is unreachable",
     "live-view": "shows changes to the people watching as they happen",
     "schema-checked": "data is checked against a published schema at the boundary",
-    "reproducible-runs": "the same inputs give the same outputs, run to run"
+    "reproducible-runs": "the same inputs give the same outputs, run to run",
+    "checked": "the project runs its own test, probe or script that checks this property — it is tested, which is not the same as enforced"
   }
 }

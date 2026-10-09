@@ -3,6 +3,39 @@
 `vibegraph-knowledge` and the VibeGraph app. Newest first. Each entry says what
 changed and, where an existing user would notice, how behaviour differs.
 
+## 0.32.0 — 2026-10-09 — the Brief reads the system through its groups, and names what it runs on
+
+A field brief got the shape of a system right (dispatcher → script → cached
+output) and missed what made it noteworthy: commands run on a remote host
+through a policy-gated platform, under each caller's own identity, with a free
+and a paid tier. Each miss had a cause in what the Brief was given.
+
+- **Groups first.** A full draft with no settled groups proposes the GROUPS
+  alone (which boxes deploy together, which trust zone they share) and waits
+  for a person; once they are ratified the brief is drafted without a groups
+  section, and a stated group is a citable statement (`group:<id>`) — for
+  where a box runs, never as a mechanism. They had been listed as "not
+  evidence" even when a person had ratified them. `--skip-groups` (and Skip
+  groups on the card) keeps the one-call draft.
+- **What each tool IS.** A tool box's definition, from the vendor's docs
+  (the stack taxonomy's tool notes), is in the facts as `tool-def:<package>`,
+  and a line about how the system reaches another host names the tool, never
+  only "a client".
+- **Checks said as checks.** A new feature word, `checked`: a property the
+  project's own test, probe or script checks, citing it — tested, not enforced.
+  A policy check that is only `[verify]` evidence used to be dropped. And a
+  method word, `dispatches`: sends named work to run on another process or host.
+- **Invoked-name variants.** A script that behaves by the name it is run as
+  (`case "${0##*/}" in tool-public) … tool-metered) …`) answers to each of
+  those names; a literal naming one (`"tool-metered"`, or a path ending in it)
+  is a command hop to that script with `invokedAs`, the map edge says
+  `as tool-metered`, and so does the Brief's edge line. The bash IR keeps a
+  case's arm patterns (`casePatterns`) and a composite TS return its string
+  literals — both field-additive.
+
+Tests: test:brief-groups-first (5), test:invoked-variants (4); the Brief card
+e2e walks groups → ratify → brief.
+
 ## 0.31.0 — 2026-10-09 — what the code decides at run time: a ladder of evidence
 
 Some facts a static reading cannot see: which request channels a service finds

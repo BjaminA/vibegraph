@@ -405,7 +405,17 @@
         "col": 2,
         "endCol": 6,
         "condition": "case \"$1\"",
-        "hasElse": false
+        "hasElse": false,
+        "casePatterns": [
+          {
+            "text": "verbose",
+            "line": 53
+          },
+          {
+            "text": "*",
+            "line": 54
+          }
+        ]
       },
       {
         "id": "module/main.fn/if@0/watch_logs.call",

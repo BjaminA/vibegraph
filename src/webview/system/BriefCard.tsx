@@ -24,6 +24,7 @@ interface BriefStatePayload {
   available: boolean; claude?: boolean; reason?: string;
   ratified: null | { at: string; by: string; model: string; spec?: Spec };
   ratifiedReview: Review | null;
+  groupsFirst?: { step: "groups" | "wait"; why: string } | null;
   proposed: null | { model: string; at: string; spec: Spec; refused: number; refusedList: Array<{ item: string; reason: string }>; omitted: string[]; notes: string[]; sections: Section[]; review: Review | null };
 }
 
@@ -163,6 +164,9 @@ export function BriefCard({ onLight }: { onLight: (boxes: string[] | null) => vo
             <div data-brief-proposal style={{ marginTop: 12, paddingTop: 8, borderTop: "1px dashed var(--proposed-border)" }}>
               <div style={{ ...quiet, color: "var(--proposed-border)", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase" }}>{`Proposed · ${p.model}`}</div>
               {p.notes.length > 0 && <div style={{ ...quiet, marginTop: 4 }}>{`asked to answer ${p.notes.length} note${p.notes.length === 1 ? "" : "s"}: ${p.notes.map((n, i) => `note:${i + 1} ${n}`).join(" · ")}`}</div>}
+              {!p.spec.function.length && !p.spec.method.length && !p.spec.feature.length && p.sections.some((s) => s.section === "groups") && (
+                <div data-brief-groups-first style={{ ...quiet, marginTop: 4 }}>Groups first: decide these groups, then draft the brief — it reads the codebase through the groups you agree.</div>
+              )}
               <Lines spec={p.spec} review={p.review} ghost onLight={onLight} />
               {p.review && <Sheet review={p.review} ask={ask} onExplain={explain} canSpend={!!state.claude} />}
               {p.sections.map((s) => (
@@ -204,11 +208,13 @@ export function BriefCard({ onLight }: { onLight: (boxes: string[] | null) => vo
             {!p && estimate && (
               <>
                 <span data-brief-estimate style={{ ...quiet, alignSelf: "center" }}>{`≈ ${estimate.calls} call${estimate.calls === 1 ? "" : "s"}, ~${Math.round(estimate.tokens / 1000)}k tokens`}</span>
-                <button data-brief-run disabled={!!busy} onClick={() => send("brief-run")} style={btn}>{busy === "brief-run" ? "Briefing… (a minute or two)" : "Draft it"}</button>
+                <button data-brief-run disabled={!!busy} onClick={() => send("brief-run")} style={btn}>{busy === "brief-run" ? "Briefing… (a minute or two)" : state.groupsFirst?.step === "groups" ? "Propose groups first" : "Draft it"}</button>
+                {state.groupsFirst?.step === "groups" && <button data-brief-skip-groups disabled={!!busy} onClick={() => send("brief-run", { skipGroups: true })} style={btn}>Skip groups</button>}
                 <button disabled={!!busy} onClick={() => setEstimate(null)} style={btn}>Cancel</button>
               </>
             )}
           </div>
+          {!p && state.groupsFirst && <div data-brief-groups-note style={{ ...quiet, marginTop: 4 }}>{state.groupsFirst.why}</div>}
           {!state.claude && <div style={{ ...quiet, marginTop: 4 }}>the claude CLI is not available here — `vibegraph-knowledge brief codebase` with a saved reply works from the command line</div>}
           {error && <div data-brief-error style={{ ...quiet, color: "var(--accent-error)", marginTop: 4 }}>{error}</div>}
         </div>

@@ -595,10 +595,21 @@ export class BashGraphBuilder {
     const subject = n.namedChildren.find((c) => c.type !== "case_item");
     const id = this.makeAnonId(parentId, "if");
     if (subject) this.walkSubstitutions(subject, parentId);
+    // 2026-10-09 — each arm's pattern, as written (quotes stripped): a case on
+    // the script's own name ($0) makes every plain-word pattern a name the
+    // script answers to (script_refs.mjs invokedNameVariants)
+    const casePatterns = [];
+    for (const item of n.namedChildren) {
+      if (item.type !== "case_item") continue;
+      for (const v of item.childrenForFieldName?.("value") ?? []) {
+        if (casePatterns.length < 16) casePatterns.push({ text: this.text(v).replace(/^["']|["']$/g, "").slice(0, 80), line: v.startPosition.row + 1 });
+      }
+    }
     this.emit({
       id, type: "if_stmt", parentId: parentId ?? null, ...this.pos(n),
       condition: subject ? `case ${this.text(subject)}` : "case",
       hasElse: false,
+      ...(casePatterns.length ? { casePatterns } : {}),
     }, parentId, n);
     for (const item of n.namedChildren) {
       if (item.type === "case_item") this.walkChildren(item, id);

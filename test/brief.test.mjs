@@ -74,7 +74,7 @@ test("B0: a group label the facts no longer support is shown as a citable fact, 
 
 test("B5: only what the facts support is kept, and the refusals say why", () => {
   writeFileSync(join(tmp, "reply.json"), "Here is the brief:\n```json\n" + JSON.stringify(reply) + "\n```\n");
-  const r = cli(["brief", "codebase", proj, "--reply", join(tmp, "reply.json")]);
+  const r = cli(["brief", "codebase", proj, "--skip-groups", "--reply", join(tmp, "reply.json")]);
   assert.equal(r.status, 0, r.stderr + r.stdout);
   const b = JSON.parse(readFileSync(join(proj, ".vibegraph/brief.json"), "utf-8")).proposed;
   assert.equal(b.spec.function.length, 3, "the fourth function line is over the limit");
@@ -159,7 +159,7 @@ test("a line resting on a rule goes STALE when the code the rule's check names c
     check: { rule: "callers-only", target: "checkApprover", files: ["decider/src/transitions.ts"] }, source: "human", createdAt: "2026-10-08T00:00:00.000Z",
   }] }));
   writeFileSync(join(tmp, "reply3.json"), JSON.stringify({ spec: { function: [{ text: "Decides releases only once an approver is appointed.", words: ["decides"], cites: ["rule:c1"] }], method: [], feature: [] }, omitted: [] }));
-  assert.equal(cli(["brief", "codebase", p2, "--reply", join(tmp, "reply3.json")]).status, 0);
+  assert.equal(cli(["brief", "codebase", p2, "--skip-groups", "--reply", join(tmp, "reply3.json")]).status, 0);
   assert.equal(cli(["brief", "codebase", "ratify", "spec", p2]).status, 0);
   const store = join(p2, "lib/store.ts");
   writeFileSync(store, readFileSync(store, "utf-8").replace("Promise<unknown> {", "Promise<unknown> {\n  // unrelated"));
