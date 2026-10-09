@@ -45,6 +45,7 @@ export function inboxSubject(item: InboxItemLike): ChipRef | null {
     case "decision": return { kind: "question", id: arg };
     case "sensor": case "drift": case "questions": return { kind: "question", id: arg || kind, label: kind === "questions" ? "questions" : "drift" };
     case "groups": case "regroup": return { kind: "module", id: "groups", label: "groups" };
+    case "claim": return { kind: "question", id: arg, label: `claim ${arg}` };
     default: return null;
   }
 }

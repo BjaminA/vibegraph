@@ -26,6 +26,8 @@ export interface BriefReview {
   counts: { lines: number; withWarnings: number; inferred: number; testOnly: number; contradicted: number; unverifiable: number; absolutes: number };
   uncovered: { rules: string[]; salient: string[]; primary: string[]; notes: string[] };
   gaps: string[];
+  /** the first `explainable` gaps can be explained (`claim explain <n>`, the card's Explain) */
+  explainable: number;
   /** "15 lines, 2 with warnings; 1 stated rule not covered" */
   summary: string;
   /** what the Ratify button says */
@@ -69,7 +71,7 @@ export function reviewBrief(spec: BriefBody["spec"], facts: BriefFacts, opts: { 
     uncovered.notes.length ? `${uncovered.notes.length} note${uncovered.notes.length === 1 ? "" : "s"} unanswered` : "",
   ].filter(Boolean);
   return {
-    lines, counts, uncovered, gaps: coverage.gaps, summary: bits.join("; "),
+    lines, counts, uncovered, gaps: coverage.gaps, explainable: coverage.explainable, summary: bits.join("; "),
     ratifyLabel: `Ratify ${counts.lines} line${counts.lines === 1 ? "" : "s"}${counts.withWarnings ? `, ${counts.withWarnings} with warnings` : ""}`,
   };
 }

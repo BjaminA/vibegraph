@@ -81,7 +81,8 @@ test("copies of code and runtime data under .vibegraph/ are git-ignored from ins
   ensurePrivateIgnore(d);
   ensurePrivateIgnore(d);
   const text = fs.readFileSync(path.join(d, ".vibegraph", ".gitignore"), "utf-8");
-  assert.deepEqual(text.trim().split("\n"), ["mine.txt", "work-snapshots/", "hooked-run.json", "observations.json", "knowledge/"]);
+  // 2026-10-08: and the run recorder's runs and derived config (trace.json stays committable)
+  assert.deepEqual(text.trim().split("\n"), ["mine.txt", "work-snapshots/", "hooked-run.json", "observations.json", "knowledge/", "traces/run-*.jsonl", "trace/"]);
   fs.rmSync(d, { recursive: true, force: true });
 });
 

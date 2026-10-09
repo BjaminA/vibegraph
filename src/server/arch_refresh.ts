@@ -21,6 +21,7 @@ import { buildSystemMap } from "./system_map.ts";
 import { renderSystemMapMd } from "./system_map_md.ts";
 import { loadVocabulary, scopesNow } from "./operation_vocab.ts";
 import { renderArchHtml } from "./arch_html.ts";
+import { staleLabelMap } from "./arch_label_drift.ts";
 
 export const ARCH_EXPORT_DIRS = [join(".vibegraph", "knowledge"), join(".vibegraph", "architecture-map")];
 
@@ -41,7 +42,7 @@ export function refreshExportedArchitecture(
     if (!existsSync(join(dir, "architecture.md")) && !existsSync(join(dir, "architecture.vibegraph.json"))) continue;
     map ??= buildSystemMap(model, { title, commit: null, tool: ctx.tool, entryPoints: ctx.entryPoints, system: ctx.system, threadGraph: ctx.threadGraph });
     const files: Array<[string, () => string]> = [
-      ["architecture.md", () => renderSystemMapMd(map!, loadVocabulary(root).vocab, scopesNow(root, model))],
+      ["architecture.md", () => renderSystemMapMd(map!, loadVocabulary(root).vocab, scopesNow(root, model), staleLabelMap(root, model))],
       ["architecture.vibegraph.json", () => json(map)],
       ["architecture.html", () => renderArchHtml(model, { title, tool: ctx.tool })],
       ["architecture.json", () => json(model)],

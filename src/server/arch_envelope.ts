@@ -26,6 +26,10 @@ import { negativeGlobs } from "./operation_vocab.ts";
 import { recordModelSource } from "./model_source.ts";
 import { listSpecs } from "./software_store.ts";
 import { declaredTopology } from "./arch_label_drift.ts";
+import { claimEdges } from "./claim_store.ts";
+import { declaredFeeds, feedEdges } from "./topology_feeds.ts";
+import { observedOps, withObserved } from "./trace_runs.ts";
+import { linesReader } from "./node_scope.ts";
 
 const MANIFESTS = ["package.json", "pyproject.toml", "setup.py", "Cargo.toml", "go.mod", "requirements.txt"];
 
@@ -116,5 +120,15 @@ function derivedArchModel(
   try { zones = deriveDataZones({ files: env.files, threads: env.threads, stack, model, plan: loadPlan(root), negative: negativeGlobs(root), registered: registeredAccess(root), declared: declaredTopology(root).topology, specs }); } catch { /* best effort */ }
   const extra = { nodes: [...stores.nodes, ...zones.nodes], edges: [...stores.edges, ...zones.edges], notes: [...stores.notes, ...zones.notes] };
   if (!extra.nodes.length) return stampHierarchy(model);
-  return stampHierarchy({ ...model, nodes: [...model.nodes, ...extra.nodes], edges: [...model.edges, ...extra.edges], notes: [...model.notes, ...extra.notes] });
+  const withZones = { ...model, nodes: [...model.nodes, ...extra.nodes], edges: [...model.edges, ...extra.edges], notes: [...model.notes, ...extra.notes] };
+  // 2026-10-08 — what a person agreed the code does at run time (claim_store.ts)
+  let claimed: ArchModelRecord["edges"] = [];
+  try { claimed = claimEdges(root, withZones, linesReader(root)); } catch { claimed = []; }
+  // and what the project's topology declares it reaches at run time (topology_feeds.ts)
+  try { claimed = [...claimed, ...feedEdges(declaredFeeds(declaredTopology(root).topology, withZones, loadPlan(root), env.files), withZones)]; } catch { /* best effort */ }
+  const known = claimed.length ? { ...withZones, edges: [...withZones.edges, ...claimed] } : withZones;
+  // and what recorded runs saw (trace_runs.ts): confirmed, or observed
+  let runs: ReturnType<typeof observedOps> = [];
+  try { runs = observedOps(root, known); } catch { runs = []; }
+  return stampHierarchy(withObserved(known, runs));
 }

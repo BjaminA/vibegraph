@@ -41,7 +41,7 @@ export interface BriefClaim {
   partition?: string[];
   not?: boolean;
   /** set by the check: what the facts say about it */
-  verdict?: "supported" | "declared" | "unverifiable" | "contradicted";
+  verdict?: "supported" | "inferred" | "declared" | "unverifiable" | "contradicted";
   why?: string;
 }
 

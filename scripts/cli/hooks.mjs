@@ -46,7 +46,7 @@ import { getThreadSkill, injectableSkillText } from "../../src/server/thread_ski
 import { affectedTests } from "../../src/shared/test_reach.ts";
 import { verbMayGate } from "../../src/server/quality/standings.ts";
 import { archForPrompt } from "./arch_context.mjs";
-import { promptBriefLines } from "./brief_context.mjs";
+import { promptBriefLines, gapLinesForPrompt } from "./brief_context.mjs";
 import { orientation, inboxNote } from "./orientation.mjs";
 import { planAffectedNote, planForPrompt, plannedThreadsForPrompt } from "./plan_context.mjs";
 import { softwareForPrompt } from "./software_context.mjs";
@@ -248,7 +248,8 @@ function onPrompt(input, { absRoot, loaded, state, constraints }) {
     routedForSoftware = routedEps;
     const archFor = archForPrompt(absRoot, env, routedEps, state, constraints);
     const dirFor = directionForPrompt(absRoot, env, routedEps, state);
-    let briefFor = promptBriefLines(absRoot, routedEps, state); // the ratified Brief's method lines for these threads, once
+    const sentBefore = [state.briefSent, state.gapsSent]; // what counts as sent only once it is
+    let briefFor = [...promptBriefLines(absRoot, routedEps, state), ...gapLinesForPrompt(absRoot, env, routedEps, state)]; // the Brief's method lines and the open facts gaps for these threads, once
     for (const r of applied.routed) {
       const c = ctx.byEntry.get(r.entryPointId);
       const terms = weakBy.get(r.entryPointId);
@@ -261,11 +262,11 @@ function onPrompt(input, { absRoot, loaded, state, constraints }) {
       if (rules) parts.push(rules);
       const before = JSON.stringify([state.arch ?? null, state.direction ?? null]);
       parts.push(...[archFor(r.entryPointId), dirFor(r.entryPointId)].filter(Boolean));
-      if (briefFor.length) { parts.push(briefFor.join("\n")); briefFor = []; }
+      if (briefFor.length) parts.push(briefFor.join("\n"));
       let block = parts.join("\n");
       // Not sent: nothing about it may be remembered as sent.
       if (block.length > room) { [state.arch, state.direction] = JSON.parse(before).map((x) => x ?? undefined); deferred.push(r.qualifiedName); continue; }
-      room -= block.length;
+      room -= block.length; briefFor = [];
       for (const k of fresh) sentRules.add(k.id);
       if (r.skill && r.skill.length + 40 <= room) {
         block += `\n## Ratified thread skill\n${r.skill}`;
@@ -305,6 +306,8 @@ function onPrompt(input, { absRoot, loaded, state, constraints }) {
       } else if (c) block += "\n(Its contract was already given earlier in this session.)";
       out.push(block);
     }
+    // the threads did not fit: their Brief and gap lines are short — alone if they fit, else not remembered as sent
+    if (briefFor.length) { const t = briefFor.join("\n"); if (t.length <= room) { out.push(t); room -= t.length; } else [state.briefSent, state.gapsSent] = sentBefore; }
     if (deferred.length) out.push(`(Also matched, not sent — over the inline limit: ${deferred.join(", ")}. Name one to receive it.)`);
     state.contracts = [...sentContracts];
     state.partialContracts = partial;

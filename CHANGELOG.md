@@ -3,6 +3,67 @@
 `vibegraph-knowledge` and the VibeGraph app. Newest first. Each entry says what
 changed and, where an existing user would notice, how behaviour differs.
 
+## 0.31.0 — 2026-10-09 — what the code decides at run time: a ladder of evidence
+
+Some facts a static reading cannot see: which request channels a service finds
+by listing them, a feed over a family, names from configuration. A model
+guessing them would put plausible guesses on the map as facts. Instead each
+fact says how it is known — **derived** from the code, **declared** by the
+project, **observed** in a recorded run, **inferred** from cited lines and
+ratified by a person — cheapest and most trustworthy first. No hook ever spends
+tokens or decides anything.
+
+- **Rung 1 — the shape of run-time names (zero tokens).** Which names exist may
+  be decided at run time; their shape is static. A function returning a
+  collection built from one template carries that template as its element
+  pattern, through a local, a linked method call, a caller's argument, a
+  closure, and into a `.map` / `for … of` callback; an operation's receiver
+  (`(await reg.meta(b)).watch(…)`) names the resource before its literal
+  arguments. A funnel whose callers name different families is charged at each
+  call site, never one family for all; a test is not a caller that disagrees;
+  a name may be the zone's own (one channel per zone).
+- **Plan-to-box matching.** A planned process is the boxes its named entry
+  points run (anchored), else its folder's one box (located — a weaker match,
+  said), else **ambiguous**: no box is charged its planned steps, and the sheet
+  says to anchor it. `architecture.md` marks a stated group label the facts no
+  longer support **LABEL STALE**.
+- **Rung 3 in session — claims (zero tokens).** `claim propose --subject <box>
+  --verb … --object <zone> --cite <file:line>…` — open to an agent: every cited
+  line must exist in a file the subject's threads reach, and the map must not
+  contradict it. Stored PROPOSED · inferred with a hash per cited line (a change
+  makes it STALE); `claim agree|reject` and the inbox are a person's. Agreed, it
+  answers the facts gap, is an `inferred` edge on the map and an inferred
+  operation in the Brief's facts. A prompt routed to a box with an open gap gets
+  one line naming it and the command — once a session, never crowding out what
+  did fit. Session start shows each Brief line's evidence kinds.
+- **Rung 2 — declared feeds (zero tokens).** The topology may declare `feeds`
+  (`{process, watches|reads|writes, via}`): shown as declared, answering the plan
+  step; STALE when a function named in `via` is no longer defined.
+- **Rung 4 — recorded runs (a person opts in).** `trace enable|disable|forbid`,
+  `trace run -- <cmd>`, `trace status`. The recorder (loaded by `NODE_OPTIONS`;
+  for processes Claude Code starts, set in `.claude/settings.local.json`) writes
+  per operation only the process, the verb and the zone — never a value, key or
+  name — to `.vibegraph/traces/` (git-ignored). A run confirms what the code
+  shows ("observed in N recorded runs") and adds what it does not (an `observed`
+  edge). Limit, stated: an operation through a plain exported function, or an
+  object no wrapped method hands out, is not seen.
+- **"Explain this gap" (the one step that spends tokens).** `claim gaps`, `claim
+  explain <n> [--estimate]`, or Explain beside a gap on the Brief card: one call
+  shown the gap and the call sites the box's threads reach; its claim must cite
+  a chain of lines it was shown, then goes through `claim propose`'s checks.
+- Also: `inbox` crashed on a plan change that adds a field.
+- Found by closing a real project's gaps: a function that maps a name through a
+  table and joins the parts (`documentIdFor(path)`) was read as returning a
+  COLLECTION, which hid the name it carries — an element pattern now needs the
+  template to BE an element, and a joined list is a string; a name now routes
+  through an unknown ONE-argument function (a mapping of one name) — an
+  identifier argument as well as a call; a function of several combines them. And a planned process anchored to several boxes does a
+  step when ANY of them does — a gateway's ingest script was charged with the
+  requests its server writes; a step none does is one gap, not one per box.
+
+Tests: test:shape-tracking (4), test:plan-matching (3), test:claims (5),
+test:feeds (3), test:recorded-runs (5), test:gap-explain (3).
+
 ## 0.30.0 — 2026-10-08 — the Brief checks itself: what changed, what the evidence is, what the map says
 
 A field review of the first Brief found it read well and still described the

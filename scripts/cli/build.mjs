@@ -28,7 +28,8 @@ const VENDOR = join(PKG, "vendor", "scripts");
 export const PYTHON_SCRIPTS = ["parse_cst.py", "literal_table.py", "cross_file_link.py", "discover_entry_points.py", "thin_script_entry.py", "extract_thread.py", "build_system_tier.py"];
 /** M-FLOW.2 — Node scripts at scripts/ root the pipeline spawns (the
  *  frontends under scripts/frontends/ are copied whole, below). */
-export const NODE_SCRIPTS = ["discover_project.mjs"];
+// node_tracer.mjs: loaded into a project's own processes (`trace enable`), so it is a file, not bundled
+export const NODE_SCRIPTS = ["discover_project.mjs", "node_tracer.mjs"];
 
 /** 2026-09-25 — `view`, the VISUALISATION, ships in the same package. The
  *  server finds everything relative to its own file (server.ts PROJECT_ROOT =

@@ -825,6 +825,12 @@ export interface ArchEdgeRecord {
   via?: string[];
   refs: ArchRef[];
   source: ArchSource;
+  /** 2026-10-08 (the run-time ladder) — how the edge is known when it is not
+   *  read from the code: a person-ratified claim (`inferred`), a recorded run
+   *  (`observed`), the project's own declaration (`declared`). Unset = derived. */
+  evidence?: "inferred" | "observed" | "declared";
+  /** recorded runs that saw this edge (a derived edge CONFIRMED by a run) */
+  observedRuns?: number;
   /** M-ARCH.3 — what crosses it, by side and source (the Payloads lens). */
   payloads?: ArchPayloadRecord[];
   /** M-ARCH.3 — the Payloads lens's label. */

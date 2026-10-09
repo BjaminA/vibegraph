@@ -77,8 +77,24 @@ export interface TopoDecisionTree {
   evaluatedByTable?: string;
 }
 
+/** 2026-10-08 (rung 2 of the run-time ladder) — what a process reaches at RUN
+ *  TIME, declared by the project where the code cannot show it statically
+ *  (names from configuration, another service, a feed over a family): exactly
+ *  one of watches / reads / writes, and `via` — the functions it happens
+ *  through, so a rename of one makes the declaration STALE. */
+export interface TopoFeed {
+  /** a planned process id, or a box id on the map */
+  process: string;
+  watches?: string;
+  reads?: string;
+  writes?: string;
+  via?: string | string[];
+  cite?: Cite;
+}
+
 export interface Topology {
   version: typeof TOPOLOGY_VERSION;
+  feeds?: TopoFeed[];
   stores?: TopoStore[];
   zones?: TopoZone[];
   families?: TopoFamily[];

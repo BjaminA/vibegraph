@@ -32,12 +32,16 @@ function provenance(source: string, evidence?: string[]): string {
   return "";
 }
 
-export function renderSystemMapMd(map: SystemMap, vocab: Vocabulary = CORE_VOCABULARY, scopes?: Record<string, NodeScopeRecord>): string {
+/** `staleLabels`: group id → why its stated label no longer matches the facts
+ *  (arch_label_drift.ts) — said beside the label, never silently printed as true. */
+export function renderSystemMapMd(map: SystemMap, vocab: Vocabulary = CORE_VOCABULARY, scopes?: Record<string, NodeScopeRecord>, staleLabels?: Map<string, string>): string {
   const allNodes = new Map<string, ArchNodeRecord>(map.nodes.map((n) => [n.id, n]));
   for (const v of Object.values(map.views)) for (const n of v.reshaped.nodes) if (!allNodes.has(n.id)) allNodes.set(n.id, n);
   const edgeById = new Map<string, ArchEdgeRecord>(map.edges.map((e) => [e.id, e]));
   const label = (id: string) => allNodes.get(id)?.label ?? toolName(id);
-  const epLabel = new Map(map.entryPoints.map((e) => [e.id, e.label]));
+  /** an edge the code does not show says how it is known (inferred / observed / declared) */
+  const ev = (e: ArchEdgeRecord) => (e.evidence ? `, ${e.evidence}` : "") + (e.observedRuns ? `, observed in ${e.observedRuns} recorded run${e.observedRuns === 1 ? "" : "s"}` : "");
+  const epLabel =new Map(map.entryPoints.map((e) => [e.id, e.label]));
   const epFile = new Map(map.entryPoints.map((e) => [e.id, e.file]));
   const groupLabel = new Map(map.groups.map((g) => [g.id, g.label]));
   const s = map.summary;
@@ -75,7 +79,7 @@ export function renderSystemMapMd(map: SystemMap, vocab: Vocabulary = CORE_VOCAB
     if (e) bySource.set(e.from, [...(bySource.get(e.from) ?? []), e]);
   }
   for (const [from, list] of bySource) {
-    push(`- **${label(from)}** → ${list.map((e) => `${label(e.to)} (${e.protocol}${e.count > 1 ? ` ×${e.count}` : ""})`).join(" · ")}`);
+    push(`- **${label(from)}** → ${list.map((e) => `${label(e.to)} (${e.protocol}${e.count > 1 ? ` ×${e.count}` : ""}${ev(e)})`).join(" · ")}`);
   }
   const quiet = bird.nodes.filter((id) => !bird.edges.some((eid) => { const e = birdEdges.get(eid) ?? edgeById.get(eid); return e && (e.from === id || e.to === id); }));
   if (quiet.length) push(`- also at this height, no arrow: ${quiet.map((id) => `**${label(id)}**`).join(", ")}`);
@@ -103,7 +107,8 @@ export function renderSystemMapMd(map: SystemMap, vocab: Vocabulary = CORE_VOCAB
   };
   const isChild = (id: string) => { const p = allNodes.get(id)?.parent; return !!p && allNodes.has(p); };
   const groupTree = (g: SystemMapGroupTree, depth: number) => {
-    push(`${"  ".repeat(depth)}- **${g.label}** (${g.kind})${provenance(g.source, g.evidence)}`);
+    const stale = staleLabels?.get(g.id);
+    push(`${"  ".repeat(depth)}- **${g.label}** (${g.kind})${provenance(g.source, g.evidence)}${stale ? ` **[LABEL STALE: the label ${stale}]**` : ""}`);
     for (const k of g.groups) groupTree(k, depth + 1);
     for (const m of g.members) if (!isChild(m)) nodeTree(m, depth + 1);
   };
@@ -152,7 +157,9 @@ export function renderSystemMapMd(map: SystemMap, vocab: Vocabulary = CORE_VOCAB
     // path is in the JSON's `via`).
     const uses = outOf(n.id).filter((e) => e.kind === "uses").sort((a, b) => b.count - a.count || a.to.localeCompare(b.to));
     const funnel = (via: string[] = []) => via.length ? ` via ${via[0].split(".").pop()}${via.length > 1 ? ` +${via.length - 1}` : ""}` : "";
-    if (uses.length) push(`- calls: ${cap(uses.map((e) => `${tick(toolName(e.to))} ${e.protocol}${e.count > 1 ? ` ×${e.count}` : ""}${funnel(e.via)}`), 8)}`);
+    if (uses.length) push(`- calls: ${cap(uses.map((e) => `${tick(toolName(e.to))} ${e.protocol}${e.count > 1 ? ` ×${e.count}` : ""}${ev(e)}${funnel(e.via)}`), 8)}`);
+    // how an edge the code does not show is known (the run-time ladder)
+    for (const e of uses.filter((x) => x.evidence)) push(`  - ${tick(toolName(e.to))} ${e.protocol} is ${e.evidence}: ${e.protocolBasis}`);
     // A weak protocol reason is usually shared by every hop of a process
     // (one client imported, not seen called): said once, not per hop.
     const weakWhy = new Set<string>();
@@ -163,7 +170,7 @@ export function renderSystemMapMd(map: SystemMap, vocab: Vocabulary = CORE_VOCAB
     }
     for (const why of weakWhy) push(`- weak evidence: ${why}`);
     const ins = into(n.id);
-    if (ins.length) push(`- ← from ${ins.map((e) => `**${label(e.from)}** (${e.protocol}${e.count > 1 ? ` ×${e.count}` : ""})`).join(" · ")}`);
+    if (ins.length) push(`- ← from ${ins.map((e) => `**${label(e.from)}** (${e.protocol}${e.count > 1 ? ` ×${e.count}` : ""}${ev(e)})`).join(" · ")}`);
     for (const d of n.dispatches ?? []) push(`- runs ${count(d.scripts.length, "script")} in ${tick(d.dir + "/")}: ${cap(d.scripts.map((x) => tick(x.file.split("/").pop() ?? x.file)), 12)}`);
     if (n.callers?.length) push(`- named by: ${cap(n.callers.map(tick), 4)}`);
     for (const note of n.notes ?? []) push(`- note: ${note}`);

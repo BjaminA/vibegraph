@@ -94,7 +94,11 @@ export function zoneOfName(pattern: string, families: Family[], naming: NamingKe
   const f = families.find((x) => norm(x.pattern) === norm(pattern)) ?? families.find((x) => covers(x.pattern, pattern));
   if (f) return f.zone;
   const k = naming.find((x) => norm(x.key) === norm(pattern)) ?? naming.find((x) => covers(x.key, pattern));
-  return k ? k.value : null;
+  if (k) return k.value;
+  // 2026-10-08 — the name of the ZONE itself (a store that keeps one channel,
+  // bucket or topic per zone: `inbox_{Role}__{User}`), holes and all
+  const z = families.find((x) => x.zone.includes("{") && (norm(x.zone) === norm(pattern) || covers(x.zone, pattern)));
+  return z ? z.zone : null;
 }
 
 const OP_OF: Record<string, DataOp["op"] | undefined> = { write: "write", admin: "write", read: "read", watch: "watch" };
@@ -164,10 +168,32 @@ export function dataOps(files: Files, ev: NameEvaluator, families: Family[], nam
       const fn = fnOf(file, n);
       if (op && VERB_EFFECTS[verbWords(method)[0] ?? ""]) {
         const name: NameValue | null = ev.ofOperation(file, n as any);
+        // 2026-10-08 — a funnel whose callers name different families: each
+        // call site's family is that caller's operation, charged at its line
+        // (the funnel itself names none — it serves every one of them)
+        if (name?.perCaller?.length) {
+          let charged = false;
+          for (const pc of name.perCaller) {
+            const zone = pc.value.pattern ? zoneOfName(pc.value.pattern, families, naming) : null;
+            if (!zone) continue;
+            const callerNode = (files[pc.file]?.nodes ?? []).find((x) => x.id === pc.nodeId);
+            let cfn = callerNode ? fnOf(pc.file, callerNode) : undefined;
+            while (cfn && !entriesAt(pc.file, cfn).length && fnOf(pc.file, cfn)) cfn = fnOf(pc.file, cfn);
+            const viaFn = fn ? `${fn.name} (${file}:${fn.line})` : `${callee} (${file}:${n.line})`;
+            ops.push({ file: pc.file, line: pc.line, op, family: zone, via: [...(pc.value.via ?? []), ...(name.via ?? []), viaFn], entries: entriesAt(pc.file, cfn), ...(cfn ? { fnId: cfn.id } : {}), nodeId: pc.nodeId });
+            charged = true;
+          }
+          if (charged) continue;
+        }
         // a name built in a loop over a literal table is each of its values
         const zones = [...new Set((name?.each ?? (name?.pattern ? [name.pattern] : [])).map((p) => zoneOfName(p, families, naming)).filter((z): z is string => !!z))];
         if (zones.length) {
-          for (const zone of zones) ops.push({ file, line: n.line ?? 0, op, family: zone, ...(name!.via ? { via: name!.via } : {}), entries: entriesAt(file, fn), ...(fn ? { fnId: fn.id } : {}), nodeId: n.id });
+          // 2026-10-08 — an operation inside a function no thread lists as a
+          // step (a callback the platform calls back, a method of an object
+          // returned) is made by whoever reaches the function around it
+          let at = fn;
+          while (at && !entriesAt(file, at).length && fnOf(file, at)) at = fnOf(file, at);
+          for (const zone of zones) ops.push({ file, line: n.line ?? 0, op, family: zone, ...(name!.via ? { via: name!.via } : {}), entries: entriesAt(file, at), ...(at ? { fnId: at.id } : {}), nodeId: n.id });
           continue;
         }
         // a name from a helper the project REGISTERED (operations.json `paths`)

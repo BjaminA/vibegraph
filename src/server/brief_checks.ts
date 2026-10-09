@@ -18,7 +18,7 @@
 //        by a line or named in `omitted`; every note is answered
 
 import type { BriefFacts } from "./brief_facts.ts";
-import type { BoxOp, DataOp } from "./brief_data.ts";
+import { openGaps, type BoxOp, type DataOp } from "./brief_data.ts";
 import type { BriefBody, BriefClaim, BriefLine, BriefPart, ClaimVerb, EvidenceRole } from "../shared/brief_types.ts";
 import { familyMatches } from "./call_args.ts";
 import { covers } from "./data_topology.ts";
@@ -71,8 +71,12 @@ export function checkClaim(c: BriefClaim, facts: Pick<BriefFacts, "data" | "boxe
   }
   const derived = mine.find((o) => o.source === "derived");
   if (derived) return say("supported", `${derived.cite}`);
+  const observed = mine.find((o) => o.source === "observed");
+  if (observed) return say("supported", `observed in a recorded run (${observed.cite}) — a run proves the path it took`);
+  const inferred = mine.find((o) => o.source === "inferred");
+  if (inferred) return say("inferred", `a person ratified ${inferred.cite.replace("claim:", "claim ")}, citing the lines it rests on; the code alone does not show it`);
   const declared = mine.find((o) => o.source === "declared");
-  if (declared) return say("declared", `the plan declares it (${declared.cite}); the code shows no such call — a feed or router the static reading cannot follow`);
+  if (declared) return say("declared", `${declared.feed ? "the project's topology" : "the plan"} declares it (${declared.cite}); the code shows no such call — a feed or router the static reading cannot follow`);
   return say("unverifiable", `neither the code nor the plan shows ${name(c.subject)} ${ops[0]} ${zones.map(short).join(" / ")}`);
 }
 
@@ -83,6 +87,8 @@ export interface Coverage {
   primary: Map<string, BoxOp[]>;
   notes: number[];
   gaps: string[];
+  /** the first `explainable` gaps are open facts gaps, in `claim gaps` order */
+  explainable: number;
 }
 
 const mentioned = (omitted: string[], ...needles: string[]) => omitted.some((o) => needles.some((n) => n && new RegExp(`(^|[^\\w])${n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}($|[^\\w])`, "i").test(o)));
@@ -108,9 +114,14 @@ export function briefCoverage(spec: BriefBody["spec"], facts: BriefFacts, omitte
     if (!stated && !mentioned(omitted, p.box, p.label)) primary.set(p.box, p.primary);
   }
   const notes = facts.notes.map((_, i) => i + 1).filter((n) => !cited.has(`note:${n}`) && !mentioned(omitted, `note:${n}`));
-  const gaps = facts.data.ops.filter((o) => o.source === "declared" && !facts.data.ops.some((d) => d.source === "derived" && d.box === o.box && d.zone === o.zone && d.op === o.op))
-    .map((o) => `${o.cite} says ${facts.labels.get(o.box) ?? o.box} ${OP_VERB[o.op]} ${short(o.zone)}; the code shows no such call (a feed or router the static reading cannot follow)`);
-  return { rules, salient, primary, notes, gaps: [...new Set(gaps)] };
+  // a step whose process the plan only LOCATES by folder is the weaker gap:
+  // listed after the anchored ones, and said as such
+  // a gap a ratified claim answers is closed (the claim says it, not the code)
+  const open = openGaps(facts.data);
+  const gaps = open.map((o) => `${o.cite} says ${facts.labels.get(o.box) ?? o.box} ${OP_VERB[o.op]} ${short(o.zone)}; the code shows no such call (a feed or router the static reading cannot follow)${o.located ? " — the plan places this process by its folder only; anchor it with entryPoints if this is the wrong box" : ""}`);
+  for (const s of facts.data.staleFeeds ?? []) gaps.push(`${s.cite} (a feed the project declares for ${s.process}) is STALE: ${s.why} — regenerate the topology, or fix the declaration`);
+  for (const a of facts.data.ambiguous) gaps.push(`plan:processes:${a.process} is ambiguous: its folder holds ${a.boxes.length} boxes (${a.boxes.map((b) => facts.labels.get(b) ?? b).join("; ")}), so none is charged its planned steps — anchor it with entryPoints`);
+  return { rules, salient, primary, notes, gaps, explainable: open.length };
 }
 
 /** One line's errors (drafting refuses it) and warnings (the review shows them). */
@@ -125,6 +136,7 @@ export function checkLine(part: BriefPart, line: BriefLine, facts: BriefFacts, o
     if (c.verdict === "contradicted") errors.push(`claim ${label(c)} is contradicted: ${c.why}`);
     else if (c.verdict === "unverifiable") warnings.push(`claim ${label(c)} is unverifiable: ${c.why}`);
     else if (c.verdict === "declared") warnings.push(`claim ${label(c)} rests on the plan only: ${c.why}`);
+    else if (c.verdict === "inferred") warnings.push(`claim ${label(c)} rests on a ratified inferred claim: ${c.why}`);
   }
   const roles = new Set<EvidenceRole>(line.cites.map((c) => facts.roles.get(c) ?? "use"));
   if (!line.cites.length) warnings.push("no citation — INFERRED");

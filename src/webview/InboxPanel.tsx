@@ -23,7 +23,7 @@ import { inboxFacts, inboxSubject } from "../shared/inbox_view";
 const KIND_LABEL: Record<string, string> = {
   plan: "Plan proposals", objective: "Proposed objective", "rule-change": "Changes to rules", rule: "Rules an agent stated",
   groups: "Architecture groups", scope: "Scoped boxes", skill: "Skill drafts", spec: "Software specs", questions: "Open questions",
-  brief: "The Brief", decision: "Decisions", sensor: "Drift to decide", drift: "Notes",
+  brief: "The Brief", decision: "Decisions", sensor: "Drift to decide", drift: "Notes", claim: "Claims about run time",
 };
 const small: React.CSSProperties = { fontSize: "var(--fs-12)", color: "var(--text-muted)", lineHeight: 1.5 };
 

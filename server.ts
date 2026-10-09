@@ -42,7 +42,7 @@ import { withProjectWords, loadVocabulary } from "./src/server/operation_vocab";
 import { nodeIO, ioLines } from "./src/shared/node_io";
 import { enrichReal } from "./src/webview/system/arch_real";
 import { scopeNode, decideNodeScope, type ScopeCtx } from "./src/server/node_scope_server";
-import { briefState, briefEstimateFor, briefDraft, briefDecide, type BriefCtx } from "./src/server/brief_server";
+import { briefState, briefEstimateFor, briefDraft, briefDecide, briefExplainGap, type BriefCtx } from "./src/server/brief_server";
 import { buildInbox, decideInbox } from "./src/server/inbox";
 import { applyArchStore, loadArchStore, saveArchStore, ratifyProposal, rejectProposal, proposalGate } from "./src/server/arch_store";
 import { carryModelSource } from "./src/server/model_source";
@@ -8391,6 +8391,12 @@ function setupWebSocket() {
           const reply = (payload: unknown) => ws.send(JSON.stringify({ type: "arch-proposal", payload: { action: t.slice(5), ...(payload as object) } }));
           if (t === "arch-propose") archProposeCore(typeof msg.payload?.guidance === "string" ? msg.payload.guidance : undefined, { update: msg.payload?.update === true }).then(reply, (e) => reply({ ok: false, error: String(e?.message ?? e) }));
           else reply(archDecide(t === "arch-ratify" ? "ratify" : "reject"));
+        } else if (msg.type === "brief-explain-gap") {
+          // 2026-10-08 — "Explain this gap": the estimate, then (a person's click) the one call
+          const n = Number(msg.payload?.n);
+          const reply = (payload: unknown) => ws.send(JSON.stringify({ type: "brief-result", payload: { action: msg.payload?.estimate ? "gap-estimate" : "gap-explain", n, ...(payload as object) } }));
+          if (!(n >= 1)) reply({ ok: false, error: "a gap number" });
+          else briefExplainGap(briefCtx, n, msg.payload?.estimate === true).then(reply, (e) => reply({ ok: false, error: String(e?.message ?? e) }));
         } else if (msg.type === "brief-get" || msg.type === "brief-estimate" || msg.type === "brief-run" || msg.type === "brief-decide") {
           // 2026-10-08 — the Brief card: state, estimate, the one token-spending
           // draft, and a person's decision (src/server/brief_server.ts)

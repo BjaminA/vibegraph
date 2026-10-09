@@ -15,7 +15,7 @@
 
 import type { ArchModelRecord } from "../shared/protocol.ts";
 import type { Topology } from "../shared/topology_types.ts";
-import type { ArchStore } from "./arch_store.ts";
+import { loadArchStore, type ArchStore } from "./arch_store.ts";
 import { loadTopology } from "./topology_store.ts";
 import { loadLive } from "./topology_live.ts";
 
@@ -31,6 +31,12 @@ export function declaredTopology(root: string): LabelFacts {
   let identities: string[] = [];
   try { identities = loadLive(root)?.inventory?.identities ?? []; } catch { identities = []; }
   return { topology, identities };
+}
+
+/** Group id → why its label is stale, for a page that prints the labels
+ *  (architecture.md). Never throws: no store, or no facts, is an empty map. */
+export function staleLabelMap(root: string, applied: ArchModelRecord): Map<string, string> {
+  try { return new Map(staleLabels(applied, loadArchStore(root), declaredTopology(root)).map((s) => [s.group, s.why])); } catch { return new Map(); }
 }
 
 const PORT = /\bport\s*[:=]?\s*(\d{2,5})\b/i;

@@ -16,7 +16,9 @@ import type { BriefLine } from "../../shared/brief_types";
 
 type Spec = { function: BriefLine[]; method: BriefLine[]; feature: BriefLine[] };
 interface ReviewLine { part: keyof Spec; index: number; warnings: string[]; byRole: Record<string, string[]> }
-interface Review { lines: ReviewLine[]; summary: string; ratifyLabel: string; uncovered: { rules: string[]; salient: string[]; primary: string[]; notes: string[] }; gaps: string[] }
+interface Review { lines: ReviewLine[]; summary: string; ratifyLabel: string; uncovered: { rules: string[]; salient: string[]; primary: string[]; notes: string[] }; gaps: string[]; explainable?: number }
+/** "Explain this gap": which gap, its estimate once asked, and how it went */
+interface GapAsk { n: number; estimate?: string; busy?: boolean; result?: string; error?: string }
 interface Section { section: string; summary: string }
 interface BriefStatePayload {
   available: boolean; claude?: boolean; reason?: string;
@@ -66,22 +68,37 @@ function Lines({ spec, review, ghost, onLight }: { spec: Spec; review?: Review |
   );
 }
 
-/** What the checks see that the prose does not show (the review sheet's foot). */
-function Sheet({ review }: { review: Review }) {
+/** What the checks see that the prose does not show (the review sheet's foot).
+ *  An open facts gap offers "Explain" — the estimate first, then one call. */
+function Sheet({ review, ask, onExplain, canSpend }: { review: Review; ask?: GapAsk | null; onExplain?: (n: number, estimate: boolean) => void; canSpend?: boolean }) {
   const rows = [
     ...review.uncovered.rules.map((r) => `stated rule ${r} — no line covers it`),
     ...review.uncovered.salient.map((f) => `core mechanism ${f} — no line covers it`),
     ...review.uncovered.primary.map((p) => `main job not stated — ${p}`),
     ...review.uncovered.notes.map((n) => `unanswered ${n}`),
-    ...review.gaps.map((g) => `facts gap — ${g}`),
   ];
+  const total = rows.length + review.gaps.length;
   return (
     <div data-brief-review style={{ marginTop: 8, padding: 8, border: "1px solid var(--border-edge)", borderRadius: 6 }}>
       <div data-brief-review-summary style={{ fontFamily: "var(--font-ui)", fontSize: "var(--fs-12)", color: "var(--text-primary)" }}>{`Review: ${review.summary}`}</div>
-      {rows.length > 0 && (
+      {total > 0 && (
         <details style={{ marginTop: 4 }}>
-          <summary style={{ ...quiet, cursor: "pointer" }}>{`${rows.length} thing${rows.length === 1 ? "" : "s"} no line covers`}</summary>
+          <summary style={{ ...quiet, cursor: "pointer" }}>{`${total} thing${total === 1 ? "" : "s"} to look at`}</summary>
           {rows.map((r, i) => <div key={i} data-brief-uncovered style={{ ...quiet, marginTop: 4 }}>{r}</div>)}
+          {review.gaps.map((g, i) => {
+            const n = i + 1;
+            const explainable = onExplain && i < (review.explainable ?? 0);
+            const mine = ask?.n === n ? ask : null;
+            return (
+              <div key={`g${i}`} data-brief-gap={n} style={{ ...quiet, marginTop: 4 }}>
+                {`facts gap — ${g}`}
+                {explainable && !mine?.estimate && <button data-brief-gap-ask={n} disabled={!canSpend || !!ask?.busy} onClick={() => onExplain!(n, true)} style={{ ...btn, marginLeft: 4, padding: "0 4px" }}>Explain</button>}
+                {explainable && mine?.estimate && !mine.result && <button data-brief-gap-run={n} disabled={!!mine.busy} onClick={() => onExplain!(n, false)} style={{ ...btn, marginLeft: 4, padding: "0 4px" }}>{mine.busy ? "Explaining…" : `Explain (${mine.estimate})`}</button>}
+                {mine?.result && <div data-brief-gap-result style={{ ...quiet, paddingLeft: 8 }}>{mine.result}</div>}
+                {mine?.error && <div style={{ ...quiet, paddingLeft: 8, color: "var(--accent-error)" }}>{mine.error}</div>}
+              </div>
+            );
+          })}
         </details>
       )}
     </div>
@@ -95,12 +112,17 @@ export function BriefCard({ onLight }: { onLight: (boxes: string[] | null) => vo
   const [error, setError] = useState<string | null>(null);
   const [estimate, setEstimate] = useState<{ calls: number; tokens: number; silent: number } | null>(null);
   const [notes, setNotes] = useState<string | null>(null);
+  const [ask, setAsk] = useState<GapAsk | null>(null);
   useEffect(() => {
     const h = (m: ExtensionMessage) => {
       const x = m as unknown as { type: string; payload?: any };
       if (x.type === "brief-state") setState(x.payload as BriefStatePayload);
       if (x.type !== "brief-result") return;
       const p = x.payload ?? {};
+      if (p.action === "gap-estimate" || p.action === "gap-explain") {
+        setAsk((a) => (a && a.n === p.n ? { ...a, busy: false, ...(p.ok ? (p.action === "gap-estimate" ? { estimate: p.detail } : { result: p.detail }) : { error: p.error }) } : a));
+        return;
+      }
       setBusy(null);
       if (!p.ok) { setError(p.error ?? "failed"); return; }
       setError(null);
@@ -113,6 +135,10 @@ export function BriefCard({ onLight }: { onLight: (boxes: string[] | null) => vo
   }, []);
   if (!state?.available) return null;
   const send = (type: string, payload: Record<string, unknown> = {}) => { setBusy(type); setError(null); bridge.postMessage({ type, payload } as never); };
+  const explain = (n: number, estimate: boolean) => {
+    setAsk((a) => (estimate || a?.n !== n ? { n, busy: true } : { ...a, busy: true, error: undefined }));
+    bridge.postMessage({ type: "brief-explain-gap", payload: { n, estimate } } as never);
+  };
   const r = state.ratified, p = state.proposed;
   const staleCount = r?.spec ? [...r.spec.function, ...r.spec.method, ...r.spec.feature].filter((l) => l.stale?.length).length : 0;
   const status = p ? "proposed" : r?.spec ? (staleCount ? `${staleCount} stale` : "ratified") : "none";
@@ -132,13 +158,13 @@ export function BriefCard({ onLight }: { onLight: (boxes: string[] | null) => vo
         <div>
           {r?.spec && <div style={{ ...quiet, marginTop: 4 }}>{`ratified ${r.at.slice(0, 10)} by ${r.by} · written by ${r.model} · click a line to light its boxes`}</div>}
           {r?.spec && <Lines spec={r.spec} review={state.ratifiedReview} onLight={onLight} />}
-          {r?.spec && !p && state.ratifiedReview && <Sheet review={state.ratifiedReview} />}
+          {r?.spec && !p && state.ratifiedReview && <Sheet review={state.ratifiedReview} ask={ask} onExplain={explain} canSpend={!!state.claude} />}
           {p && (
             <div data-brief-proposal style={{ marginTop: 12, paddingTop: 8, borderTop: "1px dashed var(--proposed-border)" }}>
               <div style={{ ...quiet, color: "var(--proposed-border)", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase" }}>{`Proposed · ${p.model}`}</div>
               {p.notes.length > 0 && <div style={{ ...quiet, marginTop: 4 }}>{`asked to answer ${p.notes.length} note${p.notes.length === 1 ? "" : "s"}: ${p.notes.map((n, i) => `note:${i + 1} ${n}`).join(" · ")}`}</div>}
               <Lines spec={p.spec} review={p.review} ghost onLight={onLight} />
-              {p.review && <Sheet review={p.review} />}
+              {p.review && <Sheet review={p.review} ask={ask} onExplain={explain} canSpend={!!state.claude} />}
               {p.sections.map((s) => (
                 <div key={s.section} data-brief-section={s.section} style={{ display: "flex", alignItems: "center", gap: 4, marginTop: 8, flexWrap: "wrap" }}>
                   <span style={{ flex: "1 1 160px" }}>{s.section}: {s.summary}</span>

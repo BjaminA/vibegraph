@@ -43,6 +43,9 @@ export function validateTopology(x: unknown): string | null {
     ["routers", (o) => (str(o.function) && opt(o.zones, strs) && opt(o.file, str) ? null : "function (zones a list)")],
     ["stateMachines", (o) => (str(o.id) && Array.isArray(o.transitions) && o.transitions.every((tr: any) => str(tr?.from) && str(tr?.to) && opt(tr.roles, strs) && opt(tr.requires, strs)) ? null : "id and transitions [{from, to, roles?, requires?}]")],
     ["decisionTrees", (o) => (str(o.id) && str(o.root) && Array.isArray(o.nodes) && o.nodes.every((n: any) => str(n?.id) && opt(n.reads, strs) && opt(n.yes, str) && opt(n.no, str)) ? null : "id, root and nodes [{id, yes?, no?, outcome?, reads?}]")],
+    // 2026-10-08 — rung 2 of the run-time ladder: what a process reaches at run time
+    ["feeds", (o) => (str(o.process) && [o.watches, o.reads, o.writes].filter((v) => v !== undefined).length === 1 && [o.watches, o.reads, o.writes].every((v) => v === undefined || str(v))
+      && (o.via === undefined || str(o.via) || strs(o.via)) ? null : "process, exactly one of watches / reads / writes (a family or zone), via (a function or a list) optional")],
   ];
   for (const [k, check] of items) {
     if (t[k] === undefined) continue;
@@ -169,8 +172,9 @@ export function sourceStatus(root: string, s: TopologySource): TopologyStatus {
 /** The derived layer as a source (data_arch.ts): never run, never stale — it is the code as parsed. */
 export const DERIVED_SOURCE: TopologySource = { id: "derived-from-code", generator: "(VibeGraph reads the code)", inputs: [] };
 
-const KEYS = ["stores", "zones", "families", "principals", "grants", "routers", "stateMachines", "decisionTrees"] as const;
-const keyOf = (k: string, o: any) => (k === "grants" ? `${o.who}|${o.zone}|${o.access}` : k === "routers" ? o.function : o.id);
+const KEYS = ["stores", "zones", "families", "principals", "grants", "routers", "stateMachines", "decisionTrees", "feeds"] as const;
+const keyOf = (k: string, o: any) => (k === "grants" ? `${o.who}|${o.zone}|${o.access}` : k === "routers" ? o.function
+  : k === "feeds" ? `${o.process}|${o.watches ?? ""}|${o.reads ?? ""}|${o.writes ?? ""}` : o.id);
 
 /** Every generated source, merged. Two sources declaring one id differently
  *  is a conflict, said — the first is kept. */

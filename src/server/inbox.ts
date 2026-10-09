@@ -27,8 +27,13 @@ import { scopesNow } from "./operation_vocab.ts";
 import { regroupFromFacts } from "./arch_regroup.ts";
 import { loadBrief, sectionSummary, allLines, decideBrief } from "./brief_store.ts";
 import { BRIEF_SECTIONS, type BriefSection } from "../shared/brief_types.ts";
+import { claimChanges, claimLabel, decideClaim, loadClaims } from "./claim_store.ts";
+import { linesReader } from "./node_scope.ts";
+import { declaredFeeds } from "./topology_feeds.ts";
+import { declaredTopology } from "./arch_label_drift.ts";
+import { modelSource } from "./model_source.ts";
 
-export type InboxKind = "plan" | "objective" | "decision" | "sensor" | "rule-change" | "rule" | "scope" | "groups" | "skill" | "spec" | "questions" | "drift" | "brief";
+export type InboxKind = "plan" | "objective" | "decision" | "sensor" | "rule-change" | "rule" | "scope" | "groups" | "skill" | "spec" | "questions" | "drift" | "brief" | "claim";
 export interface InboxItem {
   id: string;
   kind: InboxKind;
@@ -40,7 +45,8 @@ export interface InboxItem {
 }
 
 const ONE: Record<string, string> = { processes: "process", modules: "module", stores: "store", principals: "principal", stack: "tool", boundaries: "boundary", threads: "thread", flows: "flow", policies: "policy" };
-const short = (v: unknown) => { const s = JSON.stringify(v); return s.length > 140 ? `${s.slice(0, 139)}…` : s; };
+// JSON.stringify(undefined) is undefined: a field a change ADDS has no "from"
+const short = (v: unknown) => { const s = JSON.stringify(v) ?? "(none)"; return s.length > 140 ? `${s.slice(0, 139)}…` : s; };
 
 /** `model` (the derived map) turns on the sensors that read it — new
  *  processes and identities, placement, groups and scope drift. */
@@ -110,6 +116,22 @@ export function buildInbox(root: string, opts: { rec?: PlanReconcile | null; mod
       const lines = s === "spec" ? [...(opts.briefReview ?? []), ...allLines(brief.proposed.spec).slice(0, 4).map((l) => `${l.text}${l.cites.length ? "" : " (INFERRED)"}`)] : [];
       out.push({ id: `brief:${s}`, kind: "brief", decidable: true, title: `Brief (PROPOSED, ${brief.proposed.model}): ${t}`, detail: lines });
     }
+  }
+  // 2026-10-08 — a feed the project declares, naming code that is gone (topology_feeds.ts)
+  if (opts.model) {
+    let feeds: ReturnType<typeof declaredFeeds> = [];
+    try { feeds = declaredFeeds(declaredTopology(root).topology, opts.model, plan, modelSource(opts.model)?.files ?? null); } catch { feeds = []; }
+    for (const f of feeds.filter((x) => x.stale)) out.push({ id: `drift:feed:${f.index}`, kind: "drift", decidable: false, title: `declared feed ${f.index} (${f.process} ${f.op}s ${f.family}) is STALE: ${f.stale}`, detail: ["regenerate the topology (`vibegraph-knowledge topology run`), or fix the declaration in its generator"] });
+  }
+  // 2026-10-08 — claims about what the code does at run time (claim_store.ts)
+  const readLines = linesReader(root);
+  for (const k of loadClaims(root).claims) {
+    const stale = claimChanges(k, readLines);
+    if (k.status === "proposed") out.push({
+      id: `claim:${k.id}`, kind: "claim", decidable: true, title: `a claim (${k.by}): ${claimLabel(k)}`,
+      detail: [...(k.why ? [k.why] : []), ...k.cites.map((c) => `${c}: ${k.basis[c] ?? ""}`).slice(0, 4), `the map says: ${k.verdict ?? "unverifiable"}${k.verdict === "declared" ? " — the plan declares it, the code does not show it" : ""}`, ...stale.map((s) => `STALE: ${s}`)],
+    });
+    else if (k.status === "ratified" && stale.length) out.push({ id: `drift:claim:${k.id}`, kind: "drift", decidable: false, title: `ratified claim ${claimLabel(k)} is STALE — a line it cites changed`, detail: [...stale, "propose it again with the lines as they are now, or reject it"] });
   }
   if (opts.briefStale?.length) out.push({ id: "drift:brief", kind: "drift", decidable: false, title: `${opts.briefStale.length} line${opts.briefStale.length === 1 ? " of the ratified Brief is" : "s of the ratified Brief are"} STALE — code they cite changed`, detail: [...opts.briefStale.slice(0, 4), "re-brief only those: `vibegraph-knowledge brief codebase --stale` (a small call)"] });
   return out;
@@ -199,6 +221,7 @@ export function decideInbox(root: string, id: string, decision: "agree" | "rejec
       if (!BRIEF_SECTIONS.includes(arg as BriefSection)) return fail(`no brief section ${arg}`);
       return decideBrief(root, arg as BriefSection, decision === "agree" ? "ratify" : "reject", opts.who ?? "a person", opts.now ?? new Date());
     }
+    case "claim": return decideClaim(root, arg, decision, opts.who ?? "a person", opts.now ?? new Date());
     case "questions": return fail("open questions are closed one by one: `plan close open <qN> --note …` or the Plan panel");
     default: return fail(`not an inbox item: ${id}`);
   }
@@ -207,8 +230,11 @@ export function decideInbox(root: string, id: string, decision: "agree" | "rejec
 /** The Stop hook's one line, or null when nothing waits. */
 export function inboxLine(items: InboxItem[]): string | null {
   const n = items.filter((i) => i.decidable).length;
-  if (!n) return null;
+  // 2026-10-08 — what the run-time ladder holds that no longer matches the code
+  const stale = items.filter((i) => /^drift:(feed|claim):/.test(i.id)).length;
+  const staleNote = stale ? ` · ${stale} declaration${stale === 1 ? "" : "s"} or claim${stale === 1 ? "" : "s"} STALE (a line or function they name changed)` : "";
+  if (!n) return stale ? `Nothing to decide${staleNote}: \`vibegraph-knowledge inbox\` lists them.` : null;
   const kinds = new Map<string, number>();
   for (const i of items.filter((x) => x.decidable)) kinds.set(i.kind, (kinds.get(i.kind) ?? 0) + 1);
-  return `${n} decision${n === 1 ? "" : "s"} await the person (${[...kinds].map(([k, c]) => `${c} ${k}`).join(", ")}): \`vibegraph-knowledge inbox\` in a terminal outside Claude Code, or the Inbox in \`vibegraph-knowledge view\`. Do not decide them yourself — say they are waiting.`;
+  return `${n} decision${n === 1 ? "" : "s"} await the person (${[...kinds].map(([k, c]) => `${c} ${k}`).join(", ")})${staleNote}: \`vibegraph-knowledge inbox\` in a terminal outside Claude Code, or the Inbox in \`vibegraph-knowledge view\`. Do not decide them yourself — say they are waiting.`;
 }

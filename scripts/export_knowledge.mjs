@@ -37,6 +37,7 @@ import { buildCrossingIndex } from "../src/server/crossings.ts";
 import { archModelForEnvelope } from "../src/server/arch_envelope.ts";
 import { repositoryFor, systemMapFor, writeArchArtifacts } from "./arch_artifacts.mjs";
 import { renderSystemMapMd } from "../src/server/system_map_md.ts";
+import { staleLabelMap } from "../src/server/arch_label_drift.ts";
 import { briefMarkdown, briefWithStaleness, loadBrief } from "../src/server/brief_store.ts";
 import { briefInputs } from "../src/server/brief_inputs.ts";
 import { loadVocabulary, scopesNow } from "../src/server/operation_vocab.ts";
@@ -328,7 +329,7 @@ export function exportKnowledge({ root, out, task, envelope: envelopePath, commi
   } else {
     // 2026-10-08 — the ratified Brief first (brief_store.ts), each line with its
     // citations, STALE where a line it cites changed
-    const mapMd = renderSystemMapMd(systemMapFor(architecture, archArgs), loadVocabulary(absRoot).vocab, scopesNow(absRoot, architecture));
+    const mapMd = renderSystemMapMd(systemMapFor(architecture, archArgs), loadVocabulary(absRoot).vocab, scopesNow(absRoot, architecture), staleLabelMap(absRoot, architecture));
     const briefMd = briefMarkdown(briefWithStaleness(loadBrief(absRoot), loadBrief(absRoot).ratified?.spec ? briefInputs(absRoot, architecture).facts : null));
     const at = mapMd.indexOf("\n## ");
     write("architecture.md", briefMd.length && at > 0 ? `${mapMd.slice(0, at + 1)}${briefMd.join("\n")}\n${mapMd.slice(at + 1)}` : mapMd);

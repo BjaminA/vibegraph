@@ -6,6 +6,9 @@
 import type { ArchModelRecord } from "../shared/protocol.ts";
 import { BRIEF_SECTIONS, type BriefBody, type BriefSection } from "../shared/brief_types.ts";
 import { reviewBrief } from "./brief_review.ts";
+import { gapDossier, gapList, gapPrompt, parseGapReply } from "./gap_explain.ts";
+import { proposeClaim } from "./claim_store.ts";
+import { linesReader } from "./node_scope.ts";
 import { briefInputs, briefEstimate } from "./brief_inputs.ts";
 import { buildBriefPrompt, type BriefOnly } from "./brief_prompt.ts";
 import { parseBrief } from "./brief_validate.ts";
@@ -76,6 +79,28 @@ export async function briefDraft(ctx: BriefCtx, opts: { only?: BriefOnly; stale?
   saveBrief(root, next);
   ctx.changed();
   return { ok: true, detail: `${allLines(parsed.brief.spec).length} spec line(s), ${parsed.brief.refused.length} refused` };
+}
+
+/** "Explain this gap" (2026-10-08): the estimate, or the one model call on gap
+ *  `n` (1-based, `claim gaps` order), its claim stored PROPOSED · inferred. */
+export async function briefExplainGap(ctx: BriefCtx, n: number, estimateOnly: boolean): Promise<{ ok: boolean; error?: string; detail?: string; tokens?: number }> {
+  const root = ctx.root(), model = ctx.model();
+  if (!root || !model) return { ok: false, error: "the map is not built yet" };
+  const readLines = linesReader(root);
+  const { facts } = briefInputs(root, model);
+  const gap = gapList(facts)[n - 1];
+  if (!gap) return { ok: false, error: `no open facts gap ${n}` };
+  const d = gapDossier(model, facts, gap, readLines);
+  if (estimateOnly) return { ok: true, tokens: d.estimate, detail: `1 call, ~${Math.round(d.estimate / 1000)}k tokens, ${d.shown.size} lines of code shown` };
+  if (!ctx.claudeAvailable()) return { ok: false, error: "the claude CLI is unavailable — explaining a gap needs one model call" };
+  const text = await ctx.run(gapPrompt(d));
+  if (text === null) return { ok: false, error: "the model returned nothing" };
+  const parsed = parseGapReply(text, d);
+  if (!parsed.ok) return { ok: false, error: parsed.reason };
+  const r = proposeClaim(root, model, facts, readLines, { ...parsed.claim, cites: parsed.cites, why: `${parsed.why} (${ctx.modelLabel()})`, by: "agent" });
+  if (!r.ok) return { ok: false, error: `the claim was refused: ${r.reasons.join("; ")}` };
+  ctx.changed();
+  return { ok: true, detail: `claim ${r.claim!.id} PROPOSED · inferred — decide it in the inbox` };
 }
 
 export function briefDecide(ctx: BriefCtx, section: string, decision: "ratify" | "reject"): { ok: boolean; error?: string; detail?: string } {

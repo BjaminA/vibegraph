@@ -27,7 +27,10 @@ import * as path from "path";
  *  — are ignored by git from inside .vibegraph/, so a commit of the project
  *  cannot carry them whatever the project's own .gitignore says. Written
  *  once, beside whatever writes them; a person's own lines are kept. */
-const PRIVATE_LINES = ["work-snapshots/", "hooked-run.json", "observations.json", "knowledge/"];
+// 2026-10-08 — and the run recorder's runs (zones and verbs only, still a
+// person's local runtime data) and its derived config; `trace.json` (enabled /
+// forbidden) is the project's setting and may be committed
+const PRIVATE_LINES = ["work-snapshots/", "hooked-run.json", "observations.json", "knowledge/", "traces/run-*.jsonl", "trace/"];
 export function ensurePrivateIgnore(root: string): void {
   const p = path.join(root, ".vibegraph", ".gitignore");
   try {

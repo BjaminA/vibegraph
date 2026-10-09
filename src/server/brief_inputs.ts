@@ -24,6 +24,8 @@ import { ruleTargets } from "./brief_salience.ts";
 import type { Constraint } from "./constraint_store.ts";
 import { loadBrief, briefWithStaleness, allLines } from "./brief_store.ts";
 import { reviewBrief, reviewText } from "./brief_review.ts";
+import { liveClaims } from "./claim_store.ts";
+import { declaredFeeds } from "./topology_feeds.ts";
 
 export const BRIEF_VOCAB_FILE = path.join(".vibegraph", "brief-vocabulary.json");
 
@@ -65,6 +67,8 @@ export function briefInputs(root: string, model: ArchModelRecord, opts: { only?:
   const facts = buildBriefFacts(model, {
     root, readLines, plan: loadPlan(root), topology, constraints, specs, vocab: op.vocab, silentOnly, staleLabels: stale,
     ruleCode: ruleCodeReader(source, readLines), source, grantCalls: grantCalls(source), docExclude: excludeDocs, notes: opts.notes,
+    claims: (() => { try { return liveClaims(root, readLines); } catch { return []; } })(),
+    feeds: (() => { try { return declaredFeeds(topology, model, loadPlan(root), source?.files ?? null); } catch { return []; } })(),
   });
   return { facts, vocab, opVocab: op.vocab, absolutes, errors: [...errors, ...op.errors] };
 }

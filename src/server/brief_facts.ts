@@ -41,7 +41,7 @@ import type { ModelSource } from "./model_source.ts";
 import { nodeIO, ioLines, CORE_VOCABULARY, type Vocabulary } from "../shared/node_io.ts";
 import { scopeDossier } from "./node_scope.ts";
 import { planCitations } from "./arch_propose.ts";
-import { briefData, zoneLine, isVerifyFile, verifyEdge, type BriefData } from "./brief_data.ts";
+import { briefData, zoneLine, isVerifyFile, verifyEdge, type BriefData, type FeedDecl } from "./brief_data.ts";
 import { briefDocs, humanRules, salientFiles, type RuleSite, type SalientFile } from "./brief_salience.ts";
 
 export const BRIEF_FACT_LIMITS = { boxes: 80, edges: 160, docs: 40, silentPerCall: 6, specOps: 12, rules: 30, enforce: 24, salient: 5 };
@@ -119,6 +119,10 @@ export function buildBriefFacts(model: ArchModelRecord, opts: {
   docExclude?: string[];
   /** the person's corrections, for "brief again with notes" */
   notes?: string[];
+  /** person-ratified claims whose lines still hold (claim_store.ts) */
+  claims?: Array<{ id: string; subject: string; verb: string; object: string }>;
+  /** what the project's topology declares a process reaches at run time (topology_feeds.ts) */
+  feeds?: FeedDecl[];
 }): BriefFacts {
   const vocab = opts.vocab ?? CORE_VOCABULARY;
   const cites = new Map<string, string>();
@@ -139,7 +143,9 @@ export function buildBriefFacts(model: ArchModelRecord, opts: {
   };
   const fileRole = (file: string): EvidenceRole => (isVerifyFile(file) ? "verify" : "use");
   const labels = new Map(model.nodes.map((n) => [n.id, n.label]));
-  const data = briefData(model, { plan: opts.plan, topology: opts.topology });
+  const data = briefData(model, { plan: opts.plan, topology: opts.topology, claims: opts.claims, feeds: opts.feeds });
+  for (const f of opts.feeds ?? []) cites.set(f.cite, `feed ${f.process} ${f.op} ${f.family}`), roles.set(f.cite, "declare");
+  for (const k of opts.claims ?? []) cites.set(`claim:${k.id}`, `${k.subject} ${k.verb} ${k.object}`), roles.set(`claim:${k.id}`, "declare");
 
   L.push(`PROJECT ${path.basename(opts.root)}`);
   if (opts.plan?.objective) L.push(`- ${cite("plan:objective", opts.plan.objective, "declare")}: ${opts.plan.objective}`);

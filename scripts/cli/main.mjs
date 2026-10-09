@@ -37,6 +37,8 @@ import { pipelineFor, pipelineHere } from "./pipeline.mjs";
 import { SOFTWARE_USAGE, runSoftware } from "./software.mjs";
 import { BRIEF_USAGE, runBrief } from "./brief.mjs";
 import { SYSTEM_BRIEF_USAGE, runSystemBrief } from "./system_brief.mjs";
+import { CLAIM_USAGE, runClaim } from "./claim.mjs";
+import { TRACE_USAGE, runTrace } from "./trace.mjs";
 import { formatClassifyReport, runClassify } from "./classify.mjs";
 import { runArchitecture } from "./architecture.mjs";
 import { CONSTRAINTS_USAGE, runConstraints } from "./constraints.mjs";
@@ -77,6 +79,8 @@ usage:
   ${PACKAGE_NAME} ${LESSONS_USAGE}
   ${PACKAGE_NAME} ${BRIEF_USAGE}
   ${PACKAGE_NAME} ${SYSTEM_BRIEF_USAGE}
+  ${PACKAGE_NAME} ${CLAIM_USAGE}
+  ${PACKAGE_NAME} ${TRACE_USAGE}
   ${PACKAGE_NAME} ${DIRECTION_USAGE}
   ${PACKAGE_NAME} ${DATAFLOW_USAGE}
   ${PACKAGE_NAME} ${PLAN_USAGE}
@@ -673,6 +677,8 @@ export function main(argv) {
   if (command === "seeds" || command === "seed") return cmdSeeds(rest);
   if (command === "inbox") return runInbox(rest).then((r) => { (r.exitCode === 2 ? process.stderr : process.stdout).write(r.text); return r.exitCode; });
   if (command === "scope") { const r = runScope(rest); (r.exitCode === 2 ? process.stderr : process.stdout).write(r.text); return r.exitCode; }
+  if (command === "claim" || command === "claims") { const r = runClaim(rest); (r.exitCode === 0 ? process.stdout : process.stderr).write(r.text); return r.exitCode; }
+  if (command === "trace") { const r = runTrace(rest); (r.exitCode === 0 ? process.stdout : process.stderr).write(r.text); return r.exitCode; }
   if (command === "topology") { const r = runTopology(rest); (r.exitCode === 2 ? process.stderr : process.stdout).write(r.text); return r.exitCode; }
   if (command === "docs") { const r = runDocs(rest); (r.exitCode === 2 ? process.stderr : process.stdout).write(r.text); return r.exitCode; }
   if (command === "skills") return cmdSkills(rest);
