@@ -31,6 +31,7 @@ import { planWork } from "./src/server/plan_work";
 // spec that renders them WITH the stated policies bound to each tool.
 import { buildStackIndex, contractStackForFile, stackForThread, stackCalledOnThread, toolsAddedByDelta, type StackIndex } from "./src/server/stack";
 import { floorPureLibraries } from "./src/server/floor_libraries";
+import { REASONING_DENIED_TOOLS } from "./src/server/reasoning_tools";
 import { classifyEstimate, classifyRun, type ClassifyCtx } from "./src/server/classify_server";
 import { buildCrossingIndex, type CrossingIndex } from "./src/server/crossings";
 import { handleInvestigation, listInvestigations, readInvestigation, renderHandoff, readRel } from "./src/server/investigations";
@@ -3763,6 +3764,7 @@ function handleBuildPlanAccept(plan: unknown, ws: WebSocket): void {
 // therefore still possible, but it is now a deliberate detour rather than
 // the path of least resistance.
 const CHAT_DENIED_TOOLS = ["Edit", "Write", "MultiEdit", "NotebookEdit"];
+// 2026-10-12 — a REASONING spawn runs nothing: src/server/reasoning_tools.ts
 
 const buildSessionEnabled = process.env.VG_BUILD_SESSION !== "0";
 let buildSession: ChatSession | null = null;
@@ -4351,7 +4353,10 @@ function _runIntentLlm(intent: string, node: any, fileNodes: any[], fnSource: st
       cmd,
       [...pre, "-p", "--output-format", "json", "--strict-mcp-config",
         "--mcp-config", '{"mcpServers":{}}',
-        "--dangerously-skip-permissions", "--", prompt],
+        "--dangerously-skip-permissions",
+        // a draft is text the CST chokepoint lands; the model runs nothing
+        "--disallowedTools", REASONING_DENIED_TOOLS.join(","),
+        "--", prompt],
       opts,
     );
     child.stdin?.end(); // 6d pre-flight: no open pipe — claude -p otherwise waits 3s for stdin per draft
@@ -5073,6 +5078,8 @@ async function handleAnalyzeFile(filePath: string | undefined, ws: WebSocket): P
       "--strict-mcp-config",
       "--mcp-config", '{"mcpServers":{}}',
       "--dangerously-skip-permissions",
+      // a summary reads; it never runs or writes anything
+      "--disallowedTools", REASONING_DENIED_TOOLS.join(","),
       "--",
       prompt,
     ],
@@ -6748,7 +6755,10 @@ function _runReadmeLlm(prompt: string, tier: ModelTier = "thinking", kind: Spend
       [...pre, "-p", "--output-format", "json", "--strict-mcp-config",
         "--mcp-config", '{"mcpServers":{}}',
         "--dangerously-skip-permissions",
-        "--disallowedTools", CHAT_DENIED_TOOLS.join(","),
+        // the orchestrated run's reviewer alone may run checks (it executes a
+        // packet's predicate, inside a work run a person started); every other
+        // caller reasons and may not run anything (REASONING_DENIED_TOOLS)
+        "--disallowedTools", (kind === "review" ? CHAT_DENIED_TOOLS : REASONING_DENIED_TOOLS).join(","),
         "--", prompt],
       opts,
     );

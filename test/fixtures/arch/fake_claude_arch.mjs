@@ -19,6 +19,13 @@
  * Automated tests never spawn the real `claude`.
  */
 const prompt = process.argv[process.argv.length - 1] ?? "";
+// 2026-10-12 — a reasoning spawn must not be able to RUN anything: refuse
+// unless Bash and the sub-agent tools arrive denied (src/server/reasoning_tools.ts)
+const denied = (process.argv[process.argv.indexOf("--disallowedTools") + 1] ?? "").split(",");
+if (!process.argv.includes("--disallowedTools") || !denied.includes("Bash") || !denied.includes("Task")) {
+  process.stdout.write(JSON.stringify({ result: "STUB REFUSES: a reasoning spawn arrived able to run Bash or sub-agents", is_error: true }));
+  process.exit(1);
+}
 // A real proposal takes a minute; the working state is only observable if
 // the stub takes long enough to be seen (FAKE_ARCH_DELAY_MS, e2e only).
 if (process.env.FAKE_ARCH_DELAY_MS) await new Promise((r) => setTimeout(r, Number(process.env.FAKE_ARCH_DELAY_MS)));

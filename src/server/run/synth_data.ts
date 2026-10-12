@@ -8,6 +8,7 @@
 // file is only ever written into the run SANDBOX copy — never the real
 // tree. VG_CLAUDE_BIN stub in automation (M10R.7).
 
+import { REASONING_DENIED_TOOLS } from "../reasoning_tools.ts";
 import { spawn } from "child_process";
 import * as fs from "fs";
 import * as path from "path";
@@ -167,7 +168,7 @@ export function synthesizeDataFile(relPath: string, readerSource: string, cwd: s
       cmd,
       [...pre, "-p", "--output-format", "json", "--strict-mcp-config",
         "--mcp-config", '{"mcpServers":{}}',
-        "--dangerously-skip-permissions", "--", prompt],
+        "--dangerously-skip-permissions", "--disallowedTools", REASONING_DENIED_TOOLS.join(","), "--", prompt],
       { cwd, env: spawnEnv(spawnTarget) },
     );
     child.stdin?.end();

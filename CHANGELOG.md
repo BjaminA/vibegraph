@@ -3,6 +3,27 @@
 `vibegraph-knowledge` and the VibeGraph app. Newest first. Each entry says what
 changed and, where an existing user would notice, how behaviour differs.
 
+## 0.33.1 — 2026-10-12 — model calls that only reason can no longer run anything
+
+**Safety fix.** The Brief card, Scope this node, the Classify button, Explain
+this gap, Propose groups, READMEs, skills, Intent, compose, changeset,
+build-plan and system drafts, and synthesised example inputs all start
+`claude -p` in the project's own folder with permissions skipped. Most denied
+only file edits — Bash was still allowed (two denied nothing at all), so on a
+project that drives machinery a model could, unasked, have run a script that
+moves it. Every one of them now denies file edits, Bash and the sub-agent tools
+(`src/server/reasoning_tools.ts`, one list; the CLI's `classify`, `brief` and
+`architecture` use the same list — they denied Bash but not sub-agents).
+Building the map never ran anything and still does not.
+
+Left as they are, on purpose: the chat and the hooked Agent Manager run
+(sessions a person drives), a work run's worker (edits through the chokepoint,
+in a run a person starts) and its reviewer (may run a packet's checks).
+
+Tests: the Brief and architecture stubs refuse a spawn that could run Bash or
+sub-agents, so e2e-brief, e2e-arch-map, e2e-arch-drift, arch-propose and
+arch-artifacts fail if any of those paths regresses.
+
 ## 0.33.0 — 2026-10-12 — the run floor no longer assumes an unknown library is harmless; hardware is a role
 
 **Safety fix.** Before run-to-here executes anything, the floor scans every call

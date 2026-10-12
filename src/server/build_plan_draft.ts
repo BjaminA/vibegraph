@@ -10,6 +10,7 @@
 //
 // Mirrors system_draft.ts; VG_CLAUDE_BIN stub for tests (M10R.7).
 
+import { REASONING_DENIED_TOOLS } from "./reasoning_tools.ts";
 import { spawn } from "child_process";
 // .ts extensions: run directly by node type-stripping in test:build-plan-draft.
 import { resolveClaudeBin, spawnEnv } from "./run/synth_args.ts";
@@ -90,7 +91,7 @@ export function draftBuildPlan(sysPlan: SystemPlan, cwd: string, revision?: Road
       cmd,
       [...pre, "-p", "--output-format", "json", "--strict-mcp-config",
         "--mcp-config", '{"mcpServers":{}}',
-        "--dangerously-skip-permissions", "--", prompt],
+        "--dangerously-skip-permissions", "--disallowedTools", REASONING_DENIED_TOOLS.join(","), "--", prompt],
       { cwd, env: spawnEnv(spawnTarget) },
     );
     child.stdin?.end(); // 6d pre-flight: no open pipe — claude -p otherwise waits 3s for stdin per draft

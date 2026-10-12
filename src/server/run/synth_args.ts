@@ -12,6 +12,7 @@
 // injected into executed source. And the SM3 floor (scan_effects.py) runs
 // regardless — synthesized inputs never widen the statically-scanned set.
 
+import { REASONING_DENIED_TOOLS } from "../reasoning_tools.ts";
 import { claudeCommand, parseArgv, pinnedModel } from "../find_claude.ts";
 import { spawn } from "child_process";
 import * as path from "path";
@@ -233,7 +234,7 @@ export function synthesizeArgs(entryFn: string, fnSource: string, cwd: string, i
       cmd,
       [...pre, "-p", "--output-format", "json", "--strict-mcp-config",
         "--mcp-config", '{"mcpServers":{}}',
-        "--dangerously-skip-permissions", "--", prompt],
+        "--dangerously-skip-permissions", "--disallowedTools", REASONING_DENIED_TOOLS.join(","), "--", prompt],
       { cwd, env: spawnEnv(spawnTarget) },
     );
     child.stdin?.end(); // 6d pre-flight: no open pipe — claude -p otherwise waits 3s for stdin per draft

@@ -24,6 +24,7 @@
 // replies in a line-oriented format with one ```python fence per module,
 // parsed deterministically by parseBuilderReply (exported, unit-tested).
 
+import { REASONING_DENIED_TOOLS } from "./reasoning_tools.ts";
 import { spawn } from "child_process";
 // .ts extensions: run directly by node type-stripping in test:changeset-draft
 // (same convention as compose_draft.ts; esbuild resolves them fine).
@@ -253,7 +254,7 @@ export function draftChangeset(
       cmd,
       [...pre, "-p", "--output-format", "json", "--strict-mcp-config",
         "--mcp-config", '{"mcpServers":{}}',
-        "--dangerously-skip-permissions", "--", prompt],
+        "--dangerously-skip-permissions", "--disallowedTools", REASONING_DENIED_TOOLS.join(","), "--", prompt],
       { cwd, env: spawnEnv(spawnTarget) },
     );
     child.stdin?.end(); // 6d pre-flight: no open pipe — claude -p otherwise waits 3s for stdin per draft

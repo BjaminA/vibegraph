@@ -11,6 +11,7 @@
 import { test, before } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
+import { REASONING_DENIED_TOOLS } from "../src/server/reasoning_tools.ts";
 import { cpSync, mkdtempSync, readFileSync, rmSync, existsSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -38,7 +39,7 @@ before(() => {
   facts = readInfraManifests(NEXT).facts;
   docs = docExcerpts(NEXT, derived);
   prompt = buildProposePrompt(derived, facts, docs);
-  reply = JSON.parse(execFileSync("node", [STUB, prompt], { encoding: "utf-8" })).result;
+  reply = JSON.parse(execFileSync("node", [STUB, "--disallowedTools", REASONING_DENIED_TOOLS.join(","), prompt], { encoding: "utf-8" })).result;
   parsed = parseProposal(reply, derived, facts, docs, { model: "stub", now: () => new Date("2026-09-23T00:00:00Z") });
 });
 

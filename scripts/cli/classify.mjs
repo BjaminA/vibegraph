@@ -28,9 +28,12 @@ import {
   formatDossierReport, formatReplyReport, parseClassifyResponse,
 } from "../../src/server/stack_classify.ts";
 import { cliPath } from "./winpath.mjs";
+import { REASONING_DENIED_TOOLS } from "../../src/server/reasoning_tools.ts";
 
-/** The server's CHAT_DENIED_TOOLS plus Bash: a classifier reads, never runs. */
-export const CLASSIFY_DENIED_TOOLS = ["Edit", "Write", "MultiEdit", "NotebookEdit", "Bash"];
+/** A classifier (and the brief and architecture commands) reads, never runs:
+ *  the same list every reasoning spawn uses (src/server/reasoning_tools.ts —
+ *  file edits, Bash and the sub-agent tools). */
+export const CLASSIFY_DENIED_TOOLS = REASONING_DENIED_TOOLS;
 /** What a classifier may use without asking: it reads, nothing else. */
 export const CLASSIFY_ALLOWED_TOOLS = ["Read", "Glob", "Grep"];
 
