@@ -33,7 +33,7 @@ export function orientation(absRoot, loaded, constraints) {
       + `each traced forward as a thread across files.`,
   ];
   // 2026-10-08 — what the system is for and how it holds together (the ratified Brief)
-  const brief = sessionBriefLines(absRoot);
+  const brief = sessionBriefLines(absRoot, env.files);
   if (brief.length) lines.push("", ...brief);
   if (constraints.length) {
     lines.push("", `Stated rules (${constraints.length}) — from the people who run this code, with their reasons; the checkable ones are re-checked after every edit and a new violation stops the edit:`);

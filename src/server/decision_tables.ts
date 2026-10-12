@@ -39,10 +39,14 @@ export function asName(v: TableValue | undefined): string | null {
 /** A table value as a list of names; a reference to a list table is resolved. */
 export function asNames(v: TableValue | undefined, lists: (ref: string) => string[] | null): string[] | null {
   if (v === undefined) return null;
-  if (Array.isArray(v)) return v.flatMap((x) => { const n = asName(x); if (n === null) return []; const l = typeof x === "object" && x && "ref" in x ? lists(n) : null; return l ?? [n]; });
+  // 2026-10-12 — a REFERENCE (`read: FOLDER`) is the names its list holds; one
+  // that cannot be resolved is unknown, never a name of its own (`FOLDER` was
+  // read as a role and became a reader of every record zone)
+  const isRef = (x: TableValue) => typeof x === "object" && x !== null && !Array.isArray(x) && "ref" in x;
+  if (Array.isArray(v)) return v.flatMap((x) => { const n = asName(x); if (n === null) return []; return isRef(x) ? lists(n) ?? [] : [n]; });
   const n = asName(v);
   if (n === null) return null;
-  return (typeof v === "object" && lists(n)) || [n];
+  return isRef(v) ? lists(n) ?? [] : [n];
 }
 
 interface IrFile { nodes?: Array<Record<string, any>> }
@@ -74,7 +78,7 @@ export function stateMachinesFrom(tables: TableDecl[], files: Record<string, IrF
     if (rows.length < 2 || !rows.every((r) => typeof field(r, "from") === "string" && typeof field(r, "to") === "string")) continue;
     const transitions: TopoTransition[] = rows.map((r) => {
       const roles = asNames(field(r, "roles"), (ref) => lists(d.file, ref));
-      const requires = asNames(field(r, "requires"), () => null);
+      const requires = asNames(field(r, "requires"), (ref) => [ref]);
       const label = asName(field(r, "label") as TableValue);
       return {
         from: field(r, "from") as string, to: field(r, "to") as string,
@@ -112,7 +116,7 @@ export function decisionTreesFrom(tables: TableDecl[]): TopoDecisionTree[] {
       const no = asName(field(r, "no")) ?? undefined;
       for (const s of [yes, no]) if (s) { pointed.add(s); if (!keys.has(s)) leaves.add(s); }
       const question = asName(field(r, "question") as TableValue);
-      const evidence = asNames(field(r, "evidence"), () => null);
+      const evidence = asNames(field(r, "evidence"), (ref) => [ref]);
       const fn = evalOf.get(r.key!);
       nodes.push({
         id: r.key!, ...(question ? { question } : {}), ...(yes ? { yes } : {}), ...(no ? { no } : {}),

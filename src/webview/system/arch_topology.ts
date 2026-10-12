@@ -20,6 +20,8 @@ import type { TopologyModel, Topology } from "../../shared/topology_types";
 import type { TopologyDrift, TraceStep } from "../../shared/topology_analysis";
 import { grantees, whoMay, zoneOfFamily, threadsOfFunction } from "../../shared/topology_query.ts";
 import { codeOpsByZone, codeOpsText } from "../../shared/topology_code_ops.ts";
+export { decisionPositions } from "./decision_layout.ts";
+import { zoneGroupsOf } from "../../shared/topology_groups.ts";
 
 export const TOPO = "topo:";
 const EMPTY: ArchModelRecord["unplaced"] = { tests: 0, unmatchedHops: 0, toolsPresentNotCalled: [], unattributedBoundaries: 0 };
@@ -27,8 +29,43 @@ interface ThreadLike { entryPointId: string | null; nodes: any[] }
 
 const card = (id: string, label: string, category: ArchCategory, sublabel: string, notes: string[], extra: Partial<ArchNodeRecord> = {}): ArchNodeRecord =>
   ({ id, kind: "tool", label, sublabel, category, threads: [], refs: [], notes, source: "stated", ...extra } as ArchNodeRecord);
+// 2026-10-12 — a declared edge says what it is (yes, no, write, reads): the
+// map's payload fallback ("shape not spelled here") is for code edges
 const edge = (from: string, to: string, protocol: string, basis: string, extra: Partial<ArchEdgeRecord> = {}): ArchEdgeRecord =>
-  ({ id: `${TOPO}e:${from}>${to}:${protocol}`, from, to, kind: "uses", protocol, protocolBasis: basis, count: 1, threads: [], confidence: "path", refs: [], source: "stated", ...extra } as ArchEdgeRecord);
+  ({ id: `${TOPO}e:${from}>${to}:${protocol}`, from, to, kind: "uses", protocol, protocolBasis: basis, count: 1, threads: [], confidence: "path", refs: [], source: "stated", payloadSummary: protocol, ...extra } as ArchEdgeRecord);
+
+/** 2026-10-12 — the zones of one family pattern (or name prefix) as ONE card,
+ *  their grants redirected to it and counted; selecting the card (or a zone
+ *  in it) opens it. 54 zones read as a handful of groups. */
+function collapseZoneGroups(t: Topology, nodes: ArchNodeRecord[], edges: ArchEdgeRecord[], groups: ArchGroupRecord[], focus: string | null): { nodes: ArchNodeRecord[]; edges: ArchEdgeRecord[] } {
+  let ns = nodes, es = edges;
+  for (const g of zoneGroupsOf(t)) {
+    const members = g.zones.map(zoneId).filter((id) => ns.some((n) => n.id === id));
+    if (members.length < 3) continue;
+    const gid = `${TOPO}zg:${g.id}`;
+    // what every member's card says ("read by all 24") stays said when folded
+    const notesOf = (id: string) => ns.find((n) => n.id === id)?.notes ?? [];
+    const common = notesOf(members[0]).filter((x) => members.every((id) => notesOf(id).includes(x)));
+    ns = [...ns, card(gid, g.label, "database", `${members.length} zones · select to open`, [...common, `${members.length} zones: ${g.zones.join(", ")}`], { members })];
+    for (const box of groups) if (box.wraps.some((w) => members.includes(w))) box.wraps = [...box.wraps, gid];
+    if (focus === gid || members.includes(focus ?? "")) continue;
+    const inGroup = new Set(members);
+    ns = ns.filter((n) => !inGroup.has(n.id));
+    for (const box of groups) box.wraps = box.wraps.filter((w) => !inGroup.has(w));
+    const merged = new Map<string, ArchEdgeRecord>();
+    const kept: ArchEdgeRecord[] = [];
+    for (const e of es) {
+      if (!inGroup.has(e.from) && !inGroup.has(e.to)) { kept.push(e); continue; }
+      const from = inGroup.has(e.from) ? gid : e.from, to = inGroup.has(e.to) ? gid : e.to;
+      const key = `${from}>${to}:${e.protocol}`;
+      const was = merged.get(key);
+      if (was) { was.count += 1; was.payloadSummary = `${e.protocol} · ${was.count} zones`; continue; }
+      merged.set(key, { ...e, id: `${TOPO}e:${key}`, from, to, count: 1, protocolBasis: `${e.protocolBasis} (and the other zones of ${g.label})` });
+    }
+    es = [...kept, ...merged.values()];
+  }
+  return { nodes: ns, edges: es };
+}
 
 export const zoneId = (z: string) => `${TOPO}zone:${z}`;
 export const famId = (f: string) => `${TOPO}fam:${f}`;
@@ -118,7 +155,8 @@ export function resourcesModel(m: TopologyModel, threads: ThreadLike[] = [], dri
   const notes = [`declared topology — ${m.status.map((s) => `${s.source.id}: ${s.state}`).join(", ")}`];
   if (folded.note) notes.push(folded.note);
   if (drift) notes.push("live drift drawn: zones / grants only the platform has, declared grants it lacks");
-  return { version: "1", nodes, edges, groups, unplaced: EMPTY, notes };
+  const collapsed = collapseZoneGroups(t, nodes, edges, groups, opts.focus ?? null);
+  return { version: "1", nodes: collapsed.nodes, edges: collapsed.edges, groups, unplaced: EMPTY, notes };
 }
 
 /** Which read edges to draw. A zone every principal may read says so on its
@@ -169,30 +207,54 @@ export function decisionsModel(m: TopologyModel, threads: ThreadLike[] = []): Ar
   const groups: ArchGroupRecord[] = [];
   const readFamilies = new Set<string>();
   const readZones = new Set<string>();
+  // who supplies a family's (or zone's) evidence: who may write where it lives
+  const writersOf = (r: string): string[] => {
+    const z = r.startsWith("zone:") ? r.slice(5) : zoneOfFamily(t, (t.families ?? []).find((f) => f.id === r || f.pattern === r)?.pattern ?? r) ?? zoneOfFamily(t, r);
+    return z ? [...new Set(whoMay(t, z, "write").map((w) => w.principal))] : [];
+  };
+  // the `file:line` it is declared at, under "where in the code"
+  const refOf = (cite: unknown, text: string): ArchNodeRecord["refs"] => (typeof cite === "string" && cite ? [{ file: cite, text }] : []);
   for (const d of t.decisionTrees ?? []) {
+    const label = (id: string) => { const x = d.nodes.find((n) => n.id === id); return x?.outcome ? `${id} (→ ${x.outcome})` : id; };
     for (const n of d.nodes) {
       const on = n.evaluatedBy ? threadsOfFunction(n.evaluatedBy, threads) : [];
-      nodes.push(card(dnId(d.id, n.id), n.outcome ? `→ ${n.outcome}` : n.id, n.outcome ? "platform" : "scripts", n.outcome ? "outcome" : n.question ?? "decision", [
-        ...(n.question ? [n.question] : []), ...(n.evaluatedBy ? [`evaluated by ${n.evaluatedBy}${on.length ? ` — on ${on.join(", ")}` : ""}`] : []), ...(n.cite ? [`declared at ${n.cite}`] : []),
-      ]));
-      for (const k of ["yes", "no"] as const) if (n[k]) edges.push(edge(dnId(d.id, n.id), dnId(d.id, n[k]!), k, `${n.id} → ${k} → ${n[k]}`));
+      // 2026-10-12 — what makes a decision informative: who decides, on what
+      // evidence, by which rule, what follows each answer, where it is recorded
+      const rows = n.outcome ? [`an outcome of ${d.id}`] : [
+        ...(n.question ? [n.question] : []),
+        ...(n.kind || n.answeredBy ? [`${n.kind === "judgement" ? "a person's judgement" : n.kind === "check" ? "a check on recorded evidence" : "answered"}${n.answeredBy ? ` · answered by ${n.answeredBy}` : ""}`] : []),
+        ...(n.evaluatedBy ? [`evaluated by ${n.evaluatedBy}${on.length ? "" : " (on no thread)"}`] : []),
+        ...(n.cite ? [`declared at ${n.cite}`] : []),
+        ...(n.reads ?? []).map((r) => { const w = writersOf(r); return `reads ${r.replace(/^zone:/, "zone ")}${w.length ? ` — written by ${w.join(", ")}` : ""}`; }),
+        ...(n.evidence?.length ? [`evidence fields: ${n.evidence.join(", ")}`] : []),
+        ...(n.yes ? [`yes → ${label(n.yes)}`] : []), ...(n.no ? [`no → ${label(n.no)}`] : []),
+        ...(n.records ? [`recorded in ${n.records}`] : []),
+      ];
+      nodes.push(card(dnId(d.id, n.id), n.outcome ? `→ ${n.outcome}` : n.id, n.outcome ? "platform" : "scripts", n.outcome ? "outcome" : n.question ?? "decision", rows,
+        { threads: on, refs: refOf(n.cite, "declared here") }));
+      for (const k of ["yes", "no"] as const) if (n[k]) edges.push(edge(dnId(d.id, n.id), dnId(d.id, n[k]!), k, `${n.id} → ${k} → ${n[k]}`, { payloadSummary: k }));
       for (const r of n.reads ?? []) {
-        if (r.startsWith("zone:")) { readZones.add(r.slice(5)); edges.push(edge(dnId(d.id, n.id), zoneId(r.slice(5)), "reads", `${n.id} reads zone ${r.slice(5)}`)); continue; }
+        if (r.startsWith("zone:")) { readZones.add(r.slice(5)); edges.push(edge(dnId(d.id, n.id), zoneId(r.slice(5)), "reads", `${n.id} reads zone ${r.slice(5)}`, { payloadSummary: "reads" })); continue; }
         const fam = (t.families ?? []).find((f) => f.id === r || f.pattern === r)?.id ?? r;
         readFamilies.add(fam);
-        edges.push(edge(dnId(d.id, n.id), famId(fam), "reads", `${n.id} reads its evidence from ${r}`));
+        edges.push(edge(dnId(d.id, n.id), famId(fam), "reads", `${n.id} reads its evidence from ${r}`, { payloadSummary: "reads" }));
       }
     }
-    groups.push({ id: `${TOPO}tree:${d.id}`, kind: "decision tree", label: `decision tree ${d.id}`, wraps: d.nodes.map((n) => dnId(d.id, n.id)), source: "stated" });
+    groups.push({ id: `${TOPO}tree:${d.id}`, kind: "decision tree", label: `decision tree ${d.id}${d.alsoDerived ? ` · declared and derived (${d.alsoDerived})` : ""}`, wraps: d.nodes.map((n) => dnId(d.id, n.id)), source: "stated" });
   }
   for (const sm of t.stateMachines ?? []) {
     const states = [...new Set([...(sm.states ?? []), ...sm.transitions.flatMap((x) => [x.from, x.to])])];
-    for (const s of states) nodes.push(card(stId(sm.id, s), s, "pipeline", `state of ${sm.family ?? sm.id}`, []));
-    for (const tr of sm.transitions) {
-      edges.push(edge(stId(sm.id, tr.from), stId(sm.id, tr.to), tr.roles?.length ? tr.roles.join(", ") : "any", `${tr.from} → ${tr.to}${tr.roles?.length ? ` by ${tr.roles.join(", ")}` : ""}${tr.requires?.length ? `; requires ${tr.requires.join(", ")}` : ""}${tr.cite ? ` — ${tr.cite}` : ""}`));
-      for (const r of tr.requires ?? []) if ((t.families ?? []).some((f) => f.id === r)) { readFamilies.add(r); edges.push(edge(stId(sm.id, tr.to), famId(r), "requires", `${tr.from} → ${tr.to} requires ${r}`)); }
+    for (const s of states) {
+      const out = sm.transitions.filter((x) => x.from === s);
+      nodes.push(card(stId(sm.id, s), s, "pipeline", `phase of ${sm.family ?? sm.id}${out.length ? ` · ${out.length} way${out.length === 1 ? "" : "s"} on` : " · final"}`,
+        out.map((x) => `→ ${x.to}${x.roles?.length ? ` · asked by ${x.roles.join(", ")}` : ""}${x.requires?.length ? ` · needs ${x.requires.join(", ")}` : ""}${x.label ? ` · ${x.label}` : ""}${x.refusedWhen ? ` · refused when ${x.refusedWhen}` : ""}`)));
     }
-    groups.push({ id: `${TOPO}machine:${sm.id}`, kind: "state machine", label: `state machine ${sm.id}${sm.evaluatedBy ? ` (applied by ${sm.evaluatedBy})` : ""}`, wraps: states.map((s) => stId(sm.id, s)), source: "stated" });
+    for (const tr of sm.transitions) {
+      edges.push(edge(stId(sm.id, tr.from), stId(sm.id, tr.to), tr.roles?.length ? tr.roles.join(", ") : "any", `${tr.from} → ${tr.to}${tr.roles?.length ? ` by ${tr.roles.join(", ")}` : ""}${tr.requires?.length ? `; requires ${tr.requires.join(", ")}` : ""}${tr.cite ? ` — ${tr.cite}` : ""}`,
+        { payloadSummary: tr.roles?.length ? tr.roles.join(", ") : "anyone" }));
+      for (const r of tr.requires ?? []) if ((t.families ?? []).some((f) => f.id === r)) { readFamilies.add(r); edges.push(edge(stId(sm.id, tr.to), famId(r), "requires", `${tr.from} → ${tr.to} requires ${r}`, { payloadSummary: "requires" })); }
+    }
+    groups.push({ id: `${TOPO}machine:${sm.id}`, kind: "state machine", label: `state machine ${sm.id} · ${states.length} phases, ${sm.transitions.length} transitions${sm.evaluatedBy ? ` (applied by ${sm.evaluatedBy})` : ""}`, wraps: states.map((s) => stId(sm.id, s)), source: "stated" });
   }
   // The evidence: only the families read, their zones, and who may write them.
   familyCards(t, nodes, edges, readFamilies);

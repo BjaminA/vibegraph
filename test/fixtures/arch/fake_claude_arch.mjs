@@ -18,7 +18,10 @@
  * nothing"), so a stray README/skill spawn in the e2e never receives this.
  * Automated tests never spawn the real `claude`.
  */
-const prompt = process.argv[process.argv.length - 1] ?? "";
+// the prompt follows `--`; a long one arrives on stdin, as `claude -p` reads it
+import { readFileSync } from "node:fs";
+const dash = process.argv.indexOf("--");
+const prompt = dash >= 0 ? process.argv[dash + 1] ?? "" : (() => { try { return readFileSync(0, "utf-8"); } catch { return ""; } })();
 // 2026-10-12 — a reasoning spawn must not be able to RUN anything: refuse
 // unless Bash and the sub-agent tools arrive denied (src/server/reasoning_tools.ts)
 const denied = (process.argv[process.argv.indexOf("--disallowedTools") + 1] ?? "").split(",");

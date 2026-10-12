@@ -176,19 +176,23 @@ export function parseBrief(text: string, facts: BriefFacts, vocab: BriefVocabula
   const hashes: Record<string, string> = {};
   const basis: Record<string, string> = {};
   const codeHashes: NonNullable<Proposed["codeHashes"]> = {};
+  const anchors: NonNullable<Proposed["anchors"]> = {};
   for (const c of kept) {
     const content = facts.cites.get(c) ?? "";
     hashes[c] = hash16(content);
     basis[c] = content.replace(/\s+/g, " ").slice(0, 160);
     const code = facts.code.get(c);
     if (code) codeHashes[c] = code;
+    // 2026-10-12 — a `file:line` remembers the function (or line) it points at
+    const a = facts.anchorAt?.(c);
+    if (a) anchors[c] = a;
   }
   return {
     brief: {
       spec: asked("spec") ? spec : { function: [], method: [], feature: [] },
       groups: asked("groups") ? groups : [], names: asked("groups") ? names : {},
       scopes: asked("scopes") ? scopes : [], primaryPath: asked("path") ? primaryPath : null,
-      omitted, model: meta.model, at: (meta.now ?? (() => new Date()))().toISOString(), refused, scheme: 2, hashes, basis, codeHashes, estimate: facts.estimate,
+      omitted, model: meta.model, at: (meta.now ?? (() => new Date()))().toISOString(), refused, scheme: 2, hashes, basis, codeHashes, anchors, estimate: facts.estimate,
       ...(facts.notes.length ? { notes: facts.notes } : {}),
     },
   };

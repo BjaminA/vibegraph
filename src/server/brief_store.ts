@@ -20,6 +20,7 @@ import * as path from "path";
 import type { BriefBody, BriefHashes, BriefLine, BriefRecord, BriefSection } from "../shared/brief_types.ts";
 import { loadArchStore, saveArchStore, type ArchStore, type StatedGroup } from "./arch_store.ts";
 import { hash16, type BriefFacts } from "./brief_facts.ts";
+import { planSansStatus } from "./brief_anchor.ts";
 
 export const BRIEF_FILE = path.join(".vibegraph", "brief.json");
 
@@ -41,7 +42,8 @@ export function saveBrief(root: string, rec: BriefRecord): void {
 /** A new proposal. A scopes batch (`only: "scopes"`) ADDS to a pending one. */
 export function proposeBrief(rec: BriefRecord, proposed: NonNullable<BriefRecord["proposed"]>, only?: string): BriefRecord {
   const mergeHashes = (a: NonNullable<BriefRecord["proposed"]>, b: NonNullable<BriefRecord["proposed"]>) => ({
-    hashes: { ...a.hashes, ...b.hashes }, basis: { ...(a.basis ?? {}), ...(b.basis ?? {}) }, codeHashes: { ...(a.codeHashes ?? {}), ...(b.codeHashes ?? {}) }, scheme: b.scheme,
+    hashes: { ...a.hashes, ...b.hashes }, basis: { ...(a.basis ?? {}), ...(b.basis ?? {}) }, codeHashes: { ...(a.codeHashes ?? {}), ...(b.codeHashes ?? {}) },
+    anchors: { ...(a.anchors ?? {}), ...(b.anchors ?? {}) }, scheme: b.scheme,
   });
   if (only === "scopes" && rec.proposed) {
     const have = new Set(rec.proposed.scopes.map((s) => s.box));
@@ -113,6 +115,8 @@ export function decideBrief(root: string, section: BriefSection | "all", decisio
           else if (ratified.basis) delete ratified.basis[c];
           if (p.codeHashes?.[c]) (ratified.codeHashes ??= {})[c] = p.codeHashes[c];
           else if (ratified.codeHashes) delete ratified.codeHashes[c];
+          if (p.anchors?.[c]) (ratified.anchors ??= {})[c] = p.anchors[c];
+          else if (ratified.anchors) delete ratified.anchors[c];
         }
         if (p.scheme) ratified.scheme = p.scheme;
       }
@@ -152,17 +156,31 @@ export const allLines = (spec: BriefBody["spec"]): BriefLine[] => [...spec.funct
 const oneLine = (s: string, n = 90) => { const t = s.replace(/\s+/g, " ").trim(); return t.length > n ? `${t.slice(0, n - 1)}…` : t; };
 
 /** What changed under one citation, or null when nothing did (B7). */
-export function citationChange(c: string, saved: BriefHashes, facts: Pick<BriefFacts, "cites" | "code" | "legacy">): string | null {
-  if (!facts.cites.has(c)) return `${c} is no longer among the facts (removed, or out of the facts pack)`;
-  const now = facts.cites.get(c) ?? "";
+export function citationChange(c: string, saved: BriefHashes, facts: Pick<BriefFacts, "cites" | "code" | "legacy" | "anchorNow" | "reread">): string | null {
+  // 2026-10-12 — a `file:line` with an anchor follows the CODE it points at
+  // (brief_anchor.ts): where it is now, and whether it made this pack, do not matter
+  const anchor = saved.anchors?.[c];
+  if (anchor && facts.anchorNow) return facts.anchorNow(anchor);
   const was = saved.hashes[c];
+  if (!facts.cites.has(c)) {
+    // not in this pack (the pack keeps only the top-ranked lines): read the
+    // cited lines from the file itself before calling them gone
+    const again = facts.reread?.(c) ?? null;
+    if (again !== null && (!was || was === hash16(again) || (facts.legacy.get(c) ?? []).some((b) => hash16(b) === was))) return null;
+    return again === null ? `${c} is no longer among the facts (removed, or out of the facts pack)` : `${c} changed — the cited lines are not what they were`;
+  }
+  const now = facts.cites.get(c) ?? "";
+  // a plan item's status (agreed ↔ proposed) is not what a line says about it
+  const sameButStatus = (oldText: string) => c.startsWith("plan:") && planSansStatus(oldText) === planSansStatus(now.replace(/\s+/g, " ").slice(0, 160));
   if (was) {
     if (saved.basis?.[c] !== undefined) {
-      if (was !== hash16(now)) return c.startsWith("rule:") ? `${c} changed — its text, check or scope (was: "${oneLine(saved.basis[c])}")` : `${c} changed — was: "${oneLine(saved.basis[c])}", now: "${oneLine(now)}"`;
+      if (was !== hash16(now) && !sameButStatus(saved.basis[c])) return c.startsWith("rule:") ? `${c} changed — its text, check or scope (was: "${oneLine(saved.basis[c])}")` : `${c} changed — was: "${oneLine(saved.basis[c])}", now: "${oneLine(now)}"`;
     } else {
       // written by 0.29.0: fresh if it matches any way that version hashed it
-      const ok = was === hash16(now) || (facts.legacy.get(c) ?? []).some((b) => hash16(b) === was);
-      if (!ok) return `${c} changed (written before 0.29.1, which kept no record of what it was)`;
+      // (and, for a plan item, under any status)
+      const ok = was === hash16(now) || (facts.legacy.get(c) ?? []).some((b) => hash16(b) === was)
+        || (c.startsWith("plan:") && ["proposed", "agreed", "dropped"].some((st) => hash16(now.replace(/\((proposed|agreed|dropped)\)\s*$/, `(${st})`)) === was));
+      if (!ok) return `${c} changed (written before 0.29.1, which kept no record of what it was) — if the line still holds, mark it still true`;
     }
   }
   const code = saved.codeHashes?.[c];
@@ -173,7 +191,7 @@ export function citationChange(c: string, saved: BriefHashes, facts: Pick<BriefF
 }
 
 /** The ratified spec with each line's STALE citations marked against the facts now. */
-export function briefWithStaleness(rec: BriefRecord, facts: Pick<BriefFacts, "cites" | "code" | "legacy"> | null): BriefRecord["ratified"] {
+export function briefWithStaleness(rec: BriefRecord, facts: Pick<BriefFacts, "cites" | "code" | "legacy" | "anchorNow" | "reread"> | null): BriefRecord["ratified"] {
   const r = rec.ratified;
   if (!r?.spec || !facts) return r;
   const mark = (l: BriefLine): BriefLine => {

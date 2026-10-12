@@ -10,7 +10,7 @@
 // call (src/server/brief_server.ts). Folded by default: it sits over the canvas.
 
 import React, { useEffect, useState } from "react";
-import { ScrollText, Sparkles, Check, X, ChevronDown, ChevronRight, AlertTriangle, MessageSquarePlus } from "lucide-react";
+import { ScrollText, Sparkles, Check, X, ChevronDown, ChevronRight, AlertTriangle, MessageSquarePlus, RefreshCw } from "lucide-react";
 import { bridge, type ExtensionMessage } from "../types";
 import type { BriefLine } from "../../shared/brief_types";
 
@@ -25,6 +25,7 @@ interface BriefStatePayload {
   ratified: null | { at: string; by: string; model: string; spec?: Spec };
   ratifiedReview: Review | null;
   groupsFirst?: { step: "groups" | "wait"; why: string } | null;
+  sync?: { on: boolean; by: string; at: string; lastRun?: string } | null;
   proposed: null | { model: string; at: string; spec: Spec; refused: number; refusedList: Array<{ item: string; reason: string }>; omitted: string[]; notes: string[]; sections: Section[]; review: Review | null };
 }
 
@@ -35,7 +36,7 @@ const btn: React.CSSProperties = {
 };
 const PARTS: Array<[string, keyof Spec]> = [["Function", "function"], ["Method", "method"], ["Key features", "feature"]];
 
-function Lines({ spec, review, ghost, onLight }: { spec: Spec; review?: Review | null; ghost?: boolean; onLight: (boxes: string[] | null) => void }) {
+function Lines({ spec, review, ghost, onLight, onReaffirm }: { spec: Spec; review?: Review | null; ghost?: boolean; onLight: (boxes: string[] | null) => void; onReaffirm?: (text: string) => void }) {
   return (
     <>
       {PARTS.map(([title, part]) => spec[part].length ? (
@@ -59,6 +60,7 @@ function Lines({ spec, review, ghost, onLight }: { spec: Spec; review?: Review |
                   {l.text}
                 </button>
                 {(l.staleWhy ?? []).map((w, k) => <div key={`s${k}`} data-brief-stale-why style={{ ...quiet, paddingLeft: 8 }}>{`STALE — ${w}`}</div>)}
+                {onReaffirm && l.stale?.length ? <button data-brief-reaffirm-line onClick={() => onReaffirm(l.text)} title="The line still holds: stamp its citations against the code as it is now (no tokens)" style={{ ...quiet, marginLeft: 8, background: "transparent", border: "1px solid var(--border-edge)", borderRadius: 4, padding: "0 8px", cursor: "pointer" }}>Still true</button> : null}
                 {warnings.map((w, k) => <div key={`w${k}`} data-brief-warning style={{ ...quiet, paddingLeft: 8 }}>{w}</div>)}
               </div>
             );
@@ -158,7 +160,14 @@ export function BriefCard({ onLight }: { onLight: (boxes: string[] | null) => vo
       {open && (
         <div>
           {r?.spec && <div style={{ ...quiet, marginTop: 4 }}>{`ratified ${r.at.slice(0, 10)} by ${r.by} · written by ${r.model} · click a line to light its boxes`}</div>}
-          {r?.spec && <Lines spec={r.spec} review={state.ratifiedReview} onLight={onLight} />}
+          {r?.spec && <Lines spec={r.spec} review={state.ratifiedReview} onLight={onLight} onReaffirm={(text) => send("brief-reaffirm", { texts: [text] })} />}
+          {r?.spec && (
+            <button data-brief-sync aria-pressed={!!state.sync?.on} disabled={!!busy || (!state.claude && !state.sync?.on)} onClick={() => send("brief-sync", { on: !state.sync?.on })}
+              title={"Sync: when the code a ratified line cites changes, re-draft just the stale lines — one small scoped call each time, at most one per 10 minutes — and keep them as a proposal for you to ratify. Off: stale lines are only marked."}
+              style={{ ...btn, marginTop: 8, color: state.sync?.on ? "var(--accent-thread)" : "var(--text-secondary)", borderColor: state.sync?.on ? "var(--accent-thread)" : "var(--border-edge)" }}>
+              <RefreshCw size={16} strokeWidth={1.5} />{state.sync?.on ? `Sync on${state.sync.lastRun ? ` · last re-draft ${state.sync.lastRun.slice(0, 16).replace("T", " ")}` : ""}` : "Sync off"}
+            </button>
+          )}
           {r?.spec && !p && state.ratifiedReview && <Sheet review={state.ratifiedReview} ask={ask} onExplain={explain} canSpend={!!state.claude} />}
           {p && (
             <div data-brief-proposal style={{ marginTop: 12, paddingTop: 8, borderTop: "1px dashed var(--proposed-border)" }}>
@@ -196,6 +205,7 @@ export function BriefCard({ onLight }: { onLight: (boxes: string[] | null) => vo
             </div>
           )}
           <div style={{ display: "flex", gap: 4, marginTop: 12, flexWrap: "wrap" }}>
+            {staleCount > 0 && !p && <button data-brief-reaffirm-all disabled={!!busy} onClick={() => send("brief-reaffirm")} title="Every stale line still holds: stamp them against the code as it is now (no tokens)" style={btn}><Check size={16} strokeWidth={1.5} />{`All ${staleCount} still true`}</button>}
             {staleCount > 0 && !p && <button data-brief-restate disabled={!!busy || !state.claude} onClick={() => send("brief-run", { stale: true })} style={btn}><Sparkles size={16} strokeWidth={1.5} />{busy === "brief-run" ? "Re-briefing…" : `Re-brief ${staleCount} stale line${staleCount === 1 ? "" : "s"}`}</button>}
             {(r?.spec || p) && notes === null && <button data-brief-again disabled={!!busy || !state.claude} onClick={() => setNotes("")} style={btn}><MessageSquarePlus size={16} strokeWidth={1.5} />Brief again with notes</button>}
             {notes !== null && (

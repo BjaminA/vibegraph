@@ -54,6 +54,23 @@ test.describe("the declared topology on the map", () => {
     await expect(page.locator('[data-arch-group="topo:machine:request"]')).toBeVisible();
   });
 
+  // 2026-10-12 field review: a gate's card says more than its question, and grants read as a grid
+  test("a selected gate says how it is decided and what follows; the access grid lists who may write and read", async ({ page }) => {
+    await openMap(page);
+    await page.locator('[data-arch-lens="decisions"]').click();
+    await page.locator('[data-arch-id="topo:dt:verdict:readings-ok"]').click();
+    const rows = page.locator("[data-arch-decision-row]");
+    await expect(rows.first()).toContainText("Are the latest readings within limits?");
+    await expect(page.locator("[data-arch-decision]")).toContainText("evaluated by readingsWithinLimits");
+    await expect(page.locator("[data-arch-decision]")).toContainText("yes → approve");
+    await page.locator('[data-arch-lens="resources"]').click();
+    await page.locator("[data-access-grid-open]").click();
+    const grid = page.locator("[data-access-grid]");
+    await expect(grid).toBeVisible();
+    await expect(grid.locator('[data-access-row="svc-decider"]')).toContainText("W");
+    await expect(grid.locator('[data-access-row="svc-intake"]')).toContainText("R");
+  });
+
   test("the trace overlay: stepping lights the event's actor and zone, and names the write no grant allows", async ({ page }) => {
     await openMap(page);
     await page.locator('[data-arch-lens="resources"]').click();

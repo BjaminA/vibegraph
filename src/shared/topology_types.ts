@@ -44,6 +44,8 @@ export interface TopoTransition {
   requires?: string[];
   /** its name in the declaration, when it has one */
   label?: string;
+  /** 2026-10-12 — when it is refused (prose) */
+  refusedWhen?: string;
   cite?: Cite;
 }
 export interface TopoStateMachine {
@@ -70,11 +72,20 @@ export interface TopoDecisionNode {
   /** a leaf: the decision it reaches */
   outcome?: string;
   cite?: Cite;
+  /** 2026-10-12 — who answers it (a role or principal) */
+  answeredBy?: string;
+  /** a person's judgement, or a check on recorded evidence */
+  kind?: "judgement" | "check";
+  /** the family its verdict is recorded in */
+  records?: string;
 }
 export interface TopoDecisionTree {
   id: string; root: string; nodes: TopoDecisionNode[]; cite?: Cite;
   /** the record that maps its nodes to their evaluating functions */
   evaluatedByTable?: string;
+  /** 2026-10-12 — set on load: the code-derived tree with the same gates
+   *  (not drawn twice — this one is "declared and derived") */
+  alsoDerived?: string;
 }
 
 /** 2026-10-08 (rung 2 of the run-time ladder) — what a process reaches at RUN

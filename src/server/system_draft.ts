@@ -18,7 +18,7 @@
 //    grounding, so it is demoted to null/INFERRED (the A3 citation-validation
 //    lineage: never let the model manufacture its own evidence).
 
-import { REASONING_DENIED_TOOLS } from "./reasoning_tools.ts";
+import { REASONING_DENIED_TOOLS, promptArgs, promptStdin } from "./reasoning_tools.ts";
 import { spawn } from "child_process";
 // .ts extensions: run directly by node type-stripping in test:system-draft
 // (same convention as compose_draft.ts; esbuild resolves them fine).
@@ -106,10 +106,10 @@ export function draftSystemPlan(description: string, cwd: string): Promise<Syste
       cmd,
       [...pre, "-p", "--output-format", "json", "--strict-mcp-config",
         "--mcp-config", '{"mcpServers":{}}',
-        "--dangerously-skip-permissions", "--disallowedTools", REASONING_DENIED_TOOLS.join(","), "--", prompt],
+        "--dangerously-skip-permissions", "--disallowedTools", REASONING_DENIED_TOOLS.join(","), ...promptArgs(prompt)],
       { cwd, env: spawnEnv(spawnTarget) },
     );
-    child.stdin?.end(); // 6d pre-flight: no open pipe — claude -p otherwise waits 3s for stdin per draft
+    child.stdin?.end(promptStdin(prompt)); // 6d pre-flight: no open pipe — claude -p otherwise waits 3s for stdin per draft
     let out = "";
     let err = "";
     child.stdout.on("data", (b: Buffer) => { out += b.toString(); });

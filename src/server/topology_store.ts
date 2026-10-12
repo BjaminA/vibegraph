@@ -15,7 +15,7 @@ import * as fs from "fs";
 import * as path from "path";
 import * as crypto from "crypto";
 import { spawnSync } from "child_process";
-import type { Topology, TopologyModel, TopologySource, TopologyStatus } from "../shared/topology_types.ts";
+import type { Topology, TopologyModel, TopologySource, TopologyStatus, TopoDecisionTree } from "../shared/topology_types.ts";
 import { TOPOLOGY_VERSION } from "../shared/topology_types.ts";
 import { pathAllowed } from "../shared/path_match.ts";
 
@@ -54,7 +54,8 @@ export function validateTopology(x: unknown): string | null {
       if (!o || typeof o !== "object") return `${k}[${i}] must be an object`;
       const bad = check(o);
       if (bad) return `${k}[${i}] needs ${bad}`;
-      if (o.cite !== undefined && !(typeof o.cite === "string" && CITE.test(o.cite))) return `${k}[${i}].cite must be file:line`;
+      // 2026-10-12 — a feed may cite a whole file (a watch set up across it)
+      if (o.cite !== undefined && !(typeof o.cite === "string" && (CITE.test(o.cite) || (k === "feeds" && /^[^\s:]+$/.test(o.cite))))) return `${k}[${i}].cite must be file:line${k === "feeds" ? " (or a file, for a feed set up across it)" : ""}`;
     }
   }
   // Cross-references a reader relies on.
@@ -192,10 +193,23 @@ export function loadTopology(root: string, derived?: Topology): TopologyModel {
     outputs.push({ id: DERIVED_SOURCE.id, topology: derived });
     status.push({ source: DERIVED_SOURCE, state: "fresh", detail: "read from the code's literal tables, names and calls by VibeGraph (data-architecture.md)" });
   }
+  // 2026-10-12 — when a project's generator declares grants, the code-derived
+  // grants are not merged in: the declaration is the access model, and the
+  // derived reading of a catalogue (a role list's NAME read as a role) only adds noise
+  const declaredGrants = outputs.some((o) => o.id !== DERIVED_SOURCE.id && (o.topology?.grants ?? []).length);
   for (const out of outputs) {
     if (!out.topology) continue;
     const st = { source: { id: out.id } };
+    const derivedSrc = out.id === DERIVED_SOURCE.id;
     for (const k of KEYS) for (const item of (out.topology as any)[k] ?? []) {
+      if (derivedSrc && k === "grants" && declaredGrants) continue;
+      // a derived tree with the declared tree's gates is the same tree: drawn
+      // once, the declared one marked as also read from the code
+      if (derivedSrc && k === "decisionTrees") {
+        const ids = new Set(((item as TopoDecisionTree).nodes ?? []).map((n) => n.id));
+        const twin = (topology.decisionTrees ?? []).find((d) => { const shared = d.nodes.filter((n) => ids.has(n.id)).length; return shared > 0 && shared * 2 >= Math.min(ids.size, d.nodes.length); });
+        if (twin) { twin.alsoDerived = (item as TopoDecisionTree).id; continue; }
+      }
       const key = `${k}:${keyOf(k, item)}`;
       const json = JSON.stringify({ ...item, cite: undefined });
       const was = seen.get(key);

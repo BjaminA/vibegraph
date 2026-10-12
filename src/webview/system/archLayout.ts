@@ -192,7 +192,9 @@ export interface ArchLayout { nodes: Node[]; edges: Edge[]; hiddenTools: string[
 
 /** `placeEdges` — place the cards by these edges instead of the drawn ones, so
  *  drawing a focused card's extra edges routes them without moving any card. */
-export function buildArchLayout(full: ArchModelRecord, lens: ArchLens, opts: { collapseTools?: boolean; keepPlannedTools?: boolean; keepAll?: boolean; placeEdges?: ArchModelRecord["edges"] } = {}): ArchLayout {
+export function buildArchLayout(full: ArchModelRecord, lens: ArchLens, opts: { collapseTools?: boolean; keepPlannedTools?: boolean; keepAll?: boolean; placeEdges?: ArchModelRecord["edges"];
+  /** 2026-10-12 — a placement of its own (the Decisions lens lays out trees), instead of the packer */
+  fixed?: (nodes: ArchModelRecord["nodes"]) => import("./arch_pack").PackOutput } = {}): ArchLayout {
   const sel = lensSelection(full, lens, opts);
   const { model, hiddenTools, hiddenClusters, hierarchy } = sel;
   const nodesKept = sel.nodes;
@@ -204,7 +206,7 @@ export function buildArchLayout(full: ArchModelRecord, lens: ArchLens, opts: { c
   // hierarchy packed as rectangles, related parts kept close. A group is
   // drawn when a node this lens keeps sits inside it (directly or nested).
   const drawnGroups = new Set(nodesKept.flatMap((n) => hierarchy.chainOf(n.id)));
-  const packed = packArchitecture({
+  const packed = opts.fixed ? opts.fixed(nodesKept) : packArchitecture({
     nodes: nodesKept, edges: placeBy, groups: [...drawnGroups], hierarchy, cardW: CARD_W, cardH: cardHeight,
   });
   const pos = packed.pos;

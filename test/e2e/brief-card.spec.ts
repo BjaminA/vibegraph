@@ -70,6 +70,14 @@ test.describe("the Brief card", () => {
     await expect(card).toHaveAttribute("data-brief-state", "ratified", { timeout: 15_000 });
     await expect(card.locator('[data-brief-line="method"]')).toContainText("Partitions the ledger");
     await expect(card.locator("[data-brief-proposal]")).toHaveCount(0);
+    // sync: a person's switch, off by default
+    const sync = card.locator("[data-brief-sync]");
+    await expect(sync).toHaveAttribute("aria-pressed", "false");
+    await sync.click();
+    await expect(sync).toHaveAttribute("aria-pressed", "true", { timeout: 10_000 });
+    await expect(sync).toContainText("Sync on");
+    await sync.click();
+    await expect(sync).toHaveAttribute("aria-pressed", "false", { timeout: 10_000 });
     // brief again with notes: the correction goes to the model as stated input,
     // and a note the reply does not answer is reported
     await card.locator("[data-brief-again]").click();

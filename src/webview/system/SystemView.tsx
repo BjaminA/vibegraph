@@ -25,7 +25,7 @@ import { ArchEdge } from "./ArchEdge";
 import { ArchTraceBar, useArchTrace } from "./ArchTrace";
 import { ArchInspector, ArchLegend, ArchLensBar, ArchProposalBar, type MapLens } from "./ArchPanel";
 import { configModel } from "./arch_config";
-import { styleTopologyEdges, traceIds } from "./arch_topology";
+import { styleTopologyEdges, traceIds, decisionPositions } from "./arch_topology";
 import { useTopologyLens } from "./useTopologyLens";
 import { TopologyTraceBar } from "./TopologyTraceBar";
 import { journeysModel } from "./arch_journeys";
@@ -203,7 +203,7 @@ export function SystemView({
   const laidOut = useDeferredLayout((): { nodes: Node[]; edges: Edge[]; hiddenTools?: string[]; hiddenClusters?: string[] } => {
     if (topoMapModel && topoDrawn) {
       // Every drawn edge kept: a grant, a yes / no branch and an evidence read.
-      const laid = buildArchLayout(topoDrawn, "payloads", { keepAll: true, placeEdges: topoMapModel.edges }); // a zone no one may touch still matters
+      const laid = buildArchLayout(topoDrawn, "payloads", { keepAll: true, placeEdges: topoMapModel.edges, ...(lens === "decisions" ? { fixed: decisionPositions(topoDrawn) } : {}) }); // a zone no one may touch still matters
       const lit = traceName && topo.model ? traceIds(topo.model.topology, topo.traces.find((t) => t.name === traceName)?.steps[traceIndex]) : null;
       return {
         ...laid,
@@ -409,7 +409,7 @@ export function SystemView({
       )}
       {mode === "map" && <ArchTraceBar mode={trace.mode} beats={trace.beats} labelOf={labelOf} actions={trace.actions} />}
       {mode === "map" && architecture && (
-        <ArchProposalBar model={architecture} state={archPropose ?? { busy: false, error: null }} onAction={onArchAction} classify={lens === "tools"} />
+        <ArchProposalBar model={architecture} state={archPropose ?? { busy: false, error: null }} onAction={onArchAction} classify={lens === "tools"} grid={lens === "resources" ? topo.model?.topology ?? null : null} />
       )}
       {/* 2026-10-08 — the Brief: what the system is for and how, each line lighting its boxes */}
       {mode === "map" && architecture && !topoMapModel && <BriefCard onLight={(boxes) => setFlowOn(boxes ? { nodes: boxes, edges: [] } : null)} />}

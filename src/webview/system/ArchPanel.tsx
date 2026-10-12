@@ -14,6 +14,7 @@ import { ARCH_LENSES, edgeLabel, type ArchLens } from "./archLayout";
 import { ArchDispatchList } from "./ArchDispatchList";
 import { NodeIOCard, type LitPath } from "./NodeIOCard";
 import { ClassifyTools } from "./ClassifyTools";
+import { AccessGrid } from "./AccessGrid";
 import type { Vocabulary } from "../../shared/node_io";
 
 const LENS_LABEL: Record<ArchLens | "config" | "journeys" | "resources" | "decisions", string> = { birdseye: "Bird's-eye", overview: "Overview", tools: "Tools", flows: "Flows", payloads: "Payloads", trust: "Trust", config: "Configuration", journeys: "Journeys", resources: "Resources", decisions: "Decisions" };
@@ -169,8 +170,10 @@ type Selected = { node: ArchNodeRecord } | { edge: ArchEdgeRecord } | { group: A
 /** M-ARCH.4 — the proposal gate. Propose SPENDS TOKENS (one thinking-tier
  *  spawn); what comes back is pending and ghosted until a person ratifies
  *  it here. Nothing a model says becomes stated any other way. */
-export function ArchProposalBar({ model, state, onAction, classify = false }: {
+export function ArchProposalBar({ model, state, onAction, classify = false, grid = null }: {
   model: ArchModelRecord;
+  /** the Resources lens: the declared topology, for the access grid (AccessGrid.tsx) */
+  grid?: import("../../shared/topology_types").Topology | null;
   /** the Tools lens: offer to classify the unclassified tools (ClassifyTools.tsx) */
   classify?: boolean;
   state: { busy: boolean; error: string | null };
@@ -252,6 +255,7 @@ export function ArchProposalBar({ model, state, onAction, classify = false }: {
       )}
       {state.error && <span data-arch-propose-error style={{ color: "var(--text-muted)", padding: "0 4px" }}>{state.error}</span>}
       {classify && <ClassifyTools model={model} />}
+      {grid && <AccessGrid t={grid} />}
     </div>
   );
 }
@@ -321,11 +325,17 @@ export function ArchInspector({ selected, model, ioModel, vocab, onLight, onClos
             <div data-arch-members style={{ marginTop: 8 }}>
               <div style={{ color: "var(--text-primary)", marginBottom: 4 }}>{selected.node.category === "config"
                 ? `${selected.node.members.length} environment variable${selected.node.members.length === 1 ? "" : "s"} in this group`
-                : `${selected.node.members.length} tools in this box (the Tools lens draws each)`}</div>
-              {selected.node.members.map((m) => <div key={m} style={{ ...mono, color: "var(--text-muted)" }}>{m.replace(/^tool:/, "")}</div>)}
+                : selected.node.id.startsWith("topo:zg:") ? `${selected.node.members.length} zones in this group — selected, the map opens it` : `${selected.node.members.length} tools in this box (the Tools lens draws each)`}</div>
+              {selected.node.members.map((m) => <div key={m} style={{ ...mono, color: "var(--text-muted)" }}>{m.replace(/^tool:|^topo:zone:/, "")}</div>)}
             </div>
           ) : null}
           {selected.node.dispatches?.length ? <ArchDispatchList node={selected.node} onOpenThread={onOpenThread} /> : null}
+          {/* 2026-10-12 — a declared decision or phase: its rows (who answers, on what evidence, what follows) */}
+          {selected.node.id.startsWith("topo:") && selected.node.notes?.length ? (
+            <div data-arch-decision style={{ marginTop: 8, display: "grid", gap: 2 }}>
+              {selected.node.notes.map((r, i) => <div key={i} data-arch-decision-row style={{ color: i === 0 ? "var(--text-primary)" : "var(--text-secondary)", overflowWrap: "anywhere" }}>{r}</div>)}
+            </div>
+          ) : null}
           {(onReach || onRouteFrom) && (
             <div data-arch-trace-actions style={{ display: "flex", gap: 4, marginTop: 8, flexWrap: "wrap" }}>
               {onReach && <button data-arch-reach="up" onClick={() => onReach(selected.node.id, "up")} style={traceBtn}>Upstream</button>}

@@ -63,7 +63,7 @@ export function personOnlyStep(command, rest) {
     case "scope": return ["ratify", "reject"].includes(sub) ? `scope ${sub}` : null;
     case "inbox": return ["agree", "reject"].includes(sub) ? `inbox ${sub}` : null;
     // 2026-10-08 — deciding the Brief (`brief codebase ratify|reject`)
-    case "brief": return sub === "codebase" && ["ratify", "reject"].includes(rest[1]) ? `brief codebase ${rest[1]}` : null;
+    case "brief": return sub === "codebase" && ["ratify", "reject", "reaffirm", "sync"].includes(rest[1]) ? `brief codebase ${rest[1]}` : null;
     // 2026-10-08 — an agent proposes a claim; a person agrees or rejects it
     case "claim": return ["agree", "reject"].includes(sub) ? `claim ${sub}` : null;
     // turning the run recorder on or off is a person's opt-in

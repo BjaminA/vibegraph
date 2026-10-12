@@ -16,7 +16,7 @@
 // only once accepted, written, and re-parsed (X5). The ghost carries a
 // `drafted` flag so the badge reads "CLAUDE DRAFT — not yet written".
 
-import { REASONING_DENIED_TOOLS } from "./reasoning_tools.ts";
+import { REASONING_DENIED_TOOLS, promptArgs, promptStdin } from "./reasoning_tools.ts";
 import { spawn } from "child_process";
 // .ts extensions: this leaf module is run directly by node's type-stripping in
 // test:compose-draft, which requires explicit extensions on relative imports.
@@ -57,10 +57,10 @@ export function draftInsertion(intent: string, anchorLabel: string | null, cwd: 
       cmd,
       [...pre, "-p", "--output-format", "json", "--strict-mcp-config",
         "--mcp-config", '{"mcpServers":{}}',
-        "--dangerously-skip-permissions", "--disallowedTools", REASONING_DENIED_TOOLS.join(","), "--", prompt],
+        "--dangerously-skip-permissions", "--disallowedTools", REASONING_DENIED_TOOLS.join(","), ...promptArgs(prompt)],
       { cwd, env: spawnEnv(spawnTarget) },
     );
-    child.stdin?.end(); // 6d pre-flight: no open pipe — claude -p otherwise waits 3s for stdin per draft
+    child.stdin?.end(promptStdin(prompt)); // 6d pre-flight: no open pipe — claude -p otherwise waits 3s for stdin per draft
     let out = "";
     let err = "";
     child.stdout.on("data", (b: Buffer) => { out += b.toString(); });

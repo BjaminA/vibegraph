@@ -100,6 +100,9 @@ export interface BriefHashes {
   basis?: Record<string, string>;
   /** rule id → the hash of the code its check guards, and the functions */
   codeHashes?: Record<string, { hash: string; names: string[] }>;
+  /** 2026-10-12 — `file:line` → the function (or line text) it points at, so
+   *  staleness follows the code, not a line number (src/server/brief_anchor.ts) */
+  anchors?: Record<string, { file: string; line: number; id?: string; hash: string; text: string }>;
 }
 
 export interface BriefRecord {
@@ -113,7 +116,10 @@ export interface BriefRecord {
   /** what a person ratified, by section */
   ratified?: Partial<{ spec: BriefBody["spec"]; scopes: BriefScope[]; path: BriefBody["primaryPath"] }> & BriefHashes & { at: string; by: string; model: string };
   /** a short record of decisions */
-  history?: Array<{ at: string; by: string; section: string; decision: "ratify" | "reject"; model: string }>;
+  history?: Array<{ at: string; by: string; section: string; decision: "ratify" | "reject" | "reaffirm"; model: string }>;
+  /** 2026-10-12 — SYNC: a person switched on re-drafting the stale lines
+   *  when the code they cite changes (a small call each time, kept PROPOSED) */
+  sync?: { on: boolean; by: string; at: string; lastRun?: string };
 }
 
 /** The shipped words plus a project's additions (new words only). */

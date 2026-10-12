@@ -3,6 +3,95 @@
 `vibegraph-knowledge` and the VibeGraph app. Newest first. Each entry says what
 changed and, where an existing user would notice, how behaviour differs.
 
+## 0.34.0 — 2026-10-12 — the Brief stays current; decisions and access read as such
+
+A field Brief showed two lines STALE though nothing they said had changed. Two
+citation kinds were too fragile: a `file:line` was checked only against the
+lines printed in that run's facts pack (which keeps only the top-ranked ones),
+so a line that moved, or fell out of the ranking, read "no longer among the
+facts"; and a plan citation hashed the item's status, so agreed → proposed
+staled every line citing it.
+
+- **Anchored citations.** A `file:line` is anchored when it is written: to the
+  innermost function or class around it (its structural id and a hash of its
+  source), or, at module level and in docs, to the line's own text. Staleness
+  asks the anchor — that function changed or is gone, that line is no longer in
+  the file — never where it sits or whether it made today's pack. Lines written
+  before this are re-read from the file, not judged by the pack.
+- **Plan citations** ignore the item's status; its wording still counts.
+- **Still true** (card, or `brief codebase reaffirm [--line …]`): a person says
+  a stale line holds; its citations are stamped against the code as it is now.
+  Zero tokens.
+- **Scoped re-brief**: re-briefing stale lines sends only what they rest on
+  (their boxes, the boxes next to them, what they cite) — not the project.
+- **The hooks**: session start marks a line whose anchored code changed; after
+  an edit, a note names the Brief lines the edit touches (a thread behind the
+  line's boxes walks the file, or a function it cites is in it) — once a line.
+- **Sync** (a switch on the Brief card, or `brief codebase sync on|off`): when
+  the code a ratified line cites changes, the running app re-drafts just the
+  stale lines — one scoped call, after a quiet minute, at most one per 10
+  minutes — and keeps them PROPOSED for you. Off by default; a person's switch.
+
+Tests: test:brief-sync (8); the Brief card e2e toggles sync.
+
+### Fix: "Re-brief" failed with `spawn ENAMETOOLONG`
+
+A re-brief's prompt was passed to `claude -p` on the command line, which
+Windows caps at 32,767 characters for the whole line. Every model call the app
+or the CLI starts now sends a prompt over 24 KB on stdin
+(`src/server/reasoning_tools.ts`). Tests: test:reasoning-spawn (a ~300 KB
+prompt).
+
+### The Decisions and Resources lenses read as decisions and access
+
+From a field review on a shared-store project (54 zones, 641 grants, one tree
+of 20 gates, a state machine of 11 phases):
+
+- **No phantom readers.** A role list that refers to another list
+  (`read: FOLDER`, `[...ALL, ...BOARDS]`) is expanded; a reference that cannot
+  be resolved is unknown, never a role named after the list (`FOLDER` had
+  become a reader of every record zone). When a project's generator declares
+  grants, the code-derived grants are not merged in.
+- **One tree, drawn as a tree.** A derived tree sharing the declared tree's
+  gates is the same tree: drawn once, its box saying "declared and derived".
+  The Decisions lens lays out its own way: state machines first as a row of
+  phases, each tree from its root (depth to the right, yes before no, outcomes
+  as leaves), the evidence's families and zones on the right.
+- **A gate card says how it is decided.** Its question; whether it is a
+  person's judgement or a check on recorded evidence, and who answers it; the
+  function evaluating it; where it is declared; each zone it reads and who may
+  write that zone; its evidence fields; yes → / no → with the outcome; where
+  the answer is recorded. The topology schema gains `answeredBy`, `kind`,
+  `records` on a decision node and `refusedWhen` on a transition. Decision and
+  topology edges say what they are (yes, no, reads, write) instead of "shape
+  not spelled here". A phase card lists its ways on: who asks, what is needed,
+  when it is refused.
+- **Zones fold into groups.** Zones one family pattern expands to
+  (`record_{Type}`), or sharing a name prefix, are one card when three or
+  more: it says what all of them share ("writable by …", "readable by every
+  principal") and its edges are one per principal and access, counted.
+  Selecting the group, or a zone in it, opens it. **Behaviour change:** a
+  large store now opens folded.
+- **Access grid** (Resources lens): who may write (W) or read (R) each zone, a
+  principal per row and a zone group per column, collapsed to "W n · R m"; a
+  click opens a group.
+- **Every feed's fate is said.** `topology run` ends with one line per
+  declared feed: drawn (N edges the code does not show), already shown by the
+  code, no box for its process (anchor the plan process), no zone holds its
+  family, or STALE. A feed may cite a whole file.
+- **The Brief says what is decided.** The facts count each state machine's
+  transitions and phases, and each tree's gates (how many are a person's
+  judgement), outcomes and who answers; the function a declaration names as
+  evaluating a gate or applying a machine is an [enforce] item at its
+  definition; a planned module's facts say which third-party tools its files
+  use and which boxes reach it (so translation is credited to the codec, not
+  the gateway that calls it). The review sheet counts "says who reads or
+  writes in prose only" once, instead of a warning on every such line.
+
+Tests: test:topology-review (6), test:e2e-topology (the gate panel and the
+access grid), test:e2e-topology-scale (rewritten for the folded store),
+test:decision-tables.
+
 ## 0.33.2 — 2026-10-12 — a ratified scope's description sits in Process
 
 - A ratified scope's description now sits in the box inspector's **Process**

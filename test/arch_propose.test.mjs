@@ -39,7 +39,7 @@ before(() => {
   facts = readInfraManifests(NEXT).facts;
   docs = docExcerpts(NEXT, derived);
   prompt = buildProposePrompt(derived, facts, docs);
-  reply = JSON.parse(execFileSync("node", [STUB, "--disallowedTools", REASONING_DENIED_TOOLS.join(","), prompt], { encoding: "utf-8" })).result;
+  reply = JSON.parse(execFileSync("node", [STUB, "--disallowedTools", REASONING_DENIED_TOOLS.join(","), "--", prompt], { encoding: "utf-8" })).result;
   parsed = parseProposal(reply, derived, facts, docs, { model: "stub", now: () => new Date("2026-09-23T00:00:00Z") });
 });
 

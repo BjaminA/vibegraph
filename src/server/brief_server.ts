@@ -12,6 +12,7 @@ import { linesReader } from "./node_scope.ts";
 import { briefInputs, briefEstimate } from "./brief_inputs.ts";
 import { buildBriefPrompt, type BriefOnly } from "./brief_prompt.ts";
 import { groupsStep } from "./brief_groups_first.ts";
+import { reaffirmBrief, setBriefSync, staleBriefLineList, staleFocus, syncDue, markSyncRun } from "./brief_sync.ts";
 import { parseBrief } from "./brief_validate.ts";
 import { loadBrief, saveBrief, proposeBrief, decideBrief, sectionSummary, briefWithStaleness, allLines } from "./brief_store.ts";
 
@@ -40,6 +41,7 @@ export function briefState(ctx: BriefCtx): Record<string, unknown> {
   return {
     available: true, claude: ctx.claudeAvailable(),
     groupsFirst: gs && gs.step !== "brief" ? { step: gs.step, why: gs.why } : null,
+    sync: rec.sync ?? null,
     ratified: ratified ?? null,
     ratifiedReview: review(ratified?.spec),
     proposed: p ? {
@@ -68,12 +70,14 @@ export async function briefDraft(ctx: BriefCtx, opts: { only?: BriefOnly; stale?
   const only: BriefOnly | undefined = opts.stale ? "spec" : gs.step === "groups" ? "groups" : opts.only;
   const skipGroups = gs.step === "brief" && gs.skipGroups;
   const notes = (opts.notes ?? []).filter((n) => typeof n === "string" && n.trim()).map((n) => n.trim().slice(0, 400)).slice(0, 12);
-  const inp = briefInputs(root, model, { only, pending: rec.proposed, notes });
+  let inp = briefInputs(root, model, { only, pending: rec.proposed, notes });
   let restate: string[] | undefined;
   if (opts.stale) {
-    const r = briefWithStaleness(rec, inp.facts);
-    restate = r?.spec ? allLines(r.spec).filter((l) => l.stale?.length).map((l) => l.text) : [];
+    const lines = staleBriefLineList(rec, inp.facts);
+    restate = lines.map((l) => l.text);
     if (!restate.length) return { ok: false, error: "no ratified line of the Brief is stale" };
+    // 2026-10-12 — a SCOPED pack: only what those lines rest on, not the project
+    inp = briefInputs(root, model, { only, pending: rec.proposed, notes, focus: staleFocus(model, lines) });
   }
   if (only === "scopes" && !inp.facts.silent.length) return { ok: false, error: "every silent box is scoped already" };
   const current = rec.proposed && allLines(rec.proposed.spec).length ? rec.proposed.spec : rec.ratified?.spec ?? null;
@@ -119,4 +123,36 @@ export function briefDecide(ctx: BriefCtx, section: string, decision: "ratify" |
   const r = decideBrief(root, section as BriefSection | "all", decision, ctx.who());
   if (r.ok) ctx.changed();
   return r.ok ? { ok: true, detail: r.detail } : { ok: false, error: r.detail };
+}
+
+/** A person: these ratified lines still hold (every stale one when none is named). Zero tokens. */
+export function briefReaffirm(ctx: BriefCtx, texts?: string[]): { ok: boolean; error?: string; detail?: string } {
+  const root = ctx.root(), model = ctx.model();
+  if (!root || !model) return { ok: false, error: "the map is not built yet" };
+  const r = reaffirmBrief(root, briefInputs(root, model).facts, ctx.who(), texts ?? null);
+  if (r.ok) ctx.changed();
+  return r.ok ? { ok: true, detail: r.detail } : { ok: false, error: r.detail };
+}
+
+/** A person switches SYNC on or off. */
+export function briefSync(ctx: BriefCtx, on: boolean): { ok: boolean; error?: string; detail?: string } {
+  const root = ctx.root();
+  if (!root) return { ok: false, error: "the Brief needs a project directory" };
+  const r = setBriefSync(root, on, ctx.who());
+  ctx.changed();
+  return { ok: true, detail: r.detail };
+}
+
+/** After a re-derive: with SYNC on and lines gone stale, re-draft just those
+ *  (the one call, scoped), kept PROPOSED. Returns what happened, or null. */
+export async function briefSyncTick(ctx: BriefCtx): Promise<string | null> {
+  const root = ctx.root(), model = ctx.model();
+  if (!root || !model || !ctx.claudeAvailable()) return null;
+  const rec = loadBrief(root);
+  if (!rec.sync?.on || !rec.ratified?.spec) return null;
+  const stale = staleBriefLineList(rec, briefInputs(root, model).facts);
+  if (!syncDue(rec, stale.length)) return null;
+  markSyncRun(root);
+  const r = await briefDraft(ctx, { stale: true });
+  return r.ok ? `Brief sync re-drafted ${stale.length} stale line${stale.length === 1 ? "" : "s"} — waiting for you to ratify` : `Brief sync could not re-draft: ${r.error}`;
 }

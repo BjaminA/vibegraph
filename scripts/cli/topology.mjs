@@ -13,6 +13,11 @@ import { loadEnvelope } from "../quality_check.mjs";
 import { topologyFor } from "../../src/server/topology_model.ts";
 import { pipelineHere } from "./pipeline.mjs";
 import { liveCount, liveLine, loadLive, parseLive, saveLive } from "../../src/server/topology_live.ts";
+import { declaredFeeds, feedFates } from "../../src/server/topology_feeds.ts";
+import { archModelForEnvelope } from "../../src/server/arch_envelope.ts";
+import { buildStackIndex } from "../../src/server/stack.ts";
+import { buildCrossingIndex } from "../../src/server/crossings.ts";
+import { loadPlan } from "../../src/server/plan_store.ts";
 
 export const TOPOLOGY_USAGE = `topology add <id> --generator "<cmd>" --inputs <globs> | remove <id> | list | run [<id>] | show | check
               | who-writes <zone> | can-write <principal> | touches <family> | explain <tree>:<node>
@@ -56,6 +61,16 @@ export function runTopology(args) {
     const targets = loadSources(root).filter((s) => !arg || s.id === arg);
     if (!targets.length) return done(arg ? `no topology source ${arg}` : "no topology sources — vibegraph-knowledge topology add <id> --generator \"<cmd>\" --inputs <globs>", 1);
     const lines = targets.map((s) => { const r = runSource(root, s); return `${s.id}: ${r.ok ? r.detail : `FAILED — ${r.detail}`}`; });
+    // 2026-10-12 — what became of each declared feed: drawn, already shown by
+    // the code, no box for its process, STALE — never dropped without a word
+    const feeds = (loadTopology(root).topology.feeds ?? []).length;
+    if (feeds) {
+      try {
+        const env = envOf();
+        const model = archModelForEnvelope(env, buildStackIndex(env, root), buildCrossingIndex(env), root);
+        lines.push(...feedFates(declaredFeeds(loadTopology(root).topology, model, loadPlan(root), env.files), model));
+      } catch (e) { lines.push(`feeds: ${feeds} declared; their fate could not be worked out (${e.message})`); }
+    }
     return done(lines.join("\n"), lines.some((l) => l.includes("FAILED")) ? 1 : 0);
   }
   if (sub === "list" || sub === "check") {

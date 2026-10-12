@@ -46,12 +46,32 @@ export function declaredFeeds(t: Topology | null | undefined, model: ArchModelRe
   });
 }
 
+const zonesOf = (f: DeclaredFeed, model: ArchModelRecord) =>
+  model.nodes.filter((n) => n.zoneOf && (n.id === f.family || n.label === f.family || n.id.endsWith(`/${f.family}`) || n.zoneOf.holds.includes(f.family))).map((n) => n.id);
+
+/** 2026-10-12 — what became of each declared feed (a field report: of five
+ *  feeds two showed and three vanished "without a word"), for `topology run`. */
+export function feedFates(feeds: DeclaredFeed[], model: ArchModelRecord): string[] {
+  return feeds.map((f) => {
+    const head = `feed ${f.index} (${f.process} ${f.op}s ${f.family})`;
+    if (f.stale) return `${head}: STALE — ${f.stale}`;
+    if (!f.boxes.length) return `${head}: no box on the map for ${f.process} — anchor it (the plan process's entryPoints), or name a box id`;
+    const zones = zonesOf(f, model);
+    if (!zones.length) return `${head}: no zone holds ${f.family}`;
+    const pairs = f.boxes.flatMap((b) => zones.map((z) => [b, z] as const));
+    const shown = pairs.filter(([b, z]) => model.edges.some((e) => e.from === b && e.to === z && e.protocol === f.op && !e.evidence)).length;
+    return shown === pairs.length
+      ? `${head}: already shown by the code (${shown} edge${shown === 1 ? "" : "s"}) — the declaration confirms it`
+      : `${head}: drawn — ${pairs.length - shown} edge${pairs.length - shown === 1 ? "" : "s"} the code does not show${shown ? `, ${shown} it does` : ""}`;
+  });
+}
+
 /** The map edges declared feeds add where the code shows no such edge. */
 export function feedEdges(feeds: DeclaredFeed[], model: ArchModelRecord): ArchModelRecord["edges"] {
   const out: ArchModelRecord["edges"] = [];
   for (const f of feeds) {
     if (f.stale) continue;
-    const zones = model.nodes.filter((n) => n.zoneOf && (n.id === f.family || n.label === f.family || n.id.endsWith(`/${f.family}`) || n.zoneOf.holds.includes(f.family))).map((n) => n.id);
+    const zones = zonesOf(f, model);
     for (const box of f.boxes) for (const z of zones) {
       if (model.edges.some((e) => e.from === box && e.to === z && e.protocol === f.op)) continue;
       out.push({

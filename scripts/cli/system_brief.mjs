@@ -26,6 +26,7 @@ import { BRIEF_SECTIONS } from "../../src/shared/brief_types.ts";
 import { reviewBrief, reviewText } from "../../src/server/brief_review.ts";
 import { personName } from "../../src/server/person.ts";
 import { groupsStep } from "../../src/server/brief_groups_first.ts";
+import { reaffirmBrief, setBriefSync, staleBriefLineList, staleFocus } from "../../src/server/brief_sync.ts";
 import { spawnClassifier } from "./classify.mjs";
 import { cliPath } from "./winpath.mjs";
 
@@ -37,7 +38,11 @@ export const SYSTEM_BRIEF_USAGE = `brief codebase [<root>] [--estimate] [--dry-r
                                   draft again and the brief reads the codebase through them (--skip-groups: one call, as before);
                                   --note: brief again, the model must answer each correction (cited as note:<n>)
       brief codebase show [<root>]                      the pending brief and the ratified one (STALE lines marked)
-      brief codebase ratify|reject [spec|groups|scopes|path] [<root>]   a person decides (all sections when none is named)`;
+      brief codebase ratify|reject [spec|groups|scopes|path] [<root>]   a person decides (all sections when none is named)
+      brief codebase reaffirm [--line "<text>"]… [<root>]  a person: these STALE lines still hold (all stale ones when none
+                                  is named) — their citations are stamped against the code as it is now; zero tokens
+      brief codebase sync on|off [<root>]   a person: when the code a ratified line cites changes, the running app re-drafts
+                                  the stale lines (one scoped call, at most one per 10 minutes) and keeps them PROPOSED`;
 
 const ONLY = ["spec", "groups", "scopes", "path"];
 
@@ -46,6 +51,11 @@ export function runSystemBrief({ root, sub, section, values, pipeline, env = pro
   const lines = [], messages = [];
   const done = (exitCode = 0) => ({ lines, messages, exitCode });
 
+  if (sub === "sync") {
+    if (section !== "on" && section !== "off") { messages.push("brief codebase sync on|off"); return done(2); }
+    lines.push(setBriefSync(absRoot, section === "on", personName(absRoot)).detail);
+    return done(0);
+  }
   if (sub === "ratify" || sub === "reject") {
     if (section && !BRIEF_SECTIONS.includes(section)) { messages.push(`no section ${section} — one of ${BRIEF_SECTIONS.join(", ")}`); return done(2); }
     const r = decideBrief(absRoot, section ?? "all", sub, personName(absRoot));
@@ -56,6 +66,11 @@ export function runSystemBrief({ root, sub, section, values, pipeline, env = pro
   const { envelope } = loadEnvelope(absRoot, values.envelope, pipeline ?? {}, { cache: true });
   const model = archModelForEnvelope(envelope, buildStackIndex(envelope, absRoot), buildCrossingIndex(envelope), absRoot);
 
+  if (sub === "reaffirm") {
+    const r = reaffirmBrief(absRoot, briefInputs(absRoot, model).facts, personName(absRoot), [].concat(values.line ?? []).filter(Boolean));
+    (r.ok ? lines : messages).push(r.detail);
+    return done(r.ok ? 0 : 1);
+  }
   if (sub === "show") {
     const rec = loadBrief(absRoot);
     const inpShow = briefInputs(absRoot, model, { notes: rec.proposed?.notes });
@@ -94,17 +109,19 @@ export function runSystemBrief({ root, sub, section, values, pipeline, env = pro
   const rec = loadBrief(absRoot);
   // B13 — brief again with notes: the person's corrections, stated input the model must answer
   const notes = [].concat(values.note ?? []).filter((n) => typeof n === "string" && n.trim());
-  const inp = briefInputs(absRoot, model, { only: values.stale ? "spec" : only, pending: rec.proposed, notes });
+  let inp = briefInputs(absRoot, model, { only: values.stale ? "spec" : only, pending: rec.proposed, notes });
   for (const e of inp.errors) messages.push(`vocabulary: ${e}`);
   if (only === "scopes" && !inp.facts.silent.length) { lines.push("every silent box is scoped already (pending or ratified)"); return done(0); }
   // --stale: re-brief only the ratified lines whose citations changed (a small call)
   let restate;
   if (values.stale) {
-    const r = briefWithStaleness(rec, inp.facts);
-    restate = r?.spec ? allLines(r.spec).filter((l) => l.stale?.length).map((l) => l.text) : [];
+    const staleLines = staleBriefLineList(rec, inp.facts);
+    restate = staleLines.map((l) => l.text);
     if (!restate.length) { lines.push("no ratified line of the Brief is stale"); return done(0); }
+    // 2026-10-12 — a SCOPED pack: only what those lines rest on, not the project
+    inp = briefInputs(absRoot, model, { only: "spec", pending: rec.proposed, notes, focus: staleFocus(model, staleLines) });
     if (values.estimate) {
-      lines.push(`re-briefing ${restate.length} stale line${restate.length === 1 ? "" : "s"}: 1 call, ~${Math.round(inp.facts.estimate / 1000)}k input tokens (the facts are sent whole); the reply is a few lines`);
+      lines.push(`re-briefing ${restate.length} stale line${restate.length === 1 ? "" : "s"}: 1 call, ~${Math.round(inp.facts.estimate / 1000)}k input tokens (a scoped pack: only what those lines rest on); the reply is a few lines`);
       return done(0);
     }
   }

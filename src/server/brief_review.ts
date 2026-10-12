@@ -23,7 +23,7 @@ export interface ReviewLine {
 
 export interface BriefReview {
   lines: ReviewLine[];
-  counts: { lines: number; withWarnings: number; inferred: number; testOnly: number; contradicted: number; unverifiable: number; absolutes: number };
+  counts: { lines: number; withWarnings: number; inferred: number; testOnly: number; contradicted: number; unverifiable: number; absolutes: number; proseOnly: number };
   uncovered: { rules: string[]; salient: string[]; primary: string[]; notes: string[] };
   gaps: string[];
   /** the first `explainable` gaps can be explained (`claim explain <n>`, the card's Explain) */
@@ -37,13 +37,17 @@ export interface BriefReview {
 export function reviewBrief(spec: BriefBody["spec"], facts: BriefFacts, opts: { omitted?: string[]; absolutes?: string[] } = {}): BriefReview {
   const coverage: Coverage = briefCoverage(spec, facts, opts.omitted ?? []);
   const lines: ReviewLine[] = [];
-  const counts = { lines: 0, withWarnings: 0, inferred: 0, testOnly: 0, contradicted: 0, unverifiable: 0, absolutes: 0 };
+  const counts = { lines: 0, withWarnings: 0, inferred: 0, testOnly: 0, contradicted: 0, unverifiable: 0, absolutes: 0, proseOnly: 0 };
   // written before data claims existed: one note, not a warning on every line
   const structured = [...spec.function, ...spec.method, ...spec.feature].some((l) => l.claims?.length);
   for (const part of ["function", "method", "feature"] as BriefPart[]) {
     spec[part].forEach((l, index) => {
       const r = checkLine(part, l, facts, { absolutes: opts.absolutes, coverage, structured });
-      const warnings = [...r.errors.map((e) => `would be refused now: ${e}`), ...r.warnings];
+      // 2026-10-12 — a true, cited line that says who reads or writes in prose
+      // only is counted once on the sheet, not a warning on every such line
+      const prose = r.warnings.some((w) => w.includes("no structured claim"));
+      if (prose) counts.proseOnly++;
+      const warnings = [...r.errors.map((e) => `would be refused now: ${e}`), ...r.warnings.filter((w) => !w.includes("no structured claim"))];
       const byRole: ReviewLine["byRole"] = {};
       for (const c of l.cites) (byRole[facts.roles.get(c) ?? "use"] ??= []).push(c);
       counts.lines++;
@@ -65,6 +69,7 @@ export function reviewBrief(spec: BriefBody["spec"], facts: BriefFacts, opts: { 
   const bits = [
     `${counts.lines} line${counts.lines === 1 ? "" : "s"}, ${counts.withWarnings} with warnings`,
     !structured && counts.lines ? "its data claims are prose only (written before claims were checked — Brief again to check them)" : "",
+    structured && counts.proseOnly ? `${counts.proseOnly} line${counts.proseOnly === 1 ? " says" : "s say"} who reads or writes in prose only — not checked against the map` : "",
     uncovered.rules.length ? `${uncovered.rules.length} stated rule${uncovered.rules.length === 1 ? "" : "s"} not covered` : "",
     uncovered.salient.length ? `${uncovered.salient.length} core mechanism${uncovered.salient.length === 1 ? "" : "s"} not covered` : "",
     uncovered.primary.length ? `${uncovered.primary.length} process${uncovered.primary.length === 1 ? " without its" : "es without their"} main job stated` : "",

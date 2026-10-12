@@ -46,7 +46,7 @@ export interface BriefInputs { facts: BriefFacts; vocab: BriefVocabulary; opVoca
 
 /** `only: "scopes"` — the next batch of silent boxes not yet scoped. `notes` —
  *  the person's corrections, for "brief again with notes". */
-export function briefInputs(root: string, model: ArchModelRecord, opts: { only?: string; pending?: BriefRecord["proposed"]; notes?: string[] } = {}): BriefInputs {
+export function briefInputs(root: string, model: ArchModelRecord, opts: { only?: string; pending?: BriefRecord["proposed"]; notes?: string[]; focus?: { boxes: Set<string>; cites: Set<string> } } = {}): BriefInputs {
   const { vocab, errors, absolutes, excludeDocs } = loadBriefVocabulary(root);
   const op = loadVocabulary(root);
   let specs: ReturnType<typeof listSpecs> = [];
@@ -65,7 +65,7 @@ export function briefInputs(root: string, model: ArchModelRecord, opts: { only?:
   const readLines = linesReader(root);
   const source = modelSource(model);
   const facts = buildBriefFacts(model, {
-    root, readLines, plan: loadPlan(root), topology, constraints, specs, vocab: op.vocab, silentOnly, staleLabels: stale,
+    root, readLines, plan: loadPlan(root), topology, constraints, specs, vocab: op.vocab, silentOnly, staleLabels: stale, focus: opts.focus,
     ruleCode: ruleCodeReader(source, readLines), source, grantCalls: grantCalls(source), docExclude: excludeDocs, notes: opts.notes,
     claims: (() => { try { return liveClaims(root, readLines); } catch { return []; } })(),
     feeds: (() => { try { return declaredFeeds(topology, model, loadPlan(root), source?.files ?? null); } catch { return []; } })(),

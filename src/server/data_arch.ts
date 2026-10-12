@@ -36,11 +36,27 @@ export function collectTables(files: IrFiles): TableDecl[] {
 
 /** A reference to a list table, resolved: the same file first, else a unique name. */
 export function listResolver(tables: TableDecl[]): (file: string, ref: string) => string[] | null {
-  return (file, ref) => {
+  // 2026-10-12 — a list built from other lists (`[...ALL, ...BOARDS, "x"]`) is
+  // expanded; one part that cannot be resolved makes the whole list unknown
+  // (null), never a partial list read as complete
+  const resolve = (file: string, ref: string, seen: Set<string>): string[] | null => {
+    if (seen.has(ref)) return null;
+    seen.add(ref);
     const lists = tables.filter((t) => t.name === ref && t.table.shape === "list");
     const hit = lists.find((t) => t.file === file) ?? (lists.length === 1 ? lists[0] : undefined);
-    return hit ? (hit.table.values ?? []).filter((v): v is string => typeof v === "string") : null;
+    if (!hit) return null;
+    const out: string[] = [];
+    for (const v of hit.table.values ?? []) {
+      if (typeof v === "string") out.push(v);
+      else if (v && typeof v === "object" && "spread" in v && typeof v.spread === "string") {
+        const sub = resolve(hit.file, v.spread, seen);
+        if (!sub) return null;
+        out.push(...sub);
+      } else if (v && typeof v === "object") return null;
+    }
+    return [...new Set(out)];
   };
+  return (file, ref) => resolve(file, ref, new Set());
 }
 
 /** Functions that read a catalogue (its name appears in a node inside them). */

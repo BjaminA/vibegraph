@@ -46,6 +46,7 @@ import { scopeDossier } from "./node_scope.ts";
 import { planCitations } from "./arch_propose.ts";
 import { briefData, zoneLine, isVerifyFile, verifyEdge, type BriefData, type FeedDecl } from "./brief_data.ts";
 import { toolNote } from "../shared/stack_taxonomy.ts";
+import { anchorOf, anchorChange, type BriefAnchor } from "./brief_anchor.ts";
 import { briefDocs, humanRules, salientFiles, type RuleSite, type SalientFile } from "./brief_salience.ts";
 
 export const BRIEF_FACT_LIMITS = { boxes: 80, edges: 160, docs: 40, silentPerCall: 6, specOps: 12, rules: 30, enforce: 24, salient: 5 };
@@ -80,6 +81,12 @@ export interface BriefFacts {
   /** a rough token count of `text` (chars / 4) */
   estimate: number;
   leftOut: string[];
+  /** 2026-10-12 — the anchor a `file:line` points at now, what became of a
+   *  saved one, and a `file:line`'s content read from the file (for one that
+   *  is not in this pack) — src/server/brief_anchor.ts */
+  anchorAt?: (cite: string) => BriefAnchor | null;
+  anchorNow?: (a: BriefAnchor) => string | null;
+  reread?: (cite: string) => string | null;
 }
 
 export const hash16 = (s: string) => createHash("sha256").update(s).digest("hex").slice(0, 16);
@@ -127,6 +134,9 @@ export function buildBriefFacts(model: ArchModelRecord, opts: {
   claims?: Array<{ id: string; subject: string; verb: string; object: string }>;
   /** what the project's topology declares a process reaches at run time (topology_feeds.ts) */
   feeds?: FeedDecl[];
+  /** 2026-10-12 — a SCOPED pack (re-briefing stale lines): only these boxes,
+   *  their neighbours and the citations named; rules, plan and topology stay */
+  focus?: { boxes: Set<string>; cites: Set<string> };
 }): BriefFacts {
   const vocab = opts.vocab ?? CORE_VOCABULARY;
   const cites = new Map<string, string>();
@@ -154,8 +164,11 @@ export function buildBriefFacts(model: ArchModelRecord, opts: {
   L.push(`PROJECT ${path.basename(opts.root)}`);
   if (opts.plan?.objective) L.push(`- ${cite("plan:objective", opts.plan.objective, "declare")}: ${opts.plan.objective}`);
 
-  const boxes = model.nodes.slice(0, BRIEF_FACT_LIMITS.boxes);
-  if (model.nodes.length > boxes.length) leftOut.push(`${model.nodes.length - boxes.length} boxes past the first ${boxes.length}`);
+  const focus = opts.focus;
+  const near = new Set(focus?.boxes ?? []);
+  if (focus) for (const e of model.edges) if (focus.boxes.has(e.from) || focus.boxes.has(e.to)) { near.add(e.from); near.add(e.to); }
+  const boxes = model.nodes.filter((n) => !focus || near.has(n.id)).slice(0, BRIEF_FACT_LIMITS.boxes);
+  if (!focus && model.nodes.length > boxes.length) leftOut.push(`${model.nodes.length - boxes.length} boxes past the first ${boxes.length}`);
   L.push("", "BOXES (cite by id; what each does is the code's own reading, In → Process → Out; [verify] = it only tests or demonstrates):");
   for (const n of boxes) {
     const io = ioLines(nodeIO(model, n.id, vocab));
@@ -165,8 +178,8 @@ export function buildBriefFacts(model: ArchModelRecord, opts: {
     cite(n.id, basis, role, [basis]);
     L.push(`- ${n.id}${tag(role)}: "${n.label}" (${n.kind}${n.category ? `, ${n.category}` : ""}): ${n.sublabel} | in: ${io.in} | process: ${io.process} | out: ${io.out}`);
   }
-  const edges = model.edges.slice(0, BRIEF_FACT_LIMITS.edges);
-  if (model.edges.length > edges.length) leftOut.push(`${model.edges.length - edges.length} edges past the first ${edges.length}`);
+  const edges = model.edges.filter((e) => !focus || focus.boxes.has(e.from) || focus.boxes.has(e.to)).slice(0, BRIEF_FACT_LIMITS.edges);
+  if (!focus && model.edges.length > edges.length) leftOut.push(`${model.edges.length - edges.length} edges past the first ${edges.length}`);
   L.push("", "EDGES (cite by id; [verify] = a refused attempt or a test's call):");
   for (const e of edges) {
     const text = `${e.from} → ${e.to} · ${e.kind} ${e.protocol ?? ""}${e.details?.length ? ` (${e.details.slice(0, 6).join(", ")})` : ""} — ${e.protocolBasis ?? ""}`.slice(0, 260);
@@ -177,12 +190,12 @@ export function buildBriefFacts(model: ArchModelRecord, opts: {
 
   if (data.zones.size) {
     L.push("", "DATA — each zone, who the code shows writing / watching / reading it, and how it is PARTITIONED (a claim about a zone is checked against this):");
-    for (const z of data.zones.values()) L.push(`- ${z.id}: ${zoneLine(z, data, labels)}`);
+    for (const z of data.zones.values()) if (!focus || near.has(z.id)) L.push(`- ${z.id}: ${zoneLine(z, data, labels)}`);
   }
   if (data.processes.length) {
     L.push("", "PROCESSES — each one's PRIMARY operation (its main job) and its secondary ones; a line about a process states the primary, never a secondary one as its main job:");
     const op = (o: { op: string; zone: string; source: string }) => `${o.op} ${o.zone.slice("zone:".length)}${o.source === "declared" ? " (declared)" : ""}`;
-    for (const p of data.processes) L.push(`- ${p.box} "${p.label}": primary ${p.primary.map(op).join(", ")} (from ${p.why})${p.secondary.length ? `; secondary ${p.secondary.map(op).join(", ")}` : ""}`);
+    for (const p of data.processes) if (!focus || focus.boxes.has(p.box)) L.push(`- ${p.box} "${p.label}": primary ${p.primary.map(op).join(", ")} (from ${p.why})${p.secondary.length ? `; secondary ${p.secondary.map(op).join(", ")}` : ""}`);
   }
 
   // What each tool box IS, from the vendor's docs (the stack taxonomy's
@@ -237,9 +250,25 @@ export function buildBriefFacts(model: ArchModelRecord, opts: {
     if (isVerifyFile(s.file) || applied.length >= BRIEF_FACT_LIMITS.enforce) continue;
     applied.push(`- ${cite(`${s.file}:${s.line}`, window(s.file, s.line, s.callee), "enforce")} [enforce]: ${s.callee} (${s.effect}) — the code applying access`);
   }
+  // 2026-10-12 — where a DECLARED decision is applied: the functions the
+  // topology names as evaluating a gate or a state machine, at their definition
+  const defAt = new Map<string, string>();
+  for (const [file, ir] of Object.entries((opts.source?.files ?? {}) as Record<string, { nodes?: Array<{ type?: string; name?: string; line?: number }> }>)) {
+    for (const n of ir.nodes ?? []) if (n.type === "function_def" && n.name && n.line && !defAt.has(n.name) && !isVerifyFile(file)) defAt.set(n.name, `${file}:${n.line}`);
+  }
+  const applies: Array<[string, string]> = [
+    ...(opts.topology?.stateMachines ?? []).filter((s) => s.evaluatedBy).map((s) => [s.evaluatedBy!, `applies state machine ${s.id}`] as [string, string]),
+    ...(opts.topology?.decisionTrees ?? []).flatMap((d) => d.nodes.filter((n) => n.evaluatedBy && !n.outcome).map((n) => [n.evaluatedBy!, `evaluates gate ${n.id} of ${d.id}`] as [string, string])),
+  ];
+  for (const [fn, what] of applies) {
+    const at = defAt.get(fn.split(".").pop() ?? fn);
+    if (!at || applied.length >= BRIEF_FACT_LIMITS.enforce) continue;
+    const m = /^(.+):(\d+)$/.exec(at)!;
+    applied.push(`- ${cite(at, window(m[1], Number(m[2]), fn), "enforce")} [enforce]: function ${fn} — ${what}`);
+  }
   if (applied.length) L.push("", "WHERE RULES ARE APPLIED (enforce evidence — what a mechanism line cites; a test that a rule holds is [verify], never the mechanism):", ...[...new Set(applied)].slice(0, BRIEF_FACT_LIMITS.enforce));
 
-  const salient = salientFiles(opts.source ?? null, rules, sites, BRIEF_FACT_LIMITS.salient);
+  const salient = focus ? [] : salientFiles(opts.source ?? null, rules, sites, BRIEF_FACT_LIMITS.salient);
   if (salient.length) {
     L.push("", "SALIENT MECHANISMS (ranked from the facts — the brief must cover each: cite one of its lines, or a rule that names it):");
     for (const s of salient) {
@@ -264,6 +293,21 @@ export function buildBriefFacts(model: ArchModelRecord, opts: {
       const text = `decision tree ${d.id}: ${d.nodes.filter((x) => x.question).slice(0, 6).map((x) => x.question).join(" / ")}`;
       L.push(`- ${cite(`topology:dt:${d.id}`, text, "declare", [text])}: ${text}`);
     }
+    // 2026-10-12 — WHAT IS DECIDED, counted (a field brief never said "11
+    // phases, two routes, 20 gates" though the structures were in the facts)
+    for (const sm of t.stateMachines ?? []) {
+      const phases = [...new Set([...(sm.states ?? []), ...sm.transitions.flatMap((x) => [x.from, x.to])])];
+      const text = `state machine ${sm.id} decides ${sm.transitions.length} transitions over ${phases.length} phases (${phases.slice(0, 12).join(", ")}${phases.length > 12 ? ", …" : ""})${sm.evaluatedBy ? `; applied by ${sm.evaluatedBy}` : ""}`;
+      L.push(`- ${cite(`topology:sm:${sm.id}:shape`, text, "declare", [text])}: ${text}`);
+    }
+    for (const d of t.decisionTrees ?? []) {
+      const gates = d.nodes.filter((x) => !x.outcome);
+      const judge = gates.filter((x) => x.kind === "judgement").length, checks = gates.filter((x) => x.kind === "check").length;
+      const outcomes = [...new Set(d.nodes.filter((x) => x.outcome).map((x) => x.outcome!))];
+      const who = [...new Set(gates.map((x) => x.answeredBy).filter(Boolean))];
+      const text = `decision tree ${d.id}: ${gates.length} gates${judge || checks ? ` (${judge} a person's judgement, ${checks} checks on recorded evidence)` : ""}${outcomes.length ? `; outcomes ${outcomes.join(", ")}` : ""}${who.length ? `; answered by ${who.slice(0, 6).join(", ")}` : ""}`;
+      L.push(`- ${cite(`topology:dt:${d.id}:shape`, text, "declare", [text])}: ${text}`);
+    }
   }
 
   const planItems = planCitations(opts.plan);
@@ -272,6 +316,22 @@ export function buildBriefFacts(model: ArchModelRecord, opts: {
     L.push("", "THE PLAN (cite as plan:<section>:<id>):");
     for (const [id, text] of planItems) L.push(`- ${cite(id, text, "declare", [text])}: ${text}`);
   }
+  // 2026-10-12 — what a planned MODULE does in the code: the tools its files
+  // import and the boxes whose threads reach it (a field brief credited
+  // translation to the gateway that calls the codec, not to the codec)
+  const modLines: string[] = [];
+  for (const md of (opts.plan?.modules ?? []).filter((x) => x.status !== "dropped" && x.at)) {
+    const at = md.at!.replace(/^\.\//, "").replace(/\/$/, "");
+    const under = (f: string) => f === at || f.startsWith(`${at}/`);
+    const tools = ((opts.source?.stack as { tools?: Array<{ tool: string; role: string; origin: string; files?: string[] }> } | undefined)?.tools ?? [])
+      .filter((x) => x.origin === "third-party" && (x.files ?? []).some(under)).map((x) => `${x.tool} (${x.role})`);
+    const eps = new Set(((opts.source?.threads ?? []) as Array<{ entryPointId?: string | null; filesReached?: string[] }>).filter((th) => (th.filesReached ?? []).some(under)).map((th) => th.entryPointId));
+    const boxesHere = model.nodes.filter((n) => (n.entryPoints ?? []).some((e) => eps.has(e))).map((n) => n.id);
+    if (!tools.length && !boxesHere.length) continue;
+    const text = `module ${md.id} (code at ${at}): ${tools.length ? `uses ${tools.slice(0, 8).join(", ")}` : "uses no third-party tool"}${boxesHere.length ? `; reached by ${boxesHere.slice(0, 6).join(", ")}` : ""}`;
+    modLines.push(`- ${cite(`module:${md.id}`, text, "use", [text])}: ${text}`);
+  }
+  if (modLines.length) L.push("", "PLANNED MODULES IN THE CODE (cite as module:<id> — what the module's files use, and who reaches it):", ...modLines);
 
   for (const s of (opts.specs ?? []).filter((x) => x.status === "ratified")) {
     L.push("", `SOFTWARE SPEC ${s.tool} (ratified):`);
@@ -283,15 +343,15 @@ export function buildBriefFacts(model: ArchModelRecord, opts: {
     for (const r of (s.rules ?? []).filter((x) => x.core).slice(0, 6)) L.push(`- ${cite(`spec:${s.tool}:rule:${r.id}`, r.text, "declare", [r.text])}: ${r.text}`);
   }
 
-  const docs = briefDocs(opts.root, model, rules, opts.plan, { exclude: opts.docExclude, max: BRIEF_FACT_LIMITS.docs });
+  const docs = briefDocs(opts.root, model, rules, opts.plan, { exclude: opts.docExclude, max: BRIEF_FACT_LIMITS.docs }).filter((d) => !focus || focus.cites.has(`${d.file}:${d.line}`));
   if (docs.length) {
     L.push("", "THE PROJECT'S DOCS (ranked by how much they talk about this code; cite as file:line):");
     for (const d of docs) L.push(`- ${cite(`${d.file}:${d.line}`, window(d.file, d.line, d.text), "doc", [d.text])}: ${d.text}`);
   }
 
   const allSilent = silentBoxes(model, vocab);
-  const silent = opts.silentOnly ? allSilent.filter((id) => opts.silentOnly!.includes(id)) : allSilent.slice(0, BRIEF_FACT_LIMITS.silentPerCall);
-  const silentRest = allSilent.filter((id) => !silent.includes(id));
+  const silent = focus ? [] : opts.silentOnly ? allSilent.filter((id) => opts.silentOnly!.includes(id)) : allSilent.slice(0, BRIEF_FACT_LIMITS.silentPerCall);
+  const silentRest = focus ? [] : allSilent.filter((id) => !silent.includes(id));
   if (silent.length) {
     L.push("", "SILENT BOXES — the code says little about what these do; scope them (cite the code lines):");
     for (const id of silent) {
@@ -331,5 +391,8 @@ export function buildBriefFacts(model: ArchModelRecord, opts: {
     boxes: new Set(model.nodes.map((n) => n.id)), entries: new Set(model.nodes.flatMap((n) => n.entryPoints ?? [])),
     boxEntries: new Map(model.nodes.filter((n) => n.entryPoints?.length).map((n) => [n.id, n.entryPoints!])),
     groups, silent, silentRest, estimate: Math.ceil(text.length / 4), leftOut,
+    anchorAt: (c) => anchorOf(c, opts.source?.files as never, opts.readLines),
+    anchorNow: (a) => anchorChange(a, opts.source?.files as never, opts.readLines),
+    reread: (c) => { const m = /^(.+):(\d+)$/.exec(c); return m && opts.readLines(m[1]) ? window(m[1], Number(m[2]), "") || null : null; },
   };
 }

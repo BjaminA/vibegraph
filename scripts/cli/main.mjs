@@ -590,21 +590,22 @@ function cmdDoctor(args) {
 }
 
 function cmdSystemBrief(args) {
-  const sub = ["show", "ratify", "reject"].includes(args[0]) ? args[0] : null;
+  const sub = ["show", "ratify", "reject", "reaffirm", "sync"].includes(args[0]) ? args[0] : null;
   let parsed;
   try {
     parsed = parseArgs({ args: sub ? args.slice(1) : args, allowPositionals: true, options: {
       estimate: { type: "boolean" }, "dry-run": { type: "boolean" }, only: { type: "string" }, reply: { type: "string" },
       model: { type: "string" }, guidance: { type: "string" }, envelope: { type: "string" }, stale: { type: "boolean" }, "skip-groups": { type: "boolean" },
-      note: { type: "string", multiple: true },
+      note: { type: "string", multiple: true }, line: { type: "string", multiple: true },
     } });
   } catch (e) { return fail(`${e.message}\n\n${USAGE}`); }
   const pos = [...parsed.positionals];
-  const section = (sub === "ratify" || sub === "reject") && ["spec", "groups", "scopes", "path"].includes(pos[0]) ? pos.shift() : undefined;
+  const section = (sub === "ratify" || sub === "reject") && ["spec", "groups", "scopes", "path"].includes(pos[0]) ? pos.shift()
+    : sub === "sync" && ["on", "off"].includes(pos[0]) ? pos.shift() : undefined;
   let absRoot;
   try { absRoot = projectRoot(pos[0]); } catch (e) { return fail(e.message); }
   let pipeline;
-  if (!sub || sub === "show") { try { pipeline = pipelineFor(locate(), absRoot); } catch (e) { return fail(e.message, 3); } }
+  if (!sub || sub === "show" || sub === "reaffirm") { try { pipeline = pipelineFor(locate(), absRoot); } catch (e) { return fail(e.message, 3); } }
   return report(runSystemBrief({ root: absRoot, sub, section, values: parsed.values, pipeline }));
 }
 

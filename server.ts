@@ -31,7 +31,7 @@ import { planWork } from "./src/server/plan_work";
 // spec that renders them WITH the stated policies bound to each tool.
 import { buildStackIndex, contractStackForFile, stackForThread, stackCalledOnThread, toolsAddedByDelta, type StackIndex } from "./src/server/stack";
 import { floorPureLibraries } from "./src/server/floor_libraries";
-import { REASONING_DENIED_TOOLS } from "./src/server/reasoning_tools";
+import { REASONING_DENIED_TOOLS, promptArgs, promptStdin } from "./src/server/reasoning_tools";
 import { classifyEstimate, classifyRun, type ClassifyCtx } from "./src/server/classify_server";
 import { buildCrossingIndex, type CrossingIndex } from "./src/server/crossings";
 import { handleInvestigation, listInvestigations, readInvestigation, renderHandoff, readRel } from "./src/server/investigations";
@@ -45,7 +45,7 @@ import { withProjectWords, loadVocabulary } from "./src/server/operation_vocab";
 import { nodeIO, ioLines } from "./src/shared/node_io";
 import { enrichReal } from "./src/webview/system/arch_real";
 import { scopeNode, decideNodeScope, type ScopeCtx } from "./src/server/node_scope_server";
-import { briefState, briefEstimateFor, briefDraft, briefDecide, briefExplainGap, type BriefCtx } from "./src/server/brief_server";
+import { briefState, briefEstimateFor, briefDraft, briefDecide, briefExplainGap, briefReaffirm, briefSync, briefSyncTick, type BriefCtx } from "./src/server/brief_server";
 import { buildInbox, decideInbox } from "./src/server/inbox";
 import { applyArchStore, loadArchStore, saveArchStore, ratifyProposal, rejectProposal, proposalGate } from "./src/server/arch_store";
 import { carryModelSource } from "./src/server/model_source";
@@ -1168,6 +1168,7 @@ async function refreshDerived(): Promise<void> {
     latestMissingDeps = await runCheckProjectDeps(relFiles);
     broadcastProjectUpdate();
     broadcastProjectWarnings();
+    scheduleBriefSync();
   } finally {
     broadcastGraphRefresh("done");
     traceMap("refresh end");
@@ -1177,6 +1178,18 @@ async function refreshDerived(): Promise<void> {
       scheduleDerivedRefresh();
     }
   }
+}
+
+// 2026-10-12 — Brief SYNC (src/server/brief_sync.ts): once the code has been
+// quiet for a minute after a re-derive, re-draft the ratified lines that went
+// stale — only when a person switched sync on; one scoped call, kept PROPOSED
+let briefSyncTimer: NodeJS.Timeout | undefined;
+function scheduleBriefSync(): void {
+  if (!isDirectory) return;
+  clearTimeout(briefSyncTimer);
+  briefSyncTimer = setTimeout(() => {
+    void briefSyncTick(briefCtx).then((m) => { if (m) console.log(`  [Brief] ${m}`); }, (e) => console.warn(`  [Brief] sync failed: ${e?.message ?? e}`));
+  }, Number(process.env.VG_BRIEF_SYNC_QUIET_MS ?? 60_000));
 }
 
 function scheduleDerivedRefresh(): void {
@@ -4356,10 +4369,10 @@ function _runIntentLlm(intent: string, node: any, fileNodes: any[], fnSource: st
         "--dangerously-skip-permissions",
         // a draft is text the CST chokepoint lands; the model runs nothing
         "--disallowedTools", REASONING_DENIED_TOOLS.join(","),
-        "--", prompt],
+        ...promptArgs(prompt)],
       opts,
     );
-    child.stdin?.end(); // 6d pre-flight: no open pipe — claude -p otherwise waits 3s for stdin per draft
+    child.stdin?.end(promptStdin(prompt)); // 6d pre-flight: no open pipe — claude -p otherwise waits 3s for stdin per draft
     let out = "";
     let err = "";
     child.stdout.on("data", (b: Buffer) => { out += b.toString(); });
@@ -5080,11 +5093,11 @@ async function handleAnalyzeFile(filePath: string | undefined, ws: WebSocket): P
       "--dangerously-skip-permissions",
       // a summary reads; it never runs or writes anything
       "--disallowedTools", REASONING_DENIED_TOOLS.join(","),
-      "--",
-      prompt,
+      ...promptArgs(prompt),
     ],
     opts,
   );
+  child.stdin?.end(promptStdin(prompt));
 
   let stdoutBuf = "";
   let stderrBuf = "";
@@ -6759,9 +6772,10 @@ function _runReadmeLlm(prompt: string, tier: ModelTier = "thinking", kind: Spend
         // packet's predicate, inside a work run a person started); every other
         // caller reasons and may not run anything (REASONING_DENIED_TOOLS)
         "--disallowedTools", (kind === "review" ? CHAT_DENIED_TOOLS : REASONING_DENIED_TOOLS).join(","),
-        "--", prompt],
+        ...promptArgs(prompt)],
       opts,
     );
+    child.stdin?.end(promptStdin(prompt));
     let out = "";
     let errOut = "";
     child.stdout.on("data", (b: Buffer) => { out += b.toString(); });
@@ -8418,12 +8432,15 @@ function setupWebSocket() {
           const reply = (payload: unknown) => ws.send(JSON.stringify({ type: "brief-result", payload: { action: msg.payload?.estimate ? "gap-estimate" : "gap-explain", n, ...(payload as object) } }));
           if (!(n >= 1)) reply({ ok: false, error: "a gap number" });
           else briefExplainGap(briefCtx, n, msg.payload?.estimate === true).then(reply, (e) => reply({ ok: false, error: String(e?.message ?? e) }));
-        } else if (msg.type === "brief-get" || msg.type === "brief-estimate" || msg.type === "brief-run" || msg.type === "brief-decide") {
+        } else if (msg.type === "brief-get" || msg.type === "brief-estimate" || msg.type === "brief-run" || msg.type === "brief-decide" || msg.type === "brief-reaffirm" || msg.type === "brief-sync") {
           // 2026-10-08 — the Brief card: state, estimate, the one token-spending
-          // draft, and a person's decision (src/server/brief_server.ts)
+          // draft, and a person's decision (src/server/brief_server.ts);
+          // 2026-10-12 — "still true" (re-affirm) and the SYNC switch
           const t = msg.type as string;
           const result = (payload: unknown) => ws.send(JSON.stringify({ type: "brief-result", payload: { action: t.slice(6), ...(payload as object) } }));
           if (t === "brief-get") ws.send(JSON.stringify({ type: "brief-state", payload: briefState(briefCtx) }));
+          else if (t === "brief-reaffirm") result(briefReaffirm(briefCtx, Array.isArray(msg.payload?.texts) ? msg.payload.texts.filter((x: unknown): x is string => typeof x === "string").slice(0, 20) : undefined));
+          else if (t === "brief-sync") result(briefSync(briefCtx, msg.payload?.on === true));
           else if (t === "brief-estimate") result(briefEstimateFor(briefCtx));
           else if (t === "brief-run") {
             const only = ["spec", "groups", "scopes", "path"].includes(msg.payload?.only) ? msg.payload.only : undefined;
