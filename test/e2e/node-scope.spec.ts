@@ -51,6 +51,9 @@ test.describe("scope this node", () => {
     await block.locator("[data-scope-ratify]").click();
     await expect(block).toHaveAttribute("data-scope-state", "ratified", { timeout: 15_000 });
     await expect(page.locator('[data-io-band="process"] [data-io-word="store"]')).toHaveAttribute("data-scoped", "true");
+    // 2026-10-12 — the ratified description sits in Process, once
+    await expect(page.locator('[data-io-band="process"] [data-io-scope-summary]')).toContainText("HTTP client");
+    await expect(block.locator("[data-scope-ratified]")).not.toContainText("HTTP client");
     await expect(page.locator('[data-io-row="out"]', { hasText: "order decider" })).toContainText("the ledger's answer");
   });
 

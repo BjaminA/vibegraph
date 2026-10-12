@@ -3,6 +3,14 @@
 `vibegraph-knowledge` and the VibeGraph app. Newest first. Each entry says what
 changed and, where an existing user would notice, how behaviour differs.
 
+## 0.33.2 — 2026-10-12 — a ratified scope's description sits in Process
+
+- A ratified scope's description now sits in the box inspector's **Process**
+  section, under the process words — it says what the box does — instead of at
+  the foot of the card below the payload notes. Marked "scoped" (and STALE
+  when the code it was drawn from changed); the note at the foot keeps who
+  scoped it and when. Tests: test:e2e-node-scope.
+
 ## 0.33.1 — 2026-10-12 — model calls that only reason can no longer run anything
 
 **Safety fix.** The Brief card, Scope this node, the Classify button, Explain

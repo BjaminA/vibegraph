@@ -104,7 +104,15 @@ export function NodeIOCard({ model, nodeId, vocab, onLight, scopeable = true }: 
             </div>
           );
         })()}
-        {!io.process.length && <div style={quiet}>{io.silent.find((s) => /operation word/.test(s))}</div>}
+        {!io.process.length && !io.scope?.ratified?.summary && <div style={quiet}>{io.silent.find((s) => /operation word/.test(s))}</div>}
+        {/* 2026-10-12 — a ratified scope's description says what the box DOES:
+            it belongs with the process words, not under the payload notes */}
+        {io.scope?.ratified?.summary && (
+          <div data-io-scope-summary data-scope-stale={io.scope.ratified.stale ? "true" : undefined} style={{ marginTop: 8, color: "var(--text-secondary)", fontSize: "var(--fs-12)", lineHeight: 1.45 }}>
+            {io.scope.ratified.summary}
+            <span style={{ ...quiet, marginLeft: 4, ...(io.scope.ratified.stale ? { color: "var(--accent-warning)" } : {}) }}>{io.scope.ratified.stale ? "· scoped · STALE" : "· scoped"}</span>
+          </div>
+        )}
       </div>
       <div data-io-band="out" style={band}>
         <div style={head("var(--accent-io-write)")}>{`Out · ${io.out.length}`}</div>

@@ -94,8 +94,7 @@ export function NodeScopeBlock({ nodeId, scope, byId, vocab = CORE_VOCABULARY, e
       )}
       {r && !p && (
         <div data-scope-ratified style={{ ...quiet, marginBottom: 4 }}>
-          {`scoped by ${r.model}, ratified ${String(r.ratifiedAt ?? r.at).slice(0, 10)} — its words and rows are in the bands above, marked scoped`}
-          {r.summary && <div style={{ color: "var(--text-secondary)", marginTop: 2 }}>{r.summary}</div>}
+          {`scoped by ${r.model}, ratified ${String(r.ratifiedAt ?? r.at).slice(0, 10)} — its description, words and rows are in the bands above, marked scoped`}
         </div>
       )}
       {p && (
