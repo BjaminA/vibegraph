@@ -3,6 +3,59 @@
 `vibegraph-knowledge` and the VibeGraph app. Newest first. Each entry says what
 changed and, where an existing user would notice, how behaviour differs.
 
+## 0.33.0 — 2026-10-12 — the run floor no longer assumes an unknown library is harmless; hardware is a role
+
+**Safety fix.** Before run-to-here executes anything, the floor scans every call
+on the path and refuses (or asks consent for) whatever reaches outside the
+program. Its last rule treated a dotted call on ANY imported module as a
+harmless builtin, so `serial.Serial("/dev/ttyUSB0").write(b"go")`,
+`paho.mqtt.publish.single("plant/valve", "open")` and
+`socket.create_connection(...)` scanned pure and would have run without asking
+— the run's sandbox copies files, not a serial port, a broker or a network.
+
+- A dotted call on an imported module is now decided by that module: the
+  project's own as before; the standard library allowed except modules that
+  reach outside the process (socket, ssl, http, urllib, smtplib, ctypes,
+  subprocess, multiprocessing, sqlite3, …); a third-party library allowed only
+  when its role is known to stay in-process (tensor, data, utility — from the
+  stack tables or a person's statement; a model's `classify` proposal never
+  loosens the floor). Anything else is refused and named for consent, at
+  import time as well as in the function. An unclassified library fails safe.
+- `from m import f as g` keeps its alias in the Python IR (the linker already
+  expected it): `g()` links, and the floor knows what `g.write()` reaches.
+
+Tests: test:scan-effects (19, four new — red on the previous commit); the
+run-to-here suites, both pump examples and the run e2e specs unchanged.
+
+**What the unclassified boxes are.** A field map of a RevPi / EtherCAT project
+read "unclassified" for every hardware library — no role existed for hardware.
+
+- Role `device` (hardware I/O): pyserial, pysoem, pyvisa, revpimodio2, RPi.GPIO,
+  gpiozero, smbus, spidev, pymodbus, python-can, pyusb, nidaqmx; serialport,
+  onoff, johnny-five in JS; `piTest`, `i2cget|set` in bash. A device box on the
+  map says its wire (serial, EtherCAT, VISA, Modbus, I2C, GPIO, …) in a category
+  of its own; a module wrapping one is a funnel. Also: paho / mqtt / mosquitto
+  are queues, yaml a utility, sudo a process; definitions for the common ones.
+- A standard-library box says "standard library", never "unclassified".
+- **Found on the way:** a box named "node" was the standard library's
+  `fileURLToPath`. A call's file was looked up by its node id, and the FIRST
+  file holding that id won — two files with a module-level `EXAMPLES` swapped
+  imports, and `node:url` was read as an unknown tool. A call's file is now the
+  step it hangs off.
+- **Classify on the map**: the Tools lens offers "Classify N unclassified tools"
+  — the estimate first, then one model call through the same functions as
+  `vibegraph-knowledge classify --apply`. Answers are stored agent-stated: they
+  show as a model's, wait in the inbox for a person, and never loosen the run
+  floor.
+
+- **And a flake that was a bug:** the map cleared an open trace (a story, a
+  route, a reach) whenever the same layout arrived again — a background
+  re-derive after a ratify was enough, and e2e-arch-map failed 1 run in 2 for
+  it (3 of 6 before, 6 of 6 pass after). A trace now ends only when what is
+  drawn changes.
+
+Tests: test:device-role (5); e2e-arch-map 6/6 on repeat.
+
 ## 0.32.0 — 2026-10-09 — the Brief reads the system through its groups, and names what it runs on
 
 A field brief got the shape of a system right (dispatcher → script → cached

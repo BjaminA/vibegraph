@@ -90,6 +90,74 @@ KNOWN_BUILTINS = frozenset({
     "ZeroDivisionError", "OSError", "IOError",
 })
 DYNAMIC_BUILTINS = frozenset({"getattr", "setattr", "hasattr", "delattr"})
+
+# 2026-10-12 — A DOTTED CALL ON AN IMPORTED MODULE is decided by that module.
+# It used to be "external pure builtin" whatever the module was, so
+# `serial.Serial(port).write(b"go")`, `paho.mqtt.publish.single(...)` and
+# `socket.create_connection(...)` scanned PURE: run-to-here would have driven
+# a serial port, a broker, a socket. The sandbox copies files; it cannot copy
+# hardware or a network. Now:
+#   - this project's own module        → as before (its calls are linked)
+#   - the standard library             → allowed, EXCEPT the modules below,
+#                                         which reach outside the process
+#   - a third-party library            → allowed only when the server says its
+#                                         role is known to stay in-process
+#                                         (tensor / data / utility, from the
+#                                         stack tables or a person; payload
+#                                         `pureLibraries`) — otherwise refused,
+#                                         named for consent. No list = refuse.
+STDLIB_OUTSIDE = frozenset({
+    "socket", "ssl", "socketserver", "select", "selectors", "asyncio",
+    "http", "urllib", "ftplib", "smtplib", "poplib", "imaplib", "nntplib",
+    "telnetlib", "xmlrpc", "webbrowser", "ctypes", "mmap", "fcntl", "termios",
+    "tty", "pty", "signal", "multiprocessing", "subprocess", "sqlite3", "dbm",
+    "shelve", "winreg", "msvcrt", "syslog", "wsgiref",
+})
+STDLIB = frozenset(getattr(sys, "stdlib_module_names", ()))
+
+
+def import_bindings(ir: dict) -> Dict[str, str]:
+    """Local name → the dotted module (or module.member) it is bound to by an
+    import in this file. `import a.b` binds `a`; `import a.b as c` binds `c`
+    to `a.b`; `from a import b as c` binds `c` to `a.b`. A relative import
+    (`from . import x`) is this project's, marked with a leading dot."""
+    out: Dict[str, str] = {}
+    for n in ir.get("nodes", []):
+        t = n.get("type")
+        if t == "import":
+            for entry in n.get("names") or []:
+                target, _, alias = (s.strip() for s in entry.partition(" as "))
+                if alias:
+                    out[alias] = target
+                elif target:
+                    out[target.split(".")[0]] = target.split(".")[0]
+        elif t == "import_from":
+            mod = n.get("module") or ""
+            for entry in n.get("names") or []:
+                name, _, alias = (s.strip() for s in entry.partition(" as "))
+                if name and name != "*":
+                    out[alias or name] = f"{mod}.{name}" if mod else f".{name}"
+    return out
+
+
+def library_offense(target: str, bindings: Dict[str, str], project_roots: Set[str],
+                    pure_libraries: List[str]) -> Optional[str]:
+    """Why a dotted call on an imported module may reach outside the program,
+    or None when it is known not to (or the head is not an import at all)."""
+    head = target.split(".", 1)[0].split("(", 1)[0]
+    bound = bindings.get(head)
+    if not bound or bound.startswith("."):
+        return None
+    root = bound.split(".", 1)[0]
+    if root in project_roots:
+        return None
+    if root in STDLIB:
+        return None if root not in STDLIB_OUTSIDE else \
+            f"a call into the standard library's {root}, which reaches outside the process (network, devices or other processes)"
+    if any(bound == lib or bound.startswith(lib + ".") or root == lib for lib in pure_libraries):
+        return None
+    return (f"a call into the third-party library {root}, which is not known to stay inside "
+            f"the program (unclassified, or a role with effects: hardware, messaging, network, …)")
 # M-COMP — a comprehension belongs here for the same reason a for_loop
 # does: every element of it runs, so a call in one MAY have run in a prior
 # iteration even when it sits textually after the stop node. Leaving it out
@@ -213,7 +281,7 @@ def import_time_files(project_ir: Dict[str, dict], seed_file: str) -> List[str]:
     return out
 
 
-def import_time_offenses(project_ir: Dict[str, dict], seed_file: str) -> List[dict]:
+def import_time_offenses(project_ir: Dict[str, dict], seed_file: str, pure_libraries: Optional[List[str]] = None) -> List[dict]:
     """Effects that run at IMPORT time — before the entry function is called.
 
     THE HOLE THIS CLOSES (measured 2026-09-10, both ways against this very
@@ -231,14 +299,24 @@ def import_time_offenses(project_ir: Dict[str, dict], seed_file: str) -> List[di
     returning None is exactly that predicate.
     """
     offs: List[dict] = []
+    roots = {str(i.get("modulePath") or p).split("/")[0].split(".")[0] for p, i in project_ir.items() if isinstance(i, dict)}
     for f in import_time_files(project_ir, seed_file):
         ir = project_ir.get(f) or {}
+        bindings = import_bindings(ir)
         for n in sorted(ir.get("nodes", []), key=lambda m: m.get("id", "")):
             ek = n.get("effectKind")
-            if not ek:
+            target = n.get("callTarget") or n.get("funcName") or ""
+            # 2026-10-12 — a module-level call into a library not known to stay
+            # in-process (`PORT = serial.Serial("/dev/ttyUSB0")`) runs on import too
+            why = library_offense(target, bindings, roots, pure_libraries or []) if not ek and "." in target and n.get("type") in ("call", "assignment", "return_stmt") else None
+            if not ek and not why:
                 continue
             if enclosing_module_function(ir, n["id"]) is not None:
                 continue  # inside a function: runs when called, not on import
+            if why:
+                offs.append({"kind": "external-unprovable", "target": target, "effectKind": None, "file": f, "line": n.get("line", 0),
+                             "reason": f"{why}: '{target}' at IMPORT time in {f}:{n.get('line', 0)}"})
+                continue
             offs.append({
                 "kind": "effect",
                 "target": n.get("callTarget") or n.get("funcName") or n["id"],
@@ -315,6 +393,19 @@ class Scan:
         self.visited: Set[Tuple[str, str]] = set()
         self.resolution: List[dict] = []  # parity record (per call site)
         self.offenses: List[dict] = []     # SM3: every effect/dynamic/unresolved found
+        # 2026-10-12 — third-party libraries known to stay in-process (set by
+        # main from the payload's `pureLibraries`; none = refuse every one)
+        self.pure_libraries: List[str] = []
+        self.project_roots: Set[str] = {
+            str(ir.get("modulePath") or path).split("/")[0].split(".")[0].removesuffix(".py")
+            for path, ir in project_ir.items() if isinstance(ir, dict)
+        }
+        self._binding_cache: Dict[str, Dict[str, str]] = {}
+
+    def _bindings(self, file_path: str, ir: dict) -> Dict[str, str]:
+        if file_path not in self._binding_cache:
+            self._binding_cache[file_path] = import_bindings(ir)
+        return self._binding_cache[file_path]
 
     def _record(self, file_path: str, call_id: str, target: str, kind: str,
                 resolved_file: Optional[str] = None, resolved_id: Optional[str] = None):
@@ -444,6 +535,16 @@ class Scan:
             head = target.split(".", 1)[0]
             kind = classify_unresolved(target, head in local_names)
             self._record(file_path, call_id, target, kind)
+            if kind == "external" and "." in target:
+                why = library_offense(target, self._bindings(file_path, ir), self.project_roots, self.pure_libraries)
+                if why:
+                    off = {"kind": "external-unprovable", "target": target, "effectKind": None,
+                           "file": file_path, "line": site["line"],
+                           "reason": f"{why}: '{target}' at {file_path}:{site['line']}"}
+                    self.offenses.append(off)
+                    if self.stop_on_offense:
+                        return off
+                    continue
             if kind in ("dynamic", "unresolved"):
                 off = {"kind": kind, "target": target, "effectKind": None,
                        "file": file_path, "line": site["line"],
@@ -482,6 +583,10 @@ def main() -> None:
     # Accept both {"files": {...}} (server wire format) and a bare files-map
     # (committed *.ir.json fixtures) — matches extract_thread.py's leniency.
     project_ir = payload.get("files") if isinstance(payload, dict) and "files" in payload else payload
+    # the third-party libraries known to stay in-process (server-computed from
+    # the stack roles; absent = none, so every unknown library is refused)
+    pure_libraries = [x for x in (payload.get("pureLibraries") or []) if isinstance(x, str)] \
+        if isinstance(payload, dict) and "files" in payload else []
 
     # Two entry modes. stop-mode (server path): derive the enclosing
     # module-level function of N and scan bounded by N. seed-mode
@@ -522,15 +627,17 @@ def main() -> None:
 
     if args.resolution_only:
         scan = Scan(project_ir, emit_resolution=True, stop_on_offense=False)
+        scan.pure_libraries = pure_libraries
         scan.visit(seed_file, seed_id, stop_id, stop_line)
         print(json.dumps({"resolution": scan.resolution}))
         return
 
     if args.list_effects:
         scan = Scan(project_ir, emit_resolution=False, stop_on_offense=False)
+        scan.pure_libraries = pure_libraries
         # Import-time effects FIRST: they run before the entry function does,
         # and consent has to cover everything the run performs.
-        scan.offenses.extend(import_time_offenses(project_ir, seed_file))
+        scan.offenses.extend(import_time_offenses(project_ir, seed_file, pure_libraries))
         scan.visit(seed_file, seed_id, stop_id, stop_line)
         # Canonical order so the consent token over this set is stable
         # regardless of walk order (server HMACs the serialized list).
@@ -545,9 +652,10 @@ def main() -> None:
         return
 
     scan = Scan(project_ir, args.emit_resolution)
+    scan.pure_libraries = pure_libraries
     # The gate short-circuits on the FIRST offense, and an import-time effect
     # is the first thing that happens — so it is checked first.
-    import_time = import_time_offenses(project_ir, seed_file)
+    import_time = import_time_offenses(project_ir, seed_file, pure_libraries)
     offense = import_time[0] if import_time else scan.visit(seed_file, seed_id, stop_id, stop_line)
     out = {
         "pure": offense is None,

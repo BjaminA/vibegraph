@@ -364,10 +364,26 @@ export function computeThreadContract(thread: ContractInputThread, opts: ThreadC
   // commit inside a loop is a round trip because the funnel it lives in is
   // a db funnel, and both readers have to see the same fact).
   const attributions = new Map<string, Attribution | null>();
+  // 2026-10-12 — a terminal has no file of its own; the call is WRITTEN in
+  // the step it hangs off. Looking the node id up project-wide returned the
+  // FIRST file holding that id — `module/EXAMPLES.assign` is in two files —
+  // so the call read another file's imports and `node:url`'s fileURLToPath
+  // became an unclassified tool named "node". The thread's own edge decides.
+  const parentOf = new Map<string, string>();
+  for (const e of thread.edges ?? []) if (e.kind !== "flow" && !parentOf.has(e.to)) parentOf.set(e.to, e.from);
+  const byNodeId = new Map(thread.nodes.map((x) => [x.id, x]));
+  const ownerFile = (n: ThreadNode): string | null => {
+    if (n.file) return n.file;
+    for (let p = parentOf.get(n.id), hops = 0; p && hops < 8; p = parentOf.get(p), hops++) {
+      const f = byNodeId.get(p)?.file;
+      if (f) return f;
+    }
+    return n.irNodeId ? opts.fileOfNode?.(n.irNodeId) ?? null : null;
+  };
   const attributeOf = (n: ThreadNode): Attribution | null => {
     const cached = attributions.get(n.id);
     if (cached !== undefined) return cached;
-    const file = n.file ?? (n.irNodeId ? opts.fileOfNode?.(n.irNodeId) ?? null : null);
+    const file = ownerFile(n);
     const a = attributeBoundary({
       language: (file ? languageForPath(file)?.id : null) ?? lang?.id ?? "unknown",
       label: n.label,
@@ -409,9 +425,7 @@ export function computeThreadContract(thread: ContractInputThread, opts: ThreadC
     if (!tool) boundaries.unattributed++;
     else if (tool.how === "local-literal") boundaries.localData++;
     else if (tool.how === "builtin") boundaries.builtins++;
-    const observed = opts.observedFor?.(
-      n.file ?? opts.fileOfNode?.(n.irNodeId ?? "") ?? null, n.irNodeId,
-    ) ?? [];
+    const observed = opts.observedFor?.(ownerFile(n), n.irNodeId) ?? [];
     externals.push({
       id: n.id, kind: n.kind as ContractExternal["kind"], label: n.label,
       effectKind: ek, preview: previewOf(n, opts.nodeFor), irNodeId: n.irNodeId,

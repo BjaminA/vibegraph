@@ -22,6 +22,10 @@ export const ARCH_ACCENT: Record<ArchCategory, { accent: string; quiet?: boolean
   external: { accent: "--accent-io", quiet: true },
   unknown: { accent: "--text-muted", quiet: true },
   config: { accent: "--accent-config" },
+  // hardware is I/O with consequences (a write moves something): the write
+  // weight; the standard library is ambient, like an unclassified tool
+  device: { accent: "--accent-io-write" },
+  stdlib: { accent: "--text-muted", quiet: true },
 };
 
 export function archAccent(c: ArchCategory): { accent: string; quiet?: boolean } {

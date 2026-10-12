@@ -438,3 +438,45 @@ test("W1: nesting is unchanged — a nested call is a NEST, not a second node", 
   assert.equal(ir.nodes.filter((n) => n.funcName === "str" && n.parentId === outer[0].id).length, 1,
     "the inner call is minted BENEATH the outer one, not beside it");
 });
+
+// 2026-10-12 — A DOTTED CALL ON AN IMPORTED MODULE is decided by that module.
+// It was "external pure builtin" whatever the module was: measured against
+// this script, `serial.Serial(port).write()`, `paho.mqtt.publish.single()`
+// and `socket.create_connection()` all scanned PURE — run-to-here would have
+// driven a serial port, a broker and a socket (the sandbox copies files only).
+const DEVICES = "test/fixtures/run_effects/device_effects.py";
+const scanFn = (files, file, fn, pureLibraries) => {
+  const ir = files[file];
+  const stop = ir.nodes.filter((n) => n.type === "assignment" && n.name === "total" && n.id.startsWith(`module/${fn}.fn/`)).pop();
+  return py(SCAN, ["--stop-file", file, "--stop-id", stop.id, "--list-effects"],
+    JSON.stringify({ files, ...(pureLibraries ? { pureLibraries } : {}) }));
+};
+
+test("a call into a library not known to stay in-process is refused, however it is spelled", () => {
+  const files = parseFixture(DEVICES, "device_effects.py");
+  for (const fn of ["write_port", "mqtt_dotted", "mqtt_alias", "mqtt_from_alias", "open_socket"]) {
+    const v = scanFn(files, "device_effects.py", fn, ["numpy"]);
+    assert.equal(v.pure, false, `${fn} reaches outside the program`);
+    assert.ok(v.offenses.some((o) => o.kind === "external-unprovable"), `${fn}: ${JSON.stringify(v.offenses)}`);
+  }
+});
+
+test("the standard library's in-process modules and a library KNOWN to be pure still run; no list means none is known", () => {
+  const files = parseFixture(DEVICES, "device_effects.py");
+  assert.equal(scanFn(files, "device_effects.py", "pure_math", []).pure, true, "math stays in-process");
+  assert.equal(scanFn(files, "device_effects.py", "numeric", ["numpy"]).pure, true, "numpy: the server says its role is data");
+  assert.equal(scanFn(files, "device_effects.py", "numeric", undefined).pure, false, "without the server's list, an unknown library is refused — fail safe");
+});
+
+test("a port opened at module level is refused at IMPORT time", () => {
+  const files = parseFixture("test/fixtures/run_effects/device_at_import.py", "device_at_import.py");
+  const v = scanFn(files, "device_at_import.py", "status", []);
+  assert.equal(v.pure, false);
+  assert.match(JSON.stringify(v.offenses), /serial\.Serial/);
+});
+
+test("`from m import f as g` keeps its alias in the IR", () => {
+  const ir = parseFixture(DEVICES, "device_effects.py")["device_effects.py"];
+  const imp = ir.nodes.find((n) => n.type === "import_from" && n.module === "paho.mqtt");
+  assert.deepEqual(imp.names, ["publish as pub"]);
+});

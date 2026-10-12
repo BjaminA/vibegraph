@@ -559,7 +559,13 @@ class GraphBuilder(cst.CSTVisitor):
         if isinstance(node.names, cst.ImportStar):
             names = ["*"]
         else:
-            names = [self._code(a.name) for a in node.names if isinstance(a, cst.ImportAlias)]
+            # 2026-10-12 — keep `as` (the `import X as Y` form already did):
+            # cross_file_link, extract_thread and the stack all split on " as ",
+            # and without it `from m import f as g` bound g to nothing — the
+            # linker never linked g(), and the run floor could not tell which
+            # library `g.write()` reached
+            names = [f"{self._code(a.name)} as {self._code(a.asname.name)}" if a.asname and hasattr(a.asname, "name") else self._code(a.name)
+                     for a in node.names if isinstance(a, cst.ImportAlias)]
         safe_name = module_name.replace(".", "_")
         node_id = self._make_id("import_from", safe_name)
         self._emit(node_id, "import_from", self._pos(node), cst_node=node, module=module_name, names=names)

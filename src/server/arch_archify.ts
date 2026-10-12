@@ -32,7 +32,7 @@ const TYPE_OF: Record<ArchCategory, ArchifyType> = {
   database: "database", cache: "database", storage: "database",
   queue: "messagebus",
   platform: "cloud", cloud: "cloud", model: "cloud",
-  external: "external", unknown: "external",
+  external: "external", unknown: "external", device: "external", stdlib: "backend",
   // GUI-only (the Configuration lens); never in an exported model.
   config: "security",
 };

@@ -30,6 +30,8 @@ import { planWork } from "./src/server/plan_work";
 // M-STACK (PLAN-M-STACK.md) — stack facts (pure, IR-derived) + the system
 // spec that renders them WITH the stated policies bound to each tool.
 import { buildStackIndex, contractStackForFile, stackForThread, stackCalledOnThread, toolsAddedByDelta, type StackIndex } from "./src/server/stack";
+import { floorPureLibraries } from "./src/server/floor_libraries";
+import { classifyEstimate, classifyRun, type ClassifyCtx } from "./src/server/classify_server";
 import { buildCrossingIndex, type CrossingIndex } from "./src/server/crossings";
 import { handleInvestigation, listInvestigations, readInvestigation, renderHandoff, readRel } from "./src/server/investigations";
 import { diffEditChecks, formatEditCheck, type EditCheckRow } from "./src/server/edit_check";
@@ -442,6 +444,15 @@ const briefCtx: BriefCtx = {
   run: (prompt) => _runReadmeLlm(prompt, "thinking", "gen"), modelLabel: () => tierLabel("thinking"),
   who: () => personName(inputPath),
   changed: () => { reapplyArchStore(); broadcastProjectUpdate(); refreshArchDocs(); const s = JSON.stringify({ type: "brief-state", payload: briefState(briefCtx) }); for (const c of clients) c.send(s); },
+};
+
+// 2026-10-12 — "Classify N unclassified tools" (src/server/classify_server.ts)
+const classifyCtx: ClassifyCtx = {
+  root: () => (isDirectory ? inputPath : null),
+  envelope: () => (isDirectory ? { files: relativeProjectFiles() as Record<string, unknown>, threads: latestThreads as unknown[] } : null),
+  stack: () => latestStack, claudeAvailable: () => claudeCliAvailable,
+  run: (prompt) => _runReadmeLlm(prompt, "thinking", "gen"), modelLabel: () => tierLabel("thinking"),
+  changed: () => { void refreshDerived(); },
 };
 
 function archDecide(decision: "ratify" | "reject"): { ok: boolean; error?: string } {
@@ -3365,7 +3376,7 @@ async function changesetProposeCore(raw: unknown, effectConsentToken?: string, t
           resolve({ pure: false, offenses: [], reason: "could not parse effect-scan output" });
         }
       });
-      child.stdin.write(JSON.stringify({ files: relIR }));
+      child.stdin.write(JSON.stringify({ files: relIR, pureLibraries: floorPureLibraries(latestStack) }));
       child.stdin.end();
     });
 
@@ -5288,7 +5299,7 @@ function scanEffectsToNode(
         fail("could not parse effect-scan output");
       }
     });
-    child.stdin.write(JSON.stringify({ files: projectIR }));
+    child.stdin.write(JSON.stringify({ files: projectIR, pureLibraries: floorPureLibraries(latestStack) }));
     child.stdin.end();
   });
 }
@@ -5346,7 +5357,7 @@ function scanConstructorEffects(
         fail("could not parse constructor effect-scan output");
       }
     });
-    child.stdin.write(JSON.stringify({ files: projectIR }));
+    child.stdin.write(JSON.stringify({ files: projectIR, pureLibraries: floorPureLibraries(latestStack) }));
     child.stdin.end();
   });
 }
@@ -8413,6 +8424,12 @@ function setupWebSocket() {
             const decision = msg.payload?.decision === "reject" ? "reject" : "ratify";
             result(briefDecide(briefCtx, typeof msg.payload?.section === "string" ? msg.payload.section : "all", decision));
           }
+        } else if (msg.type === "classify-estimate" || msg.type === "classify-run") {
+          // the estimate spends nothing; the run is the one model call, its
+          // answers stored agent-stated for a person to ratify in the inbox
+          const reply = (payload: unknown) => ws.send(JSON.stringify({ type: "classify-result", payload: { action: msg.type === "classify-run" ? "run" : "estimate", ...(payload as object) } }));
+          if (msg.type === "classify-estimate") reply(classifyEstimate(classifyCtx));
+          else classifyRun(classifyCtx).then(reply, (e) => reply({ ok: false, error: String(e?.message ?? e) }));
         } else if (msg.type === "arch-scope" || msg.type === "arch-scope-ratify" || msg.type === "arch-scope-reject") {
           // 2026-10-06 — scope spends tokens and stores a PROPOSED scope of one
           // box; ratify / reject are the person's. Reply: arch-scope-result.

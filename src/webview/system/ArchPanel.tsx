@@ -13,6 +13,7 @@ import { archVisual } from "./arch_visual";
 import { ARCH_LENSES, edgeLabel, type ArchLens } from "./archLayout";
 import { ArchDispatchList } from "./ArchDispatchList";
 import { NodeIOCard, type LitPath } from "./NodeIOCard";
+import { ClassifyTools } from "./ClassifyTools";
 import type { Vocabulary } from "../../shared/node_io";
 
 const LENS_LABEL: Record<ArchLens | "config" | "journeys" | "resources" | "decisions", string> = { birdseye: "Bird's-eye", overview: "Overview", tools: "Tools", flows: "Flows", payloads: "Payloads", trust: "Trust", config: "Configuration", journeys: "Journeys", resources: "Resources", decisions: "Decisions" };
@@ -168,8 +169,10 @@ type Selected = { node: ArchNodeRecord } | { edge: ArchEdgeRecord } | { group: A
 /** M-ARCH.4 — the proposal gate. Propose SPENDS TOKENS (one thinking-tier
  *  spawn); what comes back is pending and ghosted until a person ratifies
  *  it here. Nothing a model says becomes stated any other way. */
-export function ArchProposalBar({ model, state, onAction }: {
+export function ArchProposalBar({ model, state, onAction, classify = false }: {
   model: ArchModelRecord;
+  /** the Tools lens: offer to classify the unclassified tools (ClassifyTools.tsx) */
+  classify?: boolean;
   state: { busy: boolean; error: string | null };
   onAction?: (action: "propose" | "update" | "ratify" | "reject", guidance?: string) => void;
 }) {
@@ -248,6 +251,7 @@ export function ArchProposalBar({ model, state, onAction }: {
         </>
       )}
       {state.error && <span data-arch-propose-error style={{ color: "var(--text-muted)", padding: "0 4px" }}>{state.error}</span>}
+      {classify && <ClassifyTools model={model} />}
     </div>
   );
 }

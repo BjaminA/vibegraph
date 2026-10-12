@@ -320,11 +320,14 @@ export function buildArchModel(input: ArchInputs): ArchModelRecord {
     let n = tools.get(name);
     if (n) return n;
     const rec = toolRec.get(name);
-    const bits = [ROLE_LABEL[role as StackRole] ?? role];
+    // 2026-10-12 — a standard-library module no table gives a role is still
+    // KNOWN: it is the language's own library, not an unclassified dependency
+    const stdlib = rec?.origin === "stdlib" && (role === "unknown" || !ROLE_CATEGORY[role]);
+    const bits = [stdlib ? "standard library" : ROLE_LABEL[role as StackRole] ?? role];
     if (rec?.version) bits.push(`v${rec.version}`);
     n = {
       id: `tool:${name}`, kind: "tool", label: name, sublabel: bits.join(" · "),
-      category: ROLE_CATEGORY[role] ?? "unknown", source: "derived",
+      category: stdlib ? "stdlib" : ROLE_CATEGORY[role] ?? "unknown", source: "derived",
       tool: name, role, origin: rec?.origin ?? "third-party",
       ...(rec?.version ? { version: rec.version } : {}),
       ...(rec?.roleStatedBy ? { roleStatedBy: rec.roleStatedBy } : {}),

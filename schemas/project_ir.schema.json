@@ -214,7 +214,7 @@
         "tool": { "type": "string", "minLength": 1 },
         "role": {
           "type": "string",
-          "enum": ["web-framework", "frontend", "http-client", "model-api", "agent-protocol", "platform", "db", "cache", "queue", "tensor", "data", "cloud", "infra", "process", "remote", "test", "build", "utility", "runtime", "unknown"]
+          "enum": ["web-framework", "frontend", "http-client", "model-api", "agent-protocol", "platform", "db", "cache", "queue", "device", "tensor", "data", "cloud", "infra", "process", "remote", "test", "build", "utility", "runtime", "unknown"]
         },
         "origin": { "type": "string", "enum": ["third-party", "stdlib", "project"] },
         "version": { "type": "string" },

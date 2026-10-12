@@ -75,13 +75,13 @@ import {
 export type StackRole =
   | "web-framework" | "frontend" | "http-client"
   | "model-api" | "agent-protocol" | "platform"
-  | "db" | "cache" | "queue"
+  | "db" | "cache" | "queue" | "device"
   | "tensor" | "data" | "cloud" | "infra" | "process" | "remote" | "test"
   | "build" | "utility" | "runtime" | "unknown";
 
 export const STACK_ROLES: readonly StackRole[] = [
   "web-framework", "frontend", "http-client", "model-api", "agent-protocol", "platform",
-  "db", "cache", "queue",
+  "db", "cache", "queue", "device",
   "tensor", "data", "cloud", "infra", "process", "remote", "test",
   "build", "utility", "runtime", "unknown",
 ];
@@ -90,7 +90,7 @@ export const STACK_ROLES: readonly StackRole[] = [
  *  architecture first, the ambient ones last. */
 export const ROLE_ORDER: readonly StackRole[] = [
   "web-framework", "frontend", "http-client", "model-api", "agent-protocol", "platform",
-  "db", "cache", "queue",
+  "db", "cache", "queue", "device",
   "tensor", "data", "cloud", "remote", "process", "infra", "build",
   "test", "utility", "runtime", "unknown",
 ];
@@ -105,6 +105,11 @@ export const ROLE_LABEL: Record<StackRole, string> = {
   db: "database",
   cache: "cache",
   queue: "queue",
+  // 2026-10-12 — hardware a program drives from this machine: a serial port,
+  // a fieldbus, GPIO / I2C / SPI, a PLC's I/O, a lab instrument. It had no
+  // role, so every such library read "unclassified" (and the run floor, which
+  // allows only libraries known to stay in-process, refuses it either way).
+  device: "hardware I/O (serial, fieldbus, GPIO / I2C, PLC I/O, instruments)",
   tensor: "tensor program",
   data: "data / numerics",
   cloud: "cloud SDK",
@@ -142,7 +147,14 @@ export const PYTHON_TOOLS: Record<string, StackRole> = {
   sqlite3: "db", psycopg2: "db", psycopg: "db", sqlalchemy: "db",
   pymongo: "db", asyncpg: "db", mysql: "db",
   redis: "cache", memcache: "cache",
-  celery: "queue", pika: "queue", kombu: "queue",
+  celery: "queue", pika: "queue", kombu: "queue", paho: "queue",
+  // 2026-10-12 — hardware I/O (see StackRole `device`); import names, not
+  // distribution names: pyserial imports as `serial`, RPi.GPIO as `RPi`
+  serial: "device", pysoem: "device", pyvisa: "device", revpimodio2: "device",
+  RPi: "device", gpiozero: "device", smbus: "device", smbus2: "device",
+  spidev: "device", pymodbus: "device", minimalmodbus: "device", can: "device",
+  usb: "device", hid: "device", evdev: "device", periphery: "device", nidaqmx: "device",
+  yaml: "utility", tomli: "utility",
   torch: "tensor", tensorflow: "tensor", jax: "tensor", keras: "tensor",
   numpy: "data", pandas: "data", sklearn: "data", scipy: "data",
   matplotlib: "data",
@@ -198,7 +210,8 @@ export const JSTS_TOOLS: Record<string, StackRole> = {
   mongoose: "db", mongodb: "db", "better-sqlite3": "db", mysql2: "db",
   typeorm: "db", drizzle: "db",
   ioredis: "cache", redis: "cache",
-  bullmq: "queue", bull: "queue", amqplib: "queue", kafkajs: "queue", nats: "queue",
+  bullmq: "queue", bull: "queue", amqplib: "queue", kafkajs: "queue", nats: "queue", mqtt: "queue",
+  serialport: "device", onoff: "device", "johnny-five": "device", "modbus-serial": "device", "i2c-bus": "device",
   "aws-sdk": "cloud", "@aws-sdk/client-s3": "cloud", "@google-cloud/storage": "cloud",
   vitest: "test", jest: "test", "@jest/globals": "test", mocha: "test",
   "@playwright/test": "test", chai: "test",
@@ -276,6 +289,12 @@ export const JSTS_SCOPE_TOOLS: Record<string, StackRole> = {
  *  and derives nothing (the roles do). Keyed by exact tool name, with a
  *  scope-level fallback for a family's other members. */
 export const TOOL_NOTES: Record<string, string> = {
+  serial: "pySerial: opens a serial port on this machine (RS-232, RS-485, USB serial) and reads and writes bytes on it.",
+  pysoem: "PySOEM: Python binding of SOEM, an EtherCAT master — reads and writes the process data of EtherCAT slave devices through a network interface.",
+  pyvisa: "PyVISA: controls measurement instruments (meters, oscilloscopes, power supplies) over GPIB, USB, serial or Ethernet through a VISA library.",
+  revpimodio2: "RevPiModIO: reads and writes the inputs and outputs of a Revolution Pi's I/O modules through the controller's process image.",
+  pymodbus: "PyModbus: a Modbus client and server (TCP, RTU over serial) — reads and writes registers and coils on PLCs and devices.",
+  paho: "Eclipse Paho MQTT client: publishes and subscribes to topics on an MQTT broker.",
   "@tdxvolt/volt-client-web": "TDX Volt browser client (WebSocket, mapped to the gRPC streaming modes): connects to a Volt — the unit of identity and trust, with its own key, CA, policy and SQLite database — through the tdxvolt.com relay and runs unary/streaming calls under the caller's own identity; CommandStream runs an allow-listed command on the Volt's host, DB calls query the Volt's database.",
   "@tdxvolt/volt-client-grpc": "TDX Volt Node.js client over gRPC (@grpc/grpc-js is the transport; initialise() takes a config-file path): the same Volt API as the web client, from a server-side process.",
   "@tdxvolt/volt-client": "TDX Volt client core: the VoltClient types and API surface the web and gRPC packages implement.",
@@ -344,6 +363,11 @@ export const BASH_TOOLS: Record<string, StackRole> = {
   firebase: "platform", supabase: "platform",
   // M-CMD.3 — `jq` transforms JSON on stdin: data work, not plumbing.
   jq: "data",
+  // 2026-10-12 — `sudo` runs another program as another user; `piTest` reads
+  // and writes a Revolution Pi's process image; `mosquitto_pub|sub` talk to an
+  // MQTT broker
+  sudo: "process", piTest: "device", i2cget: "device", i2cset: "device",
+  mosquitto_pub: "queue", mosquitto_sub: "queue",
 };
 
 /** M-TABLES — the shell's OWN builtins, GENERATED from `compgen -b`. The

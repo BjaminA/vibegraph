@@ -409,7 +409,7 @@ export function SystemView({
       )}
       {mode === "map" && <ArchTraceBar mode={trace.mode} beats={trace.beats} labelOf={labelOf} actions={trace.actions} />}
       {mode === "map" && architecture && (
-        <ArchProposalBar model={architecture} state={archPropose ?? { busy: false, error: null }} onAction={onArchAction} />
+        <ArchProposalBar model={architecture} state={archPropose ?? { busy: false, error: null }} onAction={onArchAction} classify={lens === "tools"} />
       )}
       {/* 2026-10-08 — the Brief: what the system is for and how, each line lighting its boxes */}
       {mode === "map" && architecture && !topoMapModel && <BriefCard onLight={(boxes) => setFlowOn(boxes ? { nodes: boxes, edges: [] } : null)} />}

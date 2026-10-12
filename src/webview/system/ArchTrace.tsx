@@ -31,7 +31,12 @@ export function useArchTrace(model: ArchModelRecord | null, layout: { nodes: Nod
       .map((b) => ({ ...b, ...toDrawn(b, drawn, nodeInto) }));
   }, [model, drawn, nodeInto]);
 
-  useEffect(() => { setMode(null); }, [layout]);
+  // 2026-10-12 — a trace ends when what is DRAWN changes (another lens, boxes
+  // added or gone), not when the same map arrives again: a background
+  // re-derive after a ratify re-sends an identical layout, and clearing on the
+  // new object wiped an open story mid-read (and flaked e2e-arch-map 1 in 2)
+  const drawnKey = useMemo(() => `${layout.nodes.map((n) => n.id).sort().join("|")}#${layout.edges.map((e) => e.id).sort().join("|")}`, [layout]);
+  useEffect(() => { setMode(null); }, [drawnKey]);
   useEffect(() => {
     const onKey = (ev: KeyboardEvent) => { if (ev.key === "Escape") setMode(null); };
     window.addEventListener("keydown", onKey);

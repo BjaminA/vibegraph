@@ -77,6 +77,9 @@ const WRAPPABLE = new Set<StackRole>([
   // SDK IS the project's path to that boundary (a real codebase's
   // `section-stream` wrapped openai for 12 files and could not be seen).
   "model-api", "agent-protocol",
+  // 2026-10-12 — a module wrapping a serial port or a fieldbus IS the path to
+  // that hardware (the "PortClient" every device project grows)
+  "device",
   // M-CMD.3 — the module that builds the platform request IS the funnel
   // (a real codebase's `backendCommand.ts`: "the ONE place a Volt
   // CommandStream request is built").

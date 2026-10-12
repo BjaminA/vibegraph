@@ -226,6 +226,7 @@ const ROLE_CONSEQUENCE: Partial<Record<StackRole, string>> = {
   db: "every call counts as a database round trip",
   process: "every call counts as a subprocess",
   remote: "every call counts as a subprocess on another machine",
+  device: "every call drives hardware from this machine; run-to-here asks before running one",
 };
 
 export function buildClassifyPrompt(dossiers: ToolDossier[], opts: { project?: string } = {}): string {

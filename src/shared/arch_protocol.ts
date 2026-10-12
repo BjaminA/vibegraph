@@ -26,6 +26,9 @@ export interface ProtocolAnswer {
 export type ArchCategory =
   | "frontend" | "backend" | "scripts" | "agent" | "pipeline"
   | "platform" | "database" | "cache" | "storage" | "queue" | "model" | "cloud" | "external" | "unknown"
+  // 2026-10-12 — hardware a process drives (role `device`), and a standard-
+  // library module (origin stdlib) — which used to read "unclassified"
+  | "device" | "stdlib"
   // 2026-09-28 — the Configuration lens's variable groups (GUI only; the
   // derived model never emits it).
   | "config";
@@ -33,6 +36,7 @@ export type ArchCategory =
 export const ARCH_CATEGORIES: readonly ArchCategory[] = [
   "frontend", "backend", "scripts", "agent", "pipeline",
   "platform", "database", "cache", "storage", "queue", "model", "cloud", "external", "unknown", "config",
+  "device", "stdlib",
 ];
 
 export const ARCH_CATEGORY_LABEL: Record<ArchCategory, string> = {
@@ -51,6 +55,8 @@ export const ARCH_CATEGORY_LABEL: Record<ArchCategory, string> = {
   external: "external",
   unknown: "unclassified",
   config: "environment variables",
+  device: "hardware I/O",
+  stdlib: "standard library",
 };
 
 /** Stack roles that ARE architecture boundaries: a call through one leaves
@@ -61,13 +67,21 @@ export const ARCH_CATEGORY_LABEL: Record<ArchCategory, string> = {
  *  silent gap principle 12 refuses. */
 export const BOUNDARY_ROLES: ReadonlySet<string> = new Set([
   "db", "cache", "queue", "platform", "model-api", "http-client",
-  "agent-protocol", "cloud", "remote", "unknown",
+  "agent-protocol", "cloud", "remote", "unknown", "device",
 ]);
 
 export const ROLE_CATEGORY: Record<string, ArchCategory> = {
   db: "database", cache: "cache", queue: "queue", platform: "platform",
   "model-api": "model", "http-client": "external", "agent-protocol": "agent",
-  cloud: "cloud", remote: "external", unknown: "unknown",
+  cloud: "cloud", remote: "external", unknown: "unknown", device: "device",
+};
+
+/** 2026-10-12 — the wire a hardware library speaks, from its own docs. */
+const DEVICE_WIRE: Record<string, string> = {
+  serial: "serial", serialport: "serial", minimalmodbus: "Modbus RTU", pymodbus: "Modbus", "modbus-serial": "Modbus",
+  pysoem: "EtherCAT", pyvisa: "VISA (GPIB / USB / LAN)", revpimodio2: "RevPi process image", piTest: "RevPi process image",
+  RPi: "GPIO", gpiozero: "GPIO", onoff: "GPIO", smbus: "I2C", smbus2: "I2C", "i2c-bus": "I2C", i2cget: "I2C", i2cset: "I2C",
+  spidev: "SPI", can: "CAN", usb: "USB", hid: "USB HID", evdev: "input events", nidaqmx: "NI-DAQmx",
 };
 
 const SQL_TOOLS = new Set([
@@ -115,6 +129,7 @@ export function toolProtocol(tool: string, role: string): ProtocolAnswer {
     case "http-client": return { protocol: "HTTP", basis: `${tool} is an HTTP client` };
     case "agent-protocol": return { protocol: "MCP", basis: `${tool} speaks the Model Context Protocol` };
     case "cloud": return { protocol: "HTTPS · cloud API", basis: `${tool} is a cloud SDK` };
+    case "device": return DEVICE_WIRE[tool] ? { protocol: DEVICE_WIRE[tool], basis: `${tool} drives hardware over ${DEVICE_WIRE[tool]} (its documented interface)` } : { protocol: "device I/O", basis: `${tool} has role device; its interface is not in the table` };
     case "remote": return { protocol: /^(ssh|scp|sftp|rsync|paramiko|fabric)$/.test(tool) ? "SSH" : "remote", basis: `${tool} has role remote` };
     default: return { protocol: "unknown", basis: `${tool} has no role a table or a person has given it (classify it, or state its role)` };
   }
