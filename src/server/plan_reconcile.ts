@@ -282,7 +282,7 @@ export function reconcilePlan(plan: Plan, env: EnvLike, stack: StackIndex, root:
     const through = real ? [] : realOf(t.tool);
     if (through.length) {
       const why = [...new Set(through.map((r) => viaWhy.get(`${t.tool}|${r.tool.toLowerCase()}`)).filter(Boolean))];
-      add({ section: "stack", id: t.tool, verdict: "realised", detail: `reached through ${[...new Set(through.map((r) => r.tool))].join(", ")} (used in ${new Set(through.flatMap((r) => r.files)).size} file(s))${why.length ? ` — ${why.join("; ")}` : ""}` });
+      add({ section: "stack", id: t.tool, verdict: "realised", detail: `reached through ${[...new Set(through.map((r) => r.tool))].join(", ")} (used in ${new Set(through.flatMap((r) => r.files)).size} file(s))${why.length ? ` — ${why.join("; ")}` : ""}`, tools: [...new Set(through.map((r) => r.tool))] });
     } else if (real) {
       // A role no table knows (`unknown`) is silence, not a contradiction.
       add(real.role === t.role || real.role === "unknown"

@@ -30,6 +30,7 @@ import { claimEdges } from "./claim_store.ts";
 import { declaredFeeds, feedEdges } from "./topology_feeds.ts";
 import { observedOps, withObserved } from "./trace_runs.ts";
 import { linesReader } from "./node_scope.ts";
+import { planOwnerOf } from "./arch_plan_split.ts";
 
 const MANIFESTS = ["package.json", "pyproject.toml", "setup.py", "Cargo.toml", "go.mod", "requirements.txt"];
 
@@ -93,6 +94,8 @@ function derivedArchModel(
     manifestDirs: manifestDirsFor(root, Object.keys(env.files)),
     languageOf: (f) => (typeof env.files[f]?.language === "string" ? env.files[f].language! : null),
     signalsOf: (f) => ((env.files[f] as { programSignals?: string[] } | undefined)?.programSignals ?? []),
+    // 2026-10-12 — the agreed plan's processes divide a shared box (arch_plan_split.ts)
+    planOwner: (() => { if (!root) return undefined; try { return planOwnerOf(loadPlan(root), Object.keys(env.files), env.entryPoints); } catch { return undefined; } })(),
     // M-ARCH.3 — the payload lens's inputs.
     nodeFor: opts.nodeFor,
     fileNodes: (f) => (env.files[f]?.nodes as never) ?? null,

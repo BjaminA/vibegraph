@@ -21,7 +21,7 @@ import type { TopologyDrift, TraceStep } from "../../shared/topology_analysis";
 import { grantees, whoMay, zoneOfFamily, threadsOfFunction } from "../../shared/topology_query.ts";
 import { codeOpsByZone, codeOpsText } from "../../shared/topology_code_ops.ts";
 export { decisionPositions } from "./decision_layout.ts";
-import { zoneGroupsOf } from "../../shared/topology_groups.ts";
+import { GRANT_EDGE_CAP, zoneGroupsOf } from "../../shared/topology_groups.ts";
 
 export const TOPO = "topo:";
 const EMPTY: ArchModelRecord["unplaced"] = { tests: 0, unmatchedHops: 0, toolsPresentNotCalled: [], unattributedBoundaries: 0 };
@@ -156,6 +156,18 @@ export function resourcesModel(m: TopologyModel, threads: ThreadLike[] = [], dri
   if (folded.note) notes.push(folded.note);
   if (drift) notes.push("live drift drawn: zones / grants only the platform has, declared grants it lacks");
   const collapsed = collapseZoneGroups(t, nodes, edges, groups, opts.focus ?? null);
+  // a wall of write edges is said on the principals' cards (the focused card keeps its own)
+  const plainWrite = (e: ArchEdgeRecord) => (e as { topoAccess?: string; topoDrift?: string }).topoAccess === "write" && !(e as { topoDrift?: string }).topoDrift;
+  const writes = collapsed.edges.filter(plainWrite);
+  if (writes.length > GRANT_EDGE_CAP) {
+    const focus = opts.focus ?? null;
+    const keep = (e: ArchEdgeRecord) => !plainWrite(e) || (!!focus && (e.from === focus || e.to === focus || (collapsed.nodes.find((n) => n.id === e.to)?.members ?? []).includes(focus)));
+    const per = new Map<string, number>();
+    for (const e of writes) if (!keep(e)) per.set(e.from, (per.get(e.from) ?? 0) + e.count);
+    for (const n of collapsed.nodes) if (per.has(n.id)) n.notes = [`may write ${per.get(n.id)} zone${per.get(n.id) === 1 ? "" : "s"} — select to draw them, or open the access grid`, ...(n.notes ?? [])];
+    collapsed.edges = collapsed.edges.filter(keep);
+    notes.push(`${writes.length} write-grant edges are said on the principals' cards (more than ${GRANT_EDGE_CAP}); the access grid lists every grant`);
+  }
   return { version: "1", nodes: collapsed.nodes, edges: collapsed.edges, groups, unplaced: EMPTY, notes };
 }
 
@@ -221,7 +233,6 @@ export function decisionsModel(m: TopologyModel, threads: ThreadLike[] = []): Ar
       // 2026-10-12 — what makes a decision informative: who decides, on what
       // evidence, by which rule, what follows each answer, where it is recorded
       const rows = n.outcome ? [`an outcome of ${d.id}`] : [
-        ...(n.question ? [n.question] : []),
         ...(n.kind || n.answeredBy ? [`${n.kind === "judgement" ? "a person's judgement" : n.kind === "check" ? "a check on recorded evidence" : "answered"}${n.answeredBy ? ` · answered by ${n.answeredBy}` : ""}`] : []),
         ...(n.evaluatedBy ? [`evaluated by ${n.evaluatedBy}${on.length ? "" : " (on no thread)"}`] : []),
         ...(n.cite ? [`declared at ${n.cite}`] : []),
@@ -254,7 +265,7 @@ export function decisionsModel(m: TopologyModel, threads: ThreadLike[] = []): Ar
         { payloadSummary: tr.roles?.length ? tr.roles.join(", ") : "anyone" }));
       for (const r of tr.requires ?? []) if ((t.families ?? []).some((f) => f.id === r)) { readFamilies.add(r); edges.push(edge(stId(sm.id, tr.to), famId(r), "requires", `${tr.from} → ${tr.to} requires ${r}`, { payloadSummary: "requires" })); }
     }
-    groups.push({ id: `${TOPO}machine:${sm.id}`, kind: "state machine", label: `state machine ${sm.id} · ${states.length} phases, ${sm.transitions.length} transitions${sm.evaluatedBy ? ` (applied by ${sm.evaluatedBy})` : ""}`, wraps: states.map((s) => stId(sm.id, s)), source: "stated" });
+    groups.push({ id: `${TOPO}machine:${sm.id}`, kind: "state machine", label: `state machine ${sm.id} · ${states.length} phases, ${sm.transitions.length} transitions${sm.evaluatedBy ? ` (applied by ${sm.evaluatedBy})` : ""}${sm.alsoDerived ? ` · declared and derived (${sm.alsoDerived.id}${sm.alsoDerived.evaluatedBy ? `, read in ${sm.alsoDerived.evaluatedBy}` : ""})` : ""}`, wraps: states.map((s) => stId(sm.id, s)), source: "stated" });
   }
   // The evidence: only the families read, their zones, and who may write them.
   familyCards(t, nodes, edges, readFamilies);

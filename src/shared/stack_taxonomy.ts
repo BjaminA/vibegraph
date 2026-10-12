@@ -226,6 +226,8 @@ export const JSTS_TOOLS: Record<string, StackRole> = {
   cheerio: "utility", jsdom: "utility", "json-stable-stringify": "utility", json5: "utility",
   "p-queue": "utility", "p-limit": "utility", eventemitter2: "utility", eventemitter3: "utility",
   "pdf-parse": "utility",
+  // 2026-10-12 — XML parsing and XSD validation in process (no I/O of their own)
+  "fast-xml-parser": "utility", xml2js: "utility", "xmllint-wasm": "utility",
   // M-CMD.3 — backend platform SDKs (see StackRole `platform`).
   firebase: "platform", "@supabase/supabase-js": "platform", appwrite: "platform",
   pocketbase: "platform", parse: "platform",

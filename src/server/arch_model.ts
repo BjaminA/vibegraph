@@ -38,6 +38,7 @@ import {
   calleePayload, callerPayload, observedPayload, payloadSummary, statedPayloads,
   type PayloadConstraintLike, type PayloadNodeLike,
 } from "./arch_payloads.ts";
+import { planSplit, type PlanOwner } from "./arch_plan_split.ts";
 
 const MAX_REFS = 8;
 
@@ -55,6 +56,8 @@ export interface ArchInputs {
   /** A file's registry language from its IR — an extensionless script
    *  (`bin/orders-cli`) has none by path. */
   languageOf?: (file: string) => string | null;
+  /** entry point → the AGREED plan process it runs as (arch_plan_split.ts) */
+  planOwner?: Map<string, PlanOwner>;
   /** 2026-10-06 (M3) — a file's program signals (`listen`, `argv`, `await`). */
   signalsOf?: (file: string) => string[];
   /** M-ARCH.3 — a file's IR nodes (a module-seeded script's argv signature). */
@@ -226,6 +229,8 @@ export function buildArchModel(input: ArchInputs): ArchModelRecord {
     const rel = root ? file.slice(root.length + 1) : file;
     return `${root || "."}:${rel.replace(/\.[^.]+$/, "")}`;
   };
+  const boxOf = (ep: string) => { const k = keyOf.get(ep); return !k ? undefined : runtimeOf.get(ep) && (perKey.get(k.id) ?? 0) > 1 ? `cluster:process:${procKey(k.root, epById.get(ep)!.file)}` : k.id; };
+  const planBox = planSplit([...keyOf.keys()], boxOf, input.planOwner ?? new Map());
   for (const e of input.entryPoints) {
     const fam = familyOf(e, input.languageOf?.(e.file) ?? null);
     if (!fam) { tests++; continue; }
@@ -234,19 +239,22 @@ export function buildArchModel(input: ArchInputs): ArchModelRecord {
     const own = !!runtime && (perKey.get(k.id) ?? 0) > 1;
     const root = k.root;
     // one box per process FILE, whatever family its entry points come from
-    const id = own ? `cluster:process:${procKey(root, e.file)}` : k.id;
+    // a box the agreed plan divides: its processes' entries each in their own
+    const planned = planBox.get(e.id);
+    const id = planned?.id ?? (own ? `cluster:process:${procKey(root, e.file)}` : k.id);
     clusterOf.set(e.id, id);
     let c = clusters.get(id);
     if (!c) {
       const dir = e.file.split("/").slice(0, -1).join("/");
       c = {
-        id, kind: "cluster", label: own ? `${base(e.file)} (${dir || "."})` : root ? `${fam.label} · ${root}` : fam.label, sublabel: "",
+        id, kind: "cluster", label: planned ? planned.label : own ? `${base(e.file)} (${dir || "."})` : root ? `${fam.label} · ${root}` : fam.label, sublabel: "",
+        ...(planned ? { notes: [`its own box: the agreed plan names process ${planned.process}, whose entry points the code alone puts in other boxes`] } : {}),
         category: fam.category, source: "derived", family: fam.family, root,
         entryPoints: [], frameworks: [], threads: [], refs: [], _files: new Set(),
       };
       clusters.set(id, c);
     }
-    if (runtime && (own || perKey.get(k.id) === 1)) c.runtime = { how: runtime.how, ...(runtime.by!.length ? { by: [...runtime.by!].sort() } : {}) };
+    if (runtime && (own || planned || perKey.get(k.id) === 1)) c.runtime = { how: runtime.how, ...(runtime.by!.length ? { by: [...runtime.by!].sort() } : {}) };
     c.entryPoints!.push(e.id);
     if (e.framework && !c.frameworks!.includes(e.framework)) c.frameworks!.push(e.framework);
     if (threadByEp.has(e.id)) c.threads.push(e.id);

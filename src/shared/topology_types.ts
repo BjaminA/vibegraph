@@ -57,6 +57,10 @@ export interface TopoStateMachine {
   /** the function that applies a transition */
   evaluatedBy?: string;
   cite?: Cite;
+  /** 2026-10-12 — the code's own reading of this machine (data_arch.ts), kept
+   *  as a note: the declaration is the one drawn; what the code calls it, and
+   *  which functions it saw applying it */
+  alsoDerived?: { id: string; evaluatedBy?: string };
 }
 export interface TopoDecisionNode {
   id: string;

@@ -7,10 +7,12 @@
 // is gone. This measures exactly those against the baseline stored at
 // ratification, deterministically, on every re-derive:
 //   substantial  a new deployment unit, a new planned process or module, a
+//                box the agreed plan made (arch_plan_split.ts) in no group, a
 //                group that now holds nothing, or new unplaced clusters past
 //                one, or past a tenth of the map — the view asks for an
 //                UPDATE pass (arch_propose.ts, mode "update");
-//   minor        anything else that moved — counted, not asked about;
+//   minor        anything else that moved (a new entry point in an existing
+//                box included) — counted, not asked about;
 //   none.
 // Zero tokens. The update itself is the person's choice.
 
@@ -34,6 +36,8 @@ export function deployUnits(facts: readonly InfraFact[]): string[] {
 }
 
 const clustersOf = (m: Pick<ArchModelRecord, "nodes">) => m.nodes.filter((n) => n.kind === "cluster");
+const unplacedPlanBoxes = (clusters: ArchModelRecord["nodes"], wasUngrouped: Set<string>) =>
+  clusters.filter((n) => n.id.startsWith("cluster:plan:") && !n.group && !wasUngrouped.has(n.id)).map((n) => n.id);
 const plannedOf = (plan: Plan | null): string[] => !plan ? [] : [
   ...plan.processes.filter((p) => p.status !== "dropped").map((p) => `processes:${p.id}`),
   ...(plan.modules ?? []).filter((m) => m.status !== "dropped").map((m) => `modules:${m.id}`),
@@ -48,6 +52,7 @@ export function archBaseline(applied: Pick<ArchModelRecord, "nodes">, facts: rea
     clusters: clusters.map((n) => n.id).sort(),
     ungrouped: clusters.filter((n) => !n.group).map((n) => n.id).sort(),
     deploy: deployUnits(facts),
+    entryPoints: [...new Set(clusters.flatMap((n) => n.entryPoints ?? []))].sort(),
     ...(plan ? { planRevision: plan.revision, planned: plannedOf(plan) } : {}),
   };
 }
@@ -67,6 +72,11 @@ export function archDrift(applied: ArchModelRecord, store: ArchStore, facts: rea
   const added = [...now].filter((id) => !was.has(id));
   const removed = [...was].filter((id) => !now.has(id));
   const deployAdded = b ? deployUnits(facts).filter((d) => !b.deploy.includes(d)) : [];
+  // 2026-10-12 (field review: four new entry points landed in existing boxes
+  // and drift said none) — a new entry point is drift; and a box the agreed
+  // plan made that no group holds is a person's statement the groups miss
+  const entriesAdded = b?.entryPoints ? [...new Set(clusters.flatMap((n) => n.entryPoints ?? []))].filter((e) => !b.entryPoints!.includes(e)).sort() : [];
+  const planBoxes = unplacedPlanBoxes(clusters, wasUngrouped);
   const plannedAdded = b?.planned ? plannedOf(plan).filter((p) => !b.planned!.includes(p)) : [];
   const stated = new Set(store.groups.map((g) => g.id));
   const drawn = new Set(applied.groups.filter((g) => g.source === "stated").map((g) => g.id));
@@ -74,6 +84,8 @@ export function archDrift(applied: ArchModelRecord, store: ArchStore, facts: rea
   const reasons: string[] = [];
   if (deployAdded.length) reasons.push(`${deployAdded.length} new deployment unit${deployAdded.length === 1 ? "" : "s"}: ${deployAdded.slice(0, 4).join(", ")}`);
   if (plannedAdded.length) reasons.push(`${plannedAdded.length} new planned item${plannedAdded.length === 1 ? "" : "s"}: ${plannedAdded.slice(0, 4).join(", ")}`);
+  if (planBoxes.length) reasons.push(`${planBoxes.length} box${planBoxes.length === 1 ? "" : "es"} the agreed plan names, in no group: ${planBoxes.slice(0, 4).join(", ")}`);
+  if (entriesAdded.length) reasons.push(`${entriesAdded.length} new entry point${entriesAdded.length === 1 ? "" : "s"}: ${entriesAdded.slice(0, 4).join(", ")}`);
   if (emptied.length) reasons.push(`${emptied.length} group${emptied.length === 1 ? " holds" : "s hold"} nothing now: ${emptied.slice(0, 4).join(", ")}`);
   const manyUnplaced = unplaced.length >= 2 || (clusters.length > 0 && unplaced.length / clusters.length > 0.1);
   if (unplaced.length) reasons.push(`${unplaced.length} cluster${unplaced.length === 1 ? "" : "s"} in no group: ${unplaced.slice(0, 4).join(", ")}`);
@@ -85,11 +97,12 @@ export function archDrift(applied: ArchModelRecord, store: ArchStore, facts: rea
   // membership can stand still while the words go stale
   const labels = staleLabels(applied, store, labelFacts);
   for (const l of labels) reasons.push(`the label "${l.label}" ${l.why}`);
-  const substantial = deployAdded.length > 0 || plannedAdded.length > 0 || emptied.length > 0 || (unplaced.length > 0 && manyUnplaced) || labels.length > 0;
-  const moved = substantial || unplaced.length > 0 || added.length > 0 || removed.length > 0;
+  const substantial = deployAdded.length > 0 || plannedAdded.length > 0 || emptied.length > 0 || (unplaced.length > 0 && manyUnplaced) || labels.length > 0 || planBoxes.length > 0;
+  const moved = substantial || unplaced.length > 0 || added.length > 0 || removed.length > 0 || entriesAdded.length > 0;
   return {
     level: substantial ? "substantial" : moved ? "minor" : "none",
     unplaced, added, removed, deployAdded, plannedAdded, emptied,
+    ...(entriesAdded.length ? { entriesAdded } : {}),
     ...(labels.length ? { labels } : {}),
     reasons: moved ? reasons : [],
     since: b?.at ?? r.at,

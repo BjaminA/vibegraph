@@ -15,7 +15,7 @@ import * as fs from "fs";
 import * as path from "path";
 import * as crypto from "crypto";
 import { spawnSync } from "child_process";
-import type { Topology, TopologyModel, TopologySource, TopologyStatus, TopoDecisionTree } from "../shared/topology_types.ts";
+import type { Topology, TopologyModel, TopologySource, TopologyStatus, TopoDecisionTree, TopoStateMachine } from "../shared/topology_types.ts";
 import { TOPOLOGY_VERSION } from "../shared/topology_types.ts";
 import { pathAllowed } from "../shared/path_match.ts";
 
@@ -209,6 +209,13 @@ export function loadTopology(root: string, derived?: Topology): TopologyModel {
         const ids = new Set(((item as TopoDecisionTree).nodes ?? []).map((n) => n.id));
         const twin = (topology.decisionTrees ?? []).find((d) => { const shared = d.nodes.filter((n) => ids.has(n.id)).length; return shared > 0 && shared * 2 >= Math.min(ids.size, d.nodes.length); });
         if (twin) { twin.alsoDerived = (item as TopoDecisionTree).id; continue; }
+      }
+      // and a derived machine with the declared machine's transitions (field
+      // review: a mirror in another process was drawn as a second machine)
+      if (derivedSrc && k === "stateMachines") {
+        const pairs = new Set(((item as TopoStateMachine).transitions ?? []).map((x) => `${x.from}>${x.to}`));
+        const twin = (topology.stateMachines ?? []).find((m) => { const shared = m.transitions.filter((x) => pairs.has(`${x.from}>${x.to}`)).length; return shared > 0 && shared * 2 >= Math.min(pairs.size, m.transitions.length); });
+        if (twin) { twin.alsoDerived = { id: (item as TopoStateMachine).id, ...((item as TopoStateMachine).evaluatedBy ? { evaluatedBy: (item as TopoStateMachine).evaluatedBy } : {}) }; continue; }
       }
       const key = `${k}:${keyOf(k, item)}`;
       const json = JSON.stringify({ ...item, cite: undefined });

@@ -103,7 +103,9 @@ export function realisedTargets(plan: Plan, rec: PlanReconcile | null, real: Arc
   }
   for (const t of live(plan.stack)) {
     if (finding(rec, "stack", t.tool)?.verdict !== "realised") continue;
-    const node = real.nodes.find((n) => n.kind === "tool" && (n.tool ?? "").toLowerCase() === t.tool.toLowerCase());
+    // its own name, else a package the plan check found it reached through
+    const names = [t.tool, ...(finding(rec, "stack", t.tool)?.tools ?? [])].map((x) => x.toLowerCase());
+    const node = names.map((x) => real.nodes.find((n) => n.kind === "tool" && (n.tool ?? "").toLowerCase() === x)).find(Boolean);
     if (node) out.set(`stack:${t.tool}`, node.id);
   }
   return out;

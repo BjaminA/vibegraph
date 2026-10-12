@@ -3,6 +3,52 @@
 `vibegraph-knowledge` and the VibeGraph app. Newest first. Each entry says what
 changed and, where an existing user would notice, how behaviour differs.
 
+## 0.34.1 — 2026-10-12 — the map's boxes follow the agreed plan
+
+From the same field review, re-run on 0.34.0:
+
+- **Boxes follow the agreed plan.** The map clusters entry points by how they
+  are launched (framework family, package), so a partner exchange and the
+  admin tools sat in one shared scripts box although the agreed plan names
+  each as its own process. Now, where a derived box holds the entry points of
+  more than one AGREED plan process (or of one and of none), or one process's
+  entry points sit in several boxes, that process gets its own box,
+  `cluster:plan:<id>`, labelled as the plan names it
+  (`src/server/arch_plan_split.ts`). Only the entry points a process LISTS
+  move: a process placed by its `at` alone is located, not anchored, and
+  moves nothing; nor does a proposed process. A box the plan does not
+  divide keeps its id, so stored names and groups still find it. **Behaviour
+  change:** box ids change where the plan divides a box; a ratified group
+  that named the old box shows as drift.
+- **Drift counts more.** A new entry point is drift even when it lands in an
+  existing box, and a box the agreed plan made that no group holds is
+  substantial — the map asks for an update.
+- **`--seed-plan` and the Plan overlay** find a stack tool the plan names by
+  another name (a store reached through its client packages), from the
+  packages `plan check` found it reached through.
+- **The state machine is drawn once.** A derived machine with the declared
+  machine's transitions folds into it; its box says "declared and derived"
+  and names where the code reads it. The declaration says who applies it.
+- **Gate cards** no longer repeat the question in their rows.
+- **No wall of grants.** Above 48 write edges the Resources lens says each
+  principal's writes on its card ("may write 30 zones — select to draw
+  them"), and the access grid opens first.
+- **The Brief is not blocked by a pending groups proposal** when groups are
+  already settled: it is drafted through the settled groups, says so, and the
+  pending proposal waits beside it (a full draft no longer drops it).
+- **The Brief facts** list where the code calls a ratified software spec's
+  operations as [use] evidence (a signature check's key lookup, a document
+  write), tests left out; and a feed the project's own topology declares is
+  no longer flagged as "rests on the plan only".
+- **TypeScript:** a field or constructor parameter property with no
+  annotation but a `new K()` default is typed `K`, as TypeScript infers it, so
+  `this.codec.encode(…)` links (under the existing rule: only when no
+  project class extends K). A gateway's thread now reaches the codec it
+  constructs.
+- `fast-xml-parser`, `xml2js`, `xmllint-wasm` are `utility` (in-process).
+
+Tests: test:plan-boxes (7), test:e2e-topology (the gate panel's rows).
+
 ## 0.34.0 — 2026-10-12 — the Brief stays current; decisions and access read as such
 
 A field Brief showed two lines STALE though nothing they said had changed. Two

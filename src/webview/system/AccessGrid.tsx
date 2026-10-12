@@ -5,13 +5,14 @@
 import React from "react";
 import { Grid3x3, X } from "lucide-react";
 import type { Topology } from "../../shared/topology_types";
-import { accessGrid, zoneGroupsOf } from "../../shared/topology_groups";
+import { GRANT_EDGE_CAP, accessGrid, zoneGroupsOf } from "../../shared/topology_groups";
 
 const mono: React.CSSProperties = { fontFamily: "var(--font-mono)", fontSize: "var(--fs-11)" };
 const btn: React.CSSProperties = { display: "flex", alignItems: "center", gap: 4, border: "1px solid var(--border-edge)", borderRadius: 4, padding: "4px 8px", cursor: "pointer", background: "transparent", color: "var(--text-primary)", fontFamily: "var(--font-ui)", fontSize: "var(--fs-11)" };
 
 export function AccessGrid({ t }: { t: Topology }) {
-  const [open, setOpen] = React.useState(false);
+  // a store with more grants than the map draws opens on the grid
+  const [open, setOpen] = React.useState(() => (t.grants ?? []).filter((g) => g.access === "write").length > GRANT_EDGE_CAP);
   const [expanded, setExpanded] = React.useState<Set<string>>(new Set());
   const groups = React.useMemo(() => zoneGroupsOf(t), [t]);
   const grid = React.useMemo(() => accessGrid(t), [t]);

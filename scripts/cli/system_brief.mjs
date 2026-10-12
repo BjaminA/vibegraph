@@ -99,6 +99,7 @@ export function runSystemBrief({ root, sub, section, values, pipeline, env = pro
   const gs = groupsStep(absRoot, loadBrief(absRoot), model, { only: values.only, stale: values.stale, skip: values["skip-groups"] === true });
   if (gs.step === "wait") { messages.push(gs.why); return done(1); }
   if (gs.step === "groups") lines.push(`groups first: ${gs.why}`);
+  if (gs.step === "brief" && gs.note) lines.push(`note: ${gs.note}`);
   const only = gs.step === "groups" ? "groups" : values.only;
   const skipGroups = gs.step === "brief" && gs.skipGroups;
   if (values.estimate && !values.stale) {

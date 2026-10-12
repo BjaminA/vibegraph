@@ -20,7 +20,7 @@ export const MODULE_LIMITS = [
   "a process's files are its own `at`, the files of its `entryPoints` and the modules it `uses`; a file in a module several processes use is attributed to none of them",
 ];
 
-const underPrefix = (file: string, at: string) => {
+export const underPrefix = (file: string, at: string) => {
   const a = at.replace(/^\.\//, "").replace(/\/$/, "");
   return file === a || file.startsWith(`${a}/`);
 };

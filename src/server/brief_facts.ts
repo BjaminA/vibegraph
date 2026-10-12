@@ -46,10 +46,11 @@ import { scopeDossier } from "./node_scope.ts";
 import { planCitations } from "./arch_propose.ts";
 import { briefData, zoneLine, isVerifyFile, verifyEdge, type BriefData, type FeedDecl } from "./brief_data.ts";
 import { toolNote } from "../shared/stack_taxonomy.ts";
+import { specUsage } from "./software_apply.ts";
 import { anchorOf, anchorChange, type BriefAnchor } from "./brief_anchor.ts";
 import { briefDocs, humanRules, salientFiles, type RuleSite, type SalientFile } from "./brief_salience.ts";
 
-export const BRIEF_FACT_LIMITS = { boxes: 80, edges: 160, docs: 40, silentPerCall: 6, specOps: 12, rules: 30, enforce: 24, salient: 5 };
+export const BRIEF_FACT_LIMITS = { boxes: 80, edges: 160, docs: 40, silentPerCall: 6, specOps: 12, specCalls: 8, rules: 30, enforce: 24, salient: 5 };
 
 /** What a rule's check guards: the code (hashed apart) and where it is. */
 export interface RuleCode { code: string; legacy: string; names: string[]; sites: RuleSite[] }
@@ -341,6 +342,13 @@ export function buildBriefFacts(model: ArchModelRecord, opts: {
       L.push(`- ${cite(`spec:${s.tool}:op:${o.name}`, text, "declare", [text])}: ${text}`);
     }
     for (const r of (s.rules ?? []).filter((x) => x.core).slice(0, 6)) L.push(`- ${cite(`spec:${s.tool}:rule:${r.id}`, r.text, "declare", [r.text])}: ${r.text}`);
+    // 2026-10-12 (field review: "verifies" left out for want of a use item) —
+    // where this code CALLS the tool's operations: running evidence, not tests
+    const used = specUsage(s, (opts.source?.files ?? {}) as never).calls.filter((c) => c.line && !isVerifyFile(c.file));
+    const seen = new Set<string>();
+    for (const c of used.filter((x) => !seen.has(`${x.operation}|${x.file}`) && seen.add(`${x.operation}|${x.file}`)).slice(0, BRIEF_FACT_LIMITS.specCalls)) {
+      L.push(`- ${cite(`${c.file}:${c.line}`, window(c.file, c.line!, c.call), "use")} [use]: calls ${s.tool} ${c.operation} (${c.does}${c.on ? ` ${c.on}` : ""}) — ${c.call}`);
+    }
   }
 
   const docs = briefDocs(opts.root, model, rules, opts.plan, { exclude: opts.docExclude, max: BRIEF_FACT_LIMITS.docs }).filter((d) => !focus || focus.cites.has(`${d.file}:${d.line}`));

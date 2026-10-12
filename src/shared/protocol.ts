@@ -918,6 +918,8 @@ export interface ArchDrift {
   plannedAdded: string[];
   /** groups that hold nothing any more */
   emptied: string[];
+  /** 2026-10-12 — entry points new since (they may land in existing boxes) */
+  entriesAdded?: string[];
   /** 2026-10-07 — ratified labels the facts no longer support (arch_label_drift.ts) */
   labels?: Array<{ group: string; label: string; why: string }>;
   reasons: string[];

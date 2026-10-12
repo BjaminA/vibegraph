@@ -393,6 +393,9 @@ export interface PlanFinding {
   /** a realised process: the entry points in its files (≤ 50) — how the map
    *  finds the real box the planned process became */
   entryPoints?: string[];
+  /** 2026-10-12 — a realised stack tool: the packages it is reached through
+   *  (how the map finds its box when the plan names it by another name) */
+  tools?: string[];
   /** a planned thread: the process it belongs to — named, or found from the
    *  entry point it starts from */
   process?: string;

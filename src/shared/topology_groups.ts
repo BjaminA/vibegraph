@@ -10,6 +10,11 @@ import { grantees } from "./topology_query.ts";
 
 export interface ZoneGroup { id: string; label: string; zones: string[] }
 
+/** 2026-10-12 (field review: "grant edges are still a solid wall") — above
+ *  this many write edges the map says them on the cards and the access grid
+ *  opens first: the grid is the readable view of that many. */
+export const GRANT_EDGE_CAP = 48;
+
 const patternRe = (p: string) => new RegExp(`^${p.replace(/[.*+?^$()|[\]\\]/g, "\\$&").replace(/\{[^}]+\}/g, ".+")}$`);
 
 /** Groups of at least `min` zones; a zone sits in one group at most. */

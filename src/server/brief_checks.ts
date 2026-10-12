@@ -44,6 +44,7 @@ const opsBy = (facts: Pick<BriefFacts, "data">, box: string, zones: string[], op
   facts.data.ops.filter((o) => o.box === box && zones.includes(o.zone) && ops.includes(o.op));
 
 /** What the facts say about one claim. */
+const FEED_DECLARES = "the project's topology";
 export function checkClaim(c: BriefClaim, facts: Pick<BriefFacts, "data" | "boxes" | "labels">): BriefClaim {
   const say = (verdict: NonNullable<BriefClaim["verdict"]>, why: string): BriefClaim => ({ ...c, verdict, why });
   const name = (b: string) => facts.labels.get(b) ?? b;
@@ -76,7 +77,7 @@ export function checkClaim(c: BriefClaim, facts: Pick<BriefFacts, "data" | "boxe
   const inferred = mine.find((o) => o.source === "inferred");
   if (inferred) return say("inferred", `a person ratified ${inferred.cite.replace("claim:", "claim ")}, citing the lines it rests on; the code alone does not show it`);
   const declared = mine.find((o) => o.source === "declared");
-  if (declared) return say("declared", `${declared.feed ? "the project's topology" : "the plan"} declares it (${declared.cite}); the code shows no such call — a feed or router the static reading cannot follow`);
+  if (declared) return say("declared", `${declared.feed ? FEED_DECLARES : "the plan"} declares it (${declared.cite}); the code shows no such call — a feed or router the static reading cannot follow`);
   return say("unverifiable", `neither the code nor the plan shows ${name(c.subject)} ${ops[0]} ${zones.map(short).join(" / ")}`);
 }
 
@@ -135,7 +136,8 @@ export function checkLine(part: BriefPart, line: BriefLine, facts: BriefFacts, o
   for (const c of claims) {
     if (c.verdict === "contradicted") errors.push(`claim ${label(c)} is contradicted: ${c.why}`);
     else if (c.verdict === "unverifiable") warnings.push(`claim ${label(c)} is unverifiable: ${c.why}`);
-    else if (c.verdict === "declared") warnings.push(`claim ${label(c)} rests on the plan only: ${c.why}`);
+    // 2026-10-12 — a feed the project's own topology declares is evidence, not a gap
+    else if (c.verdict === "declared" && !c.why?.startsWith(FEED_DECLARES)) warnings.push(`claim ${label(c)} rests on the plan only: ${c.why}`);
     else if (c.verdict === "inferred") warnings.push(`claim ${label(c)} rests on a ratified inferred claim: ${c.why}`);
   }
   const roles = new Set<EvidenceRole>(line.cites.map((c) => facts.roles.get(c) ?? "use"));

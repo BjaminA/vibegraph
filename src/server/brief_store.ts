@@ -57,6 +57,10 @@ export function proposeBrief(rec: BriefRecord, proposed: NonNullable<BriefRecord
     if (only === "path") p.primaryPath = proposed.primaryPath;
     return { ...rec, proposed: { ...p, refused: [...p.refused, ...proposed.refused], ...mergeHashes(rec.proposed, proposed), model: proposed.model, at: proposed.at } };
   }
+  // a full draft that asked for no groups keeps the groups still pending (they wait for their person)
+  if (rec.proposed?.groups?.length && !proposed.groups?.length) {
+    return { ...rec, proposed: { ...proposed, groups: rec.proposed.groups, names: rec.proposed.names, ...mergeHashes(rec.proposed, proposed) } };
+  }
   return { ...rec, proposed };
 }
 

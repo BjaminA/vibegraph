@@ -734,10 +734,17 @@ export class JstsGraphBuilder {
       const s = t ? this.text(t).replace(/^:\s*/, "").trim() : "";
       return /^[A-Za-z_$][\w$]*$/.test(s) ? s : null;
     };
+    // 2026-10-12 — no annotation, but a `new K()` default: TypeScript infers K
+    // (`private readonly codec = new XmlCodec()`), so it reads as `: K`
+    const newOf = (v) => {
+      if (v?.type !== "new_expression") return null;
+      const c = v.childForFieldName("constructor");
+      return c?.type === "identifier" ? this.text(c) : null;
+    };
     for (const m of body?.namedChildren ?? []) {
       if (m.type === "public_field_definition" || m.type === "field_definition") {
         const f = m.childForFieldName("name");
-        const t = plain(m.childForFieldName("type"));
+        const t = plain(m.childForFieldName("type")) ?? newOf(m.childForFieldName("value"));
         if (f && t) out[this.text(f)] = t;
       }
       if (m.type === "method_definition" && this.text(m.childForFieldName("name") ?? m) === "constructor") {
@@ -746,7 +753,7 @@ export class JstsGraphBuilder {
             || /^(public|private|protected|readonly)\s/.test(this.text(prm));
           if (!isProp) continue;
           const pat = prm.childForFieldName("pattern");
-          const t = plain(prm.childForFieldName("type"));
+          const t = plain(prm.childForFieldName("type")) ?? newOf(prm.childForFieldName("value"));
           if (pat?.type === "identifier" && t) out[this.text(pat)] = t;
         }
       }

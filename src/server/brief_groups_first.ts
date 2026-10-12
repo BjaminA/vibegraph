@@ -5,7 +5,8 @@
 // full draft asks for the groups ALONE when none is settled, and waits for a
 // person to decide them; once they are settled (ratified, or written in
 // architecture.json) the brief is drafted with them as citable statements and
-// without a groups section of its own. `--skip-groups` keeps the one-call draft.
+// without a groups section of its own (a pending proposal then waits beside it).
+// `--skip-groups` keeps the one-call draft.
 
 import type { ArchModelRecord } from "../shared/protocol.ts";
 import type { BriefRecord } from "../shared/brief_types.ts";
@@ -15,17 +16,23 @@ import { sectionSummary } from "./brief_store.ts";
 export type GroupsStep =
   | { step: "groups"; why: string }
   | { step: "wait"; why: string }
-  | { step: "brief"; skipGroups: boolean };
+  | { step: "brief"; skipGroups: boolean; note?: string };
 
 /** What a draft does about groups. `only` / `stale` drafts are unchanged. */
 export function groupsStep(root: string, rec: BriefRecord, model: ArchModelRecord, opts: { only?: string; stale?: boolean; skip?: boolean } = {}): GroupsStep {
   if (opts.only || opts.stale || opts.skip) return { step: "brief", skipGroups: false };
   const store = loadArchStore(root);
   const pendingBrief = !!(rec.proposed && sectionSummary(rec.proposed, "groups"));
+  const settled = !!ratifiedAt(store) || (model.groups ?? []).some((g) => g.source === "stated");
+  // 2026-10-12 (field review: a pending groups draft — "even a bad one" —
+  // stopped every brief) — with groups already settled, the brief is drafted
+  // through them and the pending proposal is left for its person, untouched
+  if ((pendingBrief || store.proposal) && settled) {
+    return { step: "brief", skipGroups: true, note: `${pendingBrief ? "the brief's proposed groups" : "a proposed architecture"} still wait${pendingBrief ? "" : "s"} for a person; this draft reads the codebase through the groups already settled` };
+  }
   if (pendingBrief || store.proposal) {
     return { step: "wait", why: `${pendingBrief ? "the brief's proposed groups" : "a proposed architecture"} wait for a person — ratify or reject ${pendingBrief ? "them (`brief codebase ratify|reject groups`, the card or the inbox)" : "it on the map (or `architecture --ratify|--reject`)"}, then draft the brief; or draft now with --skip-groups` };
   }
-  const settled = !!ratifiedAt(store) || (model.groups ?? []).some((g) => g.source === "stated");
   if (settled) return { step: "brief", skipGroups: true };
   return { step: "groups", why: "no groups are settled yet: the groups are proposed first (which boxes deploy together, which trust zone they share), because the brief reads the codebase through them — decide them, then draft the brief" };
 }

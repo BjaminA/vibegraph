@@ -91,7 +91,7 @@ export async function briefDraft(ctx: BriefCtx, opts: { only?: BriefOnly; stale?
   saveBrief(root, next);
   ctx.changed();
   if (gs.step === "groups") return { ok: true, detail: `groups first — ${sectionSummary(next.proposed!, "groups") ?? "no group change proposed"}; decide them, then draft the brief` };
-  return { ok: true, detail: `${allLines(parsed.brief.spec).length} spec line(s), ${parsed.brief.refused.length} refused` };
+  return { ok: true, detail: `${allLines(parsed.brief.spec).length} spec line(s), ${parsed.brief.refused.length} refused${gs.step === "brief" && gs.note ? ` — ${gs.note}` : ""}` };
 }
 
 /** "Explain this gap" (2026-10-08): the estimate, or the one model call on gap

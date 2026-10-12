@@ -66,7 +66,7 @@ export interface ArchProposal {
 }
 
 /** What the map held when the groups were ratified (the drift baseline). */
-export interface ArchBaseline { at: string; clusters: string[]; ungrouped?: string[]; deploy: string[]; planRevision?: number; planned?: string[] }
+export interface ArchBaseline { at: string; clusters: string[]; ungrouped?: string[]; deploy: string[]; planRevision?: number; planned?: string[]; entryPoints?: string[] }
 
 export interface ArchStore {
   version: "1";
@@ -103,7 +103,7 @@ function validBaseline(b: unknown): b is ArchBaseline {
   const x = b as Record<string, unknown>;
   const strs = (v: unknown) => Array.isArray(v) && v.every((s) => typeof s === "string");
   return typeof x.at === "string" && strs(x.clusters) && strs(x.deploy) && (x.ungrouped === undefined || strs(x.ungrouped))
-    && (x.planRevision === undefined || typeof x.planRevision === "number") && (x.planned === undefined || strs(x.planned));
+    && (x.planRevision === undefined || typeof x.planRevision === "number") && (x.planned === undefined || strs(x.planned)) && (x.entryPoints === undefined || strs(x.entryPoints));
 }
 
 export function emptyStore(): ArchStore {
