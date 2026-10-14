@@ -3,6 +3,41 @@
 `vibegraph-knowledge` and the VibeGraph app. Newest first. Each entry says what
 changed and, where an existing user would notice, how behaviour differs.
 
+## 0.34.3 — 2026-10-14 — the plan's boxes hold while a change is pending; questions close on evidence
+
+From the same field review, re-run on 0.34.2:
+
+- **A pending change no longer drops a box.** While an agent's change to an
+  agreed process waits for a person, the map draws the process as it was last
+  agreed (`agreedAs`); before, it fell back to the code-only boxes until
+  someone re-agreed.
+- **A question something assumes can be closed on its evidence.** A person
+  closing a question whose latest evidence is CONFIRMED settles it: the items
+  resting on it stop assuming it, and the resolved record says so. Otherwise
+  the refusal says what is missing (no evidence, refuted, not run yet) — it
+  used to say "record its evidence" even when the evidence was there.
+- **A stale box name is flagged.** Ratifying records each box's entry points;
+  a ratified name on a box whose entry points have since left is drift
+  ("the name … was given when it held 6 entry points; it now holds smoke") and
+  asks for an update. Recorded from the next ratification on.
+- **A box lists a file once** when it is seeded on both its module and its
+  `main`.
+- **"Placed by its folder"** replaces "located, not anchored" on a box the plan
+  places by its `at` only — plan check calls it realised; a library needs no
+  entry point.
+- **Brief staleness says what changed:** the was / now texts show the part that
+  differs, in whole words, not a prefix cut before the change; a citation of a
+  declared feed's edge (`…:feed:N`) that has folded into the code's own edge is
+  not stale.
+- **The Brief facts list every gate** of a declared tree (`topology:dt:<id>:gates`:
+  id, kind, who answers, the question) — the tree's line kept six of twenty.
+- **The review sheet no longer contradicts itself:** a process's main job is
+  stated by a line that cites the box's edge to that zone, or names the box
+  and the zone, even when the line carries other claims.
+
+Tests: test:plan-boxes (11), test:plan-assumptions, test:brief, test:processes,
+test:system-views.
+
 ## 0.34.2 — 2026-10-14 — the access grid opens whole; chips in the Stack panel
 
 - **Fix: the access grid showed as an empty strip with scrollbars.** On a

@@ -132,7 +132,8 @@ test("B7: a line goes STALE only when exactly what it cites changes, and says wh
   const show = cli(["brief", "codebase", "show", proj]);
   assert.equal(show.status, 0, show.stderr);
   assert.match(show.stdout, /Function: Decides when an order is released[^\n]*\[STALE: topology:sm:order-phase changed\]/);
-  assert.match(show.stdout, /topology:sm:order-phase changed — was: "state machine order-phase: filed→held[^"]*", now: "state machine order-phase: filed→parked/, "the card says what changed");
+  // 2026-10-12 — the part that changed, with its words around it (not a prefix cut before the change)
+  assert.match(show.stdout, /topology:sm:order-phase changed — was: "[^"]*order-phase: filed→held by decider[^"]*", now: "[^"]*order-phase: filed→parked by decider/, "the card says what changed");
   assert.doesNotMatch(show.stdout, /Function: Serves clerks[^\n]*STALE/, "a line whose citations did not change stays fresh");
   assert.doesNotMatch(show.stdout, /Method: Partitions[^\n]*STALE/);
 });

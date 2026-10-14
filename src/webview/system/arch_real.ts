@@ -102,9 +102,11 @@ export function enrichReal(real: ArchModelRecord, inp: RealInputs = {}): RealMod
       n.label = ps.length === 1 ? ps[0].label : `${ps[0].label} +${ps.length - 1}`;
       n.labelSource = "plan";
       const located = ps.every(locatedOnly);
-      if (located) n.sublabel = `located, not anchored · ${n.sublabel}`;
+      // 2026-10-12 (field review: "located, not anchored" read as a failure on a
+      // library plan check calls realised) — say how it was placed, not what it lacks
+      if (located) n.sublabel = `placed by its folder · ${n.sublabel}`;
       n.notes = [
-        `the plan's ${ps.map((p) => `${p.label} (${p.id})`).join(", ")} — ${located ? "LOCATED here by its `at` path, not anchored: give it `entryPoints` to name the process that runs it" : "realised here, anchored by its entry points"}; the code calls it ${n.derivedLabel}`,
+        `the plan's ${ps.map((p) => `${p.label} (${p.id})`).join(", ")} — ${located ? "placed here by its `at` folder, where plan check finds its code; no entry point names the process that runs it — a library needs none, a service would list its `entryPoints`" : "realised here, anchored by its entry points"}; the code calls it ${n.derivedLabel}`,
         ...(n.notes ?? []),
       ];
       n.essential = true; // the plan says it is its own process: never folded into another

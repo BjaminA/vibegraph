@@ -137,12 +137,26 @@ function resolveQuestion(plan: Plan, id: string, state: "closed" | "dropped", by
   if (by !== "human") return "only a person closes or drops a question — record what was found as a note on it, or as plan items, and the person closes it";
   const idx = plan.open.findIndex((q) => q.id === id);
   if (idx < 0) return (plan.resolved ?? []).some((q) => q.id === id) ? `${id} is already closed or dropped (reopen it first)` : `no open question ${id}`;
-  const resting = ([] as Array<{ id?: string; tool?: string; assumes?: string[] }>)
+  const restingItems = ([] as Array<{ id?: string; tool?: string; assumes?: string[] }>)
     .concat(plan.processes, plan.boundaries, plan.stack, plan.threads, plan.policies, plan.stores ?? [], plan.principals ?? [], plan.flows ?? [], plan.modules ?? [])
-    .filter((x) => x.assumes?.includes(id)).map((x) => x.id ?? x.tool);
-  if (resting.length) return `${resting.join(", ")} assume${resting.length === 1 ? "s" : ""} ${id} — record its evidence (\`{"op":"update","section":"open","id":"${id}","fields":{"evidence":[…]}}\`), or take it out of their \`assumes\` first`;
+    .filter((x) => x.assumes?.includes(id));
+  const resting = restingItems.map((x) => x.id ?? x.tool);
+  // 2026-10-12 (field review: a question with confirmed evidence could not be
+  // closed, and the hint said "record its evidence") — a person closing a
+  // question whose LATEST evidence is confirmed settles it: the items resting
+  // on it stop assuming it, said in the record. Anything else names what is missing.
+  const latest = plan.open[idx].evidence?.at(-1);
+  let settled = "";
+  if (resting.length) {
+    if (state !== "closed" || latest?.result !== "confirmed") {
+      return `${resting.join(", ")} assume${resting.length === 1 ? "s" : ""} ${id}, and ${state === "dropped" ? "dropping it would leave them resting on nothing" : latest ? `its latest evidence is ${latest.result ?? "not run yet"}` : "it has no evidence"} — ${state === "closed" ? "record a confirmed result for it, or " : ""}take it out of their \`assumes\` first`;
+    }
+    for (const it of restingItems) it.assumes = it.assumes!.filter((q) => q !== id);
+    settled = `confirmed by its evidence; ${resting.join(", ")} no longer assume${resting.length === 1 ? "s" : ""} it`;
+  }
   const [q] = plan.open.splice(idx, 1);
-  plan.resolved = [...(plan.resolved ?? []), { ...q, state, rev: plan.revision + 1, at: now.toISOString(), by, ...(note ? { note } : {}) }].slice(-PLAN_CAPS.resolved);
+  const why = [note, settled].filter(Boolean).join(" — ");
+  plan.resolved = [...(plan.resolved ?? []), { ...q, state, rev: plan.revision + 1, at: now.toISOString(), by, ...(why ? { note: why } : {}) }].slice(-PLAN_CAPS.resolved);
   return null;
 }
 

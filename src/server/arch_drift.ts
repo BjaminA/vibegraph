@@ -53,6 +53,7 @@ export function archBaseline(applied: Pick<ArchModelRecord, "nodes">, facts: rea
     ungrouped: clusters.filter((n) => !n.group).map((n) => n.id).sort(),
     deploy: deployUnits(facts),
     entryPoints: [...new Set(clusters.flatMap((n) => n.entryPoints ?? []))].sort(),
+    boxEntries: Object.fromEntries(clusters.map((n) => [n.id, [...(n.entryPoints ?? [])].sort()])),
     ...(plan ? { planRevision: plan.revision, planned: plannedOf(plan) } : {}),
   };
 }
@@ -77,6 +78,15 @@ export function archDrift(applied: ArchModelRecord, store: ArchStore, facts: rea
   // plan made that no group holds is a person's statement the groups miss
   const entriesAdded = b?.entryPoints ? [...new Set(clusters.flatMap((n) => n.entryPoints ?? []))].filter((e) => !b.entryPoints!.includes(e)).sort() : [];
   const planBoxes = unplacedPlanBoxes(clusters, wasUngrouped);
+  // a ratified NAME on a box whose members changed since: the name may no
+  // longer say what is inside (field review: "Partner exchange and
+  // provisioning scripts" left holding one smoke test)
+  const staleNames = Object.entries(store.names ?? {}).flatMap(([box, name]) => {
+    const was = b?.boxEntries?.[box], now = clusters.find((n) => n.id === box)?.entryPoints;
+    if (!was || !now) return [];
+    const nowS = [...now].sort();
+    return was.some((e) => !nowS.includes(e)) ? [{ box, name, was, now: nowS }] : [];
+  });
   const plannedAdded = b?.planned ? plannedOf(plan).filter((p) => !b.planned!.includes(p)) : [];
   const stated = new Set(store.groups.map((g) => g.id));
   const drawn = new Set(applied.groups.filter((g) => g.source === "stated").map((g) => g.id));
@@ -85,6 +95,7 @@ export function archDrift(applied: ArchModelRecord, store: ArchStore, facts: rea
   if (deployAdded.length) reasons.push(`${deployAdded.length} new deployment unit${deployAdded.length === 1 ? "" : "s"}: ${deployAdded.slice(0, 4).join(", ")}`);
   if (plannedAdded.length) reasons.push(`${plannedAdded.length} new planned item${plannedAdded.length === 1 ? "" : "s"}: ${plannedAdded.slice(0, 4).join(", ")}`);
   if (planBoxes.length) reasons.push(`${planBoxes.length} box${planBoxes.length === 1 ? "" : "es"} the agreed plan names, in no group: ${planBoxes.slice(0, 4).join(", ")}`);
+  for (const s of staleNames) reasons.push(`the name "${s.name}" was given to ${s.box} when it held ${s.was.length} entry point${s.was.length === 1 ? "" : "s"}; it now holds ${s.now.length ? s.now.map((e) => e.split(":")[0].split("/").pop()).join(", ") : "none"} — rename it, or update the groups`);
   if (entriesAdded.length) reasons.push(`${entriesAdded.length} new entry point${entriesAdded.length === 1 ? "" : "s"}: ${entriesAdded.slice(0, 4).join(", ")}`);
   if (emptied.length) reasons.push(`${emptied.length} group${emptied.length === 1 ? " holds" : "s hold"} nothing now: ${emptied.slice(0, 4).join(", ")}`);
   const manyUnplaced = unplaced.length >= 2 || (clusters.length > 0 && unplaced.length / clusters.length > 0.1);
@@ -97,12 +108,13 @@ export function archDrift(applied: ArchModelRecord, store: ArchStore, facts: rea
   // membership can stand still while the words go stale
   const labels = staleLabels(applied, store, labelFacts);
   for (const l of labels) reasons.push(`the label "${l.label}" ${l.why}`);
-  const substantial = deployAdded.length > 0 || plannedAdded.length > 0 || emptied.length > 0 || (unplaced.length > 0 && manyUnplaced) || labels.length > 0 || planBoxes.length > 0;
+  const substantial = deployAdded.length > 0 || plannedAdded.length > 0 || emptied.length > 0 || (unplaced.length > 0 && manyUnplaced) || labels.length > 0 || planBoxes.length > 0 || staleNames.length > 0;
   const moved = substantial || unplaced.length > 0 || added.length > 0 || removed.length > 0 || entriesAdded.length > 0;
   return {
     level: substantial ? "substantial" : moved ? "minor" : "none",
     unplaced, added, removed, deployAdded, plannedAdded, emptied,
     ...(entriesAdded.length ? { entriesAdded } : {}),
+    ...(staleNames.length ? { staleNames } : {}),
     ...(labels.length ? { labels } : {}),
     reasons: moved ? reasons : [],
     since: b?.at ?? r.at,

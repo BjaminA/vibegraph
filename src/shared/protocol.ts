@@ -920,6 +920,8 @@ export interface ArchDrift {
   emptied: string[];
   /** 2026-10-12 — entry points new since (they may land in existing boxes) */
   entriesAdded?: string[];
+  /** 2026-10-12 — named boxes whose entry points changed since they were named */
+  staleNames?: Array<{ box: string; name: string; was: string[]; now: string[] }>;
   /** 2026-10-07 — ratified labels the facts no longer support (arch_label_drift.ts) */
   labels?: Array<{ group: string; label: string; why: string }>;
   reasons: string[];

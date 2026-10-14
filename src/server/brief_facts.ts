@@ -308,6 +308,9 @@ export function buildBriefFacts(model: ArchModelRecord, opts: {
       const who = [...new Set(gates.map((x) => x.answeredBy).filter(Boolean))];
       const text = `decision tree ${d.id}: ${gates.length} gates${judge || checks ? ` (${judge} a person's judgement, ${checks} checks on recorded evidence)` : ""}${outcomes.length ? `; outcomes ${outcomes.join(", ")}` : ""}${who.length ? `; answered by ${who.slice(0, 6).join(", ")}` : ""}`;
       L.push(`- ${cite(`topology:dt:${d.id}:shape`, text, "declare", [text])}: ${text}`);
+      // 2026-10-12 (field review: the tree's line kept six questions of twenty) — every gate, one short line
+      const all = gates.map((x) => `${x.id}${x.kind ? ` [${x.kind}${x.answeredBy ? `, ${x.answeredBy}` : ""}]` : ""}: ${(x.question ?? "").replace(/\s+/g, " ").slice(0, 70)}`).join(" | ");
+      if (all) L.push(`- ${cite(`topology:dt:${d.id}:gates`, all, "declare", [all])}: gates — ${all}`);
     }
   }
 

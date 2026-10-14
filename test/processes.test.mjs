@@ -61,6 +61,6 @@ test("the plan names a box it is anchored to; one only LOCATED by `at` gets no p
   assert.ok(runner.notes.some((n) => /the plan says it runs as svc; the code creates its own identity for each run/.test(n)));
   const server = box(real, "cluster:process:.:server");
   assert.equal(server.label, "order service");
-  assert.match(server.sublabel, /^located, not anchored/);
+  assert.match(server.sublabel, /^placed by its folder/);
   assert.deepEqual(server.badges.map((b) => b.label), ["$SVC_USER"]);
 });

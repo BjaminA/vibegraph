@@ -22,7 +22,14 @@ export interface PlanOwner { id: string; label: string }
 /** entry point id → the agreed plan process it runs as, by what the plan states. */
 export function planOwnerOf(plan: Plan | null | undefined, files: string[], entryPoints: Array<{ id: string; file: string }>): Map<string, PlanOwner> {
   const out = new Map<string, PlanOwner>();
-  const agreed = (plan?.processes ?? []).filter((p) => p.status === "agreed");
+  // 2026-10-12 (field review: a pending agent edit dropped the box until a
+  // person re-agreed) — a process with a change pending is drawn as it was
+  // last AGREED (`agreedAs`); the proposal reshapes nothing until agreed
+  const agreed = (plan?.processes ?? []).flatMap((p) => {
+    if (p.status === "agreed") return [p];
+    const was = p.status === "proposed" ? (p as { agreedAs?: Record<string, unknown> }).agreedAs : undefined;
+    return was ? [{ ...p, ...(was as Partial<typeof p>), id: p.id, status: "agreed" as const }] : [];
+  });
   if (!agreed.length) return out;
   for (const e of entryPoints) {
     // a process at bin/ listing bin/provision.sh: the probes beside it are not its own

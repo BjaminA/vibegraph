@@ -159,6 +159,26 @@ export const allLines = (spec: BriefBody["spec"]): BriefLine[] => [...spec.funct
 
 const oneLine = (s: string, n = 90) => { const t = s.replace(/\s+/g, " ").trim(); return t.length > n ? `${t.slice(0, n - 1)}…` : t; };
 
+/** 2026-10-12 (field review: "was" and "now" printed identically, both cut
+ *  before the change) — the part of each that differs, with a little context. */
+export function changedSpan(was: string, now: string, ctx = 24, max = 120): { was: string; now: string } {
+  const a = was.replace(/\s+/g, " ").trim(), b = now.replace(/\s+/g, " ").trim();
+  let p = 0;
+  while (p < a.length && p < b.length && a[p] === b[p]) p++;
+  let s = 0;
+  while (s < a.length - p && s < b.length - p && a[a.length - 1 - s] === b[b.length - 1 - s]) s++;
+  const cut = (t: string) => {
+    // widened to whole words
+    const f0 = Math.max(0, p - ctx), t0 = Math.min(t.length, t.length - s + ctx);
+    const from = f0 === 0 ? 0 : t.lastIndexOf(" ", f0) + 1;
+    const sp = t.indexOf(" ", t0);
+    const to = t0 >= t.length || sp < 0 ? t.length : sp;
+    const mid = t.slice(from, to);
+    return `${from > 0 ? "…" : ""}${mid.length > max ? `${mid.slice(0, max - 1)}…` : mid}${to < t.length ? "…" : ""}`;
+  };
+  return { was: cut(a), now: cut(b) };
+}
+
 /** What changed under one citation, or null when nothing did (B7). */
 export function citationChange(c: string, saved: BriefHashes, facts: Pick<BriefFacts, "cites" | "code" | "legacy" | "anchorNow" | "reread">): string | null {
   // 2026-10-12 — a `file:line` with an anchor follows the CODE it points at
@@ -167,6 +187,10 @@ export function citationChange(c: string, saved: BriefHashes, facts: Pick<BriefF
   if (anchor && facts.anchorNow) return facts.anchorNow(anchor);
   const was = saved.hashes[c];
   if (!facts.cites.has(c)) {
+    // 2026-10-12 — a declared feed's edge (`box->zone:feed:N`) folds into the
+    // code's own edge once the code shows it: the same box and zone, still there
+    const feed = /^(.+->.+):feed:\d+$/.exec(c);
+    if (feed && [...facts.cites.keys()].some((k) => k.startsWith(`${feed[1]}:`))) return null;
     // not in this pack (the pack keeps only the top-ranked lines): read the
     // cited lines from the file itself before calling them gone
     const again = facts.reread?.(c) ?? null;
@@ -178,7 +202,7 @@ export function citationChange(c: string, saved: BriefHashes, facts: Pick<BriefF
   const sameButStatus = (oldText: string) => c.startsWith("plan:") && planSansStatus(oldText) === planSansStatus(now.replace(/\s+/g, " ").slice(0, 160));
   if (was) {
     if (saved.basis?.[c] !== undefined) {
-      if (was !== hash16(now) && !sameButStatus(saved.basis[c])) return c.startsWith("rule:") ? `${c} changed — its text, check or scope (was: "${oneLine(saved.basis[c])}")` : `${c} changed — was: "${oneLine(saved.basis[c])}", now: "${oneLine(now)}"`;
+      if (was !== hash16(now) && !sameButStatus(saved.basis[c])) return c.startsWith("rule:") ? `${c} changed — its text, check or scope (was: "${oneLine(saved.basis[c])}")` : (() => { const d = changedSpan(saved.basis![c], now); return `${c} changed — was: "${d.was}", now: "${d.now}"`; })();
     } else {
       // written by 0.29.0: fresh if it matches any way that version hashed it
       // (and, for a plan item, under any status)

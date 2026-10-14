@@ -166,3 +166,44 @@ test("above the cap, write grants are said on the principals' cards; a selected 
   const focused = resourcesModel({ topology: t, status: [], conflicts: [] }, [], null, { focus: "topo:pr:alpha" });
   assert.ok(writes(focused).length > 0 && writes(focused).every((e) => e.from === "topo:pr:alpha"));
 });
+
+// ── feedback item 50 (2026-10-12) ───────────────────────────────────────────
+
+test("a pending change to an agreed process keeps its last agreed box", () => {
+  const agreed = { id: "spawner", kind: "service", label: "admin spawner", serves: "x", entryPoints: ["bin/spawn.sh", "bin/revoke.sh"], status: "agreed" };
+  const pending = { ...agreed, entryPoints: ["bin/spawn.sh"], status: "proposed", agreedAs: agreed };
+  assert.deepEqual(boxes(model(plan([pending])))["cluster:plan:spawner"], ["revoke", "spawn"], "drawn as agreed, not as proposed");
+  assert.deepEqual(Object.keys(boxes(model(plan([{ ...pending, agreedAs: undefined }])))), ["cluster:scripts:."], "a never-agreed proposal moves nothing");
+});
+
+test("a ratified name on a box whose members left is flagged", () => {
+  const before = model(plan([]));
+  const base = archBaseline(before, [], null);
+  const store = { version: "1", groups: [], names: { "cluster:scripts:.": "All the scripts" }, ratified: { at: "2026-10-01T00:00:00Z", model: "m" }, baseline: base };
+  const after = model(plan([{ id: "spawner", kind: "service", label: "spawner", serves: "x", entryPoints: ["bin/spawn.sh", "bin/revoke.sh"], status: "agreed" }]));
+  const d = archDrift(after, store, [], null);
+  assert.equal(d.staleNames?.[0]?.box, "cluster:scripts:.");
+  assert.ok(d.reasons.some((r) => /the name "All the scripts" was given to cluster:scripts:\. when it held 6 entry points; it now holds/.test(r)), d.reasons.join("\n"));
+  assert.equal(d.level, "substantial");
+});
+
+test("stale brief citations: the changed span, and a folded feed edge", async () => {
+  const { changedSpan, citationChange } = await import("../src/server/brief_store.ts");
+  const long = "state machine target-phase: " + "A→B by x, ".repeat(12);
+  const d = changedSpan(long + "Y→Z by tea", long + "Y→Z by tea-holder");
+  assert.notEqual(d.was, d.now);
+  assert.match(d.now, /tea-holder/);
+  const facts = { cites: new Map([["cluster:a->zone:s/req:uses:watch", "x"]]), code: new Map(), legacy: new Map(), reread: () => null };
+  assert.equal(citationChange("cluster:a->zone:s/req:feed:0", { hashes: { "cluster:a->zone:s/req:feed:0": "h" } }, facts), null, "the feed folded into the code's edge");
+  assert.match(citationChange("cluster:b->zone:s/req:feed:1", { hashes: {} }, facts), /no longer among the facts/);
+});
+
+test("the brief facts list every gate of a declared tree", () => {
+  const nodes = Array.from({ length: 20 }, (_, i) => ({ id: `Q${i}`, question: `Question ${i}?`, kind: i < 12 ? "judgement" : "check", yes: "GO", no: "STOP" }));
+  const t = { version: "1", decisionTrees: [{ id: "eng", root: "Q0", nodes: [...nodes, { id: "GO", outcome: "go" }, { id: "STOP", outcome: "stop" }] }] };
+  const f = buildBriefFacts({ version: "1", nodes: [], edges: [], groups: [], unplaced: [], notes: [] }, { root: tmp, readLines: () => null, topology: t });
+  assert.match(f.text, /topology:dt:eng:shape[^\n]*20 gates \(12 a person's judgement, 8 checks/);
+  const gates = /topology:dt:eng:gates[^\n]*/.exec(f.text)?.[0] ?? "";
+  assert.match(gates, /Q0 \[judgement\]: Question 0\?/);
+  assert.match(gates, /Q19 \[check\]: Question 19\?/);
+});

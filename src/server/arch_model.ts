@@ -259,7 +259,8 @@ export function buildArchModel(input: ArchInputs): ArchModelRecord {
     if (e.framework && !c.frameworks!.includes(e.framework)) c.frameworks!.push(e.framework);
     if (threadByEp.has(e.id)) c.threads.push(e.id);
     for (const f of threadByEp.get(e.id)?.filesReached ?? []) c._files.add(f);
-    if (c.refs.length < MAX_REFS) c.refs.push({ file: e.file, nodeId: e.irNodeId, text: e.label });
+    // one ref per file and label: a script seeded on its module and on its main is one place to open
+    if (c.refs.length < MAX_REFS && !c.refs.some((r) => r.file === e.file && r.text === e.label)) c.refs.push({ file: e.file, nodeId: e.irNodeId, text: e.label });
   }
 
   // ── dispatchers: a scripts-family entry whose own file names ≥ N scripts

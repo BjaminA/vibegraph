@@ -73,7 +73,7 @@ test("Real: processes by their plan names with who they run as; the outside call
   assert.deepEqual(gw.serves, { how: "listen", files: ["gateway/src/server.ts"] });
   // M4: the plan only LOCATES the gateway (`at`, no entry points): its
   // badge is the identity the code reads, never the plan's word
-  assert.match(gw.sublabel, /^located, not anchored/);
+  assert.match(gw.sublabel, /^placed by its folder/);
   assert.deepEqual(gw.badges.map((b) => b.id), ["$GATEWAY_USER"]);
   assert.ok(gw.derivedLabel && gw.derivedLabel !== gw.label, "the code's own name is kept");
   const partner = byLabel(real.nodes, "partner system");

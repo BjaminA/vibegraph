@@ -68,10 +68,18 @@ test("validation and the door: assumes names a plan question; a question things 
   bad2.open[0].evidence[0].at = "yesterday";
   assert.match(validatePlan(bad2), /evidence\[0\]\.at must be a date/);
   const drop = applyPlanOps(plan, [{ op: "drop", section: "open", id: "q1" }], "human");
-  assert.match(drop.error, /boundaries? b2|b2 assumes q1 — record its evidence/);
+  assert.match(drop.error, /b2 assumes q1, and dropping it would leave them resting on nothing — take it out of their `assumes` first/);
   // Recording a new run is an ordinary update.
   const run = { command: "store-cli put verdicts/v1 --as svc-requester", expect: "403 Forbidden", at: "2026-10-01", result: "confirmed", note: "per-zone ACLs switched on" };
   const r = applyPlanOps(plan, [{ op: "update", section: "open", id: "q1", fields: { evidence: [...plan.open[0].evidence, run] } }], "human");
   assert.equal(r.error, undefined);
   assert.equal(find(reconcilePlan(r.plan, env, stack, ROOT), "open", "q1").verdict, "pass");
+  // 2026-10-12 — a person closing it on confirmed evidence settles it: b2 stops assuming it
+  const closed = applyPlanOps(r.plan, [{ op: "close-question", id: "q1" }], "human");
+  assert.equal(closed.error, undefined, closed.error);
+  assert.deepEqual(closed.plan.boundaries.find((b) => b.id === "b2").assumes ?? [], []);
+  assert.match(closed.plan.resolved.at(-1).note, /confirmed by its evidence; b2 no longer assumes it/);
+  // without a confirmed latest result the refusal says what is missing
+  const refuted = applyPlanOps(plan, [{ op: "update", section: "open", id: "q1", fields: { evidence: [{ ...run, result: "refuted" }] } }], "human");
+  assert.match(applyPlanOps(refuted.plan, [{ op: "close-question", id: "q1" }], "human").error, /its latest evidence is refuted — record a confirmed result for it, or take it out/);
 });

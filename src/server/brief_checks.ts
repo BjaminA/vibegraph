@@ -110,8 +110,11 @@ export function briefCoverage(spec: BriefBody["spec"], facts: BriefFacts, omitte
   for (const p of facts.data.processes) {
     const stated = lines.some((l) => (l.claims ?? []).some((c) => !c.not && c.subject === p.box && c.verdict !== "contradicted"
       && p.primary.some((o) => VERB_OPS[c.verb].includes(o.op) && zonesOf(c.object, facts).includes(o.zone))))
-      // a line written without claims: it names the box and the zone of its main job
-      || lines.some((l) => !(l.claims ?? []).length && (l.boxes ?? []).includes(p.box) && p.primary.some((o) => { const s = stem(o.zone); return s.length > 2 && l.text.toLowerCase().includes(s); }));
+      // a line that cites the box's edge to the zone of its main job, or names
+      // the box and that zone (2026-10-12: a line with OTHER claims that cited
+      // the watch edge was read as not stating it — the sheet contradicted itself)
+      || lines.some((l) => p.primary.some((o) => l.cites.some((c) => c.startsWith(`${p.box}->${o.zone}:`))))
+      || lines.some((l) => (l.boxes ?? []).includes(p.box) && p.primary.some((o) => { const s = stem(o.zone); return s.length > 2 && l.text.toLowerCase().includes(s); }));
     if (!stated && !mentioned(omitted, p.box, p.label)) primary.set(p.box, p.primary);
   }
   const notes = facts.notes.map((_, i) => i + 1).filter((n) => !cited.has(`note:${n}`) && !mentioned(omitted, `note:${n}`));
