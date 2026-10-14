@@ -1173,8 +1173,8 @@ function Graph() {
   }
 
   // M8.3.2: directory-mode UI surface — side panel always visible, main
-  // canvas swaps between index / thread / diagram. Single-file mode keeps
-  // the legacy "open a file" empty state.
+  // canvas swaps between index / thread / diagram. Before anything arrives
+  // the canvas says it is reading the project.
   // projectMode (protocol-discriminated) OR file-count — the ref mutates
   // without a re-render, so the legacy clause preserves existing timing.
   const isDirectoryMode = projectMode || Object.keys(projectDataRef.current).length > 0;
@@ -1186,8 +1186,9 @@ function Graph() {
   if (isEmpty && !isDirectoryMode && viewMode !== "index" && viewMode !== "thread" && viewMode !== "system") {
     return (
       <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", color: "var(--text-secondary)", fontSize: "var(--fs-14)", flexDirection: "column", gap: 8 }}>
-        <div style={{ fontSize: 32 }}>~</div>
-        <div>Open a Python file to see its graph</div>
+        {/* 2026-10-12 — what shows before the project arrives: no legacy "open a file" prompt */}
+        <div data-startup-loading>Reading the project…</div>
+        <div style={{ fontSize: "var(--fs-12)", color: "var(--text-muted)" }}>If this stays, nothing parsed has anything to draw yet.</div>
       </div>
     );
   }

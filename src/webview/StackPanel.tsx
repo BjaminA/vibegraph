@@ -19,6 +19,7 @@ import { FileWarning, GitMerge, ScrollText } from "lucide-react";
 import type { ConstraintRecord, StackIndexRecord, StackToolRecord } from "../shared/protocol";
 import { ROLE_LABEL, ROLE_ORDER, type StackRole } from "../shared/stack_taxonomy";
 import { SheetPortal, SheetBody, type SheetSlot } from "./panels/PanelSheet";
+import { Chip } from "./panels/Chip";
 
 const mono = "var(--font-mono)";
 
@@ -51,14 +52,12 @@ function ToolRow({ tool, constraints, onStatePolicy }: {
       style={{ display: "flex", flexDirection: "column", gap: 2, padding: "4px 0" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
         {tool.origin === "project" && <GitMerge size={13} strokeWidth={1.5} color="var(--accent-thread)" />}
-        <span style={{
-          fontFamily: mono, fontSize: "var(--fsm-12)",
-          color: tool.origin === "project" ? "var(--accent-thread)" : "var(--text-primary)",
-        }}>{tool.tool}</span>
+        {/* 2026-10-12 — the kind chips every panel uses (panels/Chip.tsx) */}
+        <Chip kind={tool.origin === "project" ? "module" : "external"} id={tool.tool} focusable={false} />
         {tool.version && <span style={{ fontFamily: mono, fontSize: "var(--fs-11)", color: "var(--text-muted)" }}>v{tool.version}</span>}
         {tool.wraps?.length ? (
-          <span style={{ fontSize: "var(--fs-11)", color: "var(--text-muted)" }}>
-            project funnel wrapping {tool.wraps.join(", ")}
+          <span style={{ fontSize: "var(--fs-11)", color: "var(--text-muted)", display: "inline-flex", gap: 4, alignItems: "center", flexWrap: "wrap" }}>
+            project funnel wrapping {tool.wraps.map((w) => <Chip key={w} kind="external" id={w} focusable={false} />)}
           </span>
         ) : null}
         <span style={{ marginLeft: "auto" }} />
@@ -74,7 +73,7 @@ function ToolRow({ tool, constraints, onStatePolicy }: {
         {configOnly && <FileWarning size={11} strokeWidth={1.5} style={{ verticalAlign: "-1px", marginRight: 4 }} />}
         {configOnly
           ? `${tool.evidence.length} manifest/config line(s) — no code parsed for this tool`
-          : `${tool.evidence.length} site(s) · ${files.slice(0, 3).join(", ")}${files.length > 3 ? ` +${files.length - 3} more` : ""}`}
+          : <>{`${tool.evidence.length} site(s) · `}{files.slice(0, 3).map((f) => <React.Fragment key={f}><Chip kind="path" id={f} label={f.split("/").pop()} />{" "}</React.Fragment>)}{files.length > 3 ? `+${files.length - 3} more` : ""}</>}
         {tool.threads.length > 0 && ` · ${tool.threads.length} thread(s)`}
       </div>
       {/* M-BOUNDARY.2 — presence and use are different facts. `threads` is
@@ -103,7 +102,8 @@ function ToolRow({ tool, constraints, onStatePolicy }: {
           <span style={{ fontFamily: mono }}>{policyLabel(c)}</span>
           {" — "}
           {c.text}
-          <span style={{ fontFamily: mono }}> [{c.id} · {c.source}-stated]</span>
+          {" "}<Chip kind="rule" id={c.id} />
+          <span style={{ fontFamily: mono }}> {c.source}-stated</span>
         </div>
       ))}
     </div>

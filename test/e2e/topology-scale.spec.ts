@@ -33,6 +33,12 @@ async function openMap(page: Page) {
 }
 
 const edgeCount = (page: Page) => page.locator(".react-flow__edge").count();
+// 60 write grants, over the cap of 48: the access grid opens first, over the map
+async function closeGrid(page: Page) {
+  await expect(page.locator("[data-access-grid]")).toBeVisible({ timeout: 15_000 });
+  await page.getByRole("button", { name: "Close the access grid" }).click();
+  await expect(page.locator("[data-access-grid]")).toHaveCount(0);
+}
 const placeOf = (page: Page, id: string) => page.locator(`.react-flow__node[data-id="${id}"]`).getAttribute("style").then((s) => /transform:[^;]+/.exec(s ?? "")?.[0] ?? "");
 
 test.describe("a large declared topology stays readable and responsive", () => {
@@ -47,6 +53,7 @@ test.describe("a large declared topology stays readable and responsive", () => {
     await page.waitForTimeout(1500);
     await page.evaluate(() => { (window as any).__long = []; });
     await page.locator('[data-arch-lens="resources"]').click();
+    await closeGrid(page);
     await expect(page.locator('[data-arch-group="topo:store:warehouse"]')).toBeVisible({ timeout: 15_000 });
     await expect(page.locator('[data-arch-id^="topo:zg:"]')).toHaveCount(5);
     await expect(page.locator('[data-arch-id^="topo:zone:"]')).toHaveCount(0);
@@ -64,6 +71,7 @@ test.describe("a large declared topology stays readable and responsive", () => {
   test("a selected group opens into its zones; a selected zone draws its reads and no card moves", async ({ page }) => {
     await openMap(page);
     await page.locator('[data-arch-lens="resources"]').click();
+    await closeGrid(page);
     await expect(page.locator('[data-arch-id="topo:zg:stock_*"]')).toBeVisible({ timeout: 15_000 });
     await page.locator('[data-arch-id="topo:zg:stock_*"]').click();
     await expect(page.locator('[data-arch-id^="topo:zone:"]')).toHaveCount(10);
@@ -91,6 +99,7 @@ test.describe("a large declared topology stays readable and responsive", () => {
     });
     await openMap(page);
     await page.locator('[data-arch-lens="resources"]').click();
+    await closeGrid(page);
     await expect(page.locator('[data-arch-id="topo:zg:stock_*"]')).toBeVisible({ timeout: 15_000 });
     expect(await page.evaluate(() => (window as any).__spun)).toBe(true);
     await expect(page.locator("[data-arch-laying-out]")).toHaveCount(0);

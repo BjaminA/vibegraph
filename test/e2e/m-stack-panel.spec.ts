@@ -60,6 +60,10 @@ test.describe("M-STACK — the Stack panel: facts, and the policies stated about
     await expect(funnel).toBeVisible();
     await expect(funnel).toHaveAttribute("data-stack-origin", "project");
     await expect(funnel).toContainText("project funnel wrapping sqlite3");
+    // 2026-10-12 — the kind chips: the tool, what it wraps, the files it is evidenced in
+    await expect(funnel.locator('[data-chip="module"][data-chip-ref="api.db"]')).toBeVisible();
+    await expect(funnel.locator('[data-chip="external"][data-chip-ref="sqlite3"]')).toBeVisible();
+    await expect(panel.locator('[data-stack-evidence="requests"] [data-chip="path"]').first()).toBeVisible();
 
     // M-BOUNDARY.2 - presence and USE are shown as different facts. sqlite3
     // is reached through the api.db funnel, so it is called; a tool whose

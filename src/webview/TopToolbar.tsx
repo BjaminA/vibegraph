@@ -332,7 +332,7 @@ export function TopToolbar({
             ? "Close code view"
             : codeEligible
               ? "Show source for the active file"
-              : "Open a Python file first"
+              : "Open a file first (a thread step or a file in the Files panel)"
         }
         accent="var(--accent-thread)"
       >

@@ -3,6 +3,7 @@
 // a click opens the group into its zones. On the Resources lens, beside the map.
 
 import React from "react";
+import { createPortal } from "react-dom";
 import { Grid3x3, X } from "lucide-react";
 import type { Topology } from "../../shared/topology_types";
 import { GRANT_EDGE_CAP, accessGrid, zoneGroupsOf } from "../../shared/topology_groups";
@@ -32,7 +33,9 @@ export function AccessGrid({ t }: { t: Topology }) {
     return [w ? `W ${w}` : "", r ? `R ${r}` : ""].filter(Boolean).join(" · ");
   };
   const toggle = (g: string) => setExpanded((s) => { const n = new Set(s); if (n.has(g)) n.delete(g); else n.add(g); return n; });
-  return (
+  // on document.body: the lens bar's backdrop-filter makes it the containing
+  // block of a fixed child, which squeezed the grid into a strip with scrollbars
+  return createPortal(
     <div data-access-grid style={{ position: "fixed", left: 16, right: 16, top: "calc(var(--vg-lens-bar-bottom, 120px) + 56px)", bottom: 16, zIndex: 34, overflow: "auto",
       background: "var(--bg-node)", border: "1px solid var(--border-edge)", borderRadius: 8, padding: 12 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, fontFamily: "var(--font-ui)", fontSize: "var(--fs-12)", color: "var(--text-primary)" }}>
@@ -60,6 +63,7 @@ export function AccessGrid({ t }: { t: Topology }) {
           ))}
         </tbody>
       </table>
-    </div>
+    </div>,
+    document.body,
   );
 }

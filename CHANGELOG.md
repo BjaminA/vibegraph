@@ -3,6 +3,25 @@
 `vibegraph-knowledge` and the VibeGraph app. Newest first. Each entry says what
 changed and, where an existing user would notice, how behaviour differs.
 
+## 0.34.2 — 2026-10-14 — the access grid opens whole; chips in the Stack panel
+
+- **Fix: the access grid showed as an empty strip with scrollbars.** On a
+  store with more write grants than the map draws, the Resources lens opens the
+  access grid first (0.34.1) — but the grid was rendered inside the lens bar,
+  whose `backdrop-filter` makes it the containing block of a fixed child, so
+  the overlay was squeezed into the bar's height. It renders on the page now
+  (a portal), full size, and closes to its button.
+- **No legacy "Open a Python file" start screen.** Before the project
+  arrives the canvas says "Reading the project…"; the Code button's hint no
+  longer names Python.
+- **The Stack panel uses the kind chips** every other panel uses: each tool
+  (a project funnel as a module, a library as external), what a funnel wraps,
+  the files it is evidenced in (click to open), and each policy's rule (click
+  to open the Rules panel).
+
+Tests: test:e2e-stack (the chips), test:e2e-topology-scale (the grid opens
+first, whole).
+
 ## 0.34.1 — 2026-10-12 — the map's boxes follow the agreed plan
 
 From the same field review, re-run on 0.34.0:
