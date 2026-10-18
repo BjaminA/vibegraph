@@ -10,15 +10,34 @@
 //             `os.environ["X"]`, a bash `$X` the script never assigns) plus
 //             CALL nodes the IR already has (`getenv("X")`, `env::var("X")`)
 //             with a literal first argument;
-//   declared  `.env.example` lines and compose `environment:` entries, as
-//             infra_manifests.ts reads them (passed in: this module does no I/O).
+//   declared  every place that can put a variable in front of running code —
+//             env templates, compose, Dockerfile, systemd, pm2, k8s and the
+//             deploy workflows (env_declarations.ts reads them; passed in:
+//             this module does no I/O).
+//
+// 2026-10-17, from a field run whose outage was a variable read by the code
+// and written by no deploy — present in the old report as one of 224
+// "declared nowhere", alphabetical, beside CI secrets that were fine:
+//   - each variable says what an UNSET value does (`ifUnset`), from the
+//     frontends' `fallback` / `use` facts, and the report ranks by it;
+//   - a build-time name (NEXT_PUBLIC_, VITE_ …) is marked: a change needs a
+//     rebuild, not a restart;
+//   - deploy targets of one kind (two deploy workflows, two compose files)
+//     are compared: the bug class is "set on one, missing on the other".
 //
 // Never guessed: a name built at runtime is not a name; a bash variable some
 // project script ASSIGNS is set by that script (a sourced file), not by the
 // environment, and is said apart.
 
-export interface EnvRead { name: string; file: string; line: number; form: string; fnId: string | null }
-export interface EnvDeclaration { name: string; file: string; line: number }
+export interface EnvRead {
+  name: string; file: string; line: number; form: string; fnId: string | null;
+  /** what an unset value becomes here, when the expression says (ir.schema.json envReads) */
+  fallback?: "value" | "empty" | "throws";
+  use?: "split" | "exit-silent" | "exit-loud";
+}
+export interface EnvDeclaration { name: string; file: string; line: number; via?: string; from?: "secret" | "var" }
+/** What the code does when the variable is not set, worst read first. */
+export type UnsetEffect = "silent" | "unset" | "loud" | "defaulted";
 export interface EnvVar {
   name: string;
   readers: EnvRead[];
@@ -26,25 +45,34 @@ export interface EnvVar {
   declared: EnvDeclaration[];
   /** bash only: project scripts that ASSIGN this name (it is sourced, not inherited). */
   setBy: string[];
+  ifUnset: UnsetEffect;
+  /** baked into a bundle at build time (NEXT_PUBLIC_, VITE_ …): a change needs a rebuild */
+  buildTime: boolean;
 }
+/** One kind of deploy target with two or more files, and the variables some set and others do not. */
+export interface TargetGap { family: string; targets: string[]; rows: Array<{ name: string; setIn: string[] }> }
 export interface EnvSurface {
   vars: EnvVar[];
-  /** read by the code, set by no project script, declared nowhere. */
+  /** read by the code, set by no project script, declared nowhere — worst `ifUnset` first. */
   undeclared: string[];
   /** declared, and read by nothing the IR sees. */
   unread: EnvDeclaration[];
   /** entry point id → the names its thread reads (sorted). */
   byThread: Record<string, string[]>;
-  /** false when the project has no .env.example / compose environment at all. */
+  /** false when the project declares no environment anywhere it can be read. */
   hasDeclarations: boolean;
+  targetGaps: TargetGap[];
 }
 
 interface IrNodeLike { id?: string; type?: string; name?: string; line?: number; endLine?: number; funcName?: string; args?: unknown[] }
-interface IrLike { language?: string; nodes?: IrNodeLike[]; envReads?: Array<{ name?: unknown; line?: unknown; form?: unknown }> }
+interface IrLike { language?: string; nodes?: IrNodeLike[]; envReads?: Array<{ name?: unknown; line?: unknown; form?: unknown; fallback?: unknown; use?: unknown }> }
 interface ThreadLike { entryPointId?: string | null; nodes: ReadonlyArray<{ kind?: string; file?: string | null; irNodeId?: string | null }>; filesReached?: ReadonlyArray<string> }
 
 const GETENV_CALLS = new Set(["getenv", "std::getenv", "env::var", "std::env::var", "env::var_os", "std::env::var_os"]);
 const NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
+const FALLBACKS = new Set(["value", "empty", "throws"]);
+const USES = new Set(["split", "exit-silent", "exit-loud"]);
+const BUILD_TIME = /^(NEXT_PUBLIC_|VITE_|REACT_APP_|VUE_APP_|NUXT_PUBLIC_|EXPO_PUBLIC_|GATSBY_|PUBLIC_)/;
 
 function literalArg(a: unknown): string | null {
   const m = /^\s*["'`]([A-Za-z_][A-Za-z0-9_]*)["'`]\s*$/.exec(String(a ?? ""));
@@ -69,12 +97,57 @@ export function envReadsFor(file: string, ir: IrLike): EnvRead[] {
     const name = typeof r.name === "string" ? r.name : "";
     const line = typeof r.line === "number" ? r.line : 0;
     if (!NAME.test(name)) continue;
-    out.push({ name, file, line, form: typeof r.form === "string" ? r.form : "read", fnId: enclosingFn(fns, line) });
+    out.push({
+      name, file, line, form: typeof r.form === "string" ? r.form : "read", fnId: enclosingFn(fns, line),
+      ...(FALLBACKS.has(r.fallback as string) ? { fallback: r.fallback as EnvRead["fallback"] } : {}),
+      ...(USES.has(r.use as string) ? { use: r.use as EnvRead["use"] } : {}),
+    });
   }
   for (const n of ir.nodes ?? []) {
     if (n.type !== "call" || !GETENV_CALLS.has(String(n.funcName ?? ""))) continue;
     const name = literalArg(n.args?.[0]);
     if (name) out.push({ name, file, line: n.line ?? 0, form: "call", fnId: enclosingFn(fns, n.line ?? 0) });
+  }
+  return out;
+}
+
+const UNSET_ORDER: UnsetEffect[] = ["silent", "unset", "loud", "defaulted"];
+/** What one read does with an unset value. Silent = an empty or missing value
+ *  split into a list or gating an early return: no error, the feature just
+ *  stops (the field run's outage). Loud = it raises or exits. */
+export function readEffect(r: Pick<EnvRead, "fallback" | "use">): UnsetEffect {
+  if ((r.use === "split" || r.use === "exit-silent") && r.fallback !== "value" && r.fallback !== "throws") return "silent";
+  if (r.fallback === "throws" || r.use === "exit-loud") return "loud";
+  if (r.fallback === "value") return "defaulted";
+  return "unset";
+}
+const worst = (rs: EnvRead[]): UnsetEffect => UNSET_ORDER[Math.min(...rs.map((r) => UNSET_ORDER.indexOf(readEffect(r))))] ?? "unset";
+
+/** Deploy targets by kind: a workflow is one when it passes or writes
+ *  variables onward, or its name says it deploys; an env template is a list,
+ *  not a target. */
+const FAMILY: Record<string, string> = {
+  "workflow-env": "deploy workflows", "workflow-pass": "deploy workflows", "workflow-write": "deploy workflows", "workflow-step": "deploy workflows",
+  compose: "compose files", k8s: "k8s manifests", systemd: "systemd units", pm2: "pm2 ecosystems", dockerfile: "Dockerfiles", "build-arg": "Dockerfiles",
+};
+function targetGaps(vars: EnvVar[], declarations: ReadonlyArray<EnvDeclaration>): TargetGap[] {
+  const deploying = new Set(declarations.filter((d) => d.via === "workflow-pass" || d.via === "workflow-write").map((d) => d.file));
+  const byFamily = new Map<string, Map<string, Set<string>>>();
+  for (const d of declarations) {
+    const family = d.via ? FAMILY[d.via] : undefined;
+    if (!family) continue;
+    if (family === "deploy workflows" && !deploying.has(d.file) && !/deploy|release|publish|prod|staging/i.test(d.file)) continue;
+    const files = byFamily.get(family) ?? byFamily.set(family, new Map()).get(family)!;
+    (files.get(d.file) ?? files.set(d.file, new Set()).get(d.file)!).add(d.name);
+  }
+  const out: TargetGap[] = [];
+  for (const [family, files] of [...byFamily].sort((a, b) => a[0].localeCompare(b[0]))) {
+    if (files.size < 2) continue;
+    const targets = [...files.keys()].sort();
+    const rows = vars
+      .map((v) => ({ name: v.name, setIn: targets.filter((t) => files.get(t)!.has(v.name)) }))
+      .filter((r) => r.setIn.length > 0 && r.setIn.length < targets.length);
+    if (rows.length) out.push({ family, targets, rows });
   }
   return out;
 }
@@ -117,7 +190,7 @@ export function buildEnvSurface(
   const byName = new Map<string, EnvVar>();
   for (const r of reads) {
     const v = byName.get(r.name) ?? byName.set(r.name, {
-      name: r.name, readers: [], threads: [], declared: declaredBy.get(r.name) ?? [], setBy: [],
+      name: r.name, readers: [], threads: [], declared: declaredBy.get(r.name) ?? [], setBy: [], ifUnset: "unset", buildTime: BUILD_TIME.test(r.name),
     }).get(r.name)!;
     v.readers.push(r);
     // A bash read of a name some project script assigns is SOURCED, not inherited.
@@ -133,27 +206,31 @@ export function buildEnvSurface(
     .filter((v) => !(v.setBy.length && v.readers.every((r) => r.form === "inherited")))
     .sort((a, b) => a.name.localeCompare(b.name));
   for (const v of vars) {
+    v.ifUnset = worst(v.readers);
     v.threads.sort();
     for (const ep of v.threads) (byThread[ep] ??= []).push(v.name);
   }
   for (const k of Object.keys(byThread)) byThread[k] = [...new Set(byThread[k])].sort();
   const readNames = new Set(vars.map((v) => v.name));
+  const rank = (v: EnvVar) => UNSET_ORDER.indexOf(v.ifUnset);
   return {
     vars,
-    undeclared: declarations.length ? vars.filter((v) => !v.declared.length).map((v) => v.name) : [],
+    undeclared: declarations.length ? vars.filter((v) => !v.declared.length).sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name)).map((v) => v.name) : [],
     unread: declarations.filter((d) => !readNames.has(d.name)),
     byThread,
     hasDeclarations: declarations.length > 0,
+    targetGaps: targetGaps(vars, declarations),
   };
 }
 
 /** What one thread's contract carries: its names, and which are undeclared. */
-export interface ConfiguredBy { names: string[]; undeclared: string[]; hasDeclarations: boolean }
+export interface ConfiguredBy { names: string[]; undeclared: string[]; hasDeclarations: boolean; silent?: string[] }
 
 export function configuredByFor(surface: EnvSurface, entryPointId: string): ConfiguredBy {
   const names = surface.byThread[entryPointId] ?? [];
   const undeclared = new Set(surface.undeclared);
-  return { names, undeclared: names.filter((n) => undeclared.has(n)), hasDeclarations: surface.hasDeclarations };
+  const silent = names.filter((n) => surface.vars.find((v) => v.name === n)?.ifUnset === "silent");
+  return { names, undeclared: names.filter((n) => undeclared.has(n)), hasDeclarations: surface.hasDeclarations, ...(silent.length ? { silent } : {}) };
 }
 
 /** The contract's line. `undefined` (no surface injected) → no line at all. */
@@ -161,8 +238,12 @@ export function formatConfiguredBy(c: ConfiguredBy | undefined): string | null {
   if (!c) return null;
   if (!c.names.length) return "Configured by: no environment variable the IR sees.";
   const undeclared = new Set(c.undeclared);
-  const marked = c.names.map((n) => (undeclared.has(n) ? `\`${n}\` (NOT declared)` : `\`${n}\``));
-  return `Configured by: ${marked.join(", ")}.${c.hasDeclarations ? "" : " (the project declares no environment: no .env.example or compose environment was found)"}`;
+  const silent = new Set(c.silent ?? []);
+  const marked = c.names.map((n) => {
+    const notes = [undeclared.has(n) ? "NOT declared" : "", silent.has(n) ? "fails silently when unset" : ""].filter(Boolean);
+    return notes.length ? `\`${n}\` (${notes.join(", ")})` : `\`${n}\``;
+  });
+  return `Configured by: ${marked.join(", ")}.${c.hasDeclarations ? "" : " (the project declares no environment: no env template, compose, Dockerfile, systemd, pm2, k8s or deploy-workflow declaration was found)"}`;
 }
 
 /** Variables a TOOL reads from the environment itself — declaring them is
@@ -179,33 +260,4 @@ const TOOL_READ: Array<[RegExp, string]> = [
 export function toolThatReads(name: string): string | null {
   for (const [re, tool] of TOOL_READ) if (re.test(name)) return tool;
   return null;
-}
-
-/** configuration.md — the whole surface, for a reader or an agent. */
-export function formatEnvSurfaceMd(s: EnvSurface): string {
-  const lines = [
-    "# Configuration (derived — the environment variables the code reads)",
-    "",
-    `${s.vars.length} variable(s) are read by name. A read is \`process.env.X\`, \`import.meta.env.X\`, \`os.environ["X"]\`, \`getenv("X")\`, \`env::var("X")\`, or an UPPERCASE \`$X\` a bash script expands and never assigns. A name built at runtime is not a name and is not here. Declarations come from \`.env.example\` and compose \`environment:\` entries.`,
-    "",
-  ];
-  if (s.hasDeclarations) {
-    lines.push(`## Read, but declared nowhere (${s.undeclared.length})`, "",
-      s.undeclared.length
-        ? "A deploy that sets only what `.env.example` lists will run these with the variable unset. Declare each, or confirm the code has a default."
-        : "None: every variable the code reads is declared.", "",
-      ...s.undeclared.map((n) => `- \`${n}\` — read in ${s.vars.find((v) => v.name === n)!.readers.map((r) => `\`${r.file}:${r.line}\``).slice(0, 4).join(", ")}`), "",
-      `## Declared, but read by nothing the IR sees (${s.unread.length})`, "",
-      s.unread.length ? "Possibly stale — or read in a way the IR cannot name (a computed key, a config library), or read by a TOOL rather than by project code (marked)." : "None.", "",
-      ...s.unread.map((d) => `- \`${d.name}\` — ${d.file}:${d.line}${toolThatReads(d.name) ? ` (read by ${toolThatReads(d.name)} itself: expected)` : ""}`), "");
-  } else {
-    lines.push("The project declares no environment (no `.env.example`, no compose `environment:`), so nothing can be checked against a declaration.", "");
-  }
-  lines.push("## Every variable", "", "| variable | declared | read in | threads |", "|---|---|---|---|");
-  for (const v of s.vars) {
-    const decl = v.declared.length ? v.declared.map((d) => `${d.file}:${d.line}`).join(", ") : s.hasDeclarations ? "**no**" : "—";
-    const files = [...new Set(v.readers.map((r) => r.file))];
-    lines.push(`| \`${v.name}\` | ${decl} | ${files.slice(0, 3).map((f) => `\`${f}\``).join(", ")}${files.length > 3 ? ` +${files.length - 3}` : ""} | ${v.threads.length} |`);
-  }
-  return lines.join("\n") + "\n";
 }

@@ -18,10 +18,17 @@
  *     chokepoint, report done; otherwise report a no-op done.
  */
 
-import { appendFileSync } from "node:fs";
+import { appendFileSync, readFileSync } from "node:fs";
 
 const argv = process.argv.slice(2);
-const prompt = argv[argv.length - 1] ?? "";
+// The prompt: after `--` (promptArgs, src/server/reasoning_tools.ts), else
+// last. Over 24 KB it arrives on STDIN instead (the ENAMETOOLONG fix,
+// 2026-10-12): then the last argument is a flag's value — the one before it is
+// the flag. The brief's prompt crossed that size and this stub read a flag
+// value as its prompt, so the orchestrated e2e drafted no brief.
+const dd = argv.indexOf("--");
+const onStdin = dd < 0 && argv.length >= 2 && argv[argv.length - 2].startsWith("--");
+const prompt = dd >= 0 ? argv.slice(dd + 1).join(" ") : onStdin ? (() => { try { return readFileSync(0, "utf-8"); } catch { return ""; } })() : argv[argv.length - 1] ?? "";
 // M-SKILLS.2 — the injection e2e asserts on the PROMPT a worker actually
 // received (the chat stub does the same for its turns): append it verbatim
 // when asked. Every role's prompt lands, tagged, so a test can tell a

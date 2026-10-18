@@ -16,7 +16,7 @@ const FIXTURE = process.env.VG_FIXTURE ?? "";
 const ROOT = resolve(FIXTURE || ".");
 const PLAN = join(ROOT, ".vibegraph", "plan.json");
 const readPlan = () => JSON.parse(readFileSync(PLAN, "utf-8"));
-const cli = (...args: string[]) => execFileSync(process.execPath, ["--experimental-strip-types", "--no-warnings", resolve("scripts/cli/main.mjs"), ...args], { cwd: ROOT, encoding: "utf-8", env: { ...process.env, CLAUDECODE: "" } });
+const cli = (...args: string[]) => execFileSync(process.execPath, ["--experimental-strip-types", "--no-warnings", resolve("scripts/cli/main.mjs"), ...args], { cwd: ROOT, encoding: "utf-8", env: { ...process.env, CLAUDECODE: "", VG_PERSON_NO_TTY: "1" } }); // the test acts as the person (0.28's no-terminal guard)
 
 async function openPlan(page: Page) {
   await page.goto("/");

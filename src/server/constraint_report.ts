@@ -13,7 +13,7 @@ import { buildStackIndex } from "./stack.ts";
 import { buildQualityFacts } from "./quality/facts.ts";
 import { newRegistry, isRun1Check, describeRun1Check } from "./quality/verbs/index.ts";
 import { checkConstraint, describeCheck, isConstraintCheck } from "./constraint_grammar.ts";
-import { routeConstraints, statedScopeFiles, type Constraint } from "./constraint_store.ts";
+import { isClassification, routeConstraints, statedScopeFiles, type Constraint } from "./constraint_store.ts";
 import { derivedPolicyClauses, checkPolicyClause, describePolicyClause } from "./policy_check.ts";
 
 export type RuleVerdict = "pass" | "violated" | "unverifiable";
@@ -76,6 +76,7 @@ export function checkStatedRules(opts: {
   const unchecked: string[] = [];
   const routed: Record<string, string[]> = {};
   for (const c of constraints) {
+    if (isClassification(c)) continue; // files a tool, decides nothing: neither checked nor "prose only"
     routed[c.id] = threads.filter((t) => routeConstraints([c], t as never).length > 0).map((t) => t.entryPointId);
     const clauses = clausesOf(c);
     const policyClauses = derivedPolicyClauses(c as never, env.files as never);

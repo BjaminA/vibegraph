@@ -6,6 +6,8 @@ import { existsSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { readStoredThreadSkill } from "../../src/server/thread_skill_store.ts";
 import { derivedPolicyClauses } from "../../src/server/policy_check.ts";
+import { statedRules } from "../../src/server/constraint_store.ts";
+import { harvestRules } from "../../src/server/rule_harvest.ts";
 import { enabledDirection } from "./direction.mjs";
 import { docsStatus } from "../../src/server/docs_registry.ts";
 import { loadSources, sourceStatus } from "../../src/server/topology_store.ts";
@@ -21,7 +23,9 @@ export function inboxNote(absRoot) {
   try { return inboxLine(buildInbox(absRoot)); } catch { return null; }
 }
 
-export function orientation(absRoot, loaded, constraints) {
+export function orientation(absRoot, loaded, all) {
+  // a tool classification files a tool and decides nothing: not a rule, not listed here
+  const constraints = statedRules(all);
   const env = loaded.envelope;
   const langs = new Map();
   for (const ir of Object.values(env.files)) langs.set(ir.language ?? "?", (langs.get(ir.language ?? "?") ?? 0) + 1);
@@ -36,7 +40,8 @@ export function orientation(absRoot, loaded, constraints) {
   const brief = sessionBriefLines(absRoot, env.files);
   if (brief.length) lines.push("", ...brief);
   if (constraints.length) {
-    lines.push("", `Stated rules (${constraints.length}) — from the people who run this code, with their reasons; the checkable ones are re-checked after every edit and a new violation stops the edit:`);
+    const byAgent = constraints.filter((c) => c.source && c.source !== "human").length;
+    lines.push("", `Stated rules (${constraints.length}) — from the people who run this code${byAgent ? ` (${byAgent} stated by an agent, not yet reviewed)` : ""}, with their reasons; the checkable ones are re-checked after every edit and a new violation stops the edit:`);
     let used = 0, shown = 0;
     for (const c of constraints) {
       const checks = [...(c.checks ?? []), ...(c.check ? [c.check] : [])].map((x) => x?.rule).filter(Boolean);
@@ -50,6 +55,13 @@ export function orientation(absRoot, loaded, constraints) {
     if (shown < constraints.length) lines.push(`- … ${constraints.length - shown} more: \`vibegraph-knowledge constraints list\``);
   } else {
     lines.push("", "No stated rules yet (`vibegraph-knowledge constraints add` records one, with its reason).");
+  }
+  // 2026-10-17 — the rules a project writes in its prose and never states: say
+  // how many rule-shaped sentences name code, once, while no person has stated one
+  if (!constraints.some((c) => c.source === "human")) {
+    let n = 0;
+    try { n = harvestRules(absRoot, env, null).candidates.length; } catch { n = 0; }
+    if (n) lines.push(`${n} rule-shaped sentence${n === 1 ? "" : "s"} in the project's prose (CLAUDE.md, READMEs, module headers) name code the IR knows — \`vibegraph-knowledge constraints harvest\` lists them; /vibegraph-rules states the real ones for a person to ratify.`);
   }
   const skills = { ratified: [], draft: 0 };
   for (const t of env.threads) {

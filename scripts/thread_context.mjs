@@ -13,7 +13,7 @@ import { deriveThreadCalls, threadAdjacency } from "../src/webview/system/thread
 import { skillRulesBlock, threadSkillStamp } from "../src/server/thread_skill_stamp.ts";
 import { testReach } from "../src/shared/test_reach.ts";
 import { buildEnvSurface, configuredByFor } from "../src/shared/env_surface.ts";
-import { readEnvDeclarations } from "../src/server/infra_manifests.ts";
+import { readEnvDeclarations } from "../src/server/env_declarations.ts";
 import { computeNearClones } from "../src/shared/near_clones.ts";
 import { rankThread } from "../src/shared/thread_rank.ts";
 import { threadFacts } from "../src/shared/thread_rank_facts.ts";

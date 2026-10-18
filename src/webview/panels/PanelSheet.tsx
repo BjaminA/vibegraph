@@ -1,9 +1,9 @@
-// The one frame every panel opens in (GUI brief M3): a centred, near-square
-// sheet over a dimmed canvas, in the app's own surface colour (2026-10-08: no
-// per-panel tint — the title and icon say which panel it is), with a
-// switcher row so moving between panels never closes and reopens. "Dock"
-// keeps the old side-drawer placement for a person who wants the graph in
-// view (remembered per browser). Esc closes.
+// The one frame every panel opens in (GUI brief M3): docked beside the graph
+// by default since 2026-10-16 (VG_SHEET_DOCK=centre restores the centred,
+// near-square sheet over a dimmed canvas), in the app's own surface colour
+// (2026-10-08: no per-panel tint — the title and icon say which panel it is),
+// with a switcher row so moving between panels never closes and reopens. The
+// dock button switches placement (remembered per browser). Esc closes.
 //
 // The panels stay mounted where App has always mounted them (the board
 // must hear a pin while closed) and render their body into this sheet's
@@ -18,7 +18,14 @@ import { PANELS, panelSpec, type PanelId } from "./panels";
 export interface SheetSlot { body: HTMLElement; sub: HTMLElement }
 
 const DOCK_KEY = "vg-sheet-docked";
-const readDocked = () => { try { return localStorage.getItem(DOCK_KEY) === "1"; } catch { return false; } };
+// a viewer's own choice wins; else the server's default (VG_SHEET_DOCK, docked since 2026-10-16:
+// the graph stays in view beside a panel)
+const readDocked = () => {
+  let saved: string | null = null;
+  try { saved = localStorage.getItem(DOCK_KEY); } catch { /* no storage */ }
+  if (saved === "1" || saved === "0") return saved === "1";
+  return document.querySelector('meta[name="vg-sheet-dock"]')?.getAttribute("content") !== "centre";
+};
 
 export function PanelSheet({ active, available, badges, onSwitch, onClose, onSlot, dock = false }: {
   active: PanelId;

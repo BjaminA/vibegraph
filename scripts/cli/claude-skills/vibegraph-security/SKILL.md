@@ -23,8 +23,10 @@ Commands are deterministic and spend no tokens: `vibegraph-knowledge …` (or
    `flows.md` for hops between them. A flow crossing a trust group without an
    auth call on its path is worth a finding.
 4. **Configuration.** `configuration.md`: every environment variable read,
-   where, and whether any `.env.example` or compose file declares it. An
-   undeclared secret-shaped name is a deployment risk.
+   where, whether anything that reaches a host sets it (env templates,
+   compose, Dockerfile, systemd, pm2, k8s, deploy workflows), and what an
+   unset value does — the "fails silently" ones first. A variable one deploy
+   target sets and another does not is listed apart.
 5. **Rules.** `constraints.md` and `vibegraph-knowledge check`: stack policies
    (forbidden tools) and invariants the team stated.
 

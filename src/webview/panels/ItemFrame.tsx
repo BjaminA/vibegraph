@@ -45,8 +45,10 @@ function Bullet({ f }: { f: ItemFact }) {
   );
 }
 
-export function ItemFrame({ chip, name, badges, facts = [], details, actions, children, ...rest }: {
+export function ItemFrame({ chip, name, badges, facts = [], details, actions, children, proposed, ...rest }: {
   chip?: ChipRef;
+  /** 2026-10-16 — waiting for a person (drafted or changed by an agent): drawn dashed, in the proposed accent */
+  proposed?: boolean;
   name?: string;
   badges?: React.ReactNode;
   facts?: ItemFact[];
@@ -67,7 +69,7 @@ export function ItemFrame({ chip, name, badges, facts = [], details, actions, ch
     </details>
   ) : null;
   return (
-    <article className="vg-item" {...rest}>
+    <article className={`vg-item vg-msg-enter${proposed ? " vg-item-proposed" : ""}`} data-item-proposed={proposed ? "true" : undefined} {...rest}>
       <div className="vg-item-head">
         {chip && <Chip {...chip} />}
         {name && <span className="vg-item-name">{name}</span>}

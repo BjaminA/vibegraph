@@ -12,8 +12,9 @@ import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { buildFromSource as buildJsts } from "../scripts/frontends/jsts/builder.mjs";
 import { buildFromSource as buildBash } from "../scripts/frontends/bash/builder.mjs";
-import { buildEnvSurface, envReadsFor, configuredByFor, formatConfiguredBy, formatEnvSurfaceMd, toolThatReads } from "../src/shared/env_surface.ts";
-import { readEnvDeclarations } from "../src/server/infra_manifests.ts";
+import { buildEnvSurface, envReadsFor, configuredByFor, formatConfiguredBy, toolThatReads } from "../src/shared/env_surface.ts";
+import { formatEnvSurfaceMd } from "../src/shared/env_surface_md.ts";
+import { readEnvDeclarations } from "../src/server/env_declarations.ts";
 import { coverageFor, sha1 } from "../src/server/coverage.ts";
 import { computeReachability } from "../src/server/reachability.ts";
 
@@ -71,7 +72,8 @@ test("declarations: every KEY= name in an env example (commented too) and compos
     const d = readEnvDeclarations(dir);
     assert.deepEqual(d.map((x) => x.name).sort(), ["OPENAI_API_KEY", "OPTIONAL_FLAG", "REGION", "TOKEN"]);
     assert.ok(!d.some((x) => x.name === "SECRET"), "the real .env is never read");
-    assert.ok(d.every((x) => Object.keys(x).sort().join() === "file,line,name"), "no value is carried");
+    assert.ok(d.every((x) => Object.keys(x).every((k) => ["file", "line", "name", "via", "from"].includes(k))), "no value is carried");
+    assert.ok(!JSON.stringify(d).includes("sk-not-a-real-key") && !JSON.stringify(d).includes("abc"), "no value is carried");
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 

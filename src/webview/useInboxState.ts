@@ -31,7 +31,7 @@ export function useInboxState(enabled: boolean): InboxState {
           message: said ? m.payload?.message : prev.message, error: said ? m.payload?.error : prev.error,
           answered: prev.answered + (said ? 1 : 0),
         }));
-      } else if (m.type === "project-update" || m.type === "plan-state") ask();
+      } else if (m.type === "project-update" || m.type === "plan-state" || m.type === "project-direction") ask();
     };
     bridge.onMessage(handler);
     ask();

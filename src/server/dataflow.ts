@@ -27,7 +27,12 @@
 //            is parameterised, and is NOT a finding); code — eval / exec /
 //            new Function.
 //   GUARD    an `if` condition between source and sink that mentions the
-//            value: reported as "guarded — verify the check", never as safe.
+//            value, or (2026-10-17, from a field run where a script's
+//            `guard_rel_script "$REL"` sat 44 lines above its exec) a call
+//            written at or before the sink to a guard-named function
+//            (guard* / validate* / verify* / assert* / ensure* / check_* /
+//            is_valid* …) that takes the value or the value it came from:
+//            reported as "guarded — verify the check", never as safe.
 //
 // What it CANNOT see, stated on every report: it is name-based and
 // flow-insensitive (the order of statements is not modelled — it may flag a
@@ -40,6 +45,8 @@
 // Pure: files in, findings out.
 
 import { languageById, languageForPath } from "../shared/languages.ts";
+import { boundNames, callsInText, codeOf, mentions, type Lang } from "./dataflow_text.ts";
+export { boundNames, callsInText, codeOf } from "./dataflow_text.ts";
 
 export type SinkKind = "command" | "argument" | "sql" | "code";
 
@@ -53,6 +60,8 @@ export interface DataflowFinding {
   /** the functions the value passed through, source first. */
   path: string[];
   guard: string | null;
+  /** what the guard is: an `if` naming the value, or a guard-named call taking it */
+  guardKind?: "condition" | "call";
   entryPointIds: string[];
 }
 
@@ -73,55 +82,17 @@ export const DATAFLOW_LIMITS = [
   "a value stored in an object attribute or a container element and read back is not followed",
   "dynamic dispatch and unresolved calls are not followed",
   "a value that goes into a database, an API or a file and comes back out is not followed (second-order input)",
-  "a guard is a condition that mentions the value, not proof that it validates",
+  "a guard is a condition that mentions the value, or a call to a guard-named function that takes it — not proof that it validates",
   "no findings is not a clean bill: it means none of these patterns matched",
 ];
 
 // ── language helpers ───────────────────────────────────────────────────
 
-type Lang = "python" | "jsts" | "bash" | "other";
 /** The IR's own language stamp first (it covers extensionless shebang
  *  scripts), then the registry — never an extension check of our own. */
 function langOf(file: string, ir: IrFile): Lang {
   const id = languageById(ir.language)?.id ?? languageForPath(file)?.id;
   return id === "python" || id === "jsts" || id === "bash" ? id : "other";
-}
-
-/** An expression with its string literals removed — except the interpolated
- *  parts of f-strings, template literals and bash double quotes, which are
- *  code. So `"name"` mentions nothing and `f"{name}"` mentions name. */
-export function codeOf(text: string, lang: Lang): string {
-  let out = "";
-  let i = 0;
-  while (i < text.length) {
-    const c = text[i];
-    const prev = text[i - 1] ?? "";
-    const isF = lang === "python" && /[fF]/.test(prev) && !/[\w]/.test(text[i - 2] ?? "");
-    if (c === "'" && lang === "bash") { const j = text.indexOf("'", i + 1); i = j < 0 ? text.length : j + 1; out += " "; continue; }
-    if (c === '"' || c === "'" || (c === "`" && lang === "jsts")) {
-      let j = i + 1;
-      let inner = "";
-      while (j < text.length && text[j] !== c) {
-        if (text[j] === "\\") { j += 2; continue; }
-        if (c === "`" && text[j] === "$" && text[j + 1] === "{") { const k = text.indexOf("}", j); inner += ` ${text.slice(j + 2, k < 0 ? text.length : k)} `; j = k < 0 ? text.length : k + 1; continue; }
-        if (isF && text[j] === "{") { const k = text.indexOf("}", j); inner += ` ${text.slice(j + 1, k < 0 ? text.length : k)} `; j = k < 0 ? text.length : k + 1; continue; }
-        if (lang === "bash" && c === '"' && text[j] === "$") { const m = /^\$\{?[\w@*#?!-]+\}?/.exec(text.slice(j)); if (m) { inner += ` ${m[0]} `; j += m[0].length; continue; } }
-        j++;
-      }
-      out += inner || " ";
-      i = j + 1;
-      continue;
-    }
-    out += c;
-    i++;
-  }
-  return out;
-}
-
-const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-function mentions(code: string, name: string, lang: Lang): boolean {
-  if (lang === "bash") return new RegExp(`\\$\\{?${esc(name)}(?![\\w])`).test(code);
-  return new RegExp(`(?<![\\w$.])${esc(name)}(?![\\w$])`).test(code);
 }
 
 const SOURCE_PATTERNS: Record<Lang, RegExp[]> = {
@@ -132,6 +103,17 @@ const SOURCE_PATTERNS: Record<Lang, RegExp[]> = {
 };
 
 const CLEANERS = /(?:^|[^\w.])(int|float|bool|Number|parseInt|parseFloat|Boolean|uuid\.UUID|UUID|shlex\.quote|quote|escape|escape_string|html\.escape|encodeURIComponent|sanitize\w*|clean\w*)\s*\(/;
+
+/** A function whose name says it checks its argument: `guard_rel_script`,
+ *  `validatePath`, `check_name`, `isSafeId`. Not `checkout`, not `ensure_dir`
+ *  (it creates), not a bare `require` (in JS it loads a module), and never a
+ *  call that is itself a sink (`subprocess.check_call`). Name-based, like CLEANERS. */
+function isGuardCall(callee: string, lang: Lang): boolean {
+  const last = callee.split(".").pop() ?? callee;
+  if (lang === "jsts" && last === "require") return false;
+  return /^(guard|validate|verify|assert|require)(?:$|[A-Z_]|[sd][A-Z_])/.test(last)
+    || /^(check|is_?[Vv]alid|is_?[Ss]afe|is_?[Aa]llowed)(?:$|[A-Z_])/.test(last);
+}
 
 function sinkOf(n: IrNode, lang: Lang, shellImports: ReadonlySet<string> = new Set()): { kind: SinkKind; argIndex: number | "any" | "callee" } | null {
   const callee = (n.funcName ?? n.callTarget ?? "").trim();
@@ -171,37 +153,6 @@ function sinkOf(n: IrNode, lang: Lang, shellImports: ReadonlySet<string> = new S
   return null;
 }
 
-/** Call expressions written inside a piece of source text, with their
- *  top-level arguments: `conn.execute(f"…{name}").fetchall()` holds
- *  `conn.execute` with one argument. The parser keeps a method CHAIN as one
- *  node (its inner call is not a node of its own), and a `return f(x)` keeps
- *  only its text — this reads both. */
-export function callsInText(text: string): Array<{ callee: string; args: string[] }> {
-  const out: Array<{ callee: string; args: string[] }> = [];
-  const re = /([A-Za-z_$][\w$]*(?:\s*\.\s*[A-Za-z_$][\w$]*)*)\s*\(/g;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(text))) {
-    let depth = 1;
-    let j = m.index + m[0].length;
-    let quote: string | null = null;
-    const start = j;
-    const args: string[] = [];
-    let argStart = j;
-    for (; j < text.length && depth > 0; j++) {
-      const c = text[j];
-      if (quote) { if (c === "\\") j++; else if (c === quote) quote = null; continue; }
-      if (c === '"' || c === "'" || c === "`") { quote = c; continue; }
-      if (c === "(" || c === "[" || c === "{") depth++;
-      else if (c === ")" || c === "]" || c === "}") { depth--; if (depth === 0) break; }
-      else if (c === "," && depth === 1) { args.push(text.slice(argStart, j).trim()); argStart = j + 1; }
-    }
-    const last = text.slice(argStart, j).trim();
-    if (last || args.length) args.push(last);
-    out.push({ callee: m[1].replace(/\s+/g, ""), args: j > start || args.length ? args : [] });
-  }
-  return out;
-}
-
 /** A node's own call and every call written inside its text. */
 function callsOf(n: IrNode): Array<{ callee: string; args: string[]; own: boolean }> {
   const own = (n.funcName ?? n.callTarget) ? [{ callee: (n.funcName ?? n.callTarget)!, args: n.args ?? [], own: true }] : [];
@@ -218,21 +169,6 @@ function callsOf(n: IrNode): Array<{ callee: string; args: string[]; own: boolea
 // ── the index ──────────────────────────────────────────────────────────
 
 interface Fn { file: string; id: string; name: string; params: string[]; nodes: IrNode[]; lang: Lang }
-
-/** The names an assignment binds: one, or each name a destructuring pattern
- *  binds (`[, , cn, fmt]`, `{ a, b: c, ...rest }`, `(x, y)`, `x, y`). */
-export function boundNames(target: string): string[] {
-  const t = target.trim();
-  if (!/^[[{(]|,/.test(t)) return [t];
-  const inner = t.replace(/^[[{(]|[\]})]$/g, "");
-  return inner.split(",").map((part) => {
-    const p = part.trim().replace(/^\.\.\.|^\*/, "");
-    if (!p) return "";
-    const renamed = /:\s*([A-Za-z_$][\w$]*)/.exec(p);
-    const base = (renamed ? renamed[1] : p).split("=")[0].trim();
-    return /^[A-Za-z_$][\w$]*$/.test(base) ? base : "";
-  }).filter(Boolean);
-}
 
 function paramName(p: string, lang: Lang): string {
   let s = p.trim().replace(/^\*{1,2}|^\.\.\./, "");
@@ -288,7 +224,7 @@ function relTarget(targetFile: string, files: Record<string, IrFile>): string {
 
 // ── the pass ───────────────────────────────────────────────────────────
 
-interface Taint { what: string; file: string; line: number | null; path: string[]; guard: string | null }
+interface Taint { what: string; file: string; line: number | null; path: string[]; guard: string | null; guardKind?: "condition" | "call" }
 
 export function computeDataflow(env: { files: Record<string, IrFile>; entryPoints?: EntryLike[]; threads?: ThreadLike[] }): DataflowReport {
   const { fns, calls, shellImports } = buildIndex(env.files);
@@ -326,7 +262,27 @@ export function computeDataflow(env: { files: Record<string, IrFile>; entryPoint
   // new taint re-queues the function and any callee it reaches.
   for (const key of fns.keys()) work.push(key);
   const seenCall = new Set<string>();
-  let guardText = new Map<string, string>(); // fnKey|name → condition
+  const guardText = new Map<string, string>(); // fnKey|name → condition
+  const callGuards = new Map<string, { text: string; line: number }>(); // fnKey|name → the first guard-named call taking it
+  const derivedFrom = new Map<string, string[]>(); // fnKey|name → the tainted names its assignment was built from
+  // The guard that covers a value at a line: an `if` naming it, a guard call
+  // written at or before that line, or either on a value it was built from
+  // (`TASK="$2"` after `guard_rel_path "$2"`), a few assignments back.
+  const guardFor = (key: string, name: string, t: Taint, atLine: number | null): { text: string; kind: "condition" | "call" } | null => {
+    const one = (nm: string) => {
+      const cond = guardText.get(`${key}|${nm}`);
+      if (cond) return { text: cond, kind: "condition" as const };
+      const call = callGuards.get(`${key}|${nm}`);
+      return call && (atLine == null || call.line <= atLine) ? { text: `${call.text} (line ${call.line})`, kind: "call" as const } : null;
+    };
+    const seen = new Set<string>();
+    let frontier = [name];
+    for (let depth = 0; depth < 4 && frontier.length; depth++) {
+      for (const nm of frontier) { seen.add(nm); const g = one(nm); if (g) return g; }
+      frontier = frontier.flatMap((nm) => derivedFrom.get(`${key}|${nm}`) ?? []).filter((nm) => !seen.has(nm));
+    }
+    return t.guard ? { text: t.guard, kind: t.guardKind ?? "condition" } : null;
+  };
   while (work.length) {
     const key = work.pop()!;
     const fn = fns.get(key)!;
@@ -342,7 +298,9 @@ export function computeDataflow(env: { files: Record<string, IrFile>; entryPoint
           if (!names.length || CLEANERS.test(code)) continue;
           const src = SOURCE_PATTERNS[fn.lang].find((re) => re.test(code));
           const via = [...m.entries()].find(([name]) => mentions(code, name, fn.lang));
+          const from = [...m.keys()].filter((name) => mentions(code, name, fn.lang));
           for (const b of names) {
+            if (from.length) derivedFrom.set(`${key}|${b}`, from);
             if (src) {
               const what = fn.lang === "bash" ? `command-line argument ${src.exec(code)?.[0] ?? ""}` : `\`${(n.preview ?? "").slice(0, 60)}\``;
               m.set(b, { what, file: fn.file, line: n.line ?? null, path: [fn.name], guard: null }); sources++; changed = true;
@@ -362,6 +320,16 @@ export function computeDataflow(env: { files: Record<string, IrFile>; entryPoint
         if (n.type === "if_stmt" && n.condition) {
           const code = codeOf(n.condition, fn.lang);
           for (const name of m.keys()) if (mentions(code, name, fn.lang)) guardText.set(`${key}|${name}`, n.condition.slice(0, 80));
+        }
+        const gc = (n.funcName ?? n.callTarget ?? "").trim();
+        if ((n.type === "call" || n.type === "assignment") && gc && isGuardCall(gc, fn.lang) && !sinkOf(n, fn.lang, shellImports.get(fn.file))) {
+          const code = codeOf((n.args ?? []).join(" "), fn.lang);
+          const text = (fn.lang === "bash" ? `${gc} ${(n.args ?? []).join(" ")}` : `${gc}(${(n.args ?? []).join(", ")})`).slice(0, 80);
+          for (const name of m.keys()) {
+            const k = `${key}|${name}`;
+            const prior = callGuards.get(k);
+            if (mentions(code, name, fn.lang) && (!prior || (n.line ?? 0) < prior.line)) callGuards.set(k, { text, line: n.line ?? 0 });
+          }
         }
       }
     }
@@ -395,8 +363,8 @@ export function computeDataflow(env: { files: Record<string, IrFile>; entryPoint
           const tKey = `${t.file}::${t.fnId}`;
           const callee = fns.get(tKey);
           if (!callee) continue;
-          const guard = via[0] ? guardText.get(`${key}|${via[0]}`) ?? via[1].guard : via[1].guard;
-          const carry: Taint = { ...via[1], path: [...via[1].path, callee.name], guard };
+          const g = via[0] ? guardFor(key, via[0], via[1] as Taint, n.line ?? null) : null;
+          const carry: Taint = { ...via[1], path: [...via[1].path, callee.name], guard: g?.text ?? via[1].guard, guardKind: g?.kind ?? (via[1] as Taint).guardKind };
           if (callee.lang === "bash") { seed(tKey, String(i + 1), carry); continue; }
           const names = callee.params.map((p) => paramName(p, callee.lang));
           const offset = names[0] === "self" || names[0] === "cls" ? 1 : 0;
@@ -424,14 +392,15 @@ export function computeDataflow(env: { files: Record<string, IrFile>; entryPoint
         const hit = pool.map((a) => codeOf(a, fn.lang)).flatMap((code) => [...m.entries()].filter(([name]) => mentions(code, name, fn.lang)))[0];
         if (!hit) continue;
         const [name, t] = hit;
-        const guard = guardText.get(`${key}|${name}`) ?? t.guard;
+        const g = guardFor(key, name, t, n.line ?? null);
         findings.push({
           kind: sink.kind,
-          severity: guard || sink.kind === "argument" ? "review" : "high",
+          severity: g || sink.kind === "argument" ? "review" : "high",
           source: { file: t.file, line: t.line, what: t.what },
           sink: { file: fn.file, nodeId: n.id, line: n.line ?? null, text: `${c.callee}(${args.join(", ")})`.slice(0, 160), fn: fn.name },
           path: t.path,
-          guard: guard ?? null,
+          guard: g?.text ?? null,
+          ...(g ? { guardKind: g.kind } : {}),
           entryPointIds: [],
         });
         break;
@@ -464,59 +433,5 @@ export function computeDataflow(env: { files: Record<string, IrFile>; entryPoint
   return { findings, sources, functionsReached: tainted.size, limits: DATAFLOW_LIMITS };
 }
 
-const KIND_LABEL: Record<SinkKind, string> = {
-  command: "reaches a shell command",
-  argument: "reaches a command's argument list (no shell)",
-  sql: "reaches SQL query text",
-  code: "reaches code evaluation",
-};
-
-/** A thread contract's lines: what untrusted input reaches on this thread,
- *  unguarded first, at most four named. Null when nothing does. */
-export function formatUntrustedLines(findings: DataflowFinding[] | undefined): string | null {
-  if (!findings?.length) return null;
-  const shown = findings.slice(0, 4).map((f) =>
-    `- [${f.severity === "high" ? "UNGUARDED" : "review"}] ${KIND_LABEL[f.kind]}: \`${f.sink.text.replace(/\s+/g, " ").slice(0, 90)}\` (${f.sink.file}${f.sink.line ? `:${f.sink.line}` : ""}) from ${f.source.what}${f.guard ? `; a condition mentions it: \`${f.guard}\`` : ""}`);
-  const more = findings.length - shown.length;
-  return [
-    "Untrusted input reaches (name-based data flow — a place to look, not a verdict; the rest and the limits: `vibegraph-knowledge dataflow`):",
-    ...shown,
-    ...(more > 0 ? [`- … ${more} more`] : []),
-  ].join("\n");
-}
-
-/** Each thread's findings, by entry point. */
-export function findingsByThread(r: DataflowReport): Map<string, DataflowFinding[]> {
-  const m = new Map<string, DataflowFinding[]>();
-  for (const f of r.findings) for (const ep of f.entryPointIds) (m.get(ep) ?? m.set(ep, []).get(ep)!).push(f);
-  return m;
-}
-
-export function formatDataflowMd(r: DataflowReport): string {
-  const high = r.findings.filter((f) => f.severity === "high");
-  const review = r.findings.filter((f) => f.severity === "review");
-  const line = (f: DataflowFinding) => [
-    `- **${KIND_LABEL[f.kind]}** in \`${f.sink.fn}\` (${f.sink.file}${f.sink.line ? `:${f.sink.line}` : ""}): \`${f.sink.text}\``,
-    `  - untrusted: ${f.source.what}${f.source.line ? ` (${f.source.file}:${f.source.line})` : ""}`,
-    `  - path: ${f.path.join(" → ")}`,
-    ...(f.guard ? [`  - a condition mentions it on the way: \`${f.guard}\` — verify it actually validates`] : []),
-    ...(f.entryPointIds.length ? [`  - threads: ${f.entryPointIds.map((e) => `\`${e}\``).join(", ")}`] : []),
-  ].join("\n");
-  return [
-    "# Untrusted input → dangerous sinks (derived — a place to look, not a verdict)",
-    "",
-    `Request data, handler parameters, command-line arguments and \`input()\` followed by name through assignments and calls to shell commands, SQL query text and code evaluation. ${r.sources} source(s) seen; ${r.functionsReached} function(s) carry untrusted values.`,
-    "",
-    "What this cannot see:",
-    ...r.limits.map((l) => `- ${l}`),
-    "",
-    `## Unguarded (${high.length})`,
-    "",
-    ...(high.length ? high.map(line) : ["None matched."]),
-    "",
-    `## To review (${review.length}) — a condition on the way, or an argument-level sink`,
-    "",
-    ...(review.length ? review.map(line) : ["None matched."]),
-    "",
-  ].join("\n");
-}
+// The report in words lives in dataflow_format.ts; re-exported so callers keep one import.
+export { formatUntrustedLines, findingsByThread, formatDataflowMd } from "./dataflow_format.ts";

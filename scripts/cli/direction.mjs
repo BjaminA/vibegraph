@@ -34,13 +34,15 @@ import { evaluatePredicate } from "../../src/server/quality/predicate.ts";
 import { deriveStackProfile } from "../../src/server/quality/profile.ts";
 import { buildStackIndex } from "../../src/server/stack.ts";
 import { cliPath } from "./winpath.mjs";
+import { projectDirectionForPrompt, runProjectDirection, PROJECT_DIRECTION_USAGE } from "./project_direction_context.mjs";
 
 export { HOOK_MODES };
 
 export const DIRECTION_USAGE = `direction [<root>]                      the generic skills: enabled?, where they apply (zero tokens)
   direction <skill> [<root>]            one skill's rules with their why and the check each is bound to
   direction enable|disable <skill> [<root>]
-  direction hooks headlines|on-violation|off [<root>]   what the hooks send (default headlines)`;
+  direction hooks headlines|on-violation|off [<root>]   what the hooks send (default headlines)
+  ${PROJECT_DIRECTION_USAGE}`;
 
 export function skillsDir(loc = locate()) {
   return loc.mode === "installed" ? join(loc.packageRoot, "vendor", "skills") : join(loc.repoRoot, "skills");
@@ -85,19 +87,28 @@ export function applicability(env, absRoot, skills) {
 
 const tag = (s) => (s.evidence === "validated" ? "drilled" : "unvalidated");
 
-/** For one prompt: `(ep) => block | null`, headline mode only, each skill
- *  once per session. */
+/** For one prompt: `(ep) => block | null` — the generic skills' headlines
+ *  and the project's agreed direction (project_direction_context.mjs). */
 export function directionForPrompt(absRoot, env, routedEps, state) {
+  const generic = genericForPrompt(absRoot, env, routedEps, state);
+  const project = routedEps.length ? projectDirectionForPrompt(absRoot, env, state) : () => null;
+  return (ep) => [generic(ep), project(ep)].filter(Boolean).join("\n") || null;
+}
+
+/** The generic skills: headline mode only, each skill once per session. */
+function genericForPrompt(absRoot, env, routedEps, state) {
   const d = enabledDirection(absRoot);
   if (!d || d.mode !== "headlines") return () => null;
-  const sent = (state.direction ??= { skills: [], rules: [] });
-  const pending = d.skills.filter((s) => !sent.skills.includes(s.name));
+  // read per call: a thread held back for room restores state.direction to a
+  // copy, and a record kept on the old object would be lost (2026-10-16)
+  const sent = () => (state.direction ??= { skills: [], rules: [] });
+  const pending = d.skills.filter((s) => !sent().skills.includes(s.name));
   if (!pending.length || !routedEps.length) return () => null;
   const applies = applicability(env, absRoot, d.skills);
   return (ep) => {
-    const now = pending.filter((s) => !sent.skills.includes(s.name) && applies.get(s.name)?.has(ep));
+    const now = pending.filter((s) => !sent().skills.includes(s.name) && applies.get(s.name)?.has(ep));
     if (!now.length) return null;
-    for (const s of now) sent.skills.push(s.name);
+    for (const s of now) sent().skills.push(s.name);
     return `## Generic direction (enabled in .vibegraph/skills.json — advice, never a gate; the why of each: \`vibegraph-knowledge direction <skill>\`)\n${now.map(headlines).join("\n")}`;
   };
 }
@@ -124,6 +135,7 @@ export function directionForFindings(absRoot, findings, state) {
 
 export function runDirection(args) {
   const [a, b, c] = args;
+  if (a === "project") return runProjectDirection(args.slice(1));
   const set = (root, mutate) => {
     const absRoot = resolve(cliPath(root ?? "."));
     const { config } = readSkillsConfig(absRoot);

@@ -57,7 +57,9 @@
         "properties": {
           "name": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$" },
           "line": { "type": "integer", "minimum": 1 },
-          "form": { "enum": ["member", "index", "destructure", "call", "inherited"] }
+          "form": { "enum": ["member", "index", "destructure", "call", "inherited"] },
+          "fallback": { "enum": ["value", "empty", "throws"], "description": "2026-10-17 — what an UNSET value becomes at this read, when the expression says: `value` a non-empty default (`?? 'x'`, `.get('X', 'x')`, `${X:-x}`), `empty` an empty one or an optional chain (quietly empty or undefined), `throws` it fails at the read (`os.environ['X']`, a method on the bare read, `${X:?}`). Absent: used bare." },
+          "use": { "enum": ["split", "exit-silent", "exit-loud"], "description": "2026-10-17 — what the code does with it, when the expression says: `split` into a list; under a negated `if` whose body returns / continues / breaks (`exit-silent`) or throws / exits the process (`exit-loud`)." }
         }
       }
     },
@@ -638,6 +640,10 @@
         },
         "elseLine": {
           "$ref": "#/$defs/Line"
+        },
+        "exits": {
+          "description": "2026-10-14, field-additive: the then-arm always leaves its block — its last statement is a return / continue / break / throw (python: raise), spelled as the language spells it. A statement after this if, in the same block, runs only when the condition is false: `if (!verify(d)) continue; write(d)` writes only verified documents (src/server/write_guards.ts). `continue`, `break` and `throw` emit no node of their own, so without this field the guard was invisible.",
+          "enum": ["return", "continue", "break", "throw", "raise"]
         },
         "casePatterns": {
           "description": "2026-10-09, field-additive (bash): a `case` statement's arm patterns as written, quotes stripped, each with its line. A case on the script's own name ($0, its basename) makes each plain-word pattern a name the script answers to (scripts/frontends/script_refs.mjs invokedNameVariants).",

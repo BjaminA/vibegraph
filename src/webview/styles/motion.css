@@ -335,9 +335,17 @@
     var(--shadow-panel);
 }
 
+/* ── a conversation message entering (2026-10-16, the Agent Manager run) ──
+   The node-enter rise, on the element itself: a reply or a question arrives;
+   nothing loops. */
+.vg-msg-enter {
+  animation: vg-node-enter-kf var(--motion-node-enter-dur) var(--motion-node-enter-ease) both;
+}
+
 /* ── Reduced motion: short-circuit all four to instant snap ────────────────
    No partial easing — the spec requires hard fall-through. */
 @media (prefers-reduced-motion: reduce) {
+  .vg-msg-enter,
   .vg-node-enter > *,
   .vg-thread-enter > *,
   .vg-node-exit-ghost,

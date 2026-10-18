@@ -56,6 +56,8 @@ export default defineConfig({
       // The Agent Manager (2026-09-29): users land on the hooked Claude Code
       // run; the orchestrated suites predate it and pin the legacy engine.
       VG_AGENT_ENGINE: process.env.VG_AGENT_ENGINE ?? "orchestrated",
+      // the suites were written against the centred sheet; docked is the product default
+      VG_SHEET_DOCK: process.env.VG_SHEET_DOCK ?? "centre",
       PATH: process.env.PATH ?? "",
       HOME: process.env.HOME ?? "",
       // M-RUN e2e (test:e2e-run) drives the SM2 arg synthesizer through a

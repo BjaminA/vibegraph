@@ -37,7 +37,7 @@ export const POINTER = [
   "stated rule's checkable half against the code as it is now, with your",
   "uncommitted changes as the delta — run it before you finish;",
   "exit 1 names the offending node, exit 2 means a rule could not be",
-  "verified, which is not a pass.",
+  "verified, exit 3 means nothing was checkable — neither is a pass.",
   "",
   "Never claim code is unused, dead, untested or unconfigured because the",
   "folder does not mention it. Check first: `reachability.md` says why a",
@@ -195,7 +195,7 @@ export const SKILL_NAME = "vibegraph";
 // planning, debugging, a security review and a pre-commit review. Claude Code
 // keeps only a skill's name and description in context until a task matches,
 // so these cost ~100 tokens each until used. scripts/cli/claude-skills/<name>/.
-export const TASK_SKILLS = ["plan", "debug", "security", "review"];
+export const TASK_SKILLS = ["plan", "debug", "security", "review", "rules"];
 export const ALL_SKILLS = [SKILL_NAME, ...TASK_SKILLS.map((t) => `${SKILL_NAME}-${t}`)];
 
 /** `plan,debug` → ["vibegraph", "vibegraph-plan", "vibegraph-debug"]; the

@@ -37,7 +37,10 @@ import { buildCrossingIndex, type CrossingIndex } from "./src/server/crossings";
 import { handleInvestigation, listInvestigations, readInvestigation, renderHandoff, readRel } from "./src/server/investigations";
 import { diffEditChecks, formatEditCheck, type EditCheckRow } from "./src/server/edit_check";
 import { derivedPolicyClauses, checkPolicyClause, describePolicyClause } from "./src/server/policy_check";
-import { startHookedRun, stopHookedRun, decideHookedRun, currentHookedRun, type HookedRunDeps } from "./src/server/hooked_runner";
+import { startHookedRun, stopHookedRun, decideHookedRun, currentHookedRun, replyHookedRun, finishHookedRun, type HookedRunDeps } from "./src/server/hooked_runner";
+import { framingFacts, runFraming } from "./src/server/hooked_framing";
+import { handleProjectDirection } from "./src/server/project_direction_server";
+import { nowState } from "./src/server/now_state";
 import { hostAllowed, originAllowed, jsonContentType, staticPath, ensurePrivateIgnore, type GuardConfig } from "./src/server/local_guard";
 import { computeDataflow, findingsByThread, formatDataflowMd, type DataflowReport } from "./src/server/dataflow";
 import { archModelForEnvelope } from "./src/server/arch_envelope";
@@ -60,7 +63,8 @@ import { threadFacts } from "./src/shared/thread_rank_facts";
 import { buildInsight } from "./src/server/insight";
 import { computeReachability } from "./src/server/reachability";
 import { buildProposePrompt, docExcerpts, parseProposal } from "./src/server/arch_propose";
-import { readInfraManifests, readEnvDeclarations } from "./src/server/infra_manifests";
+import { readInfraManifests } from "./src/server/infra_manifests";
+import { readEnvDeclarations } from "./src/server/env_declarations";
 import { readManualSeeds } from "./src/server/manual_seeds";
 import { readPackageManifests } from "./scripts/package_entries.mjs";
 import type { ArchModelRecord } from "./src/shared/protocol";
@@ -615,6 +619,17 @@ if (isDirectory) {
   skillsConfig = loaded.config;
   for (const p of loaded.problems) console.warn(`  [skills] ${p}`);
   console.log(`[skills] ${GENERIC_SKILLS.length} shipped; enabled here: ${skillsConfig.enabled.join(", ") || "(none)"}`);
+}
+// 2026-10-16 — re-read when the file changes on disk (`direction enable` from the
+// CLI while the GUI runs was never seen until a restart)
+let skillsConfigMtime = 0;
+function liveSkillsConfig(): SkillsConfig {
+  if (!isDirectory) return skillsConfig;
+  try {
+    const m = fs.statSync(path.join(inputPath, ".vibegraph", "skills.json")).mtimeMs;
+    if (m !== skillsConfigMtime) { skillsConfigMtime = m; skillsConfig = readSkillsConfig(inputPath).config; }
+  } catch { /* no file: what was last read stands */ }
+  return skillsConfig;
 }
 // resolvedPyFile: the .py file (single-file mode) or project root dir (directory mode — only used for watching)
 const resolvedPyFile = inputPath;
@@ -1800,10 +1815,10 @@ interface RoutedCheckResult {
 
 /** 2026-09-29 — every stated rule's checkable half, evaluated over the live
  *  envelope: the before/after the in-band post-edit check diffs. */
-function statedCheckSnapshot(): RoutedCheckResult[] {
+function statedCheckSnapshot(rules?: ReturnType<typeof loadConstraints>): RoutedCheckResult[] {
   if (!isDirectory) return [];
   try {
-    const constraints = loadConstraints(readmeRootDir());
+    const constraints = rules ?? loadConstraints(readmeRootDir());
     const rows = evaluateRoutedChecks(null, null, constraints);
     // A stack policy's own forbid / replace-with, derived (src/server/policy_check.ts).
     const files = relativeProjectFiles() as any;
@@ -1912,7 +1927,7 @@ function liveStackProfile(): ReturnType<typeof deriveStackProfile>["profile"] {
 function skillsConfigPayload(): { config: SkillsConfig; catalogue: ReturnType<typeof catalogueOf> } {
   let profile: ReturnType<typeof liveStackProfile> | null = null;
   if (isDirectory) { try { profile = liveStackProfile(); } catch (e: any) { console.warn(`  [skills] profile unavailable for the catalogue: ${e?.message ?? e}`); } }
-  return { config: skillsConfig, catalogue: catalogueOf(GENERIC_SKILLS, profile) };
+  return { config: liveSkillsConfig(), catalogue: catalogueOf(GENERIC_SKILLS, profile) };
 }
 
 /** Quality layer — the packet's CLOSING BAR, computed at the objective gate
@@ -2160,7 +2175,8 @@ function hookedRunDeps(): HookedRunDeps {
     target: { cmd: target.cmd, args: target.args, label: target.label, provider: target.provider, env: spawnEnv(target) },
     cli, pinEnv,
     mcpUrl: `http://localhost:${port}/mcp`,
-    checkSnapshot: () => statedCheckSnapshot() as EditCheckRow[],
+    framing: () => runFraming(framingFacts(analyzedRoot())),
+    checkSnapshot: (rules) => statedCheckSnapshot(rules) as EditCheckRow[],
     settle: refresh,
     testsFor: (files) => affectedTests(latestThreads as any, latestEntryPoints as any, files).map((t) => t.entryPointId),
     afterRestore: async () => { await refresh(); },
@@ -2590,7 +2606,7 @@ async function runPacketWorker(packet: RunPacket): Promise<WorkerOutcome> {
   // omission is named in the audit line; the prompt only carries what rode.
   const genericSel = isDirectory
     ? selectGenericSkills({
-      skills: GENERIC_SKILLS, config: skillsConfig, profile: liveStackProfile(),
+      skills: GENERIC_SKILLS, config: liveSkillsConfig(), profile: liveStackProfile(),
       entryPointId: packet.plan.entryPointId,
       task: packetTaskFacts({
         priorAttempts: packet.attempts - 1, kind: packet.plan.kind,
@@ -2602,12 +2618,12 @@ async function runPacketWorker(packet: RunPacket): Promise<WorkerOutcome> {
       alreadyInjected: new Map(),
     })
     : { routed: [], injected: [] };
-  const genericText = renderGenericSkillsBlock(genericSel.routed, skillsConfig);
+  const genericText = renderGenericSkillsBlock(genericSel.routed, liveSkillsConfig());
   // The audit lives on the packet (and so in work-run.json), not only in
   // the log: the run file is what a report reads.
   const skillAudit = auditOf(genericSel.routed);
   packet.skills = skillAudit;
-  if (skillsConfig.enabled.length) console.log(`  [skills] ${packet.id}: ${describeAudit(skillAudit)}`);
+  if (liveSkillsConfig().enabled.length) console.log(`  [skills] ${packet.id}: ${describeAudit(skillAudit)}`);
   const prompt = buildWorkerPrompt({
     entryPointId: packet.plan.entryPointId,
     qualifiedName: packet.plan.qualifiedName,
@@ -4829,7 +4845,7 @@ async function handleChat(
   const genericDedup = backend.id === "claude-stdio" ? state.injectedGenericSkills : new Map<string, string>();
   const genericSel = isDirectory
     ? selectGenericSkills({
-      skills: GENERIC_SKILLS, config: skillsConfig, profile: liveStackProfile(),
+      skills: GENERIC_SKILLS, config: liveSkillsConfig(), profile: liveStackProfile(),
       entryPointId: threadEntryPointId ?? routed[0]?.entryPointId ?? undefined,
       budgetChars: Math.max(0, SKILL_INJECTION_BUDGET_CHARS
         - (threadCtx?.skill?.length ?? 0)
@@ -4840,7 +4856,7 @@ async function handleChat(
   if (backend.id === "claude-stdio") {
     for (const [name, hash] of genericSel.injected) state.injectedGenericSkills.set(name, hash);
   }
-  const genericText = renderGenericSkillsBlock(genericSel.routed, skillsConfig);
+  const genericText = renderGenericSkillsBlock(genericSel.routed, liveSkillsConfig());
 
   // M27.2 — full framing on the FIRST turn of a persistent session;
   // later turns carry only a delta of what the user is looking at.
@@ -7308,7 +7324,7 @@ async function runSpawnThreadAgent(requestedId: string, task: string): Promise<T
   // worker on this thread would, after the thread skill, same budget rule.
   const genericSel = isDirectory
     ? selectGenericSkills({
-      skills: GENERIC_SKILLS, config: skillsConfig, profile: liveStackProfile(), entryPointId,
+      skills: GENERIC_SKILLS, config: liveSkillsConfig(), profile: liveStackProfile(), entryPointId,
       budgetChars: Math.max(0, SKILL_INJECTION_BUDGET_CHARS - (skill?.length ?? 0)), alreadyInjected: new Map(),
     })
     : { routed: [], injected: [] };
@@ -7316,7 +7332,7 @@ async function runSpawnThreadAgent(requestedId: string, task: string): Promise<T
     entryPointId,
     qualifiedName: (thread as any).seed?.qualifiedName ?? entryPointId,
     projection, skill, blindSpots,
-    genericSkills: renderGenericSkillsBlock(genericSel.routed, skillsConfig) || null,
+    genericSkills: renderGenericSkillsBlock(genericSel.routed, liveSkillsConfig()) || null,
     filesReached: (thread as any).filesReached ?? [],
     reaches, reachedBy,
     contract: contractCtx.rendered.contract,
@@ -7753,7 +7769,7 @@ const mcpContext: VibegraphMcpContext = {
     }
     const profile = isDirectory ? (() => { try { return liveStackProfile(); } catch { return null; } })() : null;
     const rows = catalogueOf(GENERIC_SKILLS, profile).map((c) =>
-      `- ${c.name} [${skillsConfig.enabled.includes(c.name) ? "enabled" : "off"}; ${c.evidence}] ${c.of ? `applies to ${c.fires} of ${c.of} threads` : "breadth unmeasured"} — ${c.description}`);
+      `- ${c.name} [${liveSkillsConfig().enabled.includes(c.name) ? "enabled" : "off"}; ${c.evidence}] ${c.of ? `applies to ${c.fires} of ${c.of} threads` : "breadth unmeasured"} — ${c.description}`);
     return { text: `${rows.join("\n")}\nName one for its rules and their why. Enabling is the person's: the Skills panel or \`vibegraph-knowledge direction enable <skill>\`.` };
   },
   // 2026-09-29 - the investigation board, read-only for an agent.
@@ -8293,12 +8309,21 @@ function setupWebSocket() {
           const echo = JSON.stringify({ type: "model-tiers", payload: tiers });
           for (const c of clients) c.send(echo);
           console.log(`[models] ${(["thinking", "routine", "worker"] as ModelTier[]).map((t) => `${t}=${routeLabel(resolveTierRoute(t, tiers))}`).join(" ")}`);
+        } else if (msg.type === "now-get") {
+          // 2026-10-16 — the project's state and one next step (src/server/now_state.ts)
+          ws.send(JSON.stringify({ type: "now-state", payload: isDirectory ? nowState(analyzedRoot(), { briefStale: latestArch ? staleBriefLines(analyzedRoot(), latestArch) : [] }) : null }));
+        } else if (msg.type === "project-direction-get" || msg.type === "project-direction-census" || msg.type === "project-direction-decide") {
+          // 2026-10-16 — the project's own direction (src/server/project_direction.ts); the panel is a person
+          const p = isDirectory ? handleProjectDirection(analyzedRoot(), msg, { stack: latestStack as never, model: latestArchDerived ?? { nodes: [], edges: [] } as never, files: relativeProjectFiles() as never })
+            : { direction: { version: "1" as const, rules: [] }, error: "project direction needs a project directory" };
+          const m = JSON.stringify({ type: "project-direction", payload: p });
+          if (msg.type === "project-direction-get") ws.send(m); else for (const c of clients) c.send(m);
         } else if (msg.type === "set-skills-config") {
           // M-SKILLS.2 — boundary validation: only SHIPPED skill names
           // survive, and the server stamps who enabled each and when. The
           // sanitised result is persisted per project and echoed to every
           // client, the models.json shape.
-          const next = sanitiseSkillsConfig(msg.payload, GENERIC_SKILLS.map((s) => s.name), { source: "human", at: new Date().toISOString() }, skillsConfig);
+          const next = sanitiseSkillsConfig(msg.payload, GENERIC_SKILLS.map((s) => s.name), { source: "human", at: new Date().toISOString() }, liveSkillsConfig());
           skillsConfig = next;
           if (isDirectory) { try { saveSkillsConfig(inputPath, next); } catch (e: any) { console.warn(`  [skills] could not save: ${e?.message ?? e}`); } }
           const echo = JSON.stringify({ type: "skills-config", payload: skillsConfigPayload() });
@@ -8350,13 +8375,16 @@ function setupWebSocket() {
           // boundary; echo as a pending proposal. Reply: system-proposal.
           handleSystemPropose(msg.payload.plan, ws);
         } else if (msg.type === "hooked-run-get") {
-          ws.send(JSON.stringify({ type: "hooked-run", payload: { run: isDirectory ? currentHookedRun(analyzedRoot()) : null } }));
-        } else if (msg.type === "hooked-run-start" || msg.type === "hooked-run-stop" || msg.type === "hooked-run-decide") {
+          ws.send(JSON.stringify({ type: "hooked-run", payload: { run: isDirectory ? currentHookedRun(analyzedRoot()) : null, ...(isDirectory ? { facts: framingFacts(analyzedRoot()) } : {}) } }));
+        } else if (msg.type === "hooked-run-start" || msg.type === "hooked-run-stop" || msg.type === "hooked-run-decide" || msg.type === "hooked-run-reply" || msg.type === "hooked-run-finish") {
           // 2026-09-29 — the Agent Manager's default path (src/server/hooked_runner.ts).
           const reply = (error?: string) => ws.send(JSON.stringify({ type: "hooked-run", payload: { run: currentHookedRun(analyzedRoot()), ...(error ? { error } : {}) } }));
           if (!isDirectory) reply("a hooked run needs a project directory");
           else if (msg.type === "hooked-run-start") { const r = startHookedRun(msg.payload?.task, hookedRunDeps()); if (!r.ok) reply(r.error); }
           else if (msg.type === "hooked-run-stop") { if (!stopHookedRun(analyzedRoot())) reply("no run is running"); }
+          // 2026-10-16 — the run is a conversation: answer it, or finish it for review
+          else if (msg.type === "hooked-run-reply") { const r = replyHookedRun(msg.payload?.text); if (!r.ok) reply(r.error); }
+          else if (msg.type === "hooked-run-finish") { if (!finishHookedRun()) reply("no run is waiting for you"); }
           else decideHookedRun(msg.payload?.accept === true, hookedRunDeps()).then((r) => { if (!r.ok) reply(r.error); }, (e) => reply(String(e?.message ?? e)));
         } else if (msg.type === "software-list" || msg.type === "software-ratify" || msg.type === "software-plan") {
           // 2026-09-30 — software specs from the Plan panel (src/server/software_server.ts); a person.
@@ -8817,6 +8845,8 @@ const THREAD_RANK = ["all", "secondary"].includes(process.env.VG_THREAD_RANK ?? 
 // The Agent Manager's first engine (2026-09-29): the hooked Claude Code run
 // by default; the legacy suites pin "orchestrated" (playwright.config.ts).
 const AGENT_ENGINE = process.env.VG_AGENT_ENGINE === "orchestrated" ? "orchestrated" : "hooked";
+// 2026-10-16 — panels open docked beside the graph unless a viewer chose centred (Playwright pins centred)
+const SHEET_DOCK = process.env.VG_SHEET_DOCK === "centre" ? "centre" : "docked";
 
 function getIndexHtml(): string {
   return `<!DOCTYPE html>
@@ -8834,6 +8864,7 @@ function getIndexHtml(): string {
   <meta name="vg-start-view" content="${START_VIEW}">
   <meta name="vg-thread-rank" content="${THREAD_RANK}">
   <meta name="vg-agent-engine" content="${AGENT_ENGINE}">
+  <meta name="vg-sheet-dock" content="${SHEET_DOCK}">
 </head>
 <body>
   ${bootMarkup()}

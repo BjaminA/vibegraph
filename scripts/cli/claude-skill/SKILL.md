@@ -101,7 +101,8 @@ enforces it. `vibegraph-knowledge constraints list` shows what is stated.
   it; tell the user the command and let them run it.
 - **Before finishing:** `vibegraph-knowledge check --uncommitted` — exit 0
   every rule passed; 1 a rule is VIOLATED (the offender is named as
-  `file:node`); 2 a rule could not be verified, which is **not** a pass.
+  `file:node`); 2 a rule could not be verified, which is **not** a pass; 3
+  nothing was checkable (no rule has a checkable half) — not a pass either.
   `vibegraph-knowledge affected --uncommitted` lists the discovered tests to
   run for your changes.
 - **Never** call code unused, dead, untested or unconfigured because the

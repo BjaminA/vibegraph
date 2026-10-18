@@ -36,6 +36,8 @@ import type { HookedRun, HookedRunChange, HookedRunEvent } from "../shared/hooke
 export type { HookedRun, HookedRunChange, HookedRunEvent } from "../shared/hooked_run_wire.ts";
 
 export const HOOKED_RUN_FILE = path.join(".vibegraph", "hooked-run.json");
+/** A line a session writes as `QUESTION: …` is a question for the person (hooked_framing.ts asks for it). */
+export const QUESTION_RE = /^\s*QUESTION:\s*(.+)$/;
 export const HOOKED_SNAP_DIR = path.join(".vibegraph", "work-snapshots", "hooked");
 const MAX_EVENTS = 300;
 const MAX_FILE_BYTES = 2 * 1024 * 1024;
@@ -114,12 +116,21 @@ export function parseStreamLine(line: string): { events: Array<Omit<HookedRunEve
   if (m?.type === "assistant") {
     for (const c of content) {
       if (c?.type === "tool_use") events.push({ kind: "tool", text: toolText(String(c.name ?? "tool"), c.input) });
-      else if (c?.type === "text" && typeof c.text === "string" && c.text.trim()) events.push({ kind: "text", text: clip(c.text.trim(), 400) });
+      else if (c?.type === "text" && typeof c.text === "string" && c.text.trim()) {
+        // a `QUESTION: …` line is the person's to answer (hooked_framing.ts): its own
+        // event, taken out before the text is clipped so a question is never cut
+        const lines = c.text.trim().split("\n");
+        const rest = lines.filter((l: string) => !QUESTION_RE.test(l)).join("\n").trim();
+        if (rest) events.push({ kind: "text", text: clip(rest, 800) });
+        for (const l of lines) { const q = QUESTION_RE.exec(l); if (q) events.push({ kind: "question", text: clip(q[1].trim(), 600) }); }
+      }
     }
   }
   // A hook that blocks reaches Claude as text in the next user turn.
   const blob = content.map((c: any) => (typeof c?.content === "string" ? c.content : Array.isArray(c?.content) ? c.content.map((x: any) => x?.text ?? "").join(" ") : c?.text ?? "")).join(" ");
-  if ((m?.type === "user" || m?.type === "system") && /breaks a stated rule|violates a stated rule/.test(blob)) {
+  // the post-edit block says "introduced a break of a stated rule" (since
+  // 2026-10-01; the old "breaks" missed it), the Stop block "violates a stated rule"
+  if ((m?.type === "user" || m?.type === "system") && /(break of|breaks|violates) a stated rule/.test(blob)) {
     const id = /\[(c\d+)[^\]]*\]/.exec(blob)?.[1];
     events.push({ kind: "blocked", text: `a VibeGraph hook blocked an edit${id ? ` (${id})` : ""} — Claude was told the rule and its reason` });
   }
@@ -140,8 +151,18 @@ export function parseStreamLine(line: string): { events: Array<Omit<HookedRunEve
 
 // ── the tree snapshot ───────────────────────────────────────────────────
 
+/** 2026-10-16 (review: a run could loosen a stated rule, the evidence then
+ *  read the loosened rule, and Reject left it loosened) — what the project
+ *  STATES under .vibegraph/ is snapshotted with the code: a change to it is
+ *  listed as evidence and undone by Reject. Caches, exports, run records and
+ *  the snapshots themselves are not. */
+export const STATED_FILES = ["constraints.json", "plan.json", "architecture.json", "skills.json", "direction.json", "brief.json", "docs.json", "manual_seeds.json", "operations.json", "models.json"];
+export const STATED_DIRS = ["software", "thread-skills", "topology"];
+export const isStated = (rel: string) => rel.startsWith(".vibegraph/");
+
 /** Every file a session could edit: under the root, outside dot / build /
- *  dependency directories, never a `.env*`, at most 2 MB each. */
+ *  dependency directories, never a `.env*`, at most 2 MB each — and the
+ *  project's stated files under .vibegraph/. */
 export function editableFiles(root: string): { files: string[]; skipped: number } {
   const files: string[] = [];
   let skipped = 0;
@@ -155,7 +176,10 @@ export function editableFiles(root: string): { files: string[]; skipped: number 
     }
   };
   walk(root);
-  return { files: files.sort(), skipped };
+  const vg = path.join(root, ".vibegraph");
+  for (const f of STATED_FILES) if (fs.existsSync(path.join(vg, f)) && fs.statSync(path.join(vg, f)).isFile()) files.push(`.vibegraph/${f}`);
+  for (const d of STATED_DIRS) if (fs.existsSync(path.join(vg, d))) walk(path.join(vg, d));
+  return { files: [...new Set(files)].sort(), skipped };
 }
 
 const sha = (b: Buffer) => createHash("sha1").update(b).digest("hex");
@@ -199,14 +223,14 @@ export function compareTree(root: string, runId: string): HookedRunChange[] {
   for (const f of now) {
     const cur = fs.readFileSync(path.join(root, f));
     if (!(f in manifest)) {
-      changes.push({ file: f, status: "added", diff: text(cur) !== null ? lineDiff("", text(cur)!) : "(binary file)" });
+      changes.push({ file: f, status: "added", diff: text(cur) !== null ? lineDiff("", text(cur)!) : "(binary file)", ...(isStated(f) ? { stated: true } : {}) });
     } else if (sha(cur) !== manifest[f]) {
       const pre = fs.readFileSync(snapFile(f));
-      changes.push({ file: f, status: "modified", diff: text(pre) !== null && text(cur) !== null ? lineDiff(text(pre)!, text(cur)!) : "(binary file)" });
+      changes.push({ file: f, status: "modified", diff: text(pre) !== null && text(cur) !== null ? lineDiff(text(pre)!, text(cur)!) : "(binary file)", ...(isStated(f) ? { stated: true } : {}) });
     }
   }
   const nowSet = new Set(now);
-  for (const f of Object.keys(manifest)) if (!nowSet.has(f)) changes.push({ file: f, status: "deleted", diff: "" });
+  for (const f of Object.keys(manifest)) if (!nowSet.has(f)) changes.push({ file: f, status: "deleted", diff: "", ...(isStated(f) ? { stated: true } : {}) });
   return changes.sort((a, b) => a.file.localeCompare(b.file));
 }
 
@@ -226,6 +250,10 @@ export function restoreTree(root: string, runId: string, changes: HookedRunChang
   }
   return touched;
 }
+
+/** The snapshot's copy of the tree, as a project root: `.vibegraph/constraints.json`
+ *  there is the stated rules as they stood when the run began. */
+export const snapshotRoot = (root: string, runId: string) => path.join(root, HOOKED_SNAP_DIR, runId, "files");
 
 export function dropSnapshot(root: string, runId: string): void {
   fs.rmSync(path.join(root, HOOKED_SNAP_DIR, runId), { recursive: true, force: true });

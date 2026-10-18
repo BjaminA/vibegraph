@@ -23,7 +23,7 @@ import { inboxFacts, inboxSubject } from "../shared/inbox_view";
 const KIND_LABEL: Record<string, string> = {
   plan: "Plan proposals", objective: "Proposed objective", "rule-change": "Changes to rules", rule: "Rules an agent stated",
   groups: "Architecture groups", scope: "Scoped boxes", skill: "Skill drafts", spec: "Software specs", questions: "Open questions",
-  brief: "The Brief", decision: "Decisions", sensor: "Drift to decide", drift: "Notes", claim: "Claims about run time",
+  brief: "The Brief", decision: "Decisions", sensor: "Drift to decide", drift: "Notes", claim: "Claims about run time", direction: "Project direction",
 };
 const small: React.CSSProperties = { fontSize: "var(--fs-12)", color: "var(--text-muted)", lineHeight: 1.5 };
 
@@ -64,7 +64,7 @@ export function InboxPanel({ open, slot, state }: { open: boolean; slot: SheetSl
           {rows.map((i) => {
             const subject = inboxSubject(i);
             return (
-              <ItemFrame key={i.id} data-inbox-item={i.id} data-inbox-kind={i.kind}
+              <ItemFrame key={i.id} data-inbox-item={i.id} data-inbox-kind={i.kind} proposed={i.decidable}
                 chip={subject ?? undefined} name={i.title} facts={inboxFacts(i)}
                 badges={i.decidable ? null : <Verdict v="prose" label="note" />}
                 actions={i.decidable ? (

@@ -19,6 +19,17 @@ const SHELL_OWN = new Set([
 ]);
 const UPPER = /^[A-Z][A-Z0-9_]*$/;
 
+/** 2026-10-17 — what an unset value becomes, read off the expansion's own
+ *  operator (the JS/TS and Python frontends' `fallback`): `${X:-word}` /
+ *  `${X:=word}` a default (empty when the word is), `${X:?msg}` fails the
+ *  script. Nothing for a bare `$X` (an empty string, quietly). */
+function expansionShape(src, name) {
+  const m = new RegExp(`^\\$\\{${name}(:?[-=?+])(.*)\\}$`, "s").exec(src);
+  if (!m || m[1].endsWith("+")) return {};
+  if (m[1].endsWith("?")) return { fallback: "throws" };
+  return { fallback: m[2] === "" || m[2] === '""' || m[2] === "''" ? "empty" : "value" };
+}
+
 export function collectEnvReads(root) {
   const assigned = new Set();
   const refs = [];
@@ -51,7 +62,7 @@ export function collectEnvReads(root) {
       case "expansion": {
         const v = n.namedChildren.find((c) => c.type === "variable_name")
           ?? n.namedChildren.find((c) => c.type === "subscript")?.childForFieldName("name");
-        if (v) refs.push({ name: v.text, line: v.startPosition.row + 1 });
+        if (v) refs.push({ name: v.text, line: v.startPosition.row + 1, ...expansionShape(n.text, v.text) });
         break;
       }
     }
@@ -62,7 +73,7 @@ export function collectEnvReads(root) {
   for (const r of refs.sort((a, b) => a.line - b.line)) {
     if (!UPPER.test(r.name) || SHELL_OWN.has(r.name) || assigned.has(r.name) || seen.has(r.name)) continue;
     seen.add(r.name);
-    out.push({ name: r.name, line: r.line, form: "inherited" });
+    out.push({ name: r.name, line: r.line, form: "inherited", ...(r.fallback ? { fallback: r.fallback } : {}) });
   }
   return out;
 }

@@ -17,7 +17,7 @@
 // check is refused here exactly as it is there, and a restatement of an
 // existing rule is refused as a duplicate rather than stored as a twin.
 import {
-  CONSTRAINT_KINDS, addConstraint, findDuplicate, loadConstraints, removeConstraintAndDemote, saveConstraints, validateConstraintInput,
+  CONSTRAINT_KINDS, addConstraint, findDuplicate, isClassification, loadConstraints, removeConstraintAndDemote, saveConstraints, validateConstraintInput,
 } from "../../src/server/constraint_store.ts";
 import { describeCheck, isConstraintCheck } from "../../src/server/constraint_grammar.ts";
 import { describeRun1Check, isRun1Check } from "../../src/server/quality/verbs/index.ts";
@@ -27,12 +27,22 @@ import { personName } from "../../src/server/person.ts";
 import { AMEND_SUBS, runConstraintAmend } from "./constraint_amend.mjs";
 import { checkStatedRules } from "../../src/server/constraint_report.ts";
 import { loadEnvelope } from "../quality_check.mjs";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { buildStackIndex } from "../../src/server/stack.ts";
+import { harvestRules, formatHarvest } from "../../src/server/rule_harvest.ts";
 
-export const CONSTRAINTS_USAGE = `constraint(s) list|add|remove|ratify|show|edit|propose|accept|reject [...]   the stated rules (.vibegraph/constraints.json); zero tokens
+export const CONSTRAINTS_USAGE = `constraint(s) list|add|harvest|remove|ratify|show|edit|propose|accept|reject [...]   the stated rules (.vibegraph/constraints.json); zero tokens
       list [<root>] [--json]
+      harvest [<root>] [--min <score>] [--all] [--json]
+          rule-shaped sentences in the project's own prose (CLAUDE.md, READMEs, docs, module headers,
+          docstrings) that name code the IR knows, ranked; a place to read, never a rule — state the
+          operators' real ones with add --cite, or let /vibegraph-rules do it for you to ratify
       add [<root>] --kind <${CONSTRAINT_KINDS.join("|")}> --text "<the rule, with its reason>"
           scope: --all | --threads <entry ids> | --files <paths> | --tools <names>   (comma-separated)
           [--note "<why>"] [--check '<json>'] [--policy '<json>']   or the whole object: --json '<object>'
+          [--cite <file>:<line> [--quote "<the sentence>"]]   the prose it was read from; refused unless it is there
+          [--as agent]   stated by a model: labelled so and waits for a person (also implied inside Claude Code)
           a check is run against the code first: UNVERIFIABLE is refused (store anyway: --force);
           --dry-run shows the verdict and stores nothing
       remove <id> [<root>]
@@ -61,9 +71,53 @@ export function formatConstraint(c) {
   ].filter(Boolean).join("; ");
   const lines = [`${c.id}  [${c.source}${c.source === "human" ? "" : " · NOT human-reviewed"}] ${c.kind} · ${scope}`, `    ${c.text}`];
   if (c.note) lines.push(`    note: ${c.note}`);
+  if (c.cite) lines.push(`    from: ${c.cite.file}:${c.cite.line} — "${c.cite.quote.length > 120 ? `${c.cite.quote.slice(0, 117)}…` : c.cite.quote}"`);
   if (c.policy) lines.push(`    policy: ${c.policy.rule} ${c.policy.tool}${c.policy.with ? ` → ${c.policy.with}` : ""}${c.policy.role ? ` (role ${c.policy.role})` : ""}`);
   for (const k of [c.check, ...(c.checks ?? [])].filter(Boolean)) lines.push(`    check: ${checkText(k)}`);
   return lines.join("\n");
+}
+
+/** The citation gate: the quoted words must appear in the file within a few
+ *  lines of the cited one (whitespace-insensitive; markdown emphasis, bullets
+ *  and backticks ignored). Returns the line they start on and the WHOLE
+ *  sentence they sit in, read from the file — a live drill cited fragments
+ *  ("is a correctness setting, not a"), and a cite is worth most as the
+ *  sentence, so the sentence is what is stored. */
+export function citedAt(root, cite) {
+  let text;
+  try { text = readFileSync(resolve(root, cite.file), "utf-8"); } catch { return { ok: false, error: `--cite names ${cite.file}, which cannot be read` }; }
+  // a markdown table row reads as its cells joined by " — " (what `harvest` shows), never across rows
+  const isRow = (s) => /^\s*\|/.test(s);
+  const plain = (s) => (isRow(s) ? s.trim().replace(/^\||\|$/g, "").split("|").map((c) => c.trim()).filter(Boolean).join(" — ") : s)
+    // emphasis marks go; an identifier's own underscores (`insert_readings`) stay
+    .replace(/[`*]/g, "").replace(/(^|\s)_+|_+(?=\s|$|[.,;:)])/g, "$1").replace(/^\s*(?:[-*+]|\d+\.|#+|\/\/|#|\*)\s*/, "").replace(/\s+/g, " ").trim();
+  const want = plain(cite.quote).toLowerCase();
+  if (want.length < 12) return { ok: false, error: "--quote wants the sentence (at least a dozen characters), not a word" };
+  const lines = text.split(/\r?\n/);
+  const lo = Math.max(0, cite.line - 4), hi = Math.min(lines.length, cite.line + 3);
+  const parts = [];
+  for (let i = lo; i < hi; i++) { const p = plain(lines[i]); if (p && !/^(-+ — )*-+$/.test(p)) parts.push({ text: p, line: i + 1, row: isRow(lines[i]) }); }
+  const joined = parts.map((p) => p.text).join(" ");
+  const at = joined.toLowerCase().indexOf(want);
+  if (at < 0) return { ok: false, error: `the cited sentence is not in ${cite.file} near line ${cite.line} — a rule cites what the prose says, verbatim` };
+  // the part the match starts in; a table row is a unit of its own
+  let acc = 0, hit = parts[0];
+  for (const p of parts) { if (acc + p.text.length >= at + 1) { hit = p; break; } acc += p.text.length + 1; }
+  const floor = hit.row ? acc : 0, ceil = hit.row ? acc + hit.text.length : joined.length;
+  // the sentence around the match: back to the previous sentence end, forward to the next
+  let start = at, end = Math.min(at + want.length, ceil);
+  while (start > floor && !/[.!?]\s$/.test(joined.slice(Math.max(0, start - 2), start))) start--;
+  while (end < ceil && !/[.!?](\s|$)/.test(joined.slice(end - 1, end + 1))) end++;
+  const sentence = joined.slice(start, end).trim().slice(0, 400);
+  return { ok: true, line: hit.line, quote: sentence };
+}
+
+/** `constraints harvest`: rule-shaped sentences in the project's prose that name code the IR knows (rule_harvest.ts). */
+function harvest(root, values, pipeline) {
+  const { absRoot, envelope } = loadEnvelope(root, undefined, pipeline ?? {}, { cache: true });
+  const report = harvestRules(absRoot, envelope, buildStackIndex(envelope, absRoot), { min: values.min ? Number(values.min) : undefined });
+  if (values.json) return { lines: [JSON.stringify(report, null, 2)], messages: [], exitCode: 0 };
+  return { lines: [formatHarvest(report, { min: values.min ? Number(values.min) : undefined, all: !!values.all }).trimEnd()], messages: [], exitCode: 0 };
 }
 
 /** A new rule's checks against the code as it is now (the `check` loop). */
@@ -84,8 +138,20 @@ export function runConstraints({ root, sub, id, values, pipeline }) {
     const all = loadConstraints(root);
     if (values.json) lines.push(JSON.stringify(all, null, 2));
     else if (!all.length) lines.push("no stated constraints (.vibegraph/constraints.json) — add one with `constraints add`");
-    else for (const c of all) lines.push(formatConstraint(c));
+    else {
+      // 2026-10-17 — rules first; classifications file tools and decide nothing
+      const rules = all.filter((c) => !isClassification(c)), filed = all.filter(isClassification);
+      if (!rules.length) lines.push("no stated rules");
+      for (const c of rules) lines.push(formatConstraint(c));
+      if (filed.length) {
+        lines.push("", `tool classifications (${filed.length}) — not rules: how a tool no table knew was filed`);
+        for (const c of filed) lines.push(`${c.id}  [${c.source}${c.source === "human" ? "" : " · NOT human-reviewed"}] ${c.policy.tool} → ${c.policy.role}`);
+      }
+    }
     return { lines, messages, exitCode: 0 };
+  }
+  if (sub === "harvest") {
+    try { return harvest(root, values, pipeline); } catch (e) { return { lines, messages: [`harvest: ${e.message}`], exitCode: 2 }; }
   }
   if (sub === "add") {
     let raw;
@@ -107,17 +173,36 @@ export function runConstraints({ root, sub, id, values, pipeline }) {
         raw[k] = j.value;
       }
     }
+    // 2026-10-17 — a rule read from the project's prose cites its sentence:
+    // --cite file:line [--quote "…"] (the quote defaults to the text). The
+    // sentence must be IN that file, near that line — the software-spec rule:
+    // a quote not in the source drops the item; here it refuses the rule.
+    if (values.cite) {
+      const m = /^(.+?):(\d+)$/.exec(values.cite);
+      if (!m) return { lines, messages: ["refused: --cite wants <file>:<line>"], exitCode: 2 };
+      raw.cite = { file: m[1], line: Number(m[2]), quote: values.quote ?? raw.text ?? "" };
+    }
     const v = validateConstraintInput(raw);
     if (!v.ok) return { lines, messages: [`refused: ${v.error}`], exitCode: 2 };
+    if (v.value.cite) {
+      const where = citedAt(root, v.value.cite);
+      if (!where.ok) return { lines, messages: [`refused: ${where.error}`], exitCode: 2 };
+      v.value.cite = { file: v.value.cite.file, line: where.line, quote: where.quote };
+    }
     const twin = findDuplicate(loadConstraints(root), v.value.text);
     if (twin) return { lines, messages: [`refused: it restates ${twin.id} ("${twin.text.slice(0, 80)}") — edit or remove that one instead`], exitCode: 1 };
     // Run by Claude Code (actor.mjs): the rule is the model's, labelled so,
     // until a person ratifies it — the same label an MCP-stated rule carries.
-    const source = isAgentRun() ? "agent" : "human";
+    // …or says so itself (--as agent, the flag `edit` already takes): a model
+    // stating a rule is an agent wherever it runs — a Windows Claude Code
+    // calling the CLI through wsl.exe does not carry CLAUDECODE across.
+    const source = values.as === "agent" || isAgentRun() ? "agent" : "human";
     // 2026-10-07 (field report) — a check is evaluated BEFORE it is stored: a
     // rule that cannot be checked was only found on its first `check`, and
     // fixing it took a proposal and a person's accept.
     const pre = v.value.check || v.value.checks?.length ? precheck(root, v.value, source, pipeline) : null;
+    // 2026-10-17 (a live drill stored a rule under --dry-run because it had no check to run): a dry run stores nothing, check or not
+    if (values["dry-run"] && !pre) return { lines: [`dry run — nothing stored. Would store as ${source}-stated:`, formatConstraint({ ...v.value, id: "(new)", source })], messages, exitCode: 0 };
     if (pre) {
       for (const r of pre.results) lines.push(`  ${r.verdict.toUpperCase()} — ${r.described}: ${r.reason}`);
       const unverifiable = pre.results.filter((r) => r.verdict === "unverifiable");

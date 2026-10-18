@@ -983,6 +983,13 @@ export class JstsGraphBuilder {
       hasElse: !!alt,
     };
     if (alt) node.elseLine = alt.startPosition.row + 1;
+    const consequence = n.childForFieldName("consequence");
+    // 2026-10-14 — a then-arm that always leaves its block (`if (!ok) continue;`):
+    // what follows the if runs only when the test is false. continue / break /
+    // throw emit no node, so this is the only place the guard can be read.
+    const last = consequence?.type === "statement_block" ? consequence.namedChildren.filter((c) => c.type !== "comment").at(-1) : consequence;
+    const exits = { return_statement: "return", continue_statement: "continue", break_statement: "break", throw_statement: "throw" }[last?.type];
+    if (exits) node.exits = exits;
     // The test is evaluated ONCE, in the enclosing flow, whichever arm
     // runs — so its calls parent OUTSIDE the branch and are emitted
     // ahead of it. This is the condition-call hole the python floor
@@ -990,7 +997,6 @@ export class JstsGraphBuilder {
     // no node at all, so nothing downstream could see the guard.
     if (cond) this.walkExpressionCalls(cond, parentId);
     this.emit(node, parentId, n);
-    const consequence = n.childForFieldName("consequence");
     if (consequence) this.visit(consequence, id);
     for (const c of alt?.namedChildren ?? []) {
       // else-if: the nested if parents to the outer if (line ≥ elseLine

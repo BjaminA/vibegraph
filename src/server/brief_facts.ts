@@ -39,7 +39,7 @@ import type { Topology } from "../shared/topology_types.ts";
 import type { SoftwareSpec } from "../shared/software_types.ts";
 import type { SdkCall } from "../shared/data_arch_types.ts";
 import type { EvidenceRole } from "../shared/brief_types.ts";
-import type { Constraint } from "./constraint_store.ts";
+import { statedRules, type Constraint } from "./constraint_store.ts";
 import type { ModelSource } from "./model_source.ts";
 import { nodeIO, ioLines, CORE_VOCABULARY, type Vocabulary } from "../shared/node_io.ts";
 import { scopeDossier } from "./node_scope.ts";
@@ -47,10 +47,11 @@ import { planCitations } from "./arch_propose.ts";
 import { briefData, zoneLine, isVerifyFile, verifyEdge, type BriefData, type FeedDecl } from "./brief_data.ts";
 import { toolNote } from "../shared/stack_taxonomy.ts";
 import { specUsage } from "./software_apply.ts";
+import { guardedWrites, guardText } from "./write_guards.ts";
 import { anchorOf, anchorChange, type BriefAnchor } from "./brief_anchor.ts";
 import { briefDocs, humanRules, salientFiles, type RuleSite, type SalientFile } from "./brief_salience.ts";
 
-export const BRIEF_FACT_LIMITS = { boxes: 80, edges: 160, docs: 40, silentPerCall: 6, specOps: 12, specCalls: 8, rules: 30, enforce: 24, salient: 5 };
+export const BRIEF_FACT_LIMITS = { boxes: 80, edges: 160, docs: 40, silentPerCall: 6, specOps: 12, specCalls: 8, guarded: 12, rules: 30, enforce: 24, salient: 5 };
 
 /** What a rule's check guards: the code (hashed apart) and where it is. */
 export interface RuleCode { code: string; legacy: string; names: string[]; sites: RuleSite[] }
@@ -222,7 +223,8 @@ export function buildBriefFacts(model: ArchModelRecord, opts: {
     }
   }
 
-  const rules = (opts.constraints ?? []).slice(0, BRIEF_FACT_LIMITS.rules);
+  // a tool classification is not a rule: it would take a rule's slot (statedRules)
+  const rules = statedRules(opts.constraints ?? []).slice(0, BRIEF_FACT_LIMITS.rules);
   const sites = new Map<string, RuleSite[]>();
   if (rules.length) {
     L.push("", "STATED RULES (cite as rule:<id>; [human] = a person stated it — every one must be covered by a line or named in omitted):");
@@ -251,6 +253,14 @@ export function buildBriefFacts(model: ArchModelRecord, opts: {
     if (isVerifyFile(s.file) || applied.length >= BRIEF_FACT_LIMITS.enforce) continue;
     applied.push(`- ${cite(`${s.file}:${s.line}`, window(s.file, s.line, s.callee), "enforce")} [enforce]: ${s.callee} (${s.effect}) — the code applying access`);
   }
+  // 2026-10-14 (brief-intent drill) — a WRITE behind a check is where that
+  // check is applied: "publishes only what verifies" rests on this line
+  let guarded = 0;
+  for (const w of guardedWrites(model, (opts.source?.files ?? {}) as never)) {
+    if (isVerifyFile(w.file) || guarded >= BRIEF_FACT_LIMITS.guarded || applied.length >= BRIEF_FACT_LIMITS.enforce) continue;
+    guarded++;
+    applied.push(`- ${cite(`${w.file}:${w.line}`, window(w.file, w.line, w.fn ?? w.zone), "enforce")} [enforce]: ${labels.get(w.box) ?? w.box} writes ${labels.get(w.zone) ?? w.zone} ${guardText(w.guards)}${w.fn ? ` — in ${w.fn}` : ""}`);
+  }
   // 2026-10-12 — where a DECLARED decision is applied: the functions the
   // topology names as evaluating a gate or a state machine, at their definition
   const defAt = new Map<string, string>();
@@ -267,7 +277,7 @@ export function buildBriefFacts(model: ArchModelRecord, opts: {
     const m = /^(.+):(\d+)$/.exec(at)!;
     applied.push(`- ${cite(at, window(m[1], Number(m[2]), fn), "enforce")} [enforce]: function ${fn} — ${what}`);
   }
-  if (applied.length) L.push("", "WHERE RULES ARE APPLIED (enforce evidence — what a mechanism line cites; a test that a rule holds is [verify], never the mechanism):", ...[...new Set(applied)].slice(0, BRIEF_FACT_LIMITS.enforce));
+  if (applied.length) L.push("", "WHERE RULES ARE APPLIED (enforce evidence — what a mechanism line cites; a write that runs only when a check holds is where that check is applied; a test that a rule holds is [verify], never the mechanism):", ...[...new Set(applied)].slice(0, BRIEF_FACT_LIMITS.enforce));
 
   const salient = focus ? [] : salientFiles(opts.source ?? null, rules, sites, BRIEF_FACT_LIMITS.salient);
   if (salient.length) {

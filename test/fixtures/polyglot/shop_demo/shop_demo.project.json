@@ -1337,7 +1337,8 @@
           "col": 8,
           "endCol": 46,
           "condition": "key not in payload",
-          "hasElse": false
+          "hasElse": false,
+          "exits": "raise"
         },
         {
           "id": "module/validate_order.fn/for@0/if@0/raise@0",
@@ -1720,7 +1721,8 @@
           "col": 2,
           "endCol": 3,
           "condition": "problems.length !== 2",
-          "hasElse": false
+          "hasElse": false,
+          "exits": "throw"
         },
         {
           "id": "module/checkRejectsEmpty.fn/if@0/raise@0",
@@ -2007,7 +2009,8 @@
           "col": 2,
           "endCol": 3,
           "condition": "!res.ok",
-          "hasElse": false
+          "hasElse": false,
+          "exits": "throw"
         },
         {
           "id": "module/postOrder.fn/if@0/raise@0",
@@ -2161,7 +2164,8 @@
         {
           "name": "SHOP_API",
           "line": 4,
-          "form": "member"
+          "form": "member",
+          "fallback": "value"
         }
       ]
     },
@@ -2620,7 +2624,8 @@
           "col": 2,
           "endCol": 3,
           "condition": "problems.length > 0",
-          "hasElse": false
+          "hasElse": false,
+          "exits": "return"
         },
         {
           "id": "module/createOrder.fn/if@0/res_status.call",
@@ -3496,17 +3501,20 @@
         {
           "name": "DB_HOST",
           "line": 10,
-          "form": "inherited"
+          "form": "inherited",
+          "fallback": "value"
         },
         {
           "name": "API_HOST",
           "line": 11,
-          "form": "inherited"
+          "form": "inherited",
+          "fallback": "value"
         },
         {
           "name": "GATEWAY_HOST",
           "line": 12,
-          "form": "inherited"
+          "form": "inherited",
+          "fallback": "value"
         }
       ]
     },

@@ -2,6 +2,7 @@
 // Each message spawns `claude -p` with an inline MCP config pointing
 // back at this server — the same loop as a terminal Claude Code session.
 import React, { useState, useEffect, useRef, useCallback, useSyncExternalStore } from "react";
+import { GitBranch, X, Crosshair } from "lucide-react";
 // M-CHAT-POLISH.4 — the tool activity card (icon map, per-tool argument
 // summary, click-to-expand full command) and the routed provenance line
 // live in their own modules.
@@ -209,7 +210,7 @@ export function ChatPanel({ contextNode, activeFilePath, threadEntryPointId, rig
         display: "flex",
         flexDirection: "column",
         zIndex: 900,
-        boxShadow: "0 -8px 40px hsl(0 0% 0% / 0.5)",
+        boxShadow: "var(--shadow-panel)",
       }}
     >
       {/* ── resize handle (full-width bar only) — drag up to grow ── */}
@@ -248,16 +249,16 @@ export function ChatPanel({ contextNode, activeFilePath, threadEntryPointId, rig
       {/* ── header ── */}
       <div
         style={{
-          padding: "8px 14px",
+          padding: "8px 16px",
           borderBottom: "1px solid var(--border-edge)",
           display: "flex",
           alignItems: "center",
-          gap: 10,
+          gap: 8,
           background: "var(--bg-node)",
           flexShrink: 0,
         }}
       >
-        <span style={{ color: "var(--accent-chat)", fontFamily: "monospace", fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase" }}>
+        <span style={{ color: "var(--accent-chat)", fontFamily: "var(--font-mono)", fontSize: "var(--fs-11)", fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase" }}>
           Claude Chat
         </span>
 
@@ -285,18 +286,18 @@ export function ChatPanel({ contextNode, activeFilePath, threadEntryPointId, rig
                 : "color-mix(in oklab, var(--accent-thread) 30%, transparent)"}`,
               borderRadius: 4,
               color: threadDetached ? "var(--text-muted)" : "var(--accent-thread)",
-              fontSize: 10,
-              padding: "2px 8px",
+              fontSize: "var(--fs-11)",
+              padding: "4px 8px",
               marginRight: 6,
               cursor: "pointer",
-              fontFamily: "monospace",
+              fontFamily: "var(--font-mono)",
               display: "flex",
               alignItems: "center",
               gap: 4,
             }}
           >
-            {threadDetached ? `all threads (${threadLabel} detached)` : `⑂ ${threadLabel}`}
-            {!threadDetached && <span style={{ opacity: 0.6 }}>×</span>}
+            {!threadDetached && <GitBranch size={16} strokeWidth={1.5} />}{threadDetached ? `all threads (${threadLabel} detached)` : threadLabel}
+            {!threadDetached && <X size={16} strokeWidth={1.5} style={{ opacity: 0.6 }} />}
           </button>
         )}
 
@@ -308,18 +309,18 @@ export function ChatPanel({ contextNode, activeFilePath, threadEntryPointId, rig
               border: "1px solid color-mix(in oklab, var(--accent-chat) 30%, transparent)",
               borderRadius: 4,
               color: "var(--accent-chat)",
-              fontSize: 10,
-              padding: "2px 8px",
+              fontSize: "var(--fs-11)",
+              padding: "4px 8px",
               cursor: "pointer",
-              fontFamily: "monospace",
+              fontFamily: "var(--font-mono)",
               display: "flex",
               alignItems: "center",
               gap: 4,
             }}
             title="Clear node context"
           >
-            ◈ {contextLabel}
-            <span style={{ opacity: 0.6 }}>×</span>
+            <Crosshair size={16} strokeWidth={1.5} />{contextLabel}
+            <X size={16} strokeWidth={1.5} style={{ opacity: 0.6 }} />
           </button>
         )}
 
@@ -348,11 +349,11 @@ export function ChatPanel({ contextNode, activeFilePath, threadEntryPointId, rig
             border: "1px solid var(--border-edge)",
             borderRadius: 4,
             color: "var(--text-muted)",
-            fontSize: 10,
-            padding: "2px 6px",
+            fontSize: "var(--fs-11)",
+            padding: "4px 8px",
             marginRight: 6,
             cursor: busy ? "not-allowed" : "pointer",
-            fontFamily: "monospace",
+            fontFamily: "var(--font-mono)",
           }}
         >
           {CHAT_MODELS.map((m) => (
@@ -375,10 +376,10 @@ export function ChatPanel({ contextNode, activeFilePath, threadEntryPointId, rig
             border: "1px solid var(--border-edge)",
             borderRadius: 4,
             color: "var(--text-muted)",
-            fontSize: 10,
-            padding: "2px 8px",
+            fontSize: "var(--fs-11)",
+            padding: "4px 8px",
             cursor: "pointer",
-            fontFamily: "monospace",
+            fontFamily: "var(--font-mono)",
           }}
           title="Start a new conversation — the agent forgets this one"
         >
@@ -397,10 +398,10 @@ export function ChatPanel({ contextNode, activeFilePath, threadEntryPointId, rig
         style={{
           flex: 1,
           overflowY: "auto",
-          padding: "10px 14px",
+          padding: "12px 16px",
           display: "flex",
           flexDirection: "column",
-          gap: 6,
+          gap: 8,
         }}
       >
         {/* M27.3 — honesty note: the session predates this panel mount,
@@ -409,9 +410,9 @@ export function ChatPanel({ contextNode, activeFilePath, threadEntryPointId, rig
           <div
             data-chat-resumed-note
             style={{
-              fontSize: 11,
+              fontSize: "var(--fs-11)",
               color: "var(--text-muted)",
-              fontFamily: "monospace",
+              fontFamily: "var(--font-mono)",
               padding: "4px 0",
             }}
           >
@@ -422,9 +423,9 @@ export function ChatPanel({ contextNode, activeFilePath, threadEntryPointId, rig
         {segments.length === 0 && (
           <div
             style={{
-              color: "var(--border-edge)",
-              fontSize: 12,
-              fontFamily: "monospace",
+              color: "var(--text-muted)",
+              fontSize: "var(--fs-12)",
+              fontFamily: "var(--font-mono)",
               textAlign: "center",
               marginTop: 20,
             }}
@@ -444,11 +445,11 @@ export function ChatPanel({ contextNode, activeFilePath, threadEntryPointId, rig
                     background: "color-mix(in oklab, var(--type-call) 12%, transparent)",
                     border: "1px solid color-mix(in oklab, var(--type-call) 25%, transparent)",
                     borderRadius: "10px 10px 2px 10px",
-                    padding: "6px 10px",
+                    padding: "8px 12px",
                     maxWidth: "65%",
                     color: "var(--text-primary)",
-                    fontSize: 12,
-                    fontFamily: "monospace",
+                    fontSize: "var(--fs-12)",
+                    fontFamily: "var(--font-mono)",
                     lineHeight: 1.5,
                     whiteSpace: "pre-wrap",
                     wordBreak: "break-word",
@@ -462,12 +463,12 @@ export function ChatPanel({ contextNode, activeFilePath, threadEntryPointId, rig
 
           if (seg.kind === "assistant") {
             return (
-              <div key={seg.id} data-chat-assistant-msg style={{ display: "flex", flexDirection: "column", gap: 2, maxWidth: "80%" }}>
+              <div key={seg.id} data-chat-assistant-msg style={{ display: "flex", flexDirection: "column", gap: 4, maxWidth: "80%" }}>
                 <div
                   style={{
                     color: "var(--text-primary)",
-                    fontSize: 12,
-                    fontFamily: "monospace",
+                    fontSize: "var(--fs-12)",
+                    fontFamily: "var(--font-mono)",
                     lineHeight: 1.6,
                     wordBreak: "break-word",
                   }}
@@ -485,7 +486,6 @@ export function ChatPanel({ contextNode, activeFilePath, threadEntryPointId, rig
                         background: "var(--accent-chat)",
                         marginLeft: 2,
                         verticalAlign: "text-bottom",
-                        animation: "vg-blink 1s step-end infinite",
                       }}
                     />
                   )}
@@ -532,9 +532,9 @@ export function ChatPanel({ contextNode, activeFilePath, threadEntryPointId, rig
             border: "1px solid var(--border-edge)",
             borderRadius: 6,
             color: busy ? "var(--text-muted)" : "var(--text-primary)",
-            fontSize: 12,
-            fontFamily: "monospace",
-            padding: "6px 10px",
+            fontSize: "var(--fs-12)",
+            fontFamily: "var(--font-mono)",
+            padding: "8px 12px",
             resize: "none",
             outline: "none",
             lineHeight: 1.5,
@@ -550,12 +550,12 @@ export function ChatPanel({ contextNode, activeFilePath, threadEntryPointId, rig
             color: !input.trim() || busy ? "var(--border-edge)" : "var(--accent-chat)",
             border: `1px solid ${!input.trim() || busy ? "var(--border-edge)" : "color-mix(in oklab, var(--accent-chat) 40%, transparent)"}`,
             borderRadius: 6,
-            padding: "6px 14px",
-            fontSize: 11,
+            padding: "8px 16px",
+            fontSize: "var(--fs-11)",
             fontWeight: 700,
             cursor: !input.trim() || busy ? "not-allowed" : "pointer",
-            fontFamily: "monospace",
-            transition: "all 0.12s",
+            fontFamily: "var(--font-mono)",
+            transition: "background var(--motion-hover-dur) var(--motion-hover-ease), border-color var(--motion-hover-dur) var(--motion-hover-ease)",
             flexShrink: 0,
           }}
         >
@@ -564,7 +564,6 @@ export function ChatPanel({ contextNode, activeFilePath, threadEntryPointId, rig
       </div>
 
       {/* blink keyframe (injected once) */}
-      <style>{`@keyframes vg-blink { 50% { opacity: 0; } }`}</style>
     </div>
   );
 }

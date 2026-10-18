@@ -62,6 +62,22 @@ COMPREHENSION_TYPES = tuple(COMPREHENSION_KINDS)
 # real value meaning module scope.
 _NO_OVERRIDE = object()
 
+_EXIT_KINDS = ((cst.Return, "return"), (cst.Continue, "continue"), (cst.Break, "break"), (cst.Raise, "raise"))
+
+
+def _then_exits(body) -> Optional[str]:
+    """The keyword an if's then-arm always leaves by (its last statement), or None."""
+    if isinstance(body, cst.SimpleStatementSuite):  # `if x: return`
+        small = body.body[-1] if body.body else None
+    else:
+        stmts = list(getattr(body, "body", []))
+        last = stmts[-1] if stmts else None
+        small = last.body[-1] if isinstance(last, cst.SimpleStatementLine) and last.body else None
+    for kind, name in _EXIT_KINDS:
+        if isinstance(small, kind):
+            return name
+    return None
+
 
 class GraphBuilder(cst.CSTVisitor):
     METADATA_DEPENDENCIES = (meta.PositionProvider,)
@@ -941,6 +957,13 @@ class GraphBuilder(cst.CSTVisitor):
         # path.
         if node.orelse is not None:
             extras["elseLine"] = self._pos(node.orelse)["line"]
+        # 2026-10-14 — a then-arm that always leaves its block (`if not ok:
+        # continue`): what follows the if runs only when the test is false.
+        # continue / break / raise emit no node, so this is where the guard
+        # can be read (src/server/write_guards.ts).
+        exits = _then_exits(node.body)
+        if exits:
+            extras["exits"] = exits
         self._emit(if_id, "if_stmt", pos, cst_node=node, **extras)
         self._parent_stack.append(if_id)
 
@@ -1468,9 +1491,10 @@ class EnvReadCollector(cst.CSTVisitor):
     so no IR node carries it; the reads ride the IR root as `envReads`.
     A name built at runtime (`os.environ[key]`) is not a name and is skipped."""
 
-    METADATA_DEPENDENCIES = (meta.PositionProvider,)
+    METADATA_DEPENDENCIES = (meta.PositionProvider, meta.ParentNodeProvider)
     _ENV_OBJ = ("os.environ", "environ")
     _ENV_CALLS = ("os.environ.get", "environ.get", "os.getenv", "getenv")
+    _EXIT_CALLS = ("sys.exit", "exit", "quit", "os._exit", "abort")
 
     def __init__(self, module: cst.Module):
         self._module = module
@@ -1479,9 +1503,54 @@ class EnvReadCollector(cst.CSTVisitor):
     def _code(self, node) -> str:
         return self._module.code_for_node(node)
 
-    def _add(self, node, name: str, form: str) -> None:
+    def _parent(self, node):
+        try:
+            return self.get_metadata(meta.ParentNodeProvider, node)
+        except KeyError:
+            return None
+
+    @staticmethod
+    def _is_empty(node) -> bool:
+        return isinstance(node, cst.SimpleString) and node.evaluated_value == ""
+
+    def _shape(self, node, fallback: Optional[str]) -> dict:
+        """2026-10-17 - what an UNSET value does at this read (the JS/TS
+        frontend's readShape, in Python): `fallback` value / empty / throws,
+        `use` split / exit-silent / exit-loud. Only what is known is
+        emitted, so a bare read stays byte-identical."""
+        out: dict = {}
+        expr, p = node, self._parent(node)
+        if isinstance(p, cst.BooleanOperation) and isinstance(p.operator, cst.Or) and p.left is expr:
+            fallback = "empty" if self._is_empty(p.right) else "value"
+            expr, p = p, self._parent(p)
+        if isinstance(p, cst.Attribute) and p.value is expr:
+            gp = self._parent(p)
+            if isinstance(gp, cst.Call) and gp.func is p:
+                if fallback is None:
+                    fallback = "throws"  # a method on None
+                elif p.attr.value == "split":
+                    out["use"] = "split"
+        elif isinstance(p, cst.UnaryOperation) and isinstance(p.operator, cst.Not):
+            child, up = p, self._parent(p)
+            while isinstance(up, cst.BooleanOperation):
+                child, up = up, self._parent(up)
+            if isinstance(up, cst.If) and up.test is child:
+                body = up.body.body
+                smalls = [s for st in body[:3] for s in (st.body if isinstance(st, cst.SimpleStatementLine) else [])] if isinstance(up.body, cst.IndentedBlock) else list(body)
+                for s in smalls[:3]:
+                    if isinstance(s, cst.Raise) or (isinstance(s, cst.Expr) and isinstance(s.value, cst.Call) and self._code(s.value.func) in self._EXIT_CALLS):
+                        out["use"] = "exit-loud"
+                        break
+                    if isinstance(s, (cst.Return, cst.Continue, cst.Break)):
+                        out["use"] = "exit-silent"
+                        break
+        if fallback:
+            out["fallback"] = fallback
+        return out
+
+    def _add(self, node, name: str, form: str, fallback: Optional[str] = None) -> None:
         line = self.get_metadata(meta.PositionProvider, node).start.line
-        self.reads.append({"name": name, "line": line, "form": form})
+        self.reads.append({"name": name, "line": line, "form": form, **self._shape(node, fallback)})
 
     @staticmethod
     def _literal(node) -> Optional[str]:
@@ -1493,18 +1562,23 @@ class EnvReadCollector(cst.CSTVisitor):
     def visit_Subscript(self, node: cst.Subscript) -> None:
         if self._code(node.value) not in self._ENV_OBJ or len(node.slice) != 1:
             return
+        if isinstance(self._parent(node), (cst.AssignTarget, cst.Del)):
+            return  # `os.environ["X"] = v` SETS the variable; it is not a read
         el = node.slice[0].slice
         if isinstance(el, cst.Index):
             name = self._literal(el.value)
             if name:
-                self._add(node, name, "index")
+                self._add(node, name, "index", "throws")  # a missing key raises KeyError
 
     def visit_Call(self, node: cst.Call) -> None:
         if self._code(node.func) not in self._ENV_CALLS or not node.args:
             return
         name = self._literal(node.args[0].value)
         if name:
-            self._add(node, name, "call")
+            # `.get("X", default)` / `getenv("X", default)`: a default None is no default
+            default = next((a.value for a in node.args[1:2] if a.keyword is None), None) or next((a.value for a in node.args if a.keyword and a.keyword.value == "default"), None)
+            fallback = None if default is None or (isinstance(default, cst.Name) and default.value == "None") else "empty" if self._is_empty(default) else "value"
+            self._add(node, name, "call", fallback)
 
 
 def resolve_nested_references(nodes: list, edges: list) -> list:

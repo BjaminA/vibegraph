@@ -183,7 +183,8 @@
         "col": 4,
         "endCol": 51,
         "condition": "user is None",
-        "hasElse": false
+        "hasElse": false,
+        "exits": "return"
       },
       {
         "id": "module/get_user_route.fn/if@0/return@0",
@@ -1537,7 +1538,8 @@
         "col": 4,
         "endCol": 19,
         "condition": "not rows",
-        "hasElse": false
+        "hasElse": false,
+        "exits": "return"
       },
       {
         "id": "module/find_user.fn/if@0/return@0",
@@ -1992,7 +1994,7 @@
         "endCol": 13,
         "name": "_helper_not_a_test",
         "params": [],
-        "docstring": "Leading underscore — must NOT be detected as a test seed.",
+        "docstring": "Leading underscore \u2014 must NOT be detected as a test seed.",
         "decorators": [],
         "isAsync": false,
         "returns": null
@@ -2099,8 +2101,8 @@
           "endCol": 13
         },
         "signature": "def _helper_not_a_test()",
-        "docstring": "Leading underscore — must NOT be detected as a test seed.",
-        "source": "\n\ndef _helper_not_a_test():\n    \"\"\"Leading underscore — must NOT be detected as a test seed.\"\"\"\n    return 42\n"
+        "docstring": "Leading underscore \u2014 must NOT be detected as a test seed.",
+        "source": "\n\ndef _helper_not_a_test():\n    \"\"\"Leading underscore \u2014 must NOT be detected as a test seed.\"\"\"\n    return 42\n"
       }
     ],
     "modulePath": "test_flow"

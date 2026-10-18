@@ -448,7 +448,8 @@
         "col": 4,
         "endCol": 41,
         "condition": "aircraft_id in _CONFIG_CACHE",
-        "hasElse": false
+        "hasElse": false,
+        "exits": "return"
       },
       {
         "id": "module/load_aircraft_config.fn/if@0/return@0",
@@ -651,7 +652,8 @@
         "endCol": 9,
         "condition": "\"temperature\" in conditions",
         "hasElse": true,
-        "elseLine": 22
+        "elseLine": 22,
+        "exits": "return"
       },
       {
         "id": "module/normalize_conditions.fn/if@0/density.assign",
@@ -807,7 +809,7 @@
           "velocity",
           "density"
         ],
-        "docstring": "Combine velocity and density into a corrected airspeed.\n    Calls math.sqrt — a library boundary the thread must mark as external.",
+        "docstring": "Combine velocity and density into a corrected airspeed.\n    Calls math.sqrt \u2014 a library boundary the thread must mark as external.",
         "decorators": [],
         "isAsync": false,
         "returns": "float",
@@ -948,8 +950,8 @@
           "endCol": 60
         },
         "signature": "def apply_correction_factor(velocity, density)",
-        "docstring": "Combine velocity and density into a corrected airspeed.\n    Calls math.sqrt — a library boundary the thread must mark as external.",
-        "source": "\n\ndef apply_correction_factor(velocity: float, density: float) -> float:\n    \"\"\"Combine velocity and density into a corrected airspeed.\n    Calls math.sqrt — a library boundary the thread must mark as external.\"\"\"\n    return velocity * math.sqrt(density / REFERENCE_DENSITY)\n"
+        "docstring": "Combine velocity and density into a corrected airspeed.\n    Calls math.sqrt \u2014 a library boundary the thread must mark as external.",
+        "source": "\n\ndef apply_correction_factor(velocity: float, density: float) -> float:\n    \"\"\"Combine velocity and density into a corrected airspeed.\n    Calls math.sqrt \u2014 a library boundary the thread must mark as external.\"\"\"\n    return velocity * math.sqrt(density / REFERENCE_DENSITY)\n"
       }
     ],
     "modulePath": "processing"

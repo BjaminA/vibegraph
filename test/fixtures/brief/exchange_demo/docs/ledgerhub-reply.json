@@ -1,0 +1,23 @@
+```json
+{
+  "tool": "ledgerhub",
+  "vendor": "LedgerHub",
+  "role": "platform",
+  "definition": "A document store whose zones can be shared between organisations' nodes, synchronised in both directions.",
+  "definitionCite": "LedgerHub is a document store whose zones can be shared between organisations' nodes",
+  "identity": { "packages": [], "calls": ["shareZone", "writeDoc", "readDoc", "watchDoc"] },
+  "operations": [
+    { "name": "shareZone", "does": "admin", "on": "zone", "note": "the zone is then synchronised to the other node, both ways", "cite": "Use shareZone to share a zone with another node" },
+    { "name": "writeDoc", "does": "write", "on": "document", "cite": "Use writeDoc to write a document into a zone" },
+    { "name": "readDoc", "does": "read", "on": "document", "cite": "readDoc returns a document from a zone" },
+    { "name": "watchDoc", "does": "subscribe", "on": "zone", "cite": "watchDoc calls you back for every document that changes in a zone" }
+  ],
+  "states": [],
+  "permissions": [],
+  "rules": [
+    { "id": "s1", "text": "A shared zone is synchronised to every node it is shared with, in both directions", "why": "a write on either node appears on the other", "cite": "A shared zone is synchronised to every node it is shared with, in both directions", "core": true },
+    { "id": "s2", "text": "Synchronisation copies documents as they are, without checking who wrote them", "why": "anything a partner writes into a shared zone arrives here", "cite": "Synchronisation copies documents as they are; it does not check who wrote them", "core": true }
+  ],
+  "unknowns": []
+}
+```

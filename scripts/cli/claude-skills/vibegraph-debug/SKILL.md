@@ -27,7 +27,8 @@ spend no tokens: `vibegraph-knowledge …` (or `npx --yes vibegraph-knowledge@la
    lists the tests that reach the suspect file; `coverage <file>` says whether
    it parsed fully and what reaches it. A partly parsed file has a partial map.
 5. **After the fix**, `vibegraph-knowledge check --uncommitted` (exit 2 means
-   a rule could not be verified — that is not a pass).
+   a rule could not be verified, exit 3 that nothing was checkable — neither
+   is a pass).
 
 If the fix breaks a stated rule, the post-edit hook blocks with the rule and
 its reason: fix the code, never the check.

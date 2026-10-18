@@ -245,7 +245,8 @@
         "col": 8,
         "endCol": 57,
         "condition": "throttle <= 0",
-        "hasElse": false
+        "hasElse": false,
+        "exits": "raise"
       },
       {
         "id": "module/Engine.class/ignite.fn/if@0/raise@0",

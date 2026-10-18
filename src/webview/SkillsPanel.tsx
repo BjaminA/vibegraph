@@ -13,6 +13,7 @@
 import React from "react";
 import type { SkillsConfigPayload } from "../shared/generic_skills_wire";
 import { SheetPortal, SheetBody, type SheetSlot } from "./panels/PanelSheet";
+import { ProjectDirectionSection } from "./ProjectDirectionSection";
 
 interface Props {
   state: SkillsConfigPayload | null;
@@ -32,9 +33,12 @@ export function SkillsPanel({ state, onChange, slot }: Props) {
   if (!slot) return null;
 
   return (
-    <SheetPortal slot={slot} subtitle={state ? `${enabled.size} of ${state.catalogue.length} enabled · advice only` : undefined}>
+    <SheetPortal slot={slot} subtitle={state ? `your project's own, and ${enabled.size} of ${state.catalogue.length} generic enabled · advice only` : undefined}>
     <SheetBody>
     <div data-skills-panel style={{ maxWidth: 720, color: "var(--text-primary)" }}>
+      {/* 2026-10-16 — the project's own direction first: what this code already does */}
+      <ProjectDirectionSection />
+      <div style={{ fontSize: "var(--fs-14)", fontWeight: 600, marginBottom: 8 }}>Generic direction <span style={{ fontSize: "var(--fs-11)", fontWeight: 400, color: "var(--text-muted)" }}>shipped with VibeGraph</span></div>
       <div style={{ fontSize: 11, color: "var(--text-muted)", lineHeight: 1.5, marginBottom: 12 }}>
         Each skill is the prose half of a quality dimension — the why beside the check that catches a violation.
         An enabled skill reaches the chat, work-run workers and thread agents (in full, labelled) and Claude Code

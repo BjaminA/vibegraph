@@ -21,7 +21,7 @@ import { execFileSync } from "node:child_process";
 import { join } from "node:path";
 import { loadEnvelope, gitDelta } from "../quality_check.mjs";
 import { buildStackIndex } from "../../src/server/stack.ts";
-import { loadConstraints } from "../../src/server/constraint_store.ts";
+import { loadConstraints, statedRules } from "../../src/server/constraint_store.ts";
 import { checkStatedRules } from "../../src/server/constraint_report.ts";
 import { historicalAdvice, historicalFolders, inHistorical } from "../../src/server/historical_copies.ts";
 
@@ -65,16 +65,23 @@ export function runConstraintChecks({ root, envelope: envelopePath, pipeline, gi
   // calls the same function, so a verdict on screen is the one printed here.
   const report = checkStatedRules({ envelope: env, root: absRoot, constraints, commit, runDelta, stack: buildStackIndex(env, absRoot) });
   const { results, unchecked, summary } = report;
-  const exitCode = summary.violated ? 1 : summary.unverifiable ? 2 : 0;
+  // 2026-10-17 — 3 when NOTHING was checked: "nothing to check" and
+  // "everything checks out" must not read the same (a field run's `check`
+  // could not fail, and its exit 0 read as a pass)
+  const exitCode = summary.violated ? 1 : summary.unverifiable ? 2 : summary.checked === 0 ? 3 : 0;
   // 2026-10-07 — folders of old copies (historical_copies.ts): said, and their offenders marked
   const historical = historicalFolders(Object.keys(env.files ?? {}));
-  return { root: absRoot, commit, constraints: constraints.length, unchecked, results, summary, exitCode, parseErrors, deltaNote, historical };
+  const rules = statedRules(constraints).length;
+  return { root: absRoot, commit, constraints: rules, classifications: constraints.length - rules, unchecked, results, summary, exitCode, parseErrors, deltaNote, historical };
 }
+
+const NOT_A_GATE = "NOTHING WAS CHECKED — this is not a pass, and `check` is not a gate here until a stated rule has a checkable half (`constraints add --check …`)";
 
 export function formatCheckReport(r) {
   const lines = [];
   if (!r.constraints) {
-    lines.push("no stated constraints in .vibegraph/constraints.json — nothing to check (a constraint states a rule the code cannot reveal; its checkable half is what this verifies)");
+    lines.push(`no stated rules in .vibegraph/constraints.json${r.classifications ? ` (${r.classifications} tool classification${r.classifications === 1 ? "" : "s"}, which are not rules)` : ""} — a rule states what the code cannot reveal; its checkable half is what this verifies`);
+    lines.push(`${NOT_A_GATE} → exit ${r.exitCode}`);
     return lines.join("\n") + "\n";
   }
   for (const row of r.results) {
@@ -89,6 +96,7 @@ export function formatCheckReport(r) {
   if (Object.keys(r.parseErrors ?? {}).length) lines.push(`parse errors — those files carry no IR and were not checked: ${Object.keys(r.parseErrors).join(", ")}`);
   const advice = historicalAdvice(r.historical ?? []);
   if (advice) lines.push(`note: ${advice}`);
+  if (!r.summary.checked) lines.push(NOT_A_GATE);
   lines.push(`${r.summary.checked} checked: ${r.summary.violated} violated, ${r.summary.unverifiable} unverifiable, ${r.summary.pass} pass → exit ${r.exitCode}`);
   return lines.join("\n") + "\n";
 }

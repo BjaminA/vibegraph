@@ -48,7 +48,7 @@ test("reading code out of text: string literals are not code, interpolations are
 test("unguarded: shell strings, SQL query text, eval — across calls and languages", () => {
   const high = report.findings.filter((f) => f.severity === "high").map((f) => `${f.kind} ${f.sink.file}:${f.sink.line}`).sort();
   assert.deepEqual(high, [
-    "code run_query.sh:8", "command app.py:19", "command helpers.py:8", "command server.ts:12", "command server.ts:31",
+    "code run_query.sh:8", "command app.py:19", "command helpers.py:8", "command run_late.sh:7", "command server.ts:12", "command server.ts:31",
     "sql app.py:28", "sql run_query.sh:7",
   ]);
   assert.deepEqual(at("helpers.py", 8).path, ["archive_route", "archive"], "followed into the helper's parameter");
@@ -62,18 +62,31 @@ test("review, not unguarded: a condition on the way, and a list-form subprocess"
   assert.equal(at("app.py", 70).kind, "argument");
 });
 
+// 2026-10-17 — a field run: a script ran `guard_rel_script "$REL"` 44 lines
+// before its exec, and the one "unguarded" finding was that script
+test("a guard-named call on the value, or the value it came from, before the sink makes it review", () => {
+  const f = at("run_task.sh", 10);
+  assert.equal(f.severity, "review");
+  assert.equal(f.guardKind, "call");
+  assert.match(f.guard, /^guard_rel_path "\$2" \(line 7\)$/);
+  assert.equal(at("run_late.sh", 7).severity, "high", "a check written after the run guards nothing");
+  const md = formatDataflowMd(report);
+  assert.match(md, /a check is called on it first: `guard_rel_path "\$2" \(line 7\)`/);
+  assert.match(md, /### `app\.py` \(\d+\)/, "grouped by file");
+});
+
 test("safe shapes are not findings", () => {
   assert.equal(at("app.py", 36), undefined, "parameterised SQL");
   assert.equal(at("app.py", 44), undefined, "int() before the query text");
   assert.equal(at("app.py", 76), undefined, "no input at all");
   assert.equal(report.findings.find((f) => f.sink.file === "server.ts" && f.kind === "sql"), undefined, "pg parameters");
   assert.equal(report.findings.find((f) => /officerId/.test(f.sink.fn)), undefined, "a regex's .exec() is not a shell");
-  assert.equal(report.findings.length, 9);
+  assert.equal(report.findings.length, 11);
 });
 
 test("the report and the thread contract say it, with the limits", () => {
   const md = formatDataflowMd(report);
-  assert.match(md, /## Unguarded \(7\)/);
+  assert.match(md, /## Unguarded \(8\)/);
   assert.match(md, /no findings is not a clean bill/);
   assert.match(md, /second-order input/);
   const ctx = threadContexts(env, ROOT, [], { dataflow: report, only: new Set(["app.py:archive_route"]) });
@@ -85,12 +98,12 @@ test("the report and the thread contract say it, with the limits", () => {
 test("the CLI exits 1 on an unguarded flow; the export writes security.md", () => {
   const r = runDataflow([ROOT]);
   assert.equal(r.exitCode, 1);
-  assert.match(r.text, /Unguarded \(7\)/);
+  assert.match(r.text, /Unguarded \(8\)/);
   const out = mkdtempSync(join(tmpdir(), "vg-df-exp-"));
   try {
     exportKnowledge({ root: ROOT, out, commit: "t" });
     assert.match(readFileSync(join(out, "security.md"), "utf-8"), /reaches a shell command/);
-    assert.match(readFileSync(join(out, "README.md"), "utf-8"), /\*\*Untrusted input:\*\* `security\.md`[^\n]*\(7 unguarded, 2 to review\)/);
+    assert.match(readFileSync(join(out, "README.md"), "utf-8"), /\*\*Untrusted input:\*\* `security\.md`[^\n]*\(8 unguarded, 3 to review\)/);
   } finally { rmSync(out, { recursive: true, force: true }); }
 });
 

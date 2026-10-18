@@ -450,7 +450,8 @@
           "col": 4,
           "endCol": 41,
           "condition": "aircraft_id in _CONFIG_CACHE",
-          "hasElse": false
+          "hasElse": false,
+          "exits": "return"
         },
         {
           "id": "module/load_aircraft_config.fn/if@0/return@0",
@@ -653,7 +654,8 @@
           "endCol": 9,
           "condition": "\"temperature\" in conditions",
           "hasElse": true,
-          "elseLine": 22
+          "elseLine": 22,
+          "exits": "return"
         },
         {
           "id": "module/normalize_conditions.fn/if@0/density.assign",

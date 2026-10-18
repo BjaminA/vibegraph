@@ -77,6 +77,7 @@ export function RuleItem({ row, review }: { row: RuleRowView; review?: boolean }
   return (
     <ItemFrame
       data-rule-row={c.id} data-constraint-source={c.source} data-rule-verdict={row.verdict ?? "prose"}
+      proposed={c.source === "agent"}
       chip={{ kind: "rule", id: c.id }}
       name={firstSentence(c.text)}
       badges={<>
@@ -115,6 +116,7 @@ export function ProposalItem({ row, p }: { row: RuleRowView; p: NonNullable<Rule
   return (
     <ItemFrame
       data-rule-proposal={`${c.id}:${p.id}`}
+      proposed
       chip={{ kind: "rule", id: c.id }}
       name={`Change proposed by ${p.by === "agent" ? "an agent" : p.by}`}
       badges={<Verdict v="proposed" label={`proposal ${p.id}`} />}

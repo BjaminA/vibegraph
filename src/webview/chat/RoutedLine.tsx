@@ -14,9 +14,9 @@ export function RoutedLine({ seg }: { seg: RoutedSegment }) {
         display: "flex",
         alignItems: "flex-start",
         gap: 6,
-        fontSize: 11,
+        fontSize: "var(--fs-11)",
         color: "var(--text-muted)",
-        fontFamily: "monospace",
+        fontFamily: "var(--font-mono)",
         padding: "4px 0",
         lineHeight: 1.5,
       }}

@@ -354,7 +354,7 @@ CLI) and says so; everything else is deterministic.
 | `hook install [--target posix\|wsl] [--remove]` | The same hooks without the `CLAUDE.md` block; `--target wsl` = `--windows` | `.claude/settings.local.json` | — |
 | `hook run <event> --file <path>` / `--command "<sh>"` / `--prompt "<text>"` | Fires a hook by hand: builds the payload Claude Code would send; the hook's exit codes (0, or 2 blocked) | nothing (a session record under `~/.cache`) | — |
 | `doctor` | Are the hooks installed, runnable from this side, and have they fired since installed? exit 0 / 1 | nothing | — |
-| `init --skill [--user]` / `--skills plan,…` / `--remove-skill` | Installs (removes) `/vibegraph` and the four task skills | `.claude/skills/`, or `~/.claude/skills/` with `--user` | — |
+| `init --skill [--user]` / `--skills plan,…` / `--remove-skill` | Installs (removes) `/vibegraph` and the five task skills | `.claude/skills/`, or `~/.claude/skills/` with `--user` | — |
 | `view [<path>] [--port n] [--open]` | Starts the visualisation until Ctrl-C | `.vibegraph/` state, as you use the app | only the app's Claude features |
 
 **Know the code**
@@ -375,7 +375,8 @@ CLI) and says so; everything else is deterministic.
 | Command | What it does | What it writes | Tokens |
 |---|---|---|---|
 | `check [--uncommitted \| --git <range>]` | Every stated rule's check: PASS / VIOLATED (names the call) / UNVERIFIABLE; exit 0 / 1 / 2 | nothing | — |
-| `constraints list \| add \| remove \| ratify` | The stated rules, their reasons, scopes and checks | `.vibegraph/constraints.json` | — |
+| `constraints list \| add \| remove \| ratify` | The stated rules, their reasons, scopes and checks; `add --cite file:line` records the prose sentence a rule was read from | `.vibegraph/constraints.json` | — |
+| `constraints harvest` | Rule-shaped sentences in the project's own prose that name code the IR knows, ranked — a place to read, never a rule (`/vibegraph-rules` turns them into rules for a person to ratify) | nothing | — |
 | `constraint show \| edit \| propose \| accept \| reject <id>` | A rule's history; change it in place (a person), or propose a change with `--why` (an agent, or anything run inside Claude Code) for a person to accept | `.vibegraph/constraints.json` | — |
 | `seed(s) list \| add \| remove` | Entry points discovery cannot see (most programs are found from `package.json` and `listen` / `argv` / top-level `await`) | `.vibegraph/manual_seeds.json` | — |
 | `skills list \| ratify \| reaffirm \| auto-reaffirm` | Per-thread skills: approve, re-stamp a still-correct stale one | `.vibegraph/thread-skills/` | — |
@@ -424,7 +425,7 @@ intend to build — it will change, and it is never mixed into the rest.
 | `design.md` | planned | when a plan exists: the hypothetical design, objective first, every item's status and its verdict against the code | keep work on the objective; see what is not built yet |
 | `software/<tool>.md` | stated | each ratified software spec: operations, states, permissions, rules, every item beside its quote, and where this code calls it (drafts withheld, named) | build with the tool's own rules in mind |
 | `reachability.md` | derived | the functions no entry point reaches, each with why | before calling anything dead |
-| `configuration.md` | derived | the environment variables the code reads, on which threads, and which are declared nowhere | before deploying |
+| `configuration.md` | derived | the environment variables the code reads, on which threads, which nothing that reaches a host sets (ranked by what an unset value does), and which one deploy target sets and another does not | before deploying |
 | `system_spec.md` | derived + stated | the tools the project is built on, by role; the modules that wrap them; policies about them | use the existing tools and wrappers |
 | `skills/<entry>.md` | drafted, ratified | per-thread guidance a person approved (drafts and stale ones withheld, named) | how to work on that thread, and why |
 | `investigations/` | stated | the investigation boards, as hand-off documents | pick up a bug where a person left it |

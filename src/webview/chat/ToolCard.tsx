@@ -128,8 +128,8 @@ export function ToolCard({ seg }: { seg: ToolSegment }) {
         background: `color-mix(in oklab, ${accent} 5%, transparent)`,
         border: `1px solid color-mix(in oklab, ${accent} 20%, transparent)`,
         borderRadius: 6,
-        fontSize: 11,
-        fontFamily: "monospace",
+        fontSize: "var(--fs-11)",
+        fontFamily: "var(--font-mono)",
         color: accent,
       }}
     >
@@ -201,7 +201,7 @@ export function ToolCard({ seg }: { seg: ToolSegment }) {
             style={{
               margin: 0,
               padding: 8,
-              fontSize: 11,
+              fontSize: "var(--fs-11)",
               fontFamily: "var(--font-mono)",
               color: "var(--text-primary)",
               border: "1px solid var(--border-edge)",
@@ -219,7 +219,7 @@ export function ToolCard({ seg }: { seg: ToolSegment }) {
               style={{
                 margin: 0,
                 padding: 8,
-                fontSize: 11,
+                fontSize: "var(--fs-11)",
                 fontFamily: "var(--font-mono)",
                 color: "var(--text-muted)",
                 border: "1px solid var(--border-edge)",

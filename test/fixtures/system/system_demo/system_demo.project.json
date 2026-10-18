@@ -244,7 +244,8 @@
           "col": 4,
           "endCol": 21,
           "condition": "cached",
-          "hasElse": false
+          "hasElse": false,
+          "exits": "return"
         },
         {
           "id": "module/get_user.fn/if@0/return@0",

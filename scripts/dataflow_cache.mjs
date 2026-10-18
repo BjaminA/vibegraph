@@ -8,6 +8,11 @@ import { dirname, join } from "node:path";
 import { cacheDirFor } from "./envelope_cache.mjs";
 import { computeDataflow } from "../src/server/dataflow.ts";
 
+// Bump when the PASS changes what it reports: the key below is the IR, so an
+// upgraded tool on an unchanged project would otherwise keep the old report
+// (2: guard-named calls guard, 2026-10-17).
+const DATAFLOW_PASS = "2";
+
 const findingKey = (f) => `${f.kind}|${f.sink.file}|${f.sink.fn}|${f.sink.text.split("(")[0]}|${f.source.what}`;
 
 /** The hooks: record the session's untrusted-input findings at its first
@@ -29,7 +34,7 @@ export function newUntrustedNote(env, absRoot, state) {
 }
 
 export function cachedDataflow(env, absRoot) {
-  const h = createHash("sha1");
+  const h = createHash("sha1").update(`pass ${DATAFLOW_PASS}`);
   for (const f of Object.keys(env.files).sort()) h.update(f).update(JSON.stringify(env.files[f].nodes ?? [])).update(JSON.stringify(env.files[f].edges ?? []));
   h.update(JSON.stringify((env.entryPoints ?? []).map((e) => [e.id, e.kind, e.framework ?? null])));
   const key = h.digest("hex");

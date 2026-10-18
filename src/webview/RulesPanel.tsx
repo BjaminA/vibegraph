@@ -5,6 +5,8 @@
 //   Awaiting you   agent-stated rules (Ratify / Remove) and proposed changes
 //                  (before / after, Accept / Reject) — a person's steps
 //   All rules · Violated · Unverifiable · By thread · History
+//   Tool classifications  how `classify` filed tools no table knew (2026-10-17):
+//                  not rules, so apart from them and from every count
 // Each rule shows its LIVE verdict from the function `check` prints. The
 // buttons are the CLI's person steps through the same functions; the
 // history names the person.
@@ -17,7 +19,7 @@ import { ConstraintsPanel, type PolicyPrefill } from "./ConstraintsPanel";
 import { RuleItem, ProposalItem } from "./rules/ruleItems";
 import type { RulesState } from "./useRulesState";
 
-type Section = "awaiting" | "all" | "violated" | "unverifiable" | "threads" | "history";
+type Section = "awaiting" | "all" | "violated" | "unverifiable" | "threads" | "history" | "classifications";
 const small: React.CSSProperties = { fontSize: "var(--fs-12)", color: "var(--text-muted)", lineHeight: 1.5 };
 const heading: React.CSSProperties = { fontSize: "var(--fs-13)", fontWeight: 600, color: "var(--text-secondary)", margin: "4px 0 0" };
 
@@ -49,6 +51,7 @@ export function RulesPanel({ open, slot, state, stack, prefill, onPrefillConsume
     { id: "unverifiable", label: "Unverifiable", count: of("unverifiable").length },
     { id: "threads", label: "By thread", count: byThread.size },
     { id: "history", label: "History", count: history.length },
+    ...(state.classifications.length ? [{ id: "classifications" as const, label: "Tool classifications", count: state.classifications.length }] : []),
   ];
   const list = (rows: typeof rules, review = false) => rows
     .slice().sort((a, b) => (a.constraint.id === focusRule ? -1 : b.constraint.id === focusRule ? 1 : 0))
@@ -104,6 +107,12 @@ export function RulesPanel({ open, slot, state, stack, prefill, onPrefillConsume
           <span>{ch.at.slice(0, 10)} · {ch.who ? `${ch.who} (${ch.by})` : ch.by} · {ch.field}{ch.why ? ` — ${ch.why}` : ""}</span>
         </div>
       )) : <div style={small}>No changes recorded yet.</div>)}
+      {section === "classifications" && (
+        <div data-rules-classifications style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          <div style={small}>How tools no table knew were filed — the role each has in the Stack panel and the system spec. They decide nothing and are never checked; an agent's filing waits for a person to ratify or remove it.</div>
+          {list(state.classifications, true)}
+        </div>
+      )}
     </div>
     </SheetBody>
     </SheetPortal>

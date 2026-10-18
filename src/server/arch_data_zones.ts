@@ -94,7 +94,8 @@ export function deriveDataZones(input: ZoneInputs): { nodes: ArchNodeRecord[]; e
     const at = raw.op === "write" ? attempts.of(raw.file, raw.nodeId) : null;
     const o: Op = at ? { ...raw, op: "attempt", attemptVia: `${at.expect === "refused" ? "a negative test expects it REFUSED" : "a negative test's attempt"} — ${at.via}` } : raw;
     const g = o.zoneKey ? { key: o.zoneKey, label: o.zoneLabel!, store: o.store!, holds: o.holds!, planned: true, namedBy: undefined } : groupOf(o.family);
-    const ref: ArchRef = { file: o.file, text: `${o.op} ${o.family} at line ${o.line}${o.port ? ` through ${o.port}` : ""}${o.attemptVia ? ` (${o.attemptVia})` : ""}${o.stated ? ` (STATED in .vibegraph/operations.json, not derived: ${o.stated})` : ""}` };
+    // the call's own node (2026-10-14): what the write runs behind is read from it (write_guards.ts)
+    const ref: ArchRef = { file: o.file, ...(o.nodeId ? { nodeId: o.nodeId } : {}), text: `${o.op} ${o.family} at line ${o.line}${o.port ? ` through ${o.port}` : ""}${o.attemptVia ? ` (${o.attemptVia})` : ""}${o.stated ? ` (STATED in .vibegraph/operations.json, not derived: ${o.stated})` : ""}` };
     const z: Zone = zones.get(g.key) ?? { label: g.label, store: g.store, holds: g.holds, planned: g.planned, namedBy: g.namedBy, refs: [], ops: new Map() };
     z.refs.push(ref);
     const cids = [...new Set(o.entries.flatMap((e) => clustersOf.get(e) ?? []))];

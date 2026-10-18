@@ -31,7 +31,7 @@ export function BackendPill({ backendId }: { backendId: ChatBackendId }) {
         display: "inline-flex",
         alignItems: "center",
         gap: 5,
-        fontSize: 11,
+        fontSize: "var(--fs-11)",
         color: "var(--text-muted)",
         fontFamily: "Inter, sans-serif",
         padding: "2px 8px",

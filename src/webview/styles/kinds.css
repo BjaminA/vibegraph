@@ -68,7 +68,9 @@ button.vg-verdict[aria-pressed="true"] { border-color: hsl(var(--h) var(--s) var
   --accent-chat: var(--text-secondary);
   --proposed-border: var(--border-edge);
 }
-.vg-sheet .vg-chip, .vg-sheet .vg-verdict, .vg-sheet .vg-op {
+/* + .vg-keep-accent (2026-10-16): a decision waiting for the person — the Agent
+   Manager's "Claude asks you" card and its waiting status — is such a bubble too */
+.vg-sheet .vg-chip, .vg-sheet .vg-verdict, .vg-sheet .vg-op, .vg-sheet .vg-keep-accent {
   --accent-thread: var(--keep-thread); --accent-warning: var(--keep-warning); --accent-chat: var(--keep-chat); --proposed-border: var(--keep-proposed);
 }
 .vg-sheet-scrim { position: fixed; inset: 0; z-index: 1148; background: hsl(222 40% 2% / 0.5); }
@@ -132,6 +134,9 @@ button.vg-verdict[aria-pressed="true"] { border-color: hsl(var(--h) var(--s) var
 
 /* ── the item frame ─────────────────────────────────────────────────────── */
 .vg-item { border: 1px solid var(--border-edge); border-radius: 10px; background: color-mix(in oklab, var(--bg-canvas) 35%, var(--bg-node)); min-width: 0; }
+/* 2026-10-16 — a proposal waiting for a person reads as one at a glance: dashed,
+   in the real proposed accent (the sheet neutralises the token; --keep-* holds it) */
+.vg-item-proposed { border-style: dashed; border-color: color-mix(in oklab, var(--keep-warning) 55%, transparent); }
 .vg-item-head { display: flex; align-items: center; gap: 8px; padding: 8px 12px; flex-wrap: wrap; }
 .vg-item-head .vg-item-name { font-weight: 600; font-size: var(--fs-13); }
 .vg-item-head .vg-grow { flex: 1; }
@@ -150,7 +155,7 @@ button.vg-verdict[aria-pressed="true"] { border-color: hsl(var(--h) var(--s) var
   font: 600 var(--fs-12)/1 var(--font-ui); padding: 8px 12px; border-radius: 8px; cursor: pointer;
   border: 1px solid var(--border-edge); color: var(--text-primary); background: var(--bg-node);
 }
-.vg-btn { display: inline-flex; align-items: center; gap: 4px; transition: background 0.12s, border-color 0.12s; }
+.vg-btn { display: inline-flex; align-items: center; gap: 4px; transition: background var(--motion-hover-dur) var(--motion-hover-ease), border-color var(--motion-hover-dur) var(--motion-hover-ease); }
 .vg-btn:hover:not(:disabled) { background: color-mix(in oklab, var(--text-primary) 8%, var(--bg-node)); }
 .vg-btn:active:not(:disabled) { background: color-mix(in oklab, var(--text-primary) 14%, var(--bg-node)); }
 .vg-btn:disabled { opacity: 0.5; cursor: default; }
@@ -162,8 +167,8 @@ button.vg-verdict[aria-pressed="true"] { border-color: hsl(var(--h) var(--s) var
 .vg-diff { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font: var(--fs-12)/1.5 var(--font-mono); padding: 0 12px 8px; }
 .vg-diff > div { padding: 8px; border-radius: 6px; overflow-wrap: anywhere; min-width: 0; }
 .vg-diff > div > small { display: block; font: 600 var(--fs-11) var(--font-ui); color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
-.vg-diff .vg-was { background: hsl(356 70% 50% / 0.10); }
-.vg-diff .vg-now { background: hsl(140 60% 45% / 0.12); }
+.vg-diff .vg-was { background: color-mix(in oklab, var(--accent-error) 10%, transparent); }
+.vg-diff .vg-now { background: color-mix(in oklab, var(--keep-thread) 12%, transparent); }
 .vg-score { display: flex; gap: 8px; flex-wrap: wrap; }
 @media (max-width: 760px) {
   .vg-item li { grid-template-columns: minmax(0, 1fr); gap: 0; }

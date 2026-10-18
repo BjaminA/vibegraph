@@ -604,7 +604,8 @@
         "col": 2,
         "endCol": 3,
         "condition": "!result.rows[0]",
-        "hasElse": false
+        "hasElse": false,
+        "exits": "throw"
       },
       {
         "id": "module/insertUser.fn/if@0/raise@0",
@@ -787,7 +788,8 @@
         "col": 2,
         "endCol": 3,
         "condition": "users.length > 1",
-        "hasElse": false
+        "hasElse": false,
+        "exits": "throw"
       },
       {
         "id": "module/checkQueryUsers.fn/if@0/raise@0",

@@ -120,7 +120,8 @@
         "col": 8,
         "endCol": 13,
         "condition": "image_size % 4 != 0",
-        "hasElse": false
+        "hasElse": false,
+        "exits": "raise"
       },
       {
         "id": "module/CNNClassifier.class/__init__.fn/if@0/raise@0",
@@ -936,7 +937,8 @@
         "col": 8,
         "endCol": 81,
         "condition": "not isinstance(value, int) or value < 1",
-        "hasElse": false
+        "hasElse": false,
+        "exits": "raise"
       },
       {
         "id": "module/_validate_shape.fn/for@0/if@0/raise@0",
@@ -1213,7 +1215,8 @@
         "col": 4,
         "endCol": 19,
         "condition": "seed is None",
-        "hasElse": false
+        "hasElse": false,
+        "exits": "return"
       },
       {
         "id": "module/_make_generator.fn/if@0/return@0",
@@ -1305,7 +1308,8 @@
         "col": 4,
         "endCol": 9,
         "condition": "steps_per_epoch < 1",
-        "hasElse": false
+        "hasElse": false,
+        "exits": "raise"
       },
       {
         "id": "module/train_epoch.fn/if@0/raise@0",
@@ -1378,6 +1382,10 @@
         "name": "?",
         "valueKind": "call",
         "preview": "generate_batch(\n    batch_size=batch_size,\n    channels=in_channels,\n    height=image_size,\n    width=image_size,\n    num_classes=num_classes,\n    generator=generator,\n)",
+        "targets": [
+          "images",
+          "labels"
+        ],
         "callTarget": "generate_batch",
         "kwargs": [
           {
@@ -1585,7 +1593,8 @@
         "col": 4,
         "endCol": 78,
         "condition": "epochs < 1",
-        "hasElse": false
+        "hasElse": false,
+        "exits": "raise"
       },
       {
         "id": "module/train_model.fn/if@0/raise@0",
@@ -1607,7 +1616,8 @@
         "col": 4,
         "endCol": 9,
         "condition": "eval_batches < 1",
-        "hasElse": false
+        "hasElse": false,
+        "exits": "raise"
       },
       {
         "id": "module/train_model.fn/if@1/raise@0",
@@ -2536,7 +2546,8 @@
         "col": 4,
         "endCol": 9,
         "condition": "logits.dim() != 2",
-        "hasElse": false
+        "hasElse": false,
+        "exits": "raise"
       },
       {
         "id": "module/accuracy_from_logits.fn/if@0/raise@0",
@@ -2590,7 +2601,8 @@
         "col": 4,
         "endCol": 85,
         "condition": "labels.dim() != 1",
-        "hasElse": false
+        "hasElse": false,
+        "exits": "raise"
       },
       {
         "id": "module/accuracy_from_logits.fn/if@1/raise@0",
@@ -2632,7 +2644,8 @@
         "col": 4,
         "endCol": 9,
         "condition": "logits.shape[0] != labels.shape[0]",
-        "hasElse": false
+        "hasElse": false,
+        "exits": "raise"
       },
       {
         "id": "module/accuracy_from_logits.fn/if@2/raise@0",
@@ -2666,7 +2679,8 @@
         "col": 4,
         "endCol": 18,
         "condition": "total == 0",
-        "hasElse": false
+        "hasElse": false,
+        "exits": "return"
       },
       {
         "id": "module/accuracy_from_logits.fn/if@3/return@0",
@@ -2772,7 +2786,8 @@
         "col": 4,
         "endCol": 88,
         "condition": "num_batches < 1",
-        "hasElse": false
+        "hasElse": false,
+        "exits": "raise"
       },
       {
         "id": "module/evaluate.fn/if@0/raise@0",
@@ -2890,6 +2905,10 @@
         "name": "?",
         "valueKind": "call",
         "preview": "generate_batch(\n    batch_size=batch_size,\n    channels=in_channels,\n    height=image_size,\n    width=image_size,\n    num_classes=num_classes,\n    generator=generator,\n)",
+        "targets": [
+          "images",
+          "labels"
+        ],
         "callTarget": "generate_batch",
         "kwargs": [
           {
@@ -3062,7 +3081,8 @@
         "col": 4,
         "endCol": 18,
         "condition": "total_seen == 0",
-        "hasElse": false
+        "hasElse": false,
+        "exits": "return"
       },
       {
         "id": "module/evaluate.fn/if@1/return@0",

@@ -31,7 +31,7 @@ import { basename, dirname, join, resolve } from "node:path";
 import { loadEnvelope } from "./quality_check.mjs";
 import { buildStackIndex } from "../src/server/stack.ts";
 import { formatContractBlock, summarizeContract } from "../src/server/thread_contract.ts";
-import { loadConstraints, routeConstraints, formatConstraintsBlock } from "../src/server/constraint_store.ts";
+import { loadConstraints, routeConstraints, formatConstraintsBlock, formatClassificationsBlock, statedRules } from "../src/server/constraint_store.ts";
 import { formatSystemSpec } from "../src/server/stack_spec.ts";
 import { buildCrossingIndex } from "../src/server/crossings.ts";
 import { archModelForEnvelope } from "../src/server/arch_envelope.ts";
@@ -51,7 +51,7 @@ import { deriveQualityModel } from "../src/server/quality/model.ts";
 import { computeAcceptance } from "../src/server/quality/acceptance.ts";
 import { calibratedVerbs } from "../src/server/quality/standings.ts";
 import { computeReachability, formatReachabilityMd } from "../src/server/reachability.ts";
-import { formatEnvSurfaceMd } from "../src/shared/env_surface.ts";
+import { formatEnvSurfaceMd } from "../src/shared/env_surface_md.ts";
 import { sha1 } from "../src/server/coverage.ts";
 import { listInvestigations, readInvestigation, readRel, renderHandoff } from "../src/server/investigations.ts";
 import { formatDataflowMd } from "../src/server/dataflow.ts";
@@ -345,9 +345,11 @@ export function exportKnowledge({ root, out, task, envelope: envelopePath, commi
     truncationHint: withIr ? "the whole index is in stack.json" : "re-run with --with-ir for the whole index as stack.json",
   }) ?? "## Stack\nNo third-party or project-funnel tools found in the project's imports.") + "\n");
   write("constraints.md", (formatConstraintsBlock(constraints, Number.MAX_SAFE_INTEGER)
-    ?? "## Constraints (STATED)\nNo stated constraints in .vibegraph/constraints.json (state one with `vibegraph-knowledge constraints add`).")
+    ?? "## Constraints (STATED)\nNo stated rules in .vibegraph/constraints.json (state one with `vibegraph-knowledge constraints add`).")
     .replace("## Constraints for this thread", "## Every stated constraint in this project")
-    + "\n\nEach constraint's scope (which files/threads/tools it routes to) and its checkable half (`check`/`checks`, a rule the IR verifies) are in `../constraints.json`; the per-thread files under `threads/` show which rules route to which thread.\n");
+    + "\n\nEach constraint's scope (which files/threads/tools it routes to) and its checkable half (`check`/`checks`, a rule the IR verifies) are in `../constraints.json`; the per-thread files under `threads/` show which rules route to which thread.\n"
+    // 2026-10-17 — tool classifications are not rules: their own short section
+    + (formatClassificationsBlock(constraints) ? `\n${formatClassificationsBlock(constraints)}\n` : ""));
 
   // 3b. What consented runs saw, verbatim: an overlay beside the IR, never in
   //     it (PLAN-M-RUNTIME). Staleness is judged against the current files by
@@ -458,7 +460,7 @@ export function exportKnowledge({ root, out, task, envelope: envelopePath, commi
     "",
     `Generated ${new Date().toISOString()} by ${tool ?? `VibeGraph commit ${commit} (\`scripts/export_knowledge.mjs\`)`}; the project was ${projectCommit === undefined ? `at VibeGraph commit ${commit}` : projectCommit ? `at commit ${projectCommit}` : "not a git repository, so no commit is recorded"}. Nothing here was written by a model: every file is DERIVED (a script read it from the code), STATED (a person wrote it, with provenance on each line) or OBSERVED (a consented run saw it). Where the derivation could not follow something it says so (\`dynamic\` = genuine runtime dispatch, \`unresolved\` = a resolution gap, \`unattributed\` = a boundary no rule could join to a tool); none of those is an error in the code.`,
     "",
-    `Project: ${Object.keys(env.files).length} files across ${langs.join(", ")}; ${env.entryPoints.length} entry points; ${threads.length} threads; ${constraints.length} stated constraints.${Object.keys(parseErrors).length ? ` Parse errors in: ${Object.keys(parseErrors).join(", ")}.` : ""}`,
+    `Project: ${Object.keys(env.files).length} files across ${langs.join(", ")}; ${env.entryPoints.length} entry points; ${threads.length} threads; ${statedRules(constraints).length} stated constraints${constraints.length > statedRules(constraints).length ? ` (and ${constraints.length - statedRules(constraints).length} tool classifications, not rules)` : ""}.${Object.keys(parseErrors).length ? ` Parse errors in: ${Object.keys(parseErrors).join(", ")}.` : ""}`,
     // M-CMD.1 — never skip in silence. A project that keeps real source in a
     // directory named `build` must be able to see that it was passed over,
     // and a partially-read file must be nameable before anything trusts it.
@@ -486,7 +488,7 @@ export function exportKnowledge({ root, out, task, envelope: envelopePath, commi
     "",
     `1. **\`constraints.md\`** (STATED) — the operators' rules with their reasons. They are not in the code; they are the part of the task you cannot infer. The raw form with scopes and checkable halves is \`../constraints.json\`.`,
     ...(plan ? [`2. **\`plan.md\`** (DERIVED) — the task decomposed onto the threads that own it, dependencies first, with each packet's files, its escalation surface and its closing bar (what a review would check). \`plan.json\` is the raw form.`] : ["2. (no task was given, so there is no plan)"]),
-    `3. **\`threads/INDEX.md\`** then **\`threads/<entry point>.md\`** (DERIVED) — one contract per thread: what enters and leaves, every external call with its literal call text and the tool it leaves through, round trips inside loops, the thread's stack, the hops that cross into another language or process, and the stated rules routed to that thread. This is exactly what a VibeGraph worker is handed before it edits. **\`flows.md\`** (DERIVED) renders every such hop terminal to terminal — the page, the literal it hands the platform, the script it runs, what that script leaves through — with a reverse index of what runs each script. Each contract's **Tested by** line names the discovered tests that exercise the thread. **\`reachability.md\`** (DERIVED) — the functions no entry point reaches (${reach.defs - reach.reached} of ${reach.defs}), each with WHY: never named anywhere, exported but unused here, called only from other unreached code, or a resolution gap / VibeGraph limit that means it IS used. Check it before editing code no thread shows you, and before calling anything dead. **\`configuration.md\`** (DERIVED) — the ${ctx.envSurface.vars.length} environment variable(s) the code reads by name, on which threads, and ${ctx.envSurface.hasDeclarations ? `the ${ctx.envSurface.undeclared.length} read but declared nowhere (.env.example / compose)` : "no declarations to check them against"}; each contract's **Configured by** line is its thread's share.`,
+    `3. **\`threads/INDEX.md\`** then **\`threads/<entry point>.md\`** (DERIVED) — one contract per thread: what enters and leaves, every external call with its literal call text and the tool it leaves through, round trips inside loops, the thread's stack, the hops that cross into another language or process, and the stated rules routed to that thread. This is exactly what a VibeGraph worker is handed before it edits. **\`flows.md\`** (DERIVED) renders every such hop terminal to terminal — the page, the literal it hands the platform, the script it runs, what that script leaves through — with a reverse index of what runs each script. Each contract's **Tested by** line names the discovered tests that exercise the thread. **\`reachability.md\`** (DERIVED) — the functions no entry point reaches (${reach.defs - reach.reached} of ${reach.defs}), each with WHY: never named anywhere, exported but unused here, called only from other unreached code, or a resolution gap / VibeGraph limit that means it IS used. Check it before editing code no thread shows you, and before calling anything dead. **\`configuration.md\`** (DERIVED) — the ${ctx.envSurface.vars.length} environment variable(s) the code reads by name, on which threads, and ${ctx.envSurface.hasDeclarations ? `the ${ctx.envSurface.undeclared.length} read but set by nothing that reaches a host, ranked by what an unset value does` : "no declarations to check them against"}; each contract's **Configured by** line is its thread's share.`,
     "",
     "**Before claiming anything is absent, unused, untested or unconfigured, check — never infer it from what this folder does not mention.** `reachability.md` says why a function is on no thread (and two of its five reasons mean it IS used); `vibegraph-knowledge coverage <file>…` says, per file, whether it was parsed fully, which threads and tests reach it, which environment variables it reads, whether it changed since this folder was written (`sources.json` holds the hashes), and what to do before trusting it. Nothing recorded against a file is not proof it is fully understood.",
     "",
@@ -535,7 +537,7 @@ export function exportKnowledge({ root, out, task, envelope: envelopePath, commi
   ].join("\n"));
 
   return {
-    outDir, written, threads: threads.length, files: Object.keys(env.files).length, constraints: constraints.length,
+    outDir, written, threads: threads.length, files: Object.keys(env.files).length, constraints: statedRules(constraints).length,
     packets: plan?.packets.length ?? null, unmatchedTokens: plan?.unmatchedTokens ?? null, taskNamesNoCode, parseErrors,
     withIr, observations, architecture: withArch, archify,
     skills: { copied: skills.copied.length, withheld: skills.withheld.length, files: skills.copied.map((s) => s.file) },

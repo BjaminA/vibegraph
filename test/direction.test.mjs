@@ -95,3 +95,16 @@ test("off: the hooks send nothing, not even on a finding", () => {
   assert.doesNotMatch(ctxOf(hook("session-start", { session_id: "o", source: "startup" })), /Generic direction enabled/);
   assert.doesNotMatch(ctxOf(hook("prompt", { session_id: "o", prompt: INGEST })), /Generic direction/);
 });
+
+// 2026-10-16 (review): a compaction emptied the session's context but kept the
+// direction / architecture / Brief "already sent" records, so they were never sent again.
+test("a compaction forgets every delivery record, and keeps the bookkeeping", async () => {
+  const { DELIVERY_KEYS } = await import("../scripts/cli/hooks.mjs");
+  for (const k of ["direction", "arch", "briefSent", "gapsSent", "briefTouched", "planGoneSent", "contracts", "rules"]) assert.ok(DELIVERY_KEYS.includes(k), k);
+  for (const k of ["baseline", "stopBlocks", "pendingBlocks", "lastKeys"]) assert.ok(!DELIVERY_KEYS.includes(k), `${k} is bookkeeping`);
+  assert.equal(runDirection(["hooks", "headlines", root]).exitCode, 0);
+  assert.match(ctxOf(hook("prompt", { session_id: "k", prompt: INGEST })), /## Generic direction/);
+  assert.doesNotMatch(ctxOf(hook("prompt", { session_id: "k", prompt: INGEST })), /## Generic direction/, "once per session");
+  hook("session-start", { session_id: "k", source: "compact" });
+  assert.match(ctxOf(hook("prompt", { session_id: "k", prompt: INGEST })), /## Generic direction/, "after a compaction it is sent again");
+});

@@ -23,6 +23,8 @@ export interface RuleRowView {
 }
 export interface RulesState {
   rules: RuleRowView[];
+  /** tool classifications: how a tool no table knew was filed — not rules */
+  classifications: RuleRowView[];
   pending: number;
   summary: { checked: number; violated: number; unverifiable: number; pass: number };
   person: string;
@@ -31,7 +33,7 @@ export interface RulesState {
   loaded: boolean;
 }
 
-const EMPTY: RulesState = { rules: [], pending: 0, summary: { checked: 0, violated: 0, unverifiable: 0, pass: 0 }, person: "", loaded: false };
+const EMPTY: RulesState = { rules: [], classifications: [], pending: 0, summary: { checked: 0, violated: 0, unverifiable: 0, pass: 0 }, person: "", loaded: false };
 
 export function sendRulesOp(op: "accept" | "reject" | "ratify" | "remove", id: string, pid?: string): void {
   bridge.postMessage({ type: "rules-op", payload: { op, id, ...(pid ? { pid } : {}) } } as never);
@@ -49,7 +51,7 @@ export function useRulesState(enabled: boolean): RulesState {
       // stays until the next step says something.
       if (t === "rules-state") {
         const p = (msg as unknown as { payload: Omit<RulesState, "loaded"> }).payload;
-        setState((prev) => ({ ...p, loaded: true, ...(p.message || p.error ? {} : { message: prev.message, error: prev.error }) }));
+        setState((prev) => ({ ...p, classifications: p.classifications ?? [], loaded: true, ...(p.message || p.error ? {} : { message: prev.message, error: prev.error }) }));
       }
       else if (t === "project-update") ask();
     };

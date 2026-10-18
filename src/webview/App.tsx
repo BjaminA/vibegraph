@@ -92,6 +92,8 @@ import { useFocusRouter } from "./panels/useFocusRouter";
 import { RulesPanel } from "./RulesPanel";
 import { InboxPanel } from "./InboxPanel";
 import { useInboxState } from "./useInboxState";
+import { useNowState } from "./useNowState";
+import { NowStrip } from "./NowStrip";
 import { useRulesState } from "./useRulesState";
 import { ThreadRulesChip } from "./threads/ThreadRulesChip";
 // M18-Add-deprecate: the 9-kind Add palette + its drag/insertion flow is
@@ -320,6 +322,7 @@ function Graph() {
   const [focusRule, setFocusRule] = useState<string | null>(null);
   const rules = useRulesState(true);
   const inbox = useInboxState(true); // 2026-10-06 (M11): every decision waiting for the person
+  const now = useNowState(true); // 2026-10-16: where the project stands, and one next step
   const inboxOpen = sheet === "inbox";
   const setInboxOpen = useMemo(() => sheetSetter("inbox"), [sheetSetter]);
   // A chip asked for a card on the map (useFocusRouter → SystemView).
@@ -1213,6 +1216,7 @@ function Graph() {
           onSelectEntry={handleSelectEntry}
           onSelectFile={handleSelectFile}
           fileStatus={fileStatus}
+          footer={now && !(systemPlan != null && (buildPlan || pendingBuildPlan || roadmapDrafting || entryPoints.length === 0)) ? <NowStrip now={now} onOpen={setSheet} /> : undefined}
         />
       )}
 
@@ -1837,7 +1841,9 @@ function Graph() {
       {/* PLAN-v7 Stage 5 — the roadmap: proposed (ratify gate), ratified
           (live statuses + run dial + failure triage), or the draft CTA when
           only the architecture is ratified so far. */}
-      {isDirectoryMode && systemPlan != null && (
+      {/* 2026-10-16 — the empty-roadmap CTA belongs to building from empty: a project
+          with code gets it only once a roadmap exists or is drafting */}
+      {isDirectoryMode && systemPlan != null && (buildPlan || pendingBuildPlan || roadmapDrafting || entryPoints.length === 0) && (
         <RoadmapPanel
           plan={buildPlan}
           pending={pendingBuildPlan}
@@ -1920,7 +1926,7 @@ function Graph() {
         <PanelSheet
           active={sheet}
           available={(isDirectoryMode ? ["inbox", "plan", "rules", "stack", "agents", "direction", "models", "board"] : ["models"]) as PanelId[]}
-          badges={{ rules: rules.pending }}
+          badges={{ rules: rules.pending, ...(now ? { inbox: now.badges.inbox, plan: now.badges.plan, direction: now.badges.direction } : {}) }}
           onSwitch={setSheet}
           onClose={() => setSheet(null)}
           onSlot={setSheetSlot}

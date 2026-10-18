@@ -56,6 +56,8 @@ export interface ConstraintInput {
   text: string;
   scope: ConstraintScope;
   note?: string;
+  /** 2026-10-17 — the prose sentence this rule was read from (constraints add --cite) */
+  cite?: { file: string; line: number; quote: string };
   policy?: StackPolicy;
   /** M-GRAMMAR — the CHECKABLE half, on ANY kind. `text` stays the sentence
    *  a worker reads; this is what the pre-checks evaluate against the IR. */
@@ -106,6 +108,14 @@ export function validateConstraintInput(x: unknown): { ok: true; value: Constrai
   }
   const value: ConstraintInput = { kind: r.kind as ConstraintKind, text: r.text.trim(), scope };
   if (typeof r.note === "string" && r.note.trim()) value.note = r.note.trim().slice(0, 300);
+  if (r.cite !== undefined) {
+    const c = r.cite as Record<string, unknown> | null;
+    if (!c || typeof c !== "object" || typeof c.file !== "string" || !c.file.trim() || /(^|\/)\.\.(\/|$)/.test(c.file)
+      || typeof c.line !== "number" || !Number.isInteger(c.line) || c.line < 1 || typeof c.quote !== "string" || !c.quote.trim()) {
+      return { ok: false, error: "cite must be {file, line ≥ 1, quote} — the prose sentence the rule was read from" };
+    }
+    value.cite = { file: c.file.trim(), line: c.line, quote: c.quote.trim().slice(0, 400) };
+  }
 
   // M-GRAMMAR — a malformed check is REFUSED at the boundary, never dropped
   // silently and never coerced. Storing a constraint whose check does not
@@ -364,7 +374,33 @@ export function policySentence(p: StackPolicy): string {
   }
 }
 
-export function formatConstraintsBlock(routed: Constraint[], budget: number = CONSTRAINT_BUDGET_CHARS): string | null {
+/** 2026-10-17 — a `describe` policy CLASSIFIES a tool (what `classify` writes)
+ *  and decides nothing. It feeds the stack index and the system spec; it is
+ *  never a rule — not in `check`'s count, the hooks' rule lines, a rule count,
+ *  a prompt's rule block or constraints.md's rules. A field run found 22 of
+ *  them listed to every session as "stated rules from the people who run this
+ *  code", and `check` reporting 22 rules with no checkable half. */
+export function isClassification(c: { policy?: { rule?: string } | null }): boolean {
+  return c.policy?.rule === "describe";
+}
+export function statedRules<T extends { policy?: { rule?: string } | null }>(list: readonly T[]): T[] {
+  return list.filter((c) => !isClassification(c));
+}
+
+/** The classifications as one line each (constraints.md): what a tool was filed as, by whom. */
+export function formatClassificationsBlock(list: readonly Constraint[]): string | null {
+  const cs = list.filter(isClassification);
+  if (!cs.length) return null;
+  return [
+    `## Tool classifications (${cs.length}) — not rules`,
+    "How a tool no table knew was filed (its role in system_spec.md). They decide nothing; a person ratifies or removes them (`vibegraph-knowledge constraints ratify|remove <id>`).",
+    "",
+    ...cs.map((c) => `- \`${c.policy!.tool}\` — ${c.policy!.role ? ROLE_LABEL[c.policy!.role] : "a tool"} (${c.id}, ${c.source === "human" ? "human-stated" : `${c.source}-stated, not reviewed`})`),
+  ].join("\n");
+}
+
+export function formatConstraintsBlock(all: Constraint[], budget: number = CONSTRAINT_BUDGET_CHARS): string | null {
+  const routed = statedRules(all);
   if (routed.length === 0) return null;
   const lines = ["## Constraints for this thread (STATED — not IR fact; the source of each line is named)"];
   let used = lines[0].length;
@@ -373,7 +409,7 @@ export function formatConstraintsBlock(routed: Constraint[], budget: number = CO
     // A stack policy leads with its imperative; the human sentence follows.
     const head = c.policy ? `${policySentence(c.policy)} — ` : "";
     const reason = c.policy?.reason ? ` (reason: ${c.policy.reason})` : "";
-    const line = `- [${c.kind} · ${SOURCE_LABEL[c.source]}] ${head}${c.text}${reason}${c.note ? ` (${c.note})` : ""}`;
+    const line = `- [${c.kind} · ${SOURCE_LABEL[c.source]}] ${head}${c.text}${reason}${c.note ? ` (${c.note})` : ""}${c.cite ? ` — from ${c.cite.file}:${c.cite.line}` : ""}`;
     if (used + line.length > budget) { omitted++; continue; }
     lines.push(line);
     used += line.length + 1;

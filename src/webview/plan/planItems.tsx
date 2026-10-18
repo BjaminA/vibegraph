@@ -38,6 +38,23 @@ function Fold({ it, finding }: { it: any; finding?: PlanFinding }) {
   );
 }
 
+/** What an agent changed in an agreed item: each field, as agreed and as proposed. */
+function AgentChange({ it }: { it: any }) {
+  const keys = Object.keys({ ...it, ...it.agreedAs }).filter((k) => k !== "status" && k !== "agreedAs" && JSON.stringify(it[k]) !== JSON.stringify(it.agreedAs[k]));
+  if (!keys.length) return null;
+  const show = (v: unknown) => (v === undefined ? "(absent)" : typeof v === "string" ? v : JSON.stringify(v));
+  return (
+    <div data-plan-agent-change>
+      {keys.slice(0, 4).map((k) => (
+        <div key={k} className="vg-diff">
+          <div className="vg-was"><small>{k} · as agreed</small>{show(it.agreedAs[k])}</div>
+          <div className="vg-now"><small>{k} · proposed by an agent</small>{show(it[k])}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function PlanItem({ plan, section, it, finding, off }: { plan: Plan; section: PlanSection; it: any; finding?: PlanFinding; off?: boolean }) {
   const id = planItemId(section, it);
   const view = planItemFacts(plan, section, it, finding);
@@ -50,7 +67,7 @@ export function PlanItem({ plan, section, it, finding, off }: { plan: Plan; sect
   return (
     <ItemFrame
       data-plan-item={`${section}:${id}`} data-plan-status={status} data-plan-verdict={finding?.verdict}
-      chip={view.chip} name={view.name}
+      chip={view.chip} name={view.name} proposed={status === "proposed"}
       badges={<>
         {off && <span data-plan-off-objective title="What it serves shares no word with the objective — a word-match guess, not a verdict. Say how it serves the objective, or drop it."><Verdict v="guess" label="serves the objective?" /></span>}
         <Verdict v={status} label={status === "promoted" ? `promoted · ${it.constraintId}` : undefined} />
@@ -58,6 +75,8 @@ export function PlanItem({ plan, section, it, finding, off }: { plan: Plan; sect
       </>}
       facts={facts}
       details={summary ? { summary, body: <Fold it={it} finding={finding} /> } : null}
+      // 2026-10-16 — an agent's change to an agreed item, above the fold: before / after
+      children={status === "proposed" && it.agreedAs ? <AgentChange it={it} /> : undefined}
       actions={<>
         {status === "proposed" && it.agreedAs && (
           <button className="vg-btn" data-plan-reject onClick={() => sendPlanOp({ op: "reject", section, id })} title="Reject the change — the agreed version comes back">

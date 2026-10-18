@@ -13,7 +13,7 @@
 import { loadPlan, savePlan } from "./plan_store.ts";
 import { applyPlanOps } from "./plan_ops.ts";
 import { planBacklog } from "./plan_review.ts";
-import { loadConstraints, removeConstraint } from "./constraint_store.ts";
+import { isClassification, loadConstraints, removeConstraint } from "./constraint_store.ts";
 import { decideConstraintProposal, ratifyConstraint } from "./constraint_edit.ts";
 import { loadArchStore, saveArchStore, ratifyProposal, rejectProposal, type ArchStore, type ArchBaseline } from "./arch_store.ts";
 import { decideScope } from "./node_scope.ts";
@@ -32,8 +32,9 @@ import { linesReader } from "./node_scope.ts";
 import { declaredFeeds } from "./topology_feeds.ts";
 import { declaredTopology } from "./arch_label_drift.ts";
 import { modelSource } from "./model_source.ts";
+import { loadDirection, saveDirection, decideRule } from "./project_direction.ts";
 
-export type InboxKind = "plan" | "objective" | "decision" | "sensor" | "rule-change" | "rule" | "scope" | "groups" | "skill" | "spec" | "questions" | "drift" | "brief" | "claim";
+export type InboxKind = "plan" | "objective" | "decision" | "sensor" | "rule-change" | "rule" | "scope" | "groups" | "skill" | "spec" | "questions" | "drift" | "brief" | "claim" | "direction";
 export interface InboxItem {
   id: string;
   kind: InboxKind;
@@ -87,8 +88,11 @@ export function buildInbox(root: string, opts: { rec?: PlanReconcile | null; mod
     for (const p of (c.proposals ?? []).filter((x: any) => !x.status || x.status === "open")) {
       out.push({ id: `rule-change:${c.id}:${p.id}`, kind: "rule-change", decidable: true, title: `a change to rule ${c.id}`, detail: [`${p.by ?? "agent"}: ${p.why}`, ...("patch" in p ? [short((p as any).patch)] : [])] });
     }
-    if (c.source !== "human") out.push({ id: `rule:${c.id}`, kind: "rule", decidable: true, title: `rule ${c.id}, stated by ${c.source}`, detail: [c.text, ...(c.check ? [`check: ${short(c.check)}`] : [])] });
+    if (c.source !== "human" && !isClassification(c)) out.push({ id: `rule:${c.id}`, kind: "rule", decidable: true, title: `rule ${c.id}, stated by ${c.source}`, detail: [c.text, ...(c.check ? [`check: ${short(c.check)}`] : [])] });
   }
+  // 2026-10-17 — a classification files a tool and decides nothing: one line, not a decision each
+  const filed = constraints.filter((c) => isClassification(c) && c.source !== "human");
+  if (filed.length) out.push({ id: "classifications", kind: "rule", decidable: false, title: `${filed.length} tool classification${filed.length === 1 ? "" : "s"} by an agent, not reviewed`, detail: [filed.slice(0, 6).map((c) => c.policy?.tool).join(", ") + (filed.length > 6 ? ", …" : ""), "not rules; ratify or remove them in the Rules panel (Tool classifications) or `vibegraph-knowledge constraints ratify|remove <id>`"] });
   const store = loadArchStore(root);
   if (store.proposal) out.push({
     id: "groups", kind: "groups", decidable: true, title: `${store.proposal.mode === "update" ? "an update to" : "proposed"} architecture groups (${store.proposal.model})`,
@@ -133,6 +137,8 @@ export function buildInbox(root: string, opts: { rec?: PlanReconcile | null; mod
     });
     else if (k.status === "ratified" && stale.length) out.push({ id: `drift:claim:${k.id}`, kind: "drift", decidable: false, title: `ratified claim ${claimLabel(k)} is STALE — a line it cites changed`, detail: [...stale, "propose it again with the lines as they are now, or reject it"] });
   }
+  // 2026-10-16 — the project's own direction: what the census proposed (project_direction.ts)
+  for (const r of loadDirection(root).rules.filter((x) => x.status === "proposed")) out.push({ id: `direction:${r.id}`, kind: "direction", decidable: true, title: `direction ${r.id}: ${r.text}`, detail: [`why: ${r.why}`, `from ${r.basis}${r.check ? " · checked after edits as advice" : ""}`] });
   if (opts.briefStale?.length) out.push({ id: "drift:brief", kind: "drift", decidable: false, title: `${opts.briefStale.length} line${opts.briefStale.length === 1 ? " of the ratified Brief is" : "s of the ratified Brief are"} STALE — code they cite changed`, detail: [...opts.briefStale.slice(0, 4), "re-brief only those: `vibegraph-knowledge brief codebase --stale` (a small call)"] });
   return out;
 }
@@ -222,6 +228,13 @@ export function decideInbox(root: string, id: string, decision: "agree" | "rejec
       return decideBrief(root, arg as BriefSection, decision === "agree" ? "ratify" : "reject", opts.who ?? "a person", opts.now ?? new Date());
     }
     case "claim": return decideClaim(root, arg, decision, opts.who ?? "a person", opts.now ?? new Date());
+    case "direction": {
+      const d = loadDirection(root);
+      const err = decideRule(d, arg, decision === "agree" ? "agree" : "drop", opts.who ?? "a person", opts.now ?? new Date());
+      if (err) return fail(err);
+      saveDirection(root, d);
+      return { ok: true, detail: `${decision === "agree" ? "agreed" : "dropped"} direction ${arg}` };
+    }
     case "questions": return fail("open questions are closed one by one: `plan close open <qN> --note …` or the Plan panel");
     default: return fail(`not an inbox item: ${id}`);
   }

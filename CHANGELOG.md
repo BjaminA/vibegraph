@@ -3,6 +3,273 @@
 `vibegraph-knowledge` and the VibeGraph app. Newest first. Each entry says what
 changed and, where an existing user would notice, how behaviour differs.
 
+## 0.35.0 — 2026-10-18 — the field review: rules from the prose, declared means deployed, panels beside the graph
+
+### From a field review on a large project
+
+A team ran 0.34.3 on a ~1,200-file production codebase and judged each output
+by one test: would it have found a real bug we hit? Four changes came out of it.
+
+- **"Declared" means "set by something that reaches a host".** The day's outage
+  was a variable the code read and no deploy wrote. `configuration.md` already
+  listed it, as one of 224 "declared nowhere", alphabetical, three lines below
+  a CI secret that was fine, because declarations came only from
+  `.env.example` and compose files. Declarations now also come from GitHub
+  workflows (`env:` keys, saying whether each is a secret or a var; `envs:`
+  passthrough lists; run steps that write a variable onward: `>> .env`, `-e` /
+  `--env` / `--build-arg`, or a helper given a name and its own value), plus
+  Dockerfile `ENV`/`ARG`, systemd `Environment=`, pm2 `env` blocks and k8s
+  `env:` lists (`src/server/env_declarations.ts`; names only, never a value).
+  The unset list is **ranked by what an unset value does**:
+  - fails silently: an empty value split into a list, or a negated read
+    gating an early return;
+  - no default;
+  - fails loudly: it raises or exits;
+  - has a default.
+
+  The parsers record this per read in a new optional `fallback` / `use` pair
+  on `envReads` (JS/TS, Python, bash). Build-time names (`NEXT_PUBLIC_`,
+  `VITE_` …) are marked as needing a rebuild. Deploy targets of one kind (two
+  deploy workflows, two compose files) are compared: "set on one, missing on
+  the other". A thread contract's Configured-by line says "fails silently
+  when unset". Python no longer counts `os.environ["X"] = v` as a read.
+- **Tool classifications are not rules.** All 22 of the project's constraints
+  were `describe` policies from `classify` ("clsx is classified as frontend"),
+  and every hooked session was told "Stated rules (22) — from the people who
+  run this code". A classification still names the tool's role in the stack
+  index and the system spec. It is now out of `check`, the session-start and
+  per-prompt rule lines, rule counts, skill and Brief rule blocks, and the main
+  list in `constraints.md`. It is shown in its own short section, in the Rules
+  panel's new Tool classifications section and in `constraints list`, and
+  agent-written ones are one Inbox line instead of one decision each. The
+  session-start list also says how many rules an agent stated. **A ratified
+  skill on a thread that had a classification routed to it reads stale once;
+  Re-affirm re-stamps it.**
+- **`check` says when nothing was checked.** With no rule that has a checkable
+  half it printed "0 checked … → exit 0", which read as a pass. It now prints
+  `NOTHING WAS CHECKED — this is not a pass` and **exits 3**, as it does when
+  there are no rules at all. Exit 0 means at least one rule was checked and
+  passed.
+- **A guard-named call is a guard.** `security.md`'s one "unguarded" shell
+  finding was a script whose `guard_rel_script "$REL"` ran 44 lines before
+  its exec. Such a finding now reads "review: a check is called on it first …
+  verify it rejects what it should". That applies when a call is written at or
+  before the sink, to a function named `guard*`, `validate*`, `verify*`,
+  `assert*`, `require*`, `check_*` or `is_valid*` / `is_safe*` / `is_allowed*`,
+  and it takes the value or a value it was built from. Not `ensure_*` (it
+  creates), not JS `require`, never a call that is itself a sink. A check
+  written after the run guards nothing. Findings are grouped by file.
+
+- **The rules in the prose.** The project's real operator rules — a file that
+  must be a root-owned copy, an ACL that is first-match by rowid, a `pm2
+  instances: 1` that is a correctness setting, a payload key that must never be
+  sent, a database that must have no user grants — sat in its CLAUDE.md and
+  module headers while its constraints held none of them. Three parts, in the
+  three strata:
+  - *derived, zero tokens:* `constraints harvest` lists rule-shaped sentences
+    (must, never, only, "the one", "leaves through", "is inert", "first-match",
+    "correctness" …) from CLAUDE.md, AGENTS.md, READMEs, docs, module headers
+    and docstrings that name something the IR knows — a file, a function, a
+    tool, a route, an environment variable, a payload key the code sends, or a
+    file-shaped path under a known folder that does not exist yet — ranked by
+    anchors, marker strength and location, and marked down for narrative (a
+    date, a past-tense record, a release-note heading), a parenthetical aside,
+    a test file or an `examples/` path. It never writes a rule. Where the shape
+    is unambiguous it suggests a grammar check (`--check …`).
+  - *proposed:* the `/vibegraph-rules` task skill (installed by `init --skill`,
+    `--skills rules`) has the session's Claude read each candidate in context
+    and state the real ones with `constraints add … --cite file:line` — inside
+    Claude Code they land agent-stated and wait in the Rules panel and Inbox.
+    `--cite` is a gate: the quoted sentence must be in that file near that
+    line, or the rule is refused; the rule carries `cite` and every prompt
+    block says `— from file:line`.
+  - *stated:* a person ratifies, as before. The session-start hook says how
+    many candidates there are, once, while no person has stated a rule.
+
+  Measured, not assumed: on the fleet example all six stated rules surface
+  from its README at the default threshold (and two from module headers), the
+  behaviour-describing docstrings do not; on a fixture built from the review's
+  five shapes, five of five. Five outside projects (Python, TypeScript, bash)
+  taught four general rules now in the ranker: release notes under any file
+  name are records; test files and sample code rank low; a marker inside a
+  parenthetical aside describes rather than rules; "in order to" is not an
+  ordering rule. Named limit: a documentation sentence describing a library's
+  behaviour ("`X` never enumerates the directory") is rule-shaped and only a
+  reader can tell it from a rule — the list is ranked and read, never applied.
+
+Tests: test:configuration-deploy (5), test:rule-surfaces (5), test:rule-harvest
+(8), test:cli-check (+1), test:dataflow (+1); the bash and polyglot snapshots
+gained only the new `fallback` field.
+
+### The GUI pass: where the project stands, panels beside the graph
+
+A review of the app found its knowledge shown as lists behind a row of
+buttons: nothing said what state the project was in or what to do next,
+every panel covered the graph, and a proposal looked the same as a decision.
+
+- **Panels open docked beside the graph** by default; the dock button still
+  centres one, and a viewer's choice is remembered. `VG_SHEET_DOCK=centre`
+  restores the centred sheet as the default (the Playwright suites pin it).
+- **"Now"**, at the foot of the side panel: the objective, what waits for you,
+  stale Brief lines, open questions, the stated rules and the project's
+  direction, each opening the panel that acts on it, and ONE next step chosen
+  by a fixed order (a waiting decision, then a stale Brief, then no objective,
+  no rules, no agreed direction, then "start a task") — computed by
+  `src/server/now_state.ts` (WS `now-get`), never a model's summary. It sits in
+  the side panel because over the canvas it covered the controls each view
+  keeps on its bottom edge (the map's "start here" story, found by
+  test:e2e-arch-map).
+- **Live counts on the panel tabs:** Inbox (decisions waiting), Plan (plan and
+  objective proposals), Direction (proposed rules), beside the Rules count.
+- **A proposal looks like one:** an item waiting for a person — a proposed plan
+  item, an agent-stated rule, a rule change, a decidable Inbox item — is drawn
+  with a dashed border in the proposed accent; an agent's change to an AGREED
+  plan item shows each field as agreed and as proposed, above the fold.
+- **The chat on the style rules:** lucide icons for the thread and context
+  pills (were ⑂ / ◈ / × glyphs), a steady caret (the blinking one was an
+  infinite animation), a readable empty state, type and spacing on the scale,
+  shadow and motion from tokens.
+- **No "Draft roadmap" on a project with code:** the empty-roadmap prompt
+  belongs to building from empty; a project with entry points sees it only once
+  a roadmap exists or is drafting.
+- Found on the way: test:e2e-plan-questions had been red since 0.28.0 — it
+  called a person's CLI step without the no-terminal opt-in (fixed in the test).
+
+Tests: test:now-state (the next-step order, walked on an empty project),
+test:e2e-now (the block, the docked panel it opens, the counts after a census).
+
+### The project's own direction, read from its code
+
+Direction was six skills shipped with VibeGraph: a project could not add its
+own, two of the six fire on nearly every thread, and the plan's principles
+reached no session but the hooks. Now a project has its own direction, read
+from what its code already does.
+
+- **The census** (`src/server/project_direction.ts`, zero tokens) proposes:
+  - *funnels* — a tool the project reaches through a module of its own (the
+    stack index's funnel), when most of its use already goes through it:
+    "Reach sqlite3 through telemetry.storage (telemetry/storage.py), not
+    directly — 5 files use sqlite3 through it; none reach it directly",
+    checked by `import-only` (a language global such as `fetch` is never
+    imported, so that rule says it is not checked rather than pass on nothing);
+  - *guarded zones* — a data zone whose every write runs behind one check
+    (the write guards): "Every write to partner_status is decided by
+    verify(…) — 1 only when it holds, 1 only when it fails";
+  - *the plan's agreed principles*, with their checks.
+- **A person decides.** Proposals wait in the Direction panel's new "This
+  project's direction" section (Read from the code · Agree · Drop) and in the
+  Inbox. A dropped rule is never proposed again. An agreed rule whose facts
+  moved is flagged ("the facts it was read from moved") — its wording is never
+  changed under the agreement. `.vibegraph/direction.json`; CLI `direction
+  project [census | agree <id> | drop <id>]` (agree and drop are a person's
+  step).
+- **Delivered like the generic direction**, under the same hooks mode: an
+  agreed rule arrives once per session with the first thread whose files it is
+  about; one with a check is checked after every edit AS ADVICE — a violation
+  the session did not start with brings the rule and its why, never a block (a
+  rule that must block is a stated rule). The Agent Manager's framing counts
+  the agreed rules; "What Claude will be told" shows them.
+- `hooks.mjs`: the inline-cap helper moved to `hook_text.mjs` (the file is at
+  490 lines, under the rule again).
+
+Tests: test:project-direction (4: the census on the brief fixture and the fleet
+example, merging, the plan principle and the Inbox, the real hooks),
+test:e2e-project-direction.
+
+### The Agent Manager is a conversation
+
+A review found the Agent Manager's default run was one `claude -p` call with
+the raw task: when Claude needed a decision the run simply ended, the hooks'
+"name it again to receive the rest" could never be acted on, and nothing told
+the session the project's objective or which VibeGraph tools exist.
+
+- **One session, many messages.** The run keeps Claude Code open
+  (stream-json in, as the chat does). Each turn ends with "waiting for you":
+  reply (Ctrl+Enter), or **Finish and review** — the evidence is collected as
+  before. Stop works mid-turn or while waiting. The limit is 2 hours, waiting
+  included.
+- **Claude can ask.** The framing asks it to put each decision that is the
+  person's on a line starting `QUESTION:` and end its turn; the panel shows it
+  as an amber "Claude asks you" card and the reply box says "Answer Claude's
+  question…". The answer goes to the same session.
+- **The framing** (`src/server/hooked_framing.ts`, appended to Claude Code's
+  system prompt): how the run works (hooks, blocks, never edit `.vibegraph/` to
+  pass a rule), the project now (objective, how many stated rules, what waits
+  for a person and not to decide it, the open plan questions to say if answered,
+  enabled direction), and which VibeGraph tools to reach for when (thread brief,
+  contract, coverage, blast radius, dataflow, plan, direction, investigation).
+  The panel shows the same facts before you start: "What Claude will be told".
+- **Guardrails.** The MCP tools that spend tokens or start other agents
+  (propose architecture, scope a node, spawn a thread agent, start a work run,
+  draft or sweep skills, generate a README, explain a node) are denied to the
+  run. A cost cap (`VG_RUN_COST_CAP`, default $10) stops further replies; the
+  status line shows the cost so far against it.
+- **The timeline reads as a conversation:** your messages, Claude's replies,
+  its questions, folded runs of tool calls, blocks and errors, each arriving
+  with the node-enter motion.
+
+Also found: the orchestrated (legacy) e2e had been red since prompts over
+24 KB moved to stdin — its stub read a flag's value as the prompt. The stub
+reads stdin now.
+
+Tests: test:hooked-run (the question parse, the framing), test:e2e-hooked-run
+(a whole conversation: the question card, the answer to the same session, an
+edit from the answered turn, finish, review).
+
+### Fixes from a review of the Agent Manager and direction
+
+- **The Agent Manager shows an edit block again.** The panel looked for "breaks
+  a stated rule"; since 2026-10-01 the post-edit hook says "introduced a break
+  of a stated rule", so a blocked edit never reached the timeline (the e2e had
+  been red). Both wordings match now.
+- **A run cannot quietly loosen a stated rule.** What the project states under
+  `.vibegraph/` (rules, plan, architecture, skills, Brief, specs, thread skills,
+  topology sources) is now part of the run's snapshot: a change to it is listed
+  in the evidence ("what the project states — a person's decision"), the rule
+  checks are made against the rules as they stood when the run began, rules
+  the run added, removed or changed are named, and Reject puts it all back.
+  Nothing blocks the write (a `.vibegraph/` write guard was declined earlier);
+  it can no longer pass unseen.
+- **After `/compact` or `/clear`, everything is sent again.** The hooks forgot
+  what the contracts and rules had sent, but kept the records for direction,
+  architecture and the Brief, so those never came back.
+- **A thread held back for room no longer loses the direction record** for
+  the rest of that prompt.
+- **The app re-reads `.vibegraph/skills.json` when it changes**, so
+  `direction enable` from the CLI shows without a restart.
+
+Tests: test:hooked-run, test:direction, test:e2e-hooked-run.
+
+### The Brief sees the check a write sits behind
+
+A field Brief never said its decisions are verified. A drill reproduced it
+(`test/fixtures/brief/exchange_demo`, `reviews/brief-intent/BASELINE.md`):
+with the intent only in the plan and the code, 0 of 3 drafts said it — and one
+said why: no fact showed the verification step. The guard was in the code
+(`if (!verify(decision)) continue;` before the write); the facts listed write
+sites, never the check in front of them.
+
+- **The parsers record an `if` that always leaves its block** — field-additive
+  `exits` on `if_stmt` (TS/JS `return | continue | break | throw`, Python
+  `return | continue | break | raise`). `continue`, `break` and `throw` emit no
+  node, so this was the only way to see the guard. IR snapshots regenerated
+  (the new field only).
+- **What a write runs behind** (`src/server/write_guards.ts`): from the IR, the
+  if-arm around a statement and every earlier exiting `if` in its block, kept
+  when the test calls something (a check, not a null test); `!check(x)` /
+  `not check(x)` read as the check failing. An exit inside a flattened callback
+  guards only the rest of that callback.
+- **The Brief facts list each guarded zone write as [enforce]**: "partner
+  exchange writes partner_status only when verify(decision) holds — in
+  publishVerified". The map's zone references now carry the write call's IR
+  node.
+- **Measured:** errors per draft (verification, publish only what verifies,
+  quarantine, restore, inverted, omitted as secondary) 3.7 → 0.7 on the drill's
+  fixture; verification and the restore stated 0/3 → 3/3. The scorer is
+  `scripts/dev/score_brief_intent.mjs`.
+
+Tests: test:write-guards (4); test:ir, test:jsts-ir, test:polyglot snapshots.
+
 ## 0.34.3 — 2026-10-14 — the plan's boxes hold while a change is pending; questions close on evidence
 
 From the same field review, re-run on 0.34.2:

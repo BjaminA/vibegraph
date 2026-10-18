@@ -1,0 +1,80 @@
+{
+  "version": "1",
+  "tool": "ledgerhub",
+  "vendor": "LedgerHub",
+  "role": "platform",
+  "definition": "A document store whose zones can be shared between organisations' nodes, synchronised in both directions.",
+  "definitionCite": "LedgerHub is a document store whose zones can be shared between organisations' nodes",
+  "identity": {
+    "packages": [],
+    "calls": [
+      "shareZone",
+      "writeDoc",
+      "readDoc",
+      "watchDoc"
+    ]
+  },
+  "operations": [
+    {
+      "name": "shareZone",
+      "does": "admin",
+      "on": "zone",
+      "note": "the zone is then synchronised to the other node, both ways",
+      "cite": "Use shareZone to share a zone with another node"
+    },
+    {
+      "name": "writeDoc",
+      "does": "write",
+      "on": "document",
+      "cite": "Use writeDoc to write a document into a zone"
+    },
+    {
+      "name": "readDoc",
+      "does": "read",
+      "on": "document",
+      "cite": "readDoc returns a document from a zone"
+    },
+    {
+      "name": "watchDoc",
+      "does": "subscribe",
+      "on": "zone",
+      "cite": "watchDoc calls you back for every document that changes in a zone"
+    }
+  ],
+  "states": [],
+  "permissions": [],
+  "rules": [
+    {
+      "id": "s1",
+      "text": "A shared zone is synchronised to every node it is shared with, in both directions",
+      "why": "a write on either node appears on the other",
+      "core": true,
+      "cite": "A shared zone is synchronised to every node it is shared with, in both directions",
+      "check": null
+    },
+    {
+      "id": "s2",
+      "text": "Synchronisation copies documents as they are, without checking who wrote them",
+      "why": "anything a partner writes into a shared zone arrives here",
+      "core": true,
+      "cite": "Synchronisation copies documents as they are; it does not check who wrote them",
+      "check": null
+    }
+  ],
+  "sources": [
+    {
+      "ref": "test/fixtures/brief/exchange_demo/docs/ledgerhub.md",
+      "sha256": "f19844478516e2ed515ddb5288bb2256f4d9596ab82c99f47f53b5f9879c86d0",
+      "fetched": "2026-10-14T15:03:19.698Z",
+      "saved": "sources/ledgerhub-f19844478516.txt"
+    }
+  ],
+  "status": "ratified",
+  "draftedBy": "saved reply test/fixtures/brief/exchange_demo/docs/ledgerhub-reply.json",
+  "draftedAt": "2026-10-14T15:03:19.699Z",
+  "gate": {
+    "dropped": [],
+    "inferred": []
+  },
+  "ratifiedAt": "2026-10-14T15:03:35.469Z"
+}

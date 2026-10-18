@@ -1,0 +1,52 @@
+{
+  "version": "1",
+  "revision": 4,
+  "objective": "Partners see only our signed decisions; nothing a partner forges reaches the decider",
+  "processes": [
+    { "id": "decider", "kind": "backend", "label": "order decider", "serves": "decides each order's status and signs it", "at": "decider/", "entryPoints": ["decider/bin/decider.ts"], "runsAs": "decider", "status": "agreed" },
+    { "id": "exchange", "kind": "backend", "label": "partner exchange", "serves": "publishes only verified decisions to the partner; quarantines what the partner forges and restores our copy", "at": "exchange/bin/exchange.ts", "entryPoints": ["exchange/bin/exchange.ts"], "runsAs": "exchange", "status": "agreed" },
+    { "id": "connector", "kind": "backend", "label": "partner connector", "serves": "shares the exchange zones with a partner's node", "entryPoints": ["exchange/bin/connect-partner.ts"], "runsAs": "admin", "status": "agreed" },
+    { "id": "gateway", "kind": "backend", "label": "clerk gateway", "serves": "clerks file requests and evidence and read status", "at": "gateway/", "runsAs": "clerk", "status": "agreed" },
+    { "id": "reports", "kind": "backend", "label": "nightly reports", "serves": "counts decisions by phase for managers", "entryPoints": ["reports/bin/nightly.ts"], "runsAs": "decider", "status": "agreed" },
+    { "id": "partner", "kind": "external_http", "label": "partner organisation", "serves": "reads our decisions and files evidence", "status": "agreed" }
+  ],
+  "stores": [
+    { "id": "ledger", "kind": "document-store", "label": "shared ledger", "serves": "orders, decisions and what is exchanged with the partner", "reachedThrough": ["lib/"], "access": { "write": ["writeDoc"], "read": ["readDoc"], "watch": ["watchDoc"] },
+      "zones": [
+        { "id": "status", "label": "signed decisions", "holds": ["status"], "writers": ["decider"] },
+        { "id": "partner_status", "label": "decisions shared with the partner", "holds": ["partner_status"], "writers": ["exchange"] },
+        { "id": "quarantine", "label": "what the partner forged", "holds": ["quarantine"], "writers": ["exchange"] },
+        { "id": "partner_evidence", "label": "evidence the partner files", "holds": ["partner_evidence"], "writers": ["exchange"] },
+        { "id": "evidence", "label": "evidence the decider reads", "holds": ["evidence"], "writers": ["exchange", "clerk"] },
+        { "id": "requests", "label": "order requests", "holds": ["requests"], "writers": ["clerk"] },
+        { "id": "history", "label": "request history", "holds": ["history"], "writers": ["clerk"] },
+        { "id": "reports", "label": "decision counts", "holds": ["reports"], "writers": ["decider"] },
+        { "id": "metrics", "label": "run metrics", "holds": ["metrics"], "writers": ["decider"] }
+      ], "status": "agreed" }
+  ],
+  "principals": [
+    { "id": "decider", "kind": "service", "label": "the decider's signing identity", "status": "agreed" },
+    { "id": "exchange", "kind": "service", "label": "the exchange's identity", "status": "agreed" },
+    { "id": "admin", "kind": "human-role", "label": "the operation admin", "status": "agreed" },
+    { "id": "clerk", "kind": "human-role", "label": "clerks", "status": "agreed" }
+  ],
+  "stack": [],
+  "boundaries": [],
+  "threads": [],
+  "flows": [
+    { "id": "publish", "serves": "partners see only our signed decisions", "steps": [
+      { "process": "decider", "op": "write", "zone": "ledger/status", "family": "status" },
+      { "process": "exchange", "op": "read", "zone": "ledger/status" },
+      { "process": "exchange", "op": "write", "zone": "ledger/partner_status", "family": "partner_status" }
+    ], "status": "agreed" },
+    { "id": "guard", "serves": "nothing a partner forges reaches the decider", "steps": [
+      { "process": "exchange", "op": "watch", "zone": "ledger/partner_status" },
+      { "process": "exchange", "op": "write", "zone": "ledger/quarantine", "family": "quarantine" }
+    ], "status": "agreed" }
+  ],
+  "policies": [],
+  "open": [],
+  "changelog": [
+    { "rev": 1, "at": "2026-10-12T09:00:00.000Z", "by": "human", "change": "objective set" }
+  ]
+}

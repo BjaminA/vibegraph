@@ -538,6 +538,10 @@ export interface ConstraintRecord {
   source: ConstraintSource;
   createdAt: string;
   note?: string;
+  // 2026-10-17 — where the rule was READ FROM, when it was harvested from the
+  // project's own prose (CLAUDE.md, a README, a module header): the verbatim
+  // sentence and its file:line. Verified against the file when stored.
+  cite?: { file: string; line: number; quote: string };
   // M-STACK.2 — kind "stack-policy": the structured decision the
   // deterministic pre-checks read. `text` stays the human sentence.
   policy?: StackPolicy;

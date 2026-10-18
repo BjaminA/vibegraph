@@ -779,7 +779,8 @@
       {
         "name": "DEPLOY_HOOK",
         "line": 56,
-        "form": "inherited"
+        "form": "inherited",
+        "fallback": "value"
       },
       {
         "name": "POST_DEPLOY",

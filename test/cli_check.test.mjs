@@ -144,11 +144,31 @@ test("a files-scoped verb reads the files the rule is STATED for (TypeScript han
   assert.equal(r.exitCode, 1);
 });
 
-test("a project with no stated constraints says so and exits 0", () => {
+// 2026-10-17 — a field run: `check` could not fail and its exit 0 read as a pass
+test("a project with no stated rules says NOTHING WAS CHECKED and exits 3, not 0", () => {
   const r = runConstraintChecks({ root: join(ROOT, "test", "fixtures", "polyglot", "shop_demo"), commit: "test" });
   assert.equal(r.constraints, 0);
-  assert.equal(r.exitCode, 0);
-  assert.ok(formatCheckReport(r).includes("nothing to check"));
+  assert.equal(r.exitCode, 3);
+  assert.match(formatCheckReport(r), /NOTHING WAS CHECKED — this is not a pass/);
+});
+
+const filed = (id, tool, role) => ({ id, kind: "stack-policy", text: `${tool} is classified as ${role}`, scope: { stack: [tool] }, source: "agent", createdAt: "", policy: { tool, rule: "describe", role } });
+
+test("tool classifications are not rules: neither checked nor 'prose only', and alone they check nothing", () => {
+  const mixed = copyFleet("classified");
+  patchConstraints(mixed, (d) => d.constraints.push(filed("c90", "zip", "utility")));
+  const r = runConstraintChecks({ root: mixed, commit: "test" });
+  assert.ok(!r.unchecked.includes("c90"), "a classification is not a rule with no checkable half");
+  assert.ok(!r.results.some((x) => x.id === "c90"));
+  assert.equal(r.classifications, 1);
+  assert.equal(r.exitCode, clean.exitCode, "the rules' verdict is unchanged");
+
+  const only = copyFleet("only-classified");
+  patchConstraints(only, (d) => { d.constraints = [filed("c1", "zip", "utility"), filed("c2", "bc", "utility")]; });
+  const o = runConstraintChecks({ root: only, commit: "test" });
+  assert.equal(o.constraints, 0);
+  assert.equal(o.exitCode, 3);
+  assert.match(formatCheckReport(o), /no stated rules .*\(2 tool classifications, which are not rules\)/);
 });
 
 after(() => rmSync(tmp, { recursive: true, force: true }));

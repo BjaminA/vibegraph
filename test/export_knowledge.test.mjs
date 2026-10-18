@@ -175,7 +175,7 @@ test("a project stating no constraints says so, on every surface", () => {
   const dir = mkdtempSync(join(tmpdir(), "vg-none-"));
   const r2 = exportKnowledge({ root: "test/fixtures/polyglot/shop_demo", out: dir, commit: "test" });
   assert.equal(r2.constraints, 0);
-  assert.ok(readFileSync(join(dir, "constraints.md"), "utf-8").includes("No stated constraints"));
+  assert.ok(readFileSync(join(dir, "constraints.md"), "utf-8").includes("No stated rules"));
   const threadFiles = readdirSync(join(dir, "threads")).filter((f) => f !== "INDEX.md");
   assert.ok(threadFiles.length > 0);
   for (const f of threadFiles) assert.ok(readFileSync(join(dir, "threads", f), "utf-8").includes("None of the stated constraints route to this thread"), f);

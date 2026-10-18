@@ -38,6 +38,10 @@ export interface SidePanelProps {
   onSelectFile: (filePath: string) => void;
   /** 2026-09-28 — per-file reachability / parse / freshness markers. */
   fileStatus?: Record<string, FileStatus>;
+  /** 2026-10-16 — pinned under the list: the project's "now" (NowStrip) —
+   *  here rather than over the canvas, where every view keeps its own
+   *  bottom-edge controls */
+  footer?: React.ReactNode;
 }
 
 export function SidePanel(props: SidePanelProps) {
@@ -108,6 +112,7 @@ export function SidePanel(props: SidePanelProps) {
           />
         )}
       </div>
+      {props.footer}
     </div>
   );
 }

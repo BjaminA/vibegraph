@@ -70,6 +70,8 @@ export function personOnlyStep(command, rest) {
     case "trace": return ["enable", "disable", "forbid"].includes(sub) ? `trace ${sub}` : null;
     case "constraints": case "constraint": return ["ratify", "remove", "accept", "reject"].includes(sub) ? `constraints ${sub}` : null;
     case "skills": return ["ratify", "reaffirm", "auto-reaffirm"].includes(sub) ? `skills ${sub}` : null;
+    // 2026-10-16 — the project's own direction: the census proposes, a person agrees or drops
+    case "direction": return sub === "project" && ["agree", "drop"].includes(rest[1]) ? `direction project ${rest[1]}` : null;
     case "architecture": return has("--ratify") || has("--reject") ? `architecture ${has("--ratify") ? "--ratify" : "--reject"}` : null;
     // Taking the hooks or skills out is how a session would stop being checked.
     case "hook": return sub === "install" && has("--remove") ? "hook install --remove" : null;

@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# The operator CLI. Installed as a root-owned COPY under /usr/local/bin;
+# never symlink it into the checkout, which the deploy user can write.
+set -euo pipefail
+
+main() {
+  local task="$1"
+  python3 -m jobs.worker "$task"
+}
+
+main "$@"

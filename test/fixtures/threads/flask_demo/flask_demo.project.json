@@ -185,7 +185,8 @@
           "col": 4,
           "endCol": 51,
           "condition": "user is None",
-          "hasElse": false
+          "hasElse": false,
+          "exits": "return"
         },
         {
           "id": "module/get_user_route.fn/if@0/return@0",
@@ -1539,7 +1540,8 @@
           "col": 4,
           "endCol": 19,
           "condition": "not rows",
-          "hasElse": false
+          "hasElse": false,
+          "exits": "return"
         },
         {
           "id": "module/find_user.fn/if@0/return@0",

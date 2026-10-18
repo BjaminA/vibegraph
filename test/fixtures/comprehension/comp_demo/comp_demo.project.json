@@ -1290,7 +1290,8 @@
           "col": 4,
           "endCol": 21,
           "condition": "any(requests.head(u).ok for u in urls)",
-          "hasElse": false
+          "hasElse": false,
+          "exits": "return"
         },
         {
           "id": "module/guard_then_fetch.fn/comp@0",

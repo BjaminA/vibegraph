@@ -51,6 +51,8 @@ import { orientation, inboxNote } from "./orientation.mjs";
 import { planAffectedNote, planForPrompt, plannedThreadsForPrompt } from "./plan_context.mjs";
 import { softwareForPrompt } from "./software_context.mjs";
 import { directionForPrompt, directionForFindings } from "./direction.mjs";
+import { fitText } from "./hook_text.mjs";
+import { projectDirectionAfterEdit, projectDirectionBaseline } from "./project_direction_context.mjs";
 import { untrustedBaseline, newUntrustedNote } from "../dataflow_cache.mjs";
 import { languageForFile } from "../../src/server/languages.ts";
 
@@ -75,23 +77,13 @@ function writeSession(path, state) {
   mkdirSync(join(path, ".."), { recursive: true });
   writeFileSync(path, JSON.stringify(state));
 }
-/** What the session's context holds. A compaction or /clear empties it. */
-function resetDelivery(state) {
-  for (const k of ["contracts", "partialContracts", "rules", "injectedSkills", "globalRulesSent", "parseNote", "oriented", "planRev", "software", "plannedThreadsSent"]) delete state[k];
-}
+/** What the session's context holds. A compaction or /clear empties it: every "already
+ *  sent" record goes (baseline / block counts are bookkeeping and stay). */
+export const DELIVERY_KEYS = ["contracts", "partialContracts", "rules", "injectedSkills", "globalRulesSent", "parseNote", "oriented", "planRev", "software", "plannedThreadsSent", "arch", "direction", "gapsSent", "briefSent", "briefTouched", "planGoneSent"];
+const resetDelivery = (state) => { for (const k of DELIVERY_KEYS) delete state[k]; };
 
-// ── the inline cap ─────────────────────────────────────────────────────
-
-/** Cut at a line boundary under `room`, and say what was cut and where the
- *  whole of it is. Never a silent truncation. */
-export function fitText(text, room, whereFull) {
-  if (text.length <= room) return text;
-  const note = `\n… (${"{n}"} more characters not shown — the inline limit; ${whereFull})`;
-  let cut = text.lastIndexOf("\n", Math.max(0, room - note.length - 12));
-  if (cut < room / 3) cut = Math.max(0, room - note.length - 12);
-  return text.slice(0, cut) + note.replace("{n}", String(text.length - cut));
-}
-
+// ── the inline cap (fitText: hook_text.mjs) ───────────────────────────
+export { fitText };
 const capped = (text) => fitText(text, INLINE_CAP, "`vibegraph-knowledge check --uncommitted` or the export has it all");
 
 // ── findings: every non-pass verdict, one per offender ─────────────────
@@ -189,7 +181,7 @@ function onSessionStart(input, { absRoot, loaded, state, constraints }) {
     return null; // resumed with its context intact
   }
   if (!state.baseline) state.baseline = findingsOf(check(absRoot, loaded)).map((f) => f.key);
-  untrustedBaseline(loaded.envelope, absRoot, state);
+  untrustedBaseline(loaded.envelope, absRoot, state); projectDirectionBaseline(absRoot, loaded, state);
   out.unshift(orientation(absRoot, loaded, constraints));
   const pn = parseNote(loaded);
   if (pn) { out.push(pn); state.parseNote = pn; }
@@ -203,7 +195,7 @@ function onPrompt(input, { absRoot, loaded, state, constraints }) {
   const env = loaded.envelope;
   const out = [];
   let room = INLINE_CAP - HEADER.length - 400;
-  if (!state.baseline) { state.baseline = findingsOf(check(absRoot, loaded)).map((f) => f.key); untrustedBaseline(env, absRoot, state); }
+  if (!state.baseline) { state.baseline = findingsOf(check(absRoot, loaded)).map((f) => f.key); untrustedBaseline(env, absRoot, state); projectDirectionBaseline(absRoot, loaded, state); }
   const pn = parseNote(loaded);
   if (pn && state.parseNote !== pn) { out.push(pn); state.parseNote = pn; room -= pn.length; }
   const planBlock = planForPrompt(absRoot, state);
@@ -416,8 +408,7 @@ function afterEdit(rel, input, { absRoot, loaded, state, constraints }) {
   if (partial.length) notes.push(`${partial.join(", ")} was read only partly (${loaded.partialParses[partial[0]]}); rules are checked on the rest of it.`);
   const { introduced, earlier, note } = newFindings(absRoot, loaded, state, textById, input.session_id);
   if (note) notes.push(note);
-  const why = directionForFindings(absRoot, introduced, state);
-  if (why) notes.push(why);
+  for (const n of [directionForFindings(absRoot, introduced, state), projectDirectionAfterEdit(absRoot, loaded, state)]) if (n) notes.push(n);
   const untrusted = newUntrustedNote(loaded.envelope, absRoot, state);
   for (const n of [untrusted, planAffectedNote(absRoot, loaded.envelope, files, state), editBriefNote(absRoot, loaded.envelope, files, state)]) if (n) notes.push(n);
   const gating = introduced.filter((f) => f.gates);

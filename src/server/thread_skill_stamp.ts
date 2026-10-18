@@ -16,7 +16,7 @@
 // what every skill was stamped with before M-WHY, so a project that states
 // no rules never sees a skill go stale for a feature it does not use.
 import { sourceHashOf } from "./readme_store.ts";
-import type { Constraint } from "./constraint_store.ts";
+import { statedRules, type Constraint } from "./constraint_store.ts";
 import { describeCheck, isConstraintCheck } from "./constraint_grammar.ts";
 import { describeRun1Check, isRun1Check } from "./quality/verbs/index.ts";
 
@@ -28,7 +28,10 @@ import { describeRun1Check, isRun1Check } from "./quality/verbs/index.ts";
  *  path correctly, including one no check anticipated. Empty when nothing
  *  routes. The text is byte-for-byte what server.ts stamped before this
  *  module existed: changing it would stale every ratified skill. */
-export function skillRulesBlock(routed: readonly Constraint[]): string {
+export function skillRulesBlock(all: readonly Constraint[]): string {
+  // 2026-10-17 — a tool classification is not a rule (isClassification): a
+  // skill on a thread one was routed to reads stale ONCE, and re-affirms
+  const routed = statedRules(all);
   if (!routed.length) return "";
   return [
     "",

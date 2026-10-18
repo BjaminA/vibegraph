@@ -74,6 +74,7 @@ usage:
       --json               the raw results instead of the report
       exit 0 every clause passed · 1 a clause is VIOLATED (offenders named as file:node)
            · 2 nothing violated but a clause is UNVERIFIABLE, which is not a pass
+           · 3 NOTHING was checked (no stated rule has a checkable half) — not a pass either
   ${PACKAGE_NAME} ${AFFECTED_USAGE}
   ${PACKAGE_NAME} ${COVERAGE_USAGE}
   ${PACKAGE_NAME} ${LESSONS_USAGE}
@@ -110,7 +111,7 @@ usage:
                            knowledge file and command to open for that task; ~100 tokens each until used);
                            with --user into ~/.claude/skills/ instead (every project on this machine, and
                            nothing else is written)
-      --skills <list>      only these task skills, e.g. --skills plan,security (/vibegraph always comes along)
+      --skills <list>      only these task skills, e.g. --skills plan,security,rules (/vibegraph always comes along)
       --remove-skill       take every one of these skills out again (--user for the machine-wide ones)
   ${PACKAGE_NAME} classify [<root>] [options]   SPENDS TOKENS: ask a model what the tools
                                                no table knows are, from how the code uses them; show the answers
@@ -331,7 +332,7 @@ function cmdInit(args) {
   const loc = locate();
   // The Claude Code skills: into ~/.claude/skills with --user (and nothing
   // else — a user-level install touches no project), else the project's.
-  // --skill installs the setup skill and all four task skills; --skills
+  // --skill installs the setup skill and all five task skills; --skills
   // plan,debug chooses; --remove-skill takes every one of ours out.
   if (parsed.values.skill || parsed.values.skills || parsed.values["remove-skill"]) {
     let results;
@@ -450,7 +451,7 @@ function report(r) {
 function cmdConstraints(argsIn) {
   // `list --json` is a flag; `add --json '<object>'` takes a value. Read the
   // flag off before parsing, so one option name means one thing to parseArgs.
-  const listJson = (argsIn[0] === "list" || argsIn[0] === "show") && argsIn.includes("--json");
+  const listJson = (argsIn[0] === "list" || argsIn[0] === "show" || argsIn[0] === "harvest") && argsIn.includes("--json");
   const args = listJson ? argsIn.filter((a) => a !== "--json") : argsIn;
   let parsed;
   try {
@@ -461,12 +462,14 @@ function cmdConstraints(argsIn) {
         json: { type: "string" }, all: { type: "boolean" }, threads: { type: "string" }, files: { type: "string" }, tools: { type: "string" },
         checks: { type: "string" }, why: { type: "string" }, as: { type: "string" },
         force: { type: "boolean" }, "dry-run": { type: "boolean" },
+        // harvest (2026-10-17): the threshold and the whole list; add --cite: the source line a rule was read from
+        min: { type: "string" }, cite: { type: "string" }, quote: { type: "string" },
       },
     });
   } catch (e) { return fail(`${e.message}\n\n${USAGE}`); }
   const { sub, args: rest, root } = subAndRoot(parsed.positionals);
   const values = { ...parsed.values, ...(listJson ? { json: true } : {}), pid: rest[1] };
-  const pipeline = sub === "add" && (values.check || values.json) ? (() => { try { return pipelineFor(locate(), resolve(cliPath(root ?? "."))); } catch { return {}; } })() : undefined;
+  const pipeline = (sub === "add" && (values.check || values.json)) || sub === "harvest" ? (() => { try { return pipelineFor(locate(), resolve(cliPath(root ?? "."))); } catch { return {}; } })() : undefined;
   return report(runConstraints({ root, sub, id: rest[0], values, pipeline }));
 }
 

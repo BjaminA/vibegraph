@@ -12,7 +12,7 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { loadConstraints, removeConstraintAndDemote, type Constraint } from "./constraint_store.ts";
+import { isClassification, loadConstraints, removeConstraintAndDemote, statedRules, type Constraint } from "./constraint_store.ts";
 import { decideConstraintProposal, ratifyConstraint } from "./constraint_edit.ts";
 import { checkStatedRules, ruleVerdict, type RuleCheckRow, type RuleVerdict } from "./constraint_report.ts";
 
@@ -29,6 +29,8 @@ export interface RuleRow {
 
 export interface RulesReply {
   rules: RuleRow[];
+  /** 2026-10-17 — tool classifications (isClassification): shown apart, never counted as rules */
+  classifications: RuleRow[];
   pending: number;
   summary: { checked: number; violated: number; unverifiable: number; pass: number };
   person: string;
@@ -53,11 +55,13 @@ export function rulesState(root: string, env: { files: Record<string, unknown>; 
   if (memo && memo.stack === stack && memo.threads === env.threads && memo.text === text) return { ...memo.value, person };
   const list = text ? loadConstraints(root) : [];
   const report = checkStatedRules({ envelope: env, root, constraints: list, stack });
-  const rules = list.map((c): RuleRow => {
+  const rows = list.map((c): RuleRow => {
     const checks = report.results.filter((r) => r.id === c.id);
     return { constraint: c, verdict: ruleVerdict(checks), checks, threads: report.routed[c.id] ?? [], awaiting: c.source !== "human" || !!c.proposals?.length };
   });
-  const value = { rules, pending: pendingReviews(list), summary: report.summary };
+  const rules = rows.filter((r) => !isClassification(r.constraint));
+  const classifications = rows.filter((r) => isClassification(r.constraint));
+  const value = { rules, classifications, pending: pendingReviews(statedRules(list)), summary: report.summary };
   memo = { stack, threads: env.threads, text, value };
   return { ...value, person };
 }
