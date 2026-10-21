@@ -1,6 +1,7 @@
 // `setup` (2026-10-20) — the project's setup, one step at a time, in one fixed
 // order (src/server/setup_state.ts): software specs → architecture groups →
-// the Brief → rules → the objective and principles → (direction) → hooks.
+// the Brief → rules → (direction) → hooks; then, not counted, a plan for what
+// is built next (2026-10-21).
 // Zero tokens and read-only: it says where the project stands and the exact
 // commands for the next step — who may run each (you / Claude / either) and
 // which spend tokens. The /vibegraph-setup skill walks a Claude Code session
@@ -24,8 +25,8 @@ import { loadDirection } from "../../src/server/project_direction.ts";
 import { censusNow } from "./project_direction_context.mjs";
 
 export const SETUP_USAGE = `setup [<root>] [--json]                 the project's setup, in order: software specs, architecture groups, the Brief,
-                                  rules, the objective and principles, the hooks — where it stands and the exact next
-                                  commands (who may run each, which spend tokens); zero tokens
+                                  rules, the hooks, then a plan for what you build next — where it stands and the
+                                  exact next commands (who may run each, which spend tokens); zero tokens
   setup skip software <name> --why "…" | skip direction --why "…" | unskip software <name> | unskip direction`;
 
 const LABEL = { done: "done", waiting: "waiting for you", todo: "to do", optional: "optional", skipped: "set aside" };
@@ -39,17 +40,19 @@ export const asRun = (run, cli) => (cli && cli !== "vibegraph-knowledge" ? run.r
 /** The checklist as text; `cli` = how this CLI was invoked; `stale` = the
  *  installed skills an older version wrote. */
 export function setupText(state, root, cli = null, stale = []) {
-  const lines = [`VibeGraph setup for ${root}: ${state.done} of ${state.of} steps done.${state.next ? ` Next: ${state.next.title}.` : " Every step is done."}`, ""];
+  const head = state.next ? ` Next: ${state.next.title}.` : ` Every step is done.${state.after ? ` After the setup: ${state.after.title}.` : ""}`;
+  const lines = [`VibeGraph setup for ${root}: ${state.done} of ${state.of} steps done.${head}`, ""];
   if (stale.length) {
     const user = stale.some((s) => s.user), here = stale.some((s) => !s.user);
     lines.push(`note: ${stale.map((s) => s.name).join(", ")} ${stale.length === 1 ? "was" : "were"} installed by an older VibeGraph and say${stale.length === 1 ? "s" : ""} things this one does not — refresh before following ${stale.length === 1 ? "it" : "them"}: ${[here ? asRun("vibegraph-knowledge init --skill", cli) : "", user ? asRun("vibegraph-knowledge init --skill --user", cli) : ""].filter(Boolean).join(" ; ")}`, "");
   }
   state.steps.forEach((s, i) => {
-    const mark = state.next && s.id === state.next.id ? "next" : LABEL[s.status];
-    lines.push(`[${mark}] ${i + 1}. ${s.title}${s.status !== "done" && mark === "next" ? ` (${LABEL[s.status]})` : ""}`);
+    if (s.after && !state.steps[i - 1]?.after) lines.push("After the setup, not counted in it:");
+    const mark = state.next && s.id === state.next.id ? "next" : state.after?.id === s.id ? "then" : LABEL[s.status];
+    lines.push(`[${mark}] ${i + 1}. ${s.title}${s.status !== "done" && (mark === "next" || mark === "then") ? ` (${LABEL[s.status]})` : ""}`);
     for (const f of s.facts) lines.push(`      ${f}`);
-    // the commands for the step that is next in full; others only when they wait for a person
-    if (s.status !== "done" && (state.next?.id === s.id || s.status === "waiting")) {
+    // the commands for the step that is next (or offered after) in full; others only when they wait for a person
+    if (s.status !== "done" && (state.next?.id === s.id || state.after?.id === s.id || s.status === "waiting")) {
       for (const c of s.commands) lines.push(`      ${WHO[c.who].padEnd(11)} ${asRun(c.run, cli)}${c.spends ? "   (spends tokens)" : ""}\n                  ${c.why}`);
     }
     if (s.status === "done" && s.commands.length && s.id === "hooks") for (const c of s.commands) lines.push(`      ${WHO[c.who].padEnd(11)} ${asRun(c.run, cli)}`);

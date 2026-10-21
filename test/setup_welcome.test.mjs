@@ -60,8 +60,9 @@ test("the now-state carries the offer, every step in its order, and the next one
   const s = nowState(root).setup;
   assert.equal(s.welcome, true);
   // with no stack facts yet the software step is left out, never guessed (setup_state.ts)
-  assert.deepEqual(s.steps.map((x) => x.id), ["groups", "brief", "rules", "objective", "direction", "hooks"]);
-  assert.deepEqual(nowState(root, { stack: { tools: [] } }).setup.steps.map((x) => x.id), ["software", "groups", "brief", "rules", "objective", "direction", "hooks"]);
+  assert.deepEqual(s.steps.map((x) => x.id), ["groups", "brief", "rules", "direction", "hooks", "plan"]);
+  assert.deepEqual(nowState(root, { stack: { tools: [] } }).setup.steps.map((x) => x.id), ["software", "groups", "brief", "rules", "direction", "hooks", "plan"]);
+  assert.deepEqual(s.steps.filter((x) => x.after).map((x) => x.id), ["plan"], "the plan follows the setup");
   const brief = s.steps.find((x) => x.id === "brief");
   assert.equal(brief.spends, true, "the Brief asks a model");
   const groups = s.steps.find((x) => x.id === "groups");

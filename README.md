@@ -72,9 +72,10 @@ vibegraph-knowledge constraints add --kind invariant --files telemetry/ \
 project stands and gives the exact commands for the next step. The order is:
 specs for the bespoke software the code builds on (found from the packages it
 actually calls, each with the docs link it found), the architecture groups and
-the Brief, the rules, the objective and the project's principles, then the
-hooks. Each command says who may run it (you, Claude, or either) and whether it
-spends tokens. `/vibegraph-setup` walks a Claude Code session through it:
+the Brief, the rules, then the hooks. A plan for what you build next is offered
+after the setup and is not counted in it. Each command says who may run it
+(you, Claude, or either) and whether it spends tokens. `/vibegraph-setup`
+walks a Claude Code session through it:
 Claude runs the proposing steps after one yes from you, and stops at every
 decision that is yours.
 
@@ -378,7 +379,7 @@ CLI) and says so; everything else is deterministic.
 | `hook run <event> --file <path>` / `--command "<sh>"` / `--prompt "<text>"` | Fires a hook by hand: builds the payload Claude Code would send; the hook's exit codes (0, or 2 blocked) | nothing (a session record under `~/.cache`) | — |
 | `doctor` | Are the hooks installed, runnable from this side, and have they fired since installed? exit 0 / 1 | nothing | — |
 | `init --skill [--user]` / `--skills plan,…` / `--remove-skill` | Installs (removes) `/vibegraph` and the six task skills | `.claude/skills/`, or `~/.claude/skills/` with `--user` | — |
-| `setup [--json]` / `setup skip software <name> --why "…"` / `skip direction` | The setup in order (software specs, architecture groups, the Brief, rules, the objective and principles, hooks): where the project stands and the exact next commands, who may run each and which spend tokens | `.vibegraph/setup.json` (only `skip`) | — |
+| `setup [--json]` / `setup skip software <name> --why "…"` / `skip direction` | The setup in order (software specs, architecture groups, the Brief, rules, hooks; then, not counted, a plan for what you build next): where the project stands and the exact next commands, who may run each and which spend tokens | `.vibegraph/setup.json` (only `skip`) | — |
 | `view [<path>] [--port n] [--open]` | Starts the visualisation until Ctrl-C | `.vibegraph/` state, as you use the app | only the app's Claude features |
 
 **Know the code**

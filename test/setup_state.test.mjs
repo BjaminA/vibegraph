@@ -1,7 +1,7 @@
 // THE SETUP (2026-10-20, src/server/setup_state.ts + scripts/cli/setup.mjs):
 // one fixed order — software specs, architecture groups, the Brief, rules,
-// the objective and principles, (direction), hooks — read from the project's
-// files at zero tokens. Walked here on test/fixtures/setup/setup_demo: a
+// (direction), hooks, and after the setup, not counted, a plan for what is built
+// next (2026-10-21) — read from the project's files at zero tokens. Walked here on test/fixtures/setup/setup_demo: a
 // script posting through an in-house SDK no table knows, a Firestore mirror
 // (a platform SDK), a shell script running an in-house command, and a README
 // that names the SDK beside its docs page.
@@ -47,9 +47,10 @@ const restack = () => { stack = buildStackIndex(loadEnvelope(root, null, {}, { c
 
 test("the order, and the first step: a platform SDK is a candidate; a package no table knows is classified FIRST", () => {
   const s = state();
-  assert.deepEqual(s.steps.map((x) => x.id), ["software", "groups", "brief", "rules", "objective", "direction", "hooks"]);
+  assert.deepEqual(s.steps.map((x) => x.id), ["software", "groups", "brief", "rules", "direction", "hooks", "plan"]);
   assert.equal(s.next.id, "software");
-  assert.equal(s.of, 6, "direction is optional, not counted");
+  assert.equal(s.of, 5, "direction is optional and the plan comes after the setup: neither is counted");
+  assert.equal(s.after, null, "the plan is offered only once nothing in the setup is left");
   // a boundary tool a table knows (redis, a cache) is a candidate too, after the platform:
   // knowing its role is not knowing how this project must use it
   assert.deepEqual(s.software.candidates.map((x) => [x.name, x.kind, x.role]), [["firebase", "platform", "platform"], ["redis", "table", "cache"]]);
@@ -159,14 +160,20 @@ test("set aside, specified, then each later step in turn — every one read from
   s = state();
   assert.equal(step(s, "rules").status, "waiting", "the model's rule still waits");
 
+  // the plan: after the setup, optional until started; a proposal in it waits
+  // for a person, but the setup's own steps still come first
+  assert.equal(step(s, "plan").status, "optional");
   const plan = emptyPlan("A ledger recorder that posts entries through the ledger SDK and mirrors settled ones to Firestore");
+  const p1 = { id: "p1", text: "Only src/ledger.ts imports @acme/ledger-client", why: "one place to change" };
+  savePlan(root, { ...plan, policies: [{ ...p1, status: "proposed" }] });
+  s = state();
+  assert.equal(step(s, "plan").status, "waiting");
+  assert.equal(s.next.id, "rules", "a setup step left comes before the plan");
+  savePlan(root, { ...plan, policies: [{ ...p1, status: "agreed" }] });
+  s = state();
+  assert.equal(step(s, "plan").status, "done");
   savePlan(root, plan);
-  s = state();
-  assert.equal(step(s, "objective").status, "todo");
-  assert.equal(step(s, "objective").now.text, "Agree the project's principles");
-  savePlan(root, { ...plan, policies: [{ id: "p1", text: "Only src/ledger.ts imports @acme/ledger-client", why: "one place to change", status: "agreed" }] });
-  s = state();
-  assert.equal(step(s, "objective").status, "done");
+  assert.equal(step(state(), "plan").status, "done", "an objective is enough: principles are the plan's, not the setup's");
 
   // hooks: installed but not fired, then fired
   mkdirSync(join(root, ".claude"), { recursive: true });
@@ -176,13 +183,14 @@ test("set aside, specified, then each later step in turn — every one read from
   writeFileSync(join(cacheDirFor(root), "hooks-fired.json"), JSON.stringify({ prompt: { at: new Date(Date.now() + 1000).toISOString(), session: "x" } }));
   s = state();
   assert.equal(step(s, "hooks").status, "done");
-  assert.equal(s.done, 5, "every core step but the waiting rules");
+  assert.equal(s.done, 4, "every core step but the waiting rules");
   assert.equal(s.next.id, "rules");
 });
 
 test("the CLI prints the order with who may run what, and the app's Next line follows the same order", () => {
   const out = runSetup([root]).text;
-  assert.match(out, /^VibeGraph setup for .*: 5 of 6 steps done\. Next: Rules the code must keep\./);
+  assert.match(out, /^VibeGraph setup for .*: 4 of 5 steps done\. Next: Rules the code must keep\./);
+  assert.match(out, /\nAfter the setup, not counted in it:\n\[done\] 7\. A plan for what you build next\n/);
   assert.match(out, /\[next\] 4\. Rules the code must keep \(waiting for you\)/);
   assert.match(out, /you:\s+vibegraph-knowledge constraints ratify <id>/);
   assert.match(out, /"you:" is a person's step/);
@@ -190,7 +198,7 @@ test("the CLI prints the order with who may run what, and the app's Next line fo
   assert.equal(json.next.id, "rules");
   // the app: a decision waiting outranks the setup; here the model's rule is one
   const n = nowState(root, { stack });
-  assert.equal(n.setup.of, 6);
+  assert.equal(n.setup.of, 5);
   assert.equal(n.next.panel, n.waiting ? "inbox" : "rules");
 });
 
@@ -253,15 +261,41 @@ test("live run, session 6: a command's own help under either spelling; no plan m
   }
   const fresh = join(base, "no-plan");
   cpSync("test/fixtures/setup/setup_demo", fresh, { recursive: true });
-  const obj = step(setupState(fresh, { stack }), "objective");
-  assert.equal(obj.status, "waiting", "the next move is a person's");
+  const obj = step(setupState(fresh, { stack }), "plan");
+  assert.equal(obj.status, "optional", "after the setup, and the move that starts it is a person's");
   assert.deepEqual(obj.commands.map((c) => [c.run.split(" ").slice(1, 3).join(" "), c.who]), [["plan observe", "you"], ["plan init", "you"], ["plan draft", "claude"]]);
   const draft = cli(["plan", "draft", "--direction", "--root", fresh]);
   assert.equal(draft.status, 1);
   assert.match(draft.stdout + draft.stderr, /no plan yet, and starting one is a person's step: `vibegraph-knowledge plan observe` .* nothing was spent/);
   // once a plan exists with its objective left open, the person states it by an edit, never `plan init`
   savePlan(fresh, emptyPlan(OBSERVED_OBJECTIVE));
-  const runs = step(setupState(fresh, { stack }), "objective").commands.map((c) => c.run);
+  const started = step(setupState(fresh, { stack }), "plan");
+  assert.equal(started.status, "todo", "started with its objective left open");
+  const runs = started.commands.map((c) => c.run);
   assert.ok(runs.some((r) => r.includes(`plan edit '{"op":"set-objective"`)), runs.join(" | "));
   assert.ok(!runs.some((r) => r.includes("plan init")), "a plan exists: init would be refused");
+});
+
+test("2026-10-21: the plan is offered only once every setup step is done, then the app says to start a task", () => {
+  const proj = join(base, "all-done");
+  cpSync("test/fixtures/setup/setup_demo", proj, { recursive: true });
+  const none = { tools: [] }; // no packages to specify: the software step reads done
+  saveArchStore(proj, { ...loadArchStore(proj), ratified: { at: "2026-10-21T10:00:00.000Z", model: "test" } });
+  saveBrief(proj, { version: "1", ratified: { spec: { function: [], method: [], feature: [] }, at: "2026-10-21T10:00:00.000Z", by: "ben", model: "test" } });
+  addConstraint(proj, { kind: "invariant", text: "settled entries are mirrored once, never edited after", scope: { all: true } }, "human");
+  mkdirSync(join(proj, ".claude"), { recursive: true });
+  writeFileSync(join(proj, ".claude", "settings.local.json"), JSON.stringify({ hooks: { Stop: [{ hooks: [{ type: "command", command: `x ${HOOK_MARKER}` }] }] } }));
+  mkdirSync(cacheDirFor(proj), { recursive: true });
+  writeFileSync(join(cacheDirFor(proj), "hooks-fired.json"), JSON.stringify({ stop: { at: new Date(Date.now() + 1000).toISOString() } }));
+  let s = setupState(proj, { stack: none });
+  assert.deepEqual([s.done, s.of, s.next], [5, 5, null]);
+  assert.equal(s.after?.id, "plan");
+  const text = setupText(s, proj);
+  assert.match(text, /5 of 5 steps done\. Every step is done\. After the setup: A plan for what you build next\./);
+  assert.match(text, /\[then\] 7\. A plan for what you build next \(optional\)\n[\s\S]*you:\s+vibegraph-knowledge plan observe/);
+  assert.deepEqual(nowState(proj, { stack: none }).next, { text: "Plan what you build next", panel: "plan" });
+  savePlan(proj, emptyPlan("A ledger recorder that posts entries through the ledger SDK"));
+  s = setupState(proj, { stack: none });
+  assert.equal(s.after, null);
+  assert.deepEqual(nowState(proj, { stack: none }).next, { text: "Start a task with Claude Code", panel: "agents" });
 });

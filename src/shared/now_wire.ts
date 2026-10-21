@@ -31,6 +31,8 @@ export interface SetupStepSummary {
   title: string;
   status: "done" | "waiting" | "todo" | "optional" | "skipped";
   core: boolean;
+  /** comes after the setup and is not counted in it (the plan) */
+  after?: boolean;
   /** some command of the step asks a model */
   spends: boolean;
   /** some command of the step is a person's decision */

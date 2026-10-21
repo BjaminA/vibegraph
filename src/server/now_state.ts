@@ -6,9 +6,10 @@
 // fixed order (never a model), each pointing at the panel that acts on it.
 //
 // 2026-10-20 — the order after "decisions waiting" and "stale Brief lines" is
-// the SETUP's (setup_state.ts): software specs, groups, the Brief, rules, the
-// objective and principles, direction, hooks — one order for the app, the
-// `setup` command and the /vibegraph-setup skill.
+// the SETUP's (setup_state.ts): software specs, groups, the Brief, rules,
+// direction, hooks — one order for the app, the `setup` command and the
+// /vibegraph-setup skill. 2026-10-21: once nothing in the setup is left, the
+// plan for what is built next is offered, then "start a task".
 
 import { framingFacts } from "./hooked_framing.ts";
 import { buildInbox } from "./inbox.ts";
@@ -32,14 +33,15 @@ export function nowState(root: string, opts: { briefStale?: string[]; stack?: Pi
     waiting.length ? { text: `${waiting.length} decision${waiting.length === 1 ? " waits" : "s wait"} for you`, panel: "inbox" }
       : briefStale ? { text: `${briefStale} Brief line${briefStale === 1 ? " is" : "s are"} stale — re-brief them`, panel: null }
         : setup?.next ? setup.next.now
-          : { text: "Start a task with Claude Code", panel: "agents" };
+          : setup?.after ? setup.after.now
+            : { text: "Start a task with Claude Code", panel: "agents" };
   return {
     objective: f.objective, waiting: waiting.length, openQuestions: f.openQuestions.length, briefStale, rules: f.rules, direction,
     badges: { inbox: waiting.length, plan: byKind("plan") + byKind("objective"), direction: direction.proposed },
     next,
     ...(setup ? { setup: {
       done: setup.done, of: setup.of, ...(setup.next ? { next: setup.next.id } : {}),
-      steps: setup.steps.map((s) => ({ id: s.id, title: s.title, status: s.status, core: s.core, spends: s.commands.some((c) => !!c.spends), decides: s.commands.some((c) => c.who === "you"), now: s.now })),
+      steps: setup.steps.map((s) => ({ id: s.id, title: s.title, status: s.status, core: s.core, ...(s.after ? { after: true } : {}), spends: s.commands.some((c) => !!c.spends), decides: s.commands.some((c) => c.who === "you"), now: s.now })),
       welcome: (() => { try { return offerWelcome(root); } catch { return false; } })(),
     } } : {}),
   };

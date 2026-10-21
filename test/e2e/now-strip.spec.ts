@@ -31,7 +31,8 @@ test.describe("now strip", () => {
     // 2026-10-20 — the next step follows the setup's order (setup_state.ts):
     // the fixture's specs and rules are done, its groups are not
     await expect(page.locator("[data-now-next]")).toContainText("Propose the architecture groups (the Brief)");
-    await expect(page.locator("[data-now-setup]")).toContainText("Setup guide · 2 of 6 steps done");
+    // 2026-10-21: of 5, the plan follows the setup and is not counted in it
+    await expect(page.locator("[data-now-setup]")).toContainText("Setup guide · 2 of 5 steps done");
     // a chip opens its panel, docked beside the graph
     await page.click("[data-now-item='direction']");
     const sheet = page.locator("[data-panel-sheet='direction']");

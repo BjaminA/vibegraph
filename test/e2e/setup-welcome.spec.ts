@@ -46,7 +46,10 @@ test.describe("setup welcome", () => {
     await expect(guide).toContainText("Set up VibeGraph for this project");
     await expect(guide.locator("[data-setup-step]")).toHaveCount(7);
     expect(await guide.locator("[data-setup-step]").evaluateAll((els) => els.map((e) => e.getAttribute("data-setup-step"))))
-      .toEqual(["software", "groups", "brief", "rules", "objective", "direction", "hooks"]);
+      .toEqual(["software", "groups", "brief", "rules", "direction", "hooks", "plan"]);
+    // the plan follows the setup, under its own line, and waits for nothing
+    await expect(guide.locator("[data-setup-after]")).toBeVisible();
+    await expect(guide.locator("[data-setup-step='plan']")).toHaveAttribute("data-setup-status", "optional");
     await expect(guide.locator("[data-setup-step='brief'] [data-setup-spends]")).toContainText("asks Claude");
     // the same steps from Claude Code: the skill, then the command that walks them
     await guide.locator("[data-setup-claude-code-toggle]").click();

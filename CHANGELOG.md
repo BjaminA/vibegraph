@@ -3,6 +3,37 @@
 `vibegraph-knowledge` and the VibeGraph app. Newest first. Each entry says what
 changed and, where an existing user would notice, how behaviour differs.
 
+## 0.38.0 (2026-10-21): the plan comes after the setup
+
+### The plan comes after the setup
+
+The setup asked for "the objective and the project's principles" (a plan) as
+its fifth step, and drew it amber, "waiting for you", on a project with no
+plan, where nothing waited. On a codebase that exists the plan repeated what
+the other steps give: the ratified Brief already says what the system is for
+and reaches every session at its start, and the rules and the direction are
+its axioms, read from the code and checked. A plan is the next piece of work.
+
+- **The setup is now** software specs, architecture groups, the Brief, rules,
+  direction (optional), hooks: five counted steps, where it was six.
+- **A plan for what you build next** follows the setup and is not counted in
+  it. It reads "optional" until a plan is started, "waiting" only when a
+  proposal in it waits for you, and "done" once the plan has an objective
+  (principles are the plan's own business now). The sidebar's Next offers it
+  only once nothing in the setup is left, then "Start a task with Claude
+  Code".
+- `vibegraph-knowledge setup` prints it under "After the setup, not counted
+  in it" (`[then]` when it is offered); the app's setup guide shows it below
+  the same line, dashed; `/vibegraph-setup` no longer lists `plan draft
+  --direction` among the paid steps it asks about up front, and offers the
+  plan once, after the setup. An installed skill reads as out of date until
+  `init --skill` refreshes it.
+
+Tests: test:setup (+1: the plan offered only once every setup step is done,
+then "start a task"), test:now-state, test:setup-welcome,
+test:e2e-setup-welcome (the plan under its own line, optional), test:e2e-now
+(2 of 5).
+
 ## 0.37.1 (2026-10-21): the setup offered to a project with its hooks installed
 
 ### The setup offered to a project with its hooks installed

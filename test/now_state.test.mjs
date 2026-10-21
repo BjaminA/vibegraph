@@ -1,8 +1,8 @@
 // "NOW" (2026-10-16, src/server/now_state.ts): the GUI's one-line summary of
 // where a project stands, and ONE next step chosen by a fixed order — what
 // waits for a person, then stale Brief lines, then the setup's next step
-// (groups, the Brief, rules, the objective and principles, hooks), and only
-// then "start a task". Walked here on an empty project, filling each gap in turn.
+// (groups, the Brief, rules, hooks), then a plan for what is built next, and
+// only then "start a task". Walked here on an empty project, filling each gap in turn.
 //
 //   npm run test:now-state
 import { test, before, after } from "node:test";
@@ -27,12 +27,13 @@ const rule = (id, status) => ({ id, text: `rule ${id}`, why: "read from the code
 
 test("the next step follows the setup's fixed order, each pointing at the panel that acts on it", () => {
   // 2026-10-20 — after decisions waiting and stale Brief lines, the order is
-  // the setup's (src/server/setup_state.ts): groups, the Brief, rules, the
-  // objective and principles, hooks (software needs the stack; none passed here)
+  // the setup's (src/server/setup_state.ts): groups, the Brief, rules, hooks
+  // (software needs the stack; none passed here); 2026-10-21: then the plan,
+  // offered after the setup and not counted in it
   let n = nowState(root);
   assert.equal(n.objective, null);
   assert.deepEqual(n.next, { text: "Propose the architecture groups (the Brief)", panel: null });
-  assert.deepEqual({ done: n.setup.done, of: n.setup.of, next: n.setup.next }, { done: 0, of: 5, next: "groups" });
+  assert.deepEqual({ done: n.setup.done, of: n.setup.of, next: n.setup.next }, { done: 0, of: 4, next: "groups" });
   assert.equal(n.waiting, 0);
 
   saveArchStore(root, { ...loadArchStore(root), ratified: { at: "2026-10-20T10:00:00.000Z", model: "test" } });
@@ -43,17 +44,19 @@ test("the next step follows the setup's fixed order, each pointing at the panel 
   addConstraint(root, { kind: "invariant", text: "only the decider writes decisions", scope: { all: true } }, "human");
   n = nowState(root);
   assert.equal(n.rules, 1);
-  assert.deepEqual(n.next, { text: "Start the plan", panel: "plan" }, "no plan yet: a person starts it before anything is drafted into it");
-
-  savePlan(root, { ...emptyPlan("Partners see only our signed decisions"), policies: [{ id: "p1", text: "only the decider writes decisions", why: "one signer", status: "agreed" }] });
-  n = nowState(root);
-  assert.equal(n.objective, "Partners see only our signed decisions");
-  assert.deepEqual(n.next, { text: "Install the hooks: vibegraph-knowledge init --hooks", panel: null }, "direction is optional: suggested only when it waits");
+  assert.deepEqual(n.next, { text: "Install the hooks: vibegraph-knowledge init --hooks", panel: null }, "the plan is not asked for inside the setup; direction is optional: suggested only when it waits");
   assert.deepEqual(n.direction, { agreed: 0, proposed: 0 });
   mkdirSync(join(root, ".claude"), { recursive: true });
   writeFileSync(join(root, ".claude", "settings.local.json"), JSON.stringify({ hooks: { Stop: [{ hooks: [{ type: "command", command: `x ${HOOK_MARKER}` }] }] } }));
   mkdirSync(cacheDirFor(root), { recursive: true });
   writeFileSync(join(cacheDirFor(root), "hooks-fired.json"), JSON.stringify({ stop: { at: new Date(Date.now() + 1000).toISOString() } }));
+  n = nowState(root);
+  assert.deepEqual({ done: n.setup.done, of: n.setup.of }, { done: 4, of: 4 });
+  assert.deepEqual(n.next, { text: "Plan what you build next", panel: "plan" }, "nothing in the setup is left: the plan is offered");
+
+  savePlan(root, { ...emptyPlan("Partners see only our signed decisions"), policies: [{ id: "p1", text: "only the decider writes decisions", why: "one signer", status: "agreed" }] });
+  n = nowState(root);
+  assert.equal(n.objective, "Partners see only our signed decisions");
 
   // a proposed direction rule waits for a person: it outranks everything below it
   saveDirection(root, { version: "1", rules: [rule("d1", "proposed")] });

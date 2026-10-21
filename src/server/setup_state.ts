@@ -7,9 +7,19 @@
 //   groups      the architecture groups — the Brief proposes them first
 //   brief       the Brief: function, method, key features, names, a start-here path
 //   rules       the rules the code must keep (harvested, drafted, ratified)
-//   objective   the objective and the project's principles — the axioms (plan.json)
 //   direction   optional: the patterns the code already follows, agreed or dropped
 //   hooks       the four hooks in Claude Code, and proof they fired
+// and after the setup, not counted in it:
+//   plan        a plan for what is built next: its objective, principles and
+//               planned processes (plan.json)
+//
+// The plan was step 5, "the objective and the project's principles", until
+// 2026-10-21 (Ben: "do we need a plan at this point? … initialise all other
+// steps first then suggest the user make a plan as the ultimate step"). On a
+// codebase that exists, the ratified Brief already says what the system is for
+// and reaches every session at its start; the rules and the direction are its
+// axioms, read from the code and checked. A plan is the next piece of work, so
+// it is offered once nothing in the setup is left.
 //
 // Specs come first because the Brief, the plan draft and the rule draft read
 // them. Each step says its state (done / waiting for you / to do / optional /
@@ -38,16 +48,24 @@ import { cacheDirFor } from "../../scripts/cache_dir.mjs";
  *  server's CommonJS bundle does not have. test:setup pins the two equal. */
 export const SETUP_HOOK_MARKER = "--vg-hook";
 
-export type SetupStepId = "software" | "groups" | "brief" | "rules" | "objective" | "direction" | "hooks";
+export type SetupStepId = "software" | "groups" | "brief" | "rules" | "direction" | "hooks" | "plan";
 export type SetupStatus = "done" | "waiting" | "todo" | "optional" | "skipped";
 export interface SetupCommand { run: string; who: "you" | "claude" | "either"; spends?: boolean; why: string }
 export interface SetupStep {
   id: SetupStepId; title: string; status: SetupStatus; core: boolean;
+  /** comes after the setup and is not counted in it (the plan) */
+  after?: boolean;
   facts: string[]; commands: SetupCommand[];
   /** the app's one-line "Next", and the panel that acts on it (null: the map's Brief card, or the CLI) */
   now: { text: string; panel: NowPanel | null };
 }
-export interface SetupState { steps: SetupStep[]; next: SetupStep | null; done: number; of: number; software: CandidateReport | null }
+export interface SetupState {
+  steps: SetupStep[];
+  next: SetupStep | null;
+  /** nothing in the setup is left: the step offered after it (the plan, not started) */
+  after: SetupStep | null;
+  done: number; of: number; software: CandidateReport | null;
+}
 
 // ── what a person set aside: .vibegraph/setup.json ─────────────────────
 export interface SetupSkips { version: "1"; software: Record<string, { why: string; at: string }>; steps: Record<string, { why: string; at: string }> }
@@ -167,42 +185,6 @@ export function setupState(root: string, opts: { stack?: Pick<StackIndexRecord, 
           cmd("constraints draft", "claude", "rules from the architecture, each citing the facts it was shown", true)],
         now: { text: "State a rule the code must keep", panel: "rules" } });
 
-  // ── objective and principles ──
-  const plan = loadPlan(root);
-  const objective = plan?.objective && plan.objective !== OBSERVED_OBJECTIVE ? plan.objective : null;
-  const proposedObjective = (plan?.open ?? []).filter((q) => q.text.startsWith("Proposed objective:"));
-  const agreed = (plan?.policies ?? []).filter((p) => p.status === "agreed" || p.status === "promoted");
-  const proposedPrinciples = (plan?.policies ?? []).filter((p) => p.status === "proposed");
-  const title = "The objective and the project's principles";
-  steps.push(proposedObjective.length || proposedPrinciples.length
-    ? { id: "objective", title, status: "waiting", core: true,
-      facts: [...(objective ? [`objective: ${objective}`] : []), ...(proposedObjective.length ? ["a proposed objective waits for a person"] : []), ...(proposedPrinciples.length ? [`${proposedPrinciples.length} proposed principle(s) wait for a person`] : [])],
-      // adopting a proposal is one step that also closes it (the live run's
-      // session told the person to retype it with set-objective, which left the
-      // proposal open)
-      commands: [cmd("plan review", "either", "every proposal on one page"),
-        ...(proposedObjective.length ? proposedObjective.slice(0, 2).map((q) => cmd(`inbox agree objective:${q.id}`, "you", `adopt ${q.id} as the objective (or Adopt in the Plan panel)`)) : [cmd("plan edit '{\"op\":\"set-objective\",\"text\":\"…\"}'", "you", "state the objective yourself, one concrete line")]),
-        cmd("plan agree policies <id>", "you", "a principle the project keeps"), cmd("plan promote <id>", "you", "a principle with a check becomes a rule that is enforced")],
-      now: { text: proposedObjective.length ? "Adopt the objective and agree the principles" : "Agree the project's principles", panel: "plan" } }
-    : objective && agreed.length
-      ? { id: "objective", title, status: "done", core: true, facts: [`objective: ${objective}`, `${agreed.length} principle(s) agreed, ${agreed.filter((p) => p.status === "promoted").length} promoted to enforced rules`], commands: [], now: { text: "", panel: "plan" } }
-      // no plan: a person starts it before anything can be drafted into it (the
-      // live run's session drafted, was told "no plan yet", and tried `plan init
-      // "placeholder"` — a person's step, refused)
-      : !plan
-        ? { id: "objective", title, status: "waiting", core: true,
-          facts: ["no plan yet: a person starts it, then Claude drafts the objective and principles into it"],
-          commands: [cmd("plan observe", "you", "starts the plan from the code (zero tokens); the objective is left for the draft"),
-            cmd("plan init \"<objective>\"", "you", "or start it with the objective yourself, one concrete line"),
-            cmd("plan draft --direction", "claude", "once the plan exists: proposes the objective and 3–7 principles from the project's prose, the Brief and the specs, each quoted", true)],
-          now: { text: "Start the plan", panel: "plan" } }
-      : { id: "objective", title, status: "todo", core: true,
-        facts: [objective ? `objective: ${objective}; no principle agreed yet` : "the objective is not stated"],
-        commands: [cmd("plan draft --direction", "claude", "proposes the objective and 3–7 principles from the project's prose, the Brief and the specs, each quoted", true),
-          // the plan exists here (the no-plan case is above): its objective is set by an edit, not `plan init`
-          ...(objective ? [] : [cmd("plan edit '{\"op\":\"set-objective\",\"text\":\"…\"}'", "you", "or state it yourself, one concrete line")])],
-        now: { text: objective ? "Agree the project's principles" : "State what the project is for", panel: "plan" } });
-
   // ── direction (optional) ──
   const d = loadDirection(root);
   const dirProposed = d.rules.filter((r) => r.status === "proposed").length;
@@ -235,9 +217,45 @@ export function setupState(root: string, opts: { stack?: Pick<StackIndexRecord, 
         commands: [cmd("init --hooks", "you", "writes .claude/settings.local.json (per person, never committed)"), cmd("hook install --target wsl", "you", "instead, for a Windows Claude Code on a WSL project")],
         now: { text: "Install the hooks: vibegraph-knowledge init --hooks", panel: null } });
 
+  // ── after the setup: a plan for what is built next (not counted) ──
+  const plan = loadPlan(root);
+  const objective = plan?.objective && plan.objective !== OBSERVED_OBJECTIVE ? plan.objective : null;
+  const proposedObjective = (plan?.open ?? []).filter((q) => q.text.startsWith("Proposed objective:"));
+  const agreed = (plan?.policies ?? []).filter((p) => p.status === "agreed" || p.status === "promoted");
+  const proposedPrinciples = (plan?.policies ?? []).filter((p) => p.status === "proposed");
+  const title = "A plan for what you build next";
+  const drafted = "proposes the objective and 3–7 principles from the project's prose, the Brief and the specs, each quoted";
+  steps.push(proposedObjective.length || proposedPrinciples.length
+    ? { id: "plan", title, status: "waiting", core: false, after: true,
+      facts: [...(objective ? [`objective: ${objective}`] : []), ...(proposedObjective.length ? ["a proposed objective waits for a person"] : []), ...(proposedPrinciples.length ? [`${proposedPrinciples.length} proposed principle(s) wait for a person`] : [])],
+      // adopting a proposal is one step that also closes it (the live run's
+      // session told the person to retype it with set-objective, which left the
+      // proposal open)
+      commands: [cmd("plan review", "either", "every proposal on one page"),
+        ...(proposedObjective.length ? proposedObjective.slice(0, 2).map((q) => cmd(`inbox agree objective:${q.id}`, "you", `adopt ${q.id} as the objective (or Adopt in the Plan panel)`)) : [cmd("plan edit '{\"op\":\"set-objective\",\"text\":\"…\"}'", "you", "state the objective yourself, one concrete line")]),
+        cmd("plan agree policies <id>", "you", "a principle the project keeps"), cmd("plan promote <id>", "you", "a principle with a check becomes a rule that is enforced")],
+      now: { text: proposedObjective.length ? "Adopt the plan's objective and agree its principles" : "Agree the plan's principles", panel: "plan" } }
+    // no plan: optional, offered once nothing in the setup is left. Starting it
+    // is a person's step (the live run's session drafted, was told "no plan
+    // yet", and tried `plan init "placeholder"`, refused)
+    : !plan
+      ? { id: "plan", title, status: "optional", core: false, after: true,
+        facts: ["after the setup: what the next piece of work is for, and the processes, threads, stores and principles it adds, checked against the code as it is built"],
+        commands: [cmd("plan observe", "you", "starts the plan from the code (zero tokens); the objective is left for the draft"),
+          cmd("plan init \"<objective>\"", "you", "or start it with the objective yourself, one concrete line"),
+          cmd("plan draft --direction", "claude", `once the plan exists: ${drafted}`, true)],
+        now: { text: "Plan what you build next", panel: "plan" } }
+      : objective
+        ? { id: "plan", title, status: "done", core: false, after: true, facts: [`objective: ${objective}`, `${agreed.length} principle(s) agreed, ${agreed.filter((p) => p.status === "promoted").length} promoted to enforced rules`], commands: [], now: { text: "", panel: "plan" } }
+        // the plan exists with its objective left open: set by an edit, never `plan init`
+        : { id: "plan", title, status: "todo", core: false, after: true, facts: ["the plan is started; its objective is not stated"],
+          commands: [cmd("plan draft --direction", "claude", drafted, true), cmd("plan edit '{\"op\":\"set-objective\",\"text\":\"…\"}'", "you", "or state it yourself, one concrete line")],
+          now: { text: "State what the plan is for", panel: "plan" } });
+
   const core = steps.filter((s) => s.core);
   const next = steps.find((s) => s.status === "waiting" || s.status === "todo") ?? null;
-  return { steps, next, done: core.filter((s) => s.status === "done").length, of: core.length, software };
+  const after = next ? null : steps.find((s) => s.after && s.status === "optional") ?? null;
+  return { steps, next, after, done: core.filter((s) => s.status === "done").length, of: core.length, software };
 }
 
 /** Are the hooks installed, and when did one last fire since? */

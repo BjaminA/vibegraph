@@ -112,7 +112,9 @@ export function SetupGuide({ now, welcome, onStart, onClose }: {
             <p style={{ ...quiet, margin: "4px 0 0" }}>
               {welcome
                 ? "VibeGraph has read this project, and none of its setup has been started here. The setup gives Claude the project's architecture, its Brief and the rules your team keeps, and checks every edit against them."
-                : `${now.setup?.done ?? 0} of ${now.setup?.of ?? 0} steps done. The same order as \`vibegraph-knowledge setup\`.`}
+                : now.setup && now.setup.done >= now.setup.of
+                  ? `All ${now.setup.of} steps are done. After the setup: a plan for what you build next, when you have it.`
+                  : `${now.setup?.done ?? 0} of ${now.setup?.of ?? 0} steps done. The same order as \`vibegraph-knowledge setup\`.`}
             </p>
           </div>
           <button type="button" data-setup-guide-close onClick={onClose} aria-label="Close" style={{ background: "transparent", border: "none", padding: 0, cursor: "pointer", color: "var(--text-muted)" }}><X {...ico} /></button>
@@ -122,7 +124,10 @@ export function SetupGuide({ now, welcome, onStart, onClose }: {
           {steps.map((s, i) => {
             const st = STATE[s.status];
             return (
-              <li key={s.id} data-setup-step={s.id} data-setup-status={s.status} style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "8px 12px", borderRadius: 8, border: "1px solid var(--border-edge)" }}>
+              <React.Fragment key={s.id}>
+              {/* 2026-10-21 — the plan follows the setup and is not counted in it (setup_state.ts) */}
+              {s.after && !steps[i - 1]?.after && <li data-setup-after style={{ ...quiet, marginTop: 8 }}>After the setup, when you have something to build next:</li>}
+              <li data-setup-step={s.id} data-setup-status={s.status} style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "8px 12px", borderRadius: 8, border: `1px ${s.after ? "dashed" : "solid"} var(--border-edge)` }}>
                 <span style={{ ...quiet, fontFamily: "var(--font-mono)", minWidth: 16 }}>{i + 1}</span>
                 <div style={{ flex: "1 1 auto", display: "flex", flexDirection: "column", gap: 4 }}>
                   <span style={{ fontFamily: "var(--font-ui)", fontSize: "var(--fs-13)", color: "var(--text-primary)" }}>{s.title}</span>
@@ -134,6 +139,7 @@ export function SetupGuide({ now, welcome, onStart, onClose }: {
                   {s.decides && s.status !== "done" && <span style={tag("var(--text-secondary)")}><UserCheck {...ico} />you decide</span>}
                 </div>
               </li>
+              </React.Fragment>
             );
           })}
         </ol>

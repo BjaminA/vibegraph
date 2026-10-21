@@ -17,8 +17,8 @@ first run installs `libcst` into `~/.cache/vibegraph-knowledge` by itself.
 ## Set up (once per project)
 
 The whole setup, in order — software specs for the bespoke tools the code builds
-on, the architecture groups and the Brief, the rules, the objective and
-principles, then the hooks — is `vibegraph-knowledge setup` (the
+on, the architecture groups and the Brief, the rules, then the hooks, and after
+it a plan for what you build next — is `vibegraph-knowledge setup` (the
 `/vibegraph-setup` skill walks it): it says where the project stands and the
 exact next commands, who may run each and which spend tokens. The quickest
 start, hooks only:
