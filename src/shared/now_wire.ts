@@ -14,4 +14,6 @@ export interface NowState {
   badges: { inbox: number; plan: number; direction: number };
   /** the one next step, by a fixed order; `panel` null = on the map (the Brief card) */
   next: { text: string; panel: NowPanel | null };
+  /** 2026-10-20 — the setup's progress (src/server/setup_state.ts) */
+  setup?: { done: number; of: number };
 }

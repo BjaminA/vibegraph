@@ -21,7 +21,7 @@ import {
 } from "../../src/server/constraint_store.ts";
 import { describeCheck, isConstraintCheck } from "../../src/server/constraint_grammar.ts";
 import { describeRun1Check, isRun1Check } from "../../src/server/quality/verbs/index.ts";
-import { isAgentRun } from "./actor.mjs";
+import { actorNote, actorOf } from "./actor.mjs";
 import { ratifyConstraint } from "../../src/server/constraint_edit.ts";
 import { personName } from "../../src/server/person.ts";
 import { AMEND_SUBS, runConstraintAmend } from "./constraint_amend.mjs";
@@ -31,13 +31,20 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { buildStackIndex } from "../../src/server/stack.ts";
 import { harvestRules, formatHarvest } from "../../src/server/rule_harvest.ts";
+import { runRuleDraft } from "./rule_draft.mjs";
 
-export const CONSTRAINTS_USAGE = `constraint(s) list|add|harvest|remove|ratify|show|edit|propose|accept|reject [...]   the stated rules (.vibegraph/constraints.json); zero tokens
+export const CONSTRAINTS_USAGE = `constraint(s) list|add|harvest|draft|remove|ratify|show|edit|propose|accept|reject [...]   the stated rules (.vibegraph/constraints.json); zero tokens except draft
       list [<root>] [--json]
       harvest [<root>] [--min <score>] [--all] [--json]
           rule-shaped sentences in the project's own prose (CLAUDE.md, READMEs, docs, module headers,
           docstrings) that name code the IR knows, ranked; a place to read, never a rule — state the
           operators' real ones with add --cite, or let /vibegraph-rules do it for you to ratify
+      draft [<root>] [--dry-run] [--reply <file>] [--prompt] [--model <m>] [--force]
+          SPENDS TOKENS (one model call): rules proposed from the architecture — the processes, the
+          tools by role, the funnels, the hops, silent-fail settings, unguarded flows, the harvest
+          and the census, side by side. Each must cite what it was shown; its scope must use the
+          project's spellings; its check is run first. Survivors are stored agent-stated for a person.
+          Refused while 12 or more proposals already wait for review (--force overrides)
       add [<root>] --kind <${CONSTRAINT_KINDS.join("|")}> --text "<the rule, with its reason>"
           scope: --all | --threads <entry ids> | --files <paths> | --tools <names>   (comma-separated)
           [--note "<why>"] [--check '<json>'] [--policy '<json>']   or the whole object: --json '<object>'
@@ -153,6 +160,9 @@ export function runConstraints({ root, sub, id, values, pipeline }) {
   if (sub === "harvest") {
     try { return harvest(root, values, pipeline); } catch (e) { return { lines, messages: [`harvest: ${e.message}`], exitCode: 2 }; }
   }
+  if (sub === "draft") {
+    try { return runRuleDraft({ root, values, pipeline }); } catch (e) { return { lines, messages: [`draft: ${e.message}`], exitCode: 2 }; }
+  }
   if (sub === "add") {
     let raw;
     if (values.json) {
@@ -195,8 +205,9 @@ export function runConstraints({ root, sub, id, values, pipeline }) {
     // until a person ratifies it — the same label an MCP-stated rule carries.
     // …or says so itself (--as agent, the flag `edit` already takes): a model
     // stating a rule is an agent wherever it runs — a Windows Claude Code
-    // calling the CLI through wsl.exe does not carry CLAUDECODE across.
-    const source = values.as === "agent" || isAgentRun() ? "agent" : "human";
+    // calling the CLI through wsl.exe does not carry CLAUDECODE across, so
+    // "human" also needs a terminal (actorOf, the person's-step rule).
+    const source = values.as === "agent" ? "agent" : actorOf();
     // 2026-10-07 (field report) — a check is evaluated BEFORE it is stored: a
     // rule that cannot be checked was only found on its first `check`, and
     // fixing it took a proposal and a person's accept.
@@ -214,6 +225,7 @@ export function runConstraints({ root, sub, id, values, pipeline }) {
     const c = addConstraint(root, v.value, source);
     lines.unshift(`stated ${c.id} (${source}${source === "agent" ? " — a person ratifies it with `constraints ratify`" : ""}):`, formatConstraint(c), ...(pre ? ["against the current code:"] : []));
     if (pre?.results.some((r) => r.verdict === "violated")) messages.push(`note: the code VIOLATES ${c.id} today — \`check\` will fail until the offenders above are fixed`);
+    if (values.as !== "agent" && actorNote()) messages.push(actorNote());
     return { lines, messages, exitCode: 0 };
   }
   if (sub === "remove") {

@@ -34,7 +34,7 @@ export interface BriefReview {
   ratifyLabel: string;
 }
 
-export function reviewBrief(spec: BriefBody["spec"], facts: BriefFacts, opts: { omitted?: string[]; absolutes?: string[] } = {}): BriefReview {
+export function reviewBrief(spec: BriefBody["spec"], facts: BriefFacts, opts: { omitted?: string[]; absolutes?: string[]; /** the draft's scheme: 2+ was asked for claims */ scheme?: number } = {}): BriefReview {
   const coverage: Coverage = briefCoverage(spec, facts, opts.omitted ?? []);
   const lines: ReviewLine[] = [];
   const counts = { lines: 0, withWarnings: 0, inferred: 0, testOnly: 0, contradicted: 0, unverifiable: 0, absolutes: 0, proseOnly: 0 };
@@ -68,7 +68,9 @@ export function reviewBrief(spec: BriefBody["spec"], facts: BriefFacts, opts: { 
   };
   const bits = [
     `${counts.lines} line${counts.lines === 1 ? "" : "s"}, ${counts.withWarnings} with warnings`,
-    !structured && counts.lines ? "its data claims are prose only (written before claims were checked — Brief again to check them)" : "",
+    // a draft from before claims existed, or a current one whose model stated
+    // none (2026-10-20, live run: a minutes-old draft was told it was old)
+    !structured && counts.lines ? ((opts.scheme ?? 0) >= 2 ? "no line states a data claim (who reads or writes what): the data in its lines is prose only, not checked against the map" : "its data claims are prose only (written before claims were checked — Brief again to check them)") : "",
     structured && counts.proseOnly ? `${counts.proseOnly} line${counts.proseOnly === 1 ? " says" : "s say"} who reads or writes in prose only — not checked against the map` : "",
     uncovered.rules.length ? `${uncovered.rules.length} stated rule${uncovered.rules.length === 1 ? "" : "s"} not covered` : "",
     uncovered.salient.length ? `${uncovered.salient.length} core mechanism${uncovered.salient.length === 1 ? "" : "s"} not covered` : "",

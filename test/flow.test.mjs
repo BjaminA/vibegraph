@@ -21,7 +21,7 @@ import { fileURLToPath } from "node:url";
 import { buildPolyglotEnvelope } from "../scripts/regen_polyglot.mjs";
 import { buildStackIndex } from "../src/server/stack.ts";
 import { buildCrossingIndex, toolNameOf } from "../src/server/crossings.ts";
-import { nodeScriptRefs, resolveScriptFiles, scriptSuffix } from "../scripts/frontends/script_refs.mjs";
+import { matchScriptFiles, nodeScriptRefs, resolveScriptFiles, scriptFileIndex, scriptSuffix } from "../scripts/frontends/script_refs.mjs";
 import { discoverProject } from "../scripts/discover_project.mjs";
 import { exportKnowledge } from "../scripts/export_knowledge.mjs";
 import { readFileSync } from "node:fs";
@@ -151,6 +151,14 @@ test("a script reference is a path SUFFIX read from IR args, never from source",
   assert.deepEqual(resolveScriptFiles(keys, "opt/other/search.sh").files, [keys[1]], "a unique basename, reached from a path");
   assert.equal(resolveScriptFiles(keys, "index.mjs").files.length, 2, "a bare basename two files carry is AMBIGUOUS: both named, neither claimed");
   assert.deepEqual(resolveScriptFiles(keys, "x/y/index.mjs").files, [], "two files carry the basename: no claim from a path either");
+  // 2026-10-20: the path-suffix index (built once per crossing index and per
+  // discovery) answers exactly as the scan over every path did.
+  const more = [...keys, "run.sh", "ops/run.sh", "ops/deep/run.sh", "x/ops/deep/run.sh"];
+  const index = scriptFileIndex(more);
+  for (const s of ["run.sh", "deep/run.sh", "ops/deep/run.sh", "un.sh", "index.mjs", "a/index.mjs", "q/ops/deep/run.sh", "srv/other/company/search.sh", "nothing.sh", ""]) {
+    assert.deepEqual(matchScriptFiles(index, s), matchScriptFiles(more, s), `match ${s}`);
+    if (s) assert.deepEqual(resolveScriptFiles(index, s), resolveScriptFiles(more, s), `resolve ${s}`);
+  }
   // A bash word with NESTED quotes is read whole.
   const refs = nodeScriptRefs({ type: "call", funcName: "exec", args: ['"$(dirname "$0")/../scripts/run.sh"', '"$2"'] });
   assert.deepEqual(refs.map((r) => [r.suffix, r.scriptShaped]), [["scripts/run.sh", true]]);

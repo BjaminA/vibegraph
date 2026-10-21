@@ -71,9 +71,28 @@ export function scriptSuffix(literal) {
   return null;
 }
 
-/** Parsed files whose path ends with the suffix (segment-aligned). */
+/** Every segment-aligned tail of every path → the paths ending with it, sorted.
+ *  Built once and passed wherever `fileKeys` is taken: matching scanned every
+ *  parsed path per literal, per thread: most of the crossing index on a
+ *  743-file tree (2026-10-20). */
+export function scriptFileIndex(fileKeys) {
+  const bySuffix = new Map();
+  for (const f of fileKeys) {
+    const segs = f.split("/");
+    for (let i = 0; i < segs.length; i++) {
+      const tail = segs.slice(i).join("/");
+      (bySuffix.get(tail) ?? bySuffix.set(tail, []).get(tail)).push(f);
+    }
+  }
+  for (const list of bySuffix.values()) list.sort();
+  return { bySuffix };
+}
+
+/** Parsed files whose path ends with the suffix (segment-aligned). `fileKeys`
+ *  is the list of parsed paths or a `scriptFileIndex` of it. */
 export function matchScriptFiles(fileKeys, suffix) {
   if (!suffix) return [];
+  if (fileKeys?.bySuffix) return [...(fileKeys.bySuffix.get(suffix) ?? [])];
   const out = [];
   for (const f of fileKeys) {
     if (f === suffix || f.endsWith("/" + suffix)) out.push(f);
@@ -189,6 +208,29 @@ export function variantRefs(node, variants) {
     }
   }
   return out;
+}
+
+/** Per file, in node order, the nodes that can name a script (a script-shaped
+ *  literal, or a name a script answers to), each with its references. The
+ *  crossing index visited every node of every reached file once per THREAD
+ *  (2026-10-20); a file's answer is now read once. A dynamic `import()` or
+ *  `require` LOADS a module, the linker's business, never a run: 57 of the
+ *  first real run's hops were these. Returns `file → [{ node, refs }]`. */
+export function scriptRefIndex(files, variants) {
+  const byFile = new Map();
+  return (file) => {
+    let list = byFile.get(file);
+    if (!list) {
+      list = [];
+      for (const node of files[file]?.nodes ?? []) {
+        if (!node || typeof node.id !== "string" || /(^|\.)(import|require)$/.test(nodeCallee(node))) continue;
+        const refs = nodeScriptRefs(node);
+        if (refs.length || variantRefs(node, variants).length) list.push({ node, refs });
+      }
+      byFile.set(file, list);
+    }
+    return list;
+  };
 }
 
 /** The callee text a node carries, for a label. */

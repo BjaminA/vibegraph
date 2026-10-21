@@ -18,7 +18,7 @@
 //
 // NAMED LIMIT: a target KEY (`buildBackendCommand("company", …)`) is not a
 // path; a table mapping keys to scripts is not read here (M-FLOW refusals).
-import { nodeScriptRefs, resolveScriptFiles } from "./frontends/script_refs.mjs";
+import { nodeScriptRefs, resolveScriptFiles, scriptFileIndex } from "./frontends/script_refs.mjs";
 import { packageRunFiles } from "./package_entries.mjs";
 
 /** Mirrors isTestFile in src/shared/path_match.ts: this script is also run as
@@ -91,13 +91,14 @@ export function discoverProject(files, entryPoints, manifests = []) {
   }
   for (const e of pkgOut) haveEntry.add(e.file);
   const invokedFrom = new Map(); // target file → [{file, nodeId, literal}]
+  const pathIndex = scriptFileIndex(fileKeys);
   for (const [file, ir] of Object.entries(files)) {
     for (const n of ir.nodes ?? []) {
       // A module load is not a run (see crossings.ts).
       const callee = n.funcName ?? n.callTarget ?? "";
       if (typeof callee === "string" && /(^|\.)(import|require)$/.test(callee)) continue;
       for (const { literal, suffix } of nodeScriptRefs(n)) {
-        const { files: matches } = resolveScriptFiles(fileKeys, suffix);
+        const { files: matches } = resolveScriptFiles(pathIndex, suffix);
         // Only an EXACT naming counts as evidence of invocation; a suffix
         // several files share is recorded by the crossing as ambiguous and
         // makes no entry here (an entry is a claim the file is run).

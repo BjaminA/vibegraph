@@ -124,8 +124,8 @@ export function deriveStackProfile(env: EnvelopeLike, stack: StackIndex, opts: {
   else notes.push("project: subsystems not recorded — none carries an endpoint ref to cite");
 
   // per thread, from the contracts
-  const opts2 = contractOptsFor(env, stack);
   const crossings = buildCrossingIndex(env as never);
+  const opts2 = contractOptsFor(env, stack, crossings);
   const threads: StackProfile["threads"] = {};
   const calledProject = new Map<string, { node: string; conf: Confidence }>();
   const loopNodes: string[] = [];

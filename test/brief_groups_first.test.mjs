@@ -23,6 +23,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildBriefFacts } from "../src/server/brief_facts.ts";
 import { checkLine } from "../src/server/brief_checks.ts";
+import { ratifiedAt } from "../src/server/arch_store.ts";
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const tmp = mkdtempSync(join(tmpdir(), "vg-gfirst-"));
@@ -49,6 +50,15 @@ test("with no settled groups the first draft proposes the groups alone, and the 
 
 test("once a person ratifies them, the brief is drafted without a groups section and may cite a stated group", () => {
   assert.equal(cli(["brief", "codebase", "ratify", "groups", proj]).status, 0);
+  // 2026-10-20 (live setup run): ratified through the Brief = RATIFIED — the
+  // stamp every "are the groups settled?" asks, and the baseline drift reads
+  const arch = JSON.parse(readFileSync(join(proj, ".vibegraph/architecture.json"), "utf-8"));
+  assert.match(arch.ratified?.at ?? "", /^\d{4}-\d\d-\d\dT/);
+  assert.ok(arch.baseline?.clusters?.includes("cluster:scripts:decider"), "drift is measured from the map as it was ratified");
+  const setup = cli(["setup", proj]);
+  assert.match(setup.stdout, /\[done\] 2\. Architecture groups\n\s+1 group\(s\), ratified \d{4}-/);
+  // a store an earlier version wrote this way (no stamp) still reads as ratified
+  assert.deepEqual(ratifiedAt({ groups: [{ id: "g", kind: "process", label: "x", wraps: [], note: "from the brief (claude); evidence: e1" }], names: {} }), { at: "", model: "claude" });
   const dry = cli(["brief", "codebase", proj, "--dry-run"]);
   assert.doesNotMatch(dry.stdout, /"groups": \[/, "the settled groups are not re-proposed");
   assert.match(dry.stdout, /- group:g-orders \[stated process\] "Order decisions": cluster:scripts:decider/);

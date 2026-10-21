@@ -5,9 +5,9 @@
 //
 // Level 1 draws the primary nodes, 2 adds secondary, 3 draws everything (the
 // raw thread, byte-for-byte what the view drew before ranks existed). The
-// first level comes from the server (VG_THREAD_RANK, a meta tag — the e2e
-// suites pin "all", as they pin the start view), then the user's choice,
-// remembered.
+// first level comes from the server (VG_THREAD_RANK, a meta tag; Secondary
+// unless set — the e2e suites pin "all", as they pin the start view), then
+// the user's Primary / Secondary choice, remembered; "All" lasts one thread.
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
@@ -31,26 +31,39 @@ function serverDefault(): Rank {
   const v = typeof document === "undefined"
     ? null
     : document.querySelector('meta[name="vg-thread-rank"]')?.getAttribute("content");
-  return v === "all" ? 3 : v === "secondary" ? 2 : 1;
+  return v === "all" ? 3 : v === "primary" ? 1 : 2;
 }
 
-/** The level and the opened remits, persisted like the nest toggles. */
-export function useRankState(): {
+/** The level a thread opens at: the reader's remembered Primary or Secondary,
+ *  else the server's default (Secondary). "All" is never remembered
+ *  (2026-10-20): it draws every node the walk reached — on a big thread
+ *  thousands — and a choice made to inspect one thread opened every later
+ *  one that way. A level stored as "All" before this is not a choice. */
+function openingLevel(): Rank {
+  try {
+    const v = Number(localStorage.getItem(LEVEL_KEY));
+    if (v === 1 || v === 2) return v;
+  } catch { /* ignore */ }
+  return serverDefault();
+}
+
+/** The level and the opened remits, persisted like the nest toggles.
+ *  `threadKey` (the open thread's seed): a new thread opens at the opening
+ *  level, never at "All" left from the last one. */
+export function useRankState(threadKey?: string): {
   level: Rank; setLevel: (l: Rank) => void;
   openRemits: Set<string>; toggleRemit: (id: string) => void;
 } {
-  const [level, setLevelState] = useState<Rank>(() => {
-    try {
-      const v = Number(localStorage.getItem(LEVEL_KEY));
-      if (v === 1 || v === 2 || v === 3) return v;
-    } catch { /* ignore */ }
-    return serverDefault();
-  });
+  const [level, setLevelState] = useState<Rank>(openingLevel);
+  useEffect(() => {
+    setLevelState((l) => (l === 3 ? openingLevel() : l));
+  }, [threadKey]);
   const [openRemits, setOpen] = useState<Set<string>>(() => {
     try { return new Set(JSON.parse(localStorage.getItem(OPEN_KEY) || "[]")); } catch { return new Set(); }
   });
   const setLevel = useCallback((l: Rank) => {
     setLevelState(l);
+    if (l === 3) return; // for this thread only
     try { localStorage.setItem(LEVEL_KEY, String(l)); } catch { /* ignore */ }
   }, []);
   const toggleRemit = useCallback((id: string) => {

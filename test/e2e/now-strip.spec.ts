@@ -28,8 +28,12 @@ test.describe("now strip", () => {
     await expect(page.locator("[data-now-item='rules']")).toContainText("3 rules");
     await expect(page.locator("[data-now-item='direction']")).toContainText("no direction yet");
     await expect(page.locator("[data-roadmap-state='empty']")).toHaveCount(0);
-    await expect(page.locator("[data-now-next]")).toContainText("Read the project's direction from its code");
-    await page.click("[data-now-next]");
+    // 2026-10-20 — the next step follows the setup's order (setup_state.ts):
+    // the fixture's specs and rules are done, its groups are not
+    await expect(page.locator("[data-now-next]")).toContainText("Propose the architecture groups (the Brief)");
+    await expect(page.locator("[data-now-setup]")).toContainText("setup: 2 of 6 steps done");
+    // a chip opens its panel, docked beside the graph
+    await page.click("[data-now-item='direction']");
     const sheet = page.locator("[data-panel-sheet='direction']");
     await expect(sheet).toBeVisible();
     await expect(sheet).toHaveAttribute("data-docked", "true");

@@ -32,7 +32,7 @@ import { linesReader } from "./node_scope.ts";
 import { declaredFeeds } from "./topology_feeds.ts";
 import { declaredTopology } from "./arch_label_drift.ts";
 import { modelSource } from "./model_source.ts";
-import { loadDirection, saveDirection, decideRule } from "./project_direction.ts";
+import { loadDirection, saveDirection, decideRule, type Candidate } from "./project_direction.ts";
 
 export type InboxKind = "plan" | "objective" | "decision" | "sensor" | "rule-change" | "rule" | "scope" | "groups" | "skill" | "spec" | "questions" | "drift" | "brief" | "claim" | "direction";
 export interface InboxItem {
@@ -143,7 +143,7 @@ export function buildInbox(root: string, opts: { rec?: PlanReconcile | null; mod
   return out;
 }
 
-export interface DecideOpts { who?: string; now?: Date; archBaseline?: (store: ArchStore) => ArchBaseline | undefined; model?: ArchModelRecord | null; rec?: PlanReconcile | null }
+export interface DecideOpts { who?: string; now?: Date; archBaseline?: (store: ArchStore) => ArchBaseline | undefined; model?: ArchModelRecord | null; rec?: PlanReconcile | null; /** the direction census now: an agree on a stale proposal is refused */ census?: () => Candidate[] }
 
 /** A person's decision on one inbox item, through the store's own operation. */
 export function decideInbox(root: string, id: string, decision: "agree" | "reject", opts: DecideOpts = {}): { ok: boolean; detail: string } {
@@ -225,12 +225,12 @@ export function decideInbox(root: string, id: string, decision: "agree" | "rejec
     }
     case "brief": {
       if (!BRIEF_SECTIONS.includes(arg as BriefSection)) return fail(`no brief section ${arg}`);
-      return decideBrief(root, arg as BriefSection, decision === "agree" ? "ratify" : "reject", opts.who ?? "a person", opts.now ?? new Date());
+      return decideBrief(root, arg as BriefSection, decision === "agree" ? "ratify" : "reject", opts.who ?? "a person", opts.now ?? new Date(), { archBaseline: opts.archBaseline });
     }
     case "claim": return decideClaim(root, arg, decision, opts.who ?? "a person", opts.now ?? new Date());
     case "direction": {
       const d = loadDirection(root);
-      const err = decideRule(d, arg, decision === "agree" ? "agree" : "drop", opts.who ?? "a person", opts.now ?? new Date());
+      const err = decideRule(d, arg, decision === "agree" ? "agree" : "drop", opts.who ?? "a person", opts.now ?? new Date(), decision === "agree" ? opts.census?.() : undefined);
       if (err) return fail(err);
       saveDirection(root, d);
       return { ok: true, detail: `${decision === "agree" ? "agreed" : "dropped"} direction ${arg}` };

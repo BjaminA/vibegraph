@@ -25,6 +25,7 @@ import * as path from "node:path";
 import type { ArchModelRecord } from "../shared/protocol.ts";
 import type { SoftwareSpec } from "../shared/software_types.ts";
 import { nodeIO, ioLines, CORE_VOCABULARY, type Vocabulary, type ScopeBody, type NodeScopeRecord } from "../shared/node_io.ts";
+import { jsonObjectInReply } from "./json_reply.ts";
 
 /** The project's lines, read once per file; nothing outside the root. */
 export function linesReader(root: string): (file: string) => string[] | null {
@@ -153,14 +154,7 @@ export function buildScopePrompt(model: ArchModelRecord, nodeId: string, dossier
   ].join("\n");
 }
 
-function jsonOf(text: string): Record<string, unknown> | null {
-  let body = text.trim();
-  const fence = /```(?:json)?\s*([\s\S]*?)```/.exec(body);
-  if (fence) body = fence[1].trim();
-  const a = body.indexOf("{"), b = body.lastIndexOf("}");
-  if (a < 0 || b <= a) return null;
-  try { return JSON.parse(body.slice(a, b + 1)); } catch { return null; }
-}
+const jsonOf = (text: string): Record<string, unknown> | null => jsonObjectInReply(text);
 
 /** The gate: what comes back is checked against what was shown. */
 export function parseScope(text: string, model: ArchModelRecord, nodeId: string, dossier: Dossier, meta: { model: string; vocab?: Vocabulary; now?: () => Date }): { scope: ScopeBody | null; error?: string } {

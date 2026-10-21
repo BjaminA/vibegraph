@@ -38,6 +38,21 @@ export interface EditTarget {
   // detect a genuine target switch (and fire the dirty-guard) vs. a
   // re-selection of the same function.
   key: string;
+  // 2026-10-20 — the class a method sits in, for the breadcrumb's hierarchy
+  // (project › file › Class › method).
+  className?: string;
+}
+
+/** The whole file a target sits in: the breadcrumb's file segment opens it. */
+export function fileTargetOf(target: EditTarget): EditTarget {
+  return { node: target.node, fnName: "(module)", filePath: target.filePath, isModule: true, signatureEditable: false, key: `${target.filePath}::(module)` };
+}
+
+/** The lines a target shows of its file (1-based, inclusive); null = all of it. */
+export function spanOf(target: EditTarget): { start: number; end: number } | null {
+  if (target.isModule) return null;
+  const { line, endLine } = target.node;
+  return line == null || endLine == null ? null : { start: line, end: endLine };
 }
 
 function functionName(node: AstNode): string {
@@ -63,6 +78,8 @@ export function resolveEditTarget(
   let guard = 0;
   while (cursor && guard++ < 10_000) {
     if (cursor.type === "function_def") {
+      let up = cursor.parentId ? byId.get(cursor.parentId) : undefined;
+      while (up && up.type !== "class_def") up = up.parentId ? byId.get(up.parentId) : undefined;
       return {
         node: cursor,
         fnName: functionName(cursor),
@@ -71,6 +88,7 @@ export function resolveEditTarget(
         // Signature edits allowed only when the def itself was clicked.
         signatureEditable: cursor.id === node.id,
         key: `${filePath}::${cursor.id}`,
+        ...(up ? { className: functionName(up) } : {}),
       };
     }
     cursor = cursor.parentId ? byId.get(cursor.parentId) : undefined;

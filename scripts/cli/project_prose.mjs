@@ -5,14 +5,19 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 import { spawnSync } from "node:child_process";
+import { loadBrief, briefMarkdown } from "../../src/server/brief_store.ts";
+import { loadArchStore, ratifiedAt } from "../../src/server/arch_store.ts";
 
 const PER_FILE = 12_000;
 const TOTAL = 48_000;
 const DOC_DIR_FILES = 24;
 
 export const DIRECTION_HINT = "This is a DIRECTION draft for a project that already exists: its observed processes are in the plan. "
-  + "Propose (1) the objective, as {\"op\":\"objective\",\"text\":\"…\",\"cite\":\"…\"}; (2) 3 to 7 PRINCIPLES the project's people state "
-  + "(who alone may write what, one identity per person, what is never done), as policies {text, why, check?}; (3) a better name for "
+  + "Propose (1) the objective, as {\"op\":\"objective\",\"text\":\"…\",\"cite\":\"…\"} — ONE concrete line: what it does, for whom, built on what; "
+  + "(2) 3 to 7 PRINCIPLES the project's people state "
+  + "(who alone may write what, one identity per person, what is never done), as policies {text, why, check?} — each concrete enough to be "
+  + "WRONG: \"state of the art\" or \"high quality\" is not a principle; one that names a module, a tool, a software spec's rule or a data shape "
+  + "is, and carries a check when the grammar can state it; (3) a better name for "
   + "an observed process where the prose names it, as {\"op\":\"name\",\"id\":\"<process id>\",\"label\":\"…\",\"cite\":\"…\"}. "
   + "Every line quotes the prose it comes from; nothing else.";
 
@@ -45,5 +50,23 @@ export function projectProse(root) {
   }
   const log = spawnSync("git", ["log", "-n", "40", "--format=%s"], { cwd: root, encoding: "utf-8" });
   if (log.status === 0 && log.stdout.trim()) docs.push({ ref: "recent commit subjects", text: log.stdout.trim() });
+  return docs;
+}
+
+/** 2026-10-20 (the setup workflow) — what a person already ratified about the
+ *  project, as quotable documents beside its prose: the Brief's function,
+ *  method and key features, and the stated architecture groups. The direction
+ *  draft's objective and principles may then quote the architecture and the
+ *  Brief as well as the README (and every ratified software spec, which the
+ *  prompt already carries). Nothing pending: only what a person ratified. */
+export function projectKnowledge(root) {
+  const docs = [];
+  const brief = loadBrief(root);
+  const lines = briefMarkdown(brief.ratified);
+  if (lines.length) docs.push({ ref: "the ratified Brief (.vibegraph/brief.json)", text: lines.join("\n") });
+  const groups = loadArchStore(root).groups.filter((g) => g.label);
+  if (groups.length && ratifiedAt(loadArchStore(root))) {
+    docs.push({ ref: "the ratified architecture groups (.vibegraph/architecture.json)", text: groups.map((g) => `- ${g.label}${g.note ? `: ${g.note}` : ""}`).join("\n") });
+  }
   return docs;
 }

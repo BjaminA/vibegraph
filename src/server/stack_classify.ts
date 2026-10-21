@@ -28,6 +28,7 @@ import {
 } from "../shared/stack_taxonomy.ts";
 import type { StackIndex, StackTool } from "./stack.ts";
 import { addConstraint, loadConstraints, type Constraint, type ConstraintInput } from "./constraint_store.ts";
+import { jsonInReply } from "./json_reply.ts";
 
 // ── the dossier ──────────────────────────────────────────────────────────
 
@@ -307,16 +308,9 @@ function clip(v: unknown, n: number): string {
 export function parseClassifyResponse(text: string, dossiers: ToolDossier[]): ParsedReply {
   const asked = new Set(dossiers.map((d) => d.tool));
   const out: ParsedReply = { accepted: [], unsure: [], refused: [], missing: [] };
-  let body = text.trim();
-  const fence = /```(?:json)?\s*([\s\S]*?)```/.exec(body);
-  if (fence) body = fence[1].trim();
-  const a = body.indexOf("{");
-  const b = body.lastIndexOf("}");
-  if (a < 0 || b <= a) { out.error = "the reply contained no JSON object"; out.missing = [...asked]; return out; }
-  let parsed: unknown;
-  try { parsed = JSON.parse(body.slice(a, b + 1)); } catch (e) {
-    out.error = `the reply's JSON did not parse: ${(e as Error).message}`; out.missing = [...asked]; return out;
-  }
+  const r = jsonInReply(text, "object");
+  if (r.error) { out.error = r.error; out.missing = [...asked]; return out; }
+  const parsed: unknown = r.value;
   const obj = (parsed && typeof parsed === "object" ? parsed : {}) as Record<string, unknown>;
   const placed = new Set<string>();
   for (const raw of Array.isArray(obj.classifications) ? obj.classifications : []) {

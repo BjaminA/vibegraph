@@ -78,7 +78,12 @@ export function checkLayer(facts: ArchCheckFacts, check: LayerCheck): Result {
   for (const e of mine) {
     if (e.to !== null || e.workspace !== undefined) {
       const target = e.to ?? `${e.workspace}/`;
-      if (inLayer(target) || pathAllowed(target, check.mayImport)) continue;
+      // 2026-10-19 (PLAN-M-RULES M4): an import written as a PACKAGE NAME is
+      // that package even when the resolver found its file — "may import only
+      // @mcp/core" read `@mcp/core/internal` (resolved to packages/core/src/…)
+      // as VIOLATED, because only path entries were compared once resolved.
+      const byName = !/^[./]/.test(e.spec) && packageAllowed(e.spec, check.mayImport);
+      if (inLayer(target) || pathAllowed(target, check.mayImport) || byName) continue;
       offenders.push(`${e.from}:${e.line} imports ${e.spec} (${target})`);
       continue;
     }

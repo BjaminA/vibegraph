@@ -42,6 +42,26 @@ export function personRefusal(env = process.env, io = { stdinTTY: !!process.stdi
   return NO_TERMINAL;
 }
 
+/** Who a RECORD says made it (2026-10-19, PLAN-M-RULES M4, class 6). The
+ *  person's-step refusal above learned the terminal rule; the records did not:
+ *  `constraints add`, a plan edit, a spec edit, a claim and a rule change wrote
+ *  "human" whenever the mark was absent — and inside WSL a Windows-side
+ *  Claude's command has neither mark nor terminal (measured from this
+ *  laptop's Claude Code: CLAUDECODE, CLAUDE_CODE_ENTRYPOINT and WSLENV all
+ *  unset across wsl.exe, stdin not a terminal). So a model's rule was filed as
+ *  a person's, unreviewed and labelled reviewed. Now "human" only where a
+ *  person's step could run: one rule for refusing and for recording. */
+export function actorOf(env = process.env, io = { stdinTTY: !!process.stdin.isTTY }) {
+  return personRefusal(env, io) === null ? "human" : "agent";
+}
+
+/** Said when a record is a model's ONLY because no terminal is attached. */
+export function actorNote(env = process.env, io = { stdinTTY: !!process.stdin.isTTY }) {
+  return !isAgentRun(env) && actorOf(env, io) === "agent"
+    ? "(recorded as a model's: no terminal is attached, which is what an agent's tool call looks like on either side of wsl.exe — in a script of your own, set VG_PERSON_NO_TTY=1)"
+    : null;
+}
+
 /** For `doctor`: inside WSL, does a Windows-side Claude's mark reach us? */
 export function wslMarkAdvice(env = process.env) {
   if (!env.WSL_DISTRO_NAME) return null;

@@ -342,10 +342,25 @@
   animation: vg-node-enter-kf var(--motion-node-enter-dur) var(--motion-node-enter-ease) both;
 }
 
+/* ── a direction switch (2026-10-20, direction/DeliverySwitches.tsx) ──
+   The knob and the track follow the press at hover speed; nothing loops. */
+.vg-switch-knob,
+.vg-switch-track {
+  transition: left var(--motion-hover-dur) var(--motion-hover-ease),
+    background-color var(--motion-hover-dur) var(--motion-hover-ease),
+    border-color var(--motion-hover-dur) var(--motion-hover-ease);
+}
+.vg-switch:focus-visible .vg-switch-track {
+  outline: 1px solid var(--accent-thread);
+  outline-offset: 2px;
+}
+
 /* ── Reduced motion: short-circuit all four to instant snap ────────────────
    No partial easing — the spec requires hard fall-through. */
 @media (prefers-reduced-motion: reduce) {
   .vg-msg-enter,
+  .vg-switch-knob,
+  .vg-switch-track,
   .vg-node-enter > *,
   .vg-thread-enter > *,
   .vg-node-exit-ghost,

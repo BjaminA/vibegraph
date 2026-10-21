@@ -104,29 +104,53 @@ test.describe("M-SKILLS.2 — generic direction, enabled per project, injected a
     // catalogue's task handling cannot silently regress to zero.
     const rr = await panel.locator('[data-skill-row="retry-root-cause"] [data-skill-breadth]').textContent();
     expect(rr).toContain(`applies to ${m![2]} of ${m![2]} threads`);
+    // 2026-10-20 — no page-wide drop-down: every row carries the two switches, both off
+    await expect(panel.locator("select")).toHaveCount(0);
+    await expect(panel.locator("[data-direction-explainer]")).toContainText("Tell Claude up front");
+    await expect(panel.locator("[data-direction-explainer]")).toContainText("Explain when an edit breaks it");
+    for (const name of SHIPPED) {
+      const sw = panel.locator(`[data-skill-row="${name}"] [role="switch"]`);
+      await expect(sw).toHaveCount(2);
+      await expect(sw.nth(0)).toHaveAttribute("aria-checked", "false");
+      await expect(sw.nth(1)).toHaveAttribute("aria-checked", "false");
+    }
   });
 
-  test("2. ticking a skill round-trips through the server and persists with who and when", async ({ page }) => {
+  test("2. a switch flips at once, round-trips through the server, and persists with who and when", async ({ page }) => {
     await page.goto("/");
     await page.waitForSelector("[data-thread-index]", { timeout: 15_000 });
     await page.click("[data-skills-toggle]");
-    const row = page.locator('[data-skills-panel] [data-skill-row="boundary-integrity"]');
+    const row = page.locator('[data-skills-panel] [data-skill-row="resolvability"]');
     await expect(row).toBeVisible({ timeout: 10_000 });
-    // `click`, not `check`: the box is CONTROLLED by the server's echo with no
-    // optimistic local flip, so Playwright's check() — which demands the DOM
-    // change on the spot — would report a failure that is the design working.
-    await page.click('[data-skill-toggle="boundary-integrity"]');
-    // The row flips only on the SERVER's echo (no optimistic local state).
-    await expect(row).toHaveAttribute("data-skill-enabled", "true", { timeout: 10_000 });
-    await expect(row).toContainText("enabled by human on 20");
-    await expect
-      .poll(() => (existsSync(SKILLS_FILE) ? readFileSync(SKILLS_FILE, "utf-8") : ""), { timeout: 10_000 })
-      .toContain('"boundary-integrity"');
-    const onDisk = JSON.parse(readFileSync(SKILLS_FILE, "utf-8"));
-    expect(onDisk.version).toBe("1.0");
-    expect(onDisk.enabled).toEqual(["boundary-integrity"]);
-    expect(onDisk.enabledBy["boundary-integrity"].source).toBe("human");
-    // The other five stay off.
+    const up = row.locator('[data-delivery="upfront"]');
+    const broken = row.locator('[data-delivery="oncheck"]');
+    const disk = () => (existsSync(SKILLS_FILE) ? JSON.parse(readFileSync(SKILLS_FILE, "utf-8")) : {});
+    // 2026-10-20 — the switch shows the press at once (it used to wait for the
+    // server's echo, which rebuilt the whole catalogue first): 250 ms is a
+    // budget no server round trip on a busy machine is promised.
+    await up.click();
+    await expect(up).toHaveAttribute("aria-checked", "true", { timeout: 250 });
+    await expect(row).toHaveAttribute("data-skill-enabled", "true", { timeout: 250 });
+    await expect.poll(() => disk().delivery?.resolvability, { timeout: 10_000 }).toEqual({ upfront: true, onCheck: false });
+    await expect(row).toContainText("in use since 20");
+    expect(disk().enabled).toEqual(["resolvability"]);
+    expect(disk().enabledBy.resolvability.source).toBe("human");
+    // the second switch alone, then neither: not in use
+    await broken.click();
+    await expect(broken).toHaveAttribute("aria-checked", "true", { timeout: 250 });
+    await up.click();
+    await expect.poll(() => disk().delivery?.resolvability, { timeout: 10_000 }).toEqual({ upfront: false, onCheck: true });
+    await page.reload();
+    await page.waitForSelector("[data-thread-index]", { timeout: 15_000 });
+    await page.click("[data-skills-toggle]");
+    await expect(page.locator('[data-skill-row="resolvability"] [data-delivery="oncheck"]')).toHaveAttribute("aria-checked", "true", { timeout: 10_000 });
+    await expect(page.locator('[data-skill-row="resolvability"] [data-delivery="upfront"]')).toHaveAttribute("aria-checked", "false");
+    await page.locator('[data-skill-row="resolvability"] [data-delivery="oncheck"]').click();
+    await expect.poll(() => disk().enabled, { timeout: 10_000 }).toEqual([]);
+    await expect(page.locator('[data-skills-panel] [data-skill-row="resolvability"]')).toHaveAttribute("data-skill-enabled", "false");
+    // the one the worker test needs: boundary-integrity up front
+    await page.locator('[data-skill-row="boundary-integrity"] [data-delivery="upfront"]').click();
+    await expect.poll(() => disk().enabled, { timeout: 10_000 }).toEqual(["boundary-integrity"]);
     for (const name of SHIPPED.filter((n) => n !== "boundary-integrity")) {
       await expect(page.locator(`[data-skills-panel] [data-skill-row="${name}"]`)).toHaveAttribute("data-skill-enabled", "false");
     }

@@ -22,7 +22,9 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync, readdirSync, existsSync } from "node:fs";
+import { readFileSync, readdirSync, existsSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { skillDelivery } from "../src/shared/generic_skills_wire.ts";
 import { join } from "node:path";
 import Ajv2020 from "ajv/dist/2020.js";
 import addFormats from "ajv-formats";
@@ -194,8 +196,40 @@ test("M-SKILLS.2: the WS boundary keeps only shipped names, dedups, and stamps w
   assert.deepEqual(second.enabledBy["change-coupling"], t2, "newly enabled: the new stamp");
   assert.equal(second.enabledBy["boundary-integrity"], undefined, "disabled: no stamp lingers");
   // Garbage in → OFF, never a throw.
-  assert.deepEqual(sanitiseSkillsConfig(null, known, t1), { version: "1.0", enabled: [] });
-  assert.deepEqual(sanitiseSkillsConfig({ enabled: "boundary-integrity" }, known, t1), { version: "1.0", enabled: [] });
+  assert.deepEqual(sanitiseSkillsConfig(null, known, t1), { version: "1.0", enabled: [], delivery: {} });
+  assert.deepEqual(sanitiseSkillsConfig({ enabled: "boundary-integrity" }, known, t1), { version: "1.0", enabled: [], delivery: {} });
+});
+
+test("2026-10-20: two switches per skill — one press merges, both off is not in use, the legacy mode is read into switches", () => {
+  const known = EXPECTED;
+  const t1 = { source: "human", at: "2026-10-20T10:00:00Z" };
+  // the panel sends ONE switch
+  const a = sanitiseSkillsConfig({ skill: "repetition-cost", upfront: true }, known, t1);
+  assert.deepEqual(a.delivery, { "repetition-cost": { upfront: true, onCheck: false } });
+  assert.deepEqual(a.enabled, ["repetition-cost"]);
+  const b = sanitiseSkillsConfig({ skill: "repetition-cost", onCheck: true }, known, t1, a);
+  assert.deepEqual(b.delivery["repetition-cost"], { upfront: true, onCheck: true }, "merged, not replaced");
+  const c = sanitiseSkillsConfig({ skill: "repetition-cost", upfront: false, onCheck: false }, known, t1, b);
+  assert.deepEqual(c.enabled, [], "both off: not in use");
+  assert.equal(c.enabledBy, undefined);
+  assert.deepEqual(sanitiseSkillsConfig({ skill: "not-a-skill", upfront: true }, known, t1, b).delivery, b.delivery, "an unknown name changes nothing");
+  assert.deepEqual(sanitiseSkillsConfig({ skill: "repetition-cost", upfront: "yes" }, known, t1, b).delivery, b.delivery, "a non-boolean is not coerced");
+  // the older shape still works: an enabled list, switches from the page-wide mode
+  assert.deepEqual(sanitiseSkillsConfig({ enabled: ["resolvability"], hooks: "on-violation" }, known, t1).delivery, { resolvability: { upfront: false, onCheck: true } });
+  // a file written before the switches: read into them
+  const dir = mkdtempSync(join(tmpdir(), "vg-delivery-"));
+  mkdirSync(join(dir, ".vibegraph"));
+  writeFileSync(join(dir, ".vibegraph", "skills.json"), JSON.stringify({ version: "1.0", enabled: ["repetition-cost", "resolvability"], hooks: "on-violation" }));
+  const legacy = readSkillsConfig(dir).config;
+  assert.deepEqual(legacy.delivery, { "repetition-cost": { upfront: false, onCheck: true }, resolvability: { upfront: false, onCheck: true } });
+  assert.deepEqual(skillDelivery(legacy, "boundary-integrity"), { upfront: false, onCheck: false });
+  writeFileSync(join(dir, ".vibegraph", "skills.json"), JSON.stringify({ version: "1.0", enabled: ["repetition-cost"] }));
+  assert.deepEqual(readSkillsConfig(dir).config.delivery, { "repetition-cost": { upfront: true, onCheck: true } }, "the default mode meant both");
+  rmSync(dir, { recursive: true, force: true });
+  // the chat and workers get a skill only when it is told up front
+  const sel = (config) => selectGenericSkills({ skills, config, profile, entryPointId: "telemetry/ingest.py:ingest_batch", budgetChars: 100000, alreadyInjected: new Map() }).routed.find((r) => r.name === "repetition-cost");
+  assert.equal(sel({ version: "1.0", enabled: ["repetition-cost"], delivery: { "repetition-cost": { upfront: false, onCheck: true } } }).omitted, "check-only");
+  assert.ok(sel({ version: "1.0", enabled: ["repetition-cost"], delivery: { "repetition-cost": { upfront: true, onCheck: false } } }).skill, "up front: injected");
 });
 
 test("M-SKILLS.2: ONE task-facts builder for the gate and the spawn, so retry means the same thing at both", () => {

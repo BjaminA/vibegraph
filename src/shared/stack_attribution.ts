@@ -30,6 +30,7 @@ import {
   jstsPackageName, pythonToolName, rustCrateName,
 } from "./stack_taxonomy.ts";
 import { PYTHON_BUILTIN_NAMES } from "./stack_stdlib.generated.ts";
+import { toolAtCallSite } from "./stack_sites.ts";
 
 export { JSTS_GLOBAL_TOOLS };
 
@@ -411,12 +412,8 @@ export function attributeBoundary(input: BoundaryInput): Attribution | null {
   // 3. The stack index already keyed THIS call node (bash command words —
   //    `curl`, `psql`: the index's evidence rows carry the call's node id).
   if (stack && file && irNodeId) {
-    for (const t of stack.tools) {
-      if (t.origin === "project") continue;
-      for (const e of t.evidence ?? []) {
-        if (e.nodeId === irNodeId && e.file === file) return decorate(fromTool(t, "call-site"));
-      }
-    }
+    const t = toolAtCallSite(stack.tools, file, irNodeId);
+    if (t) return decorate(fromTool(t, "call-site"));
   }
 
   // 4. The receiver head is an import binding in this file. File-exact.

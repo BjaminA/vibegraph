@@ -612,6 +612,11 @@ export interface StackToolRecord {
    *  "this call happens to live in a file that imports the wrapper". */
   home?: string;
   files: string[];
+  /** origin "project": the importers that take a binding of the funnel whose
+   *  body uses what it wraps (by name, or a resolved call into one). A
+   *  subset of `files`, without `home`: importing a grab-bag module for its
+   *  `cn()` is not using the fetch wrapper beside it (funnel_users.ts). */
+  users?: string[];
   /** Threads whose reached FILES contain this tool (presence). */
   threads: string[];
   /** M-BOUNDARY.2 — threads with a BOUNDARY attributed to this tool (use).

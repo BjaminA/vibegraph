@@ -16,7 +16,11 @@ import { buildPolyglotEnvelope } from "../scripts/regen_polyglot.mjs";
 import { buildStackIndex } from "../src/server/stack.ts";
 import { buildCrossingIndex } from "../src/server/crossings.ts";
 import { archModelForEnvelope } from "../src/server/arch_envelope.ts";
-import { census, mergeCensus, decideRule, loadDirection, saveDirection, rulesFor } from "../src/server/project_direction.ts";
+import { census, censusAt, mergeCensus, decideRule, loadDirection, saveDirection, rulesFor, setRuleDelivery, staleRules } from "../src/server/project_direction.ts";
+import { addConstraint } from "../src/server/constraint_store.ts";
+import { handleProjectDirection } from "../src/server/project_direction_server.ts";
+import { ruleDelivery } from "../src/shared/project_direction_wire.ts";
+import { runDirection } from "../scripts/cli/direction.mjs";
 import { buildInbox, decideInbox } from "../src/server/inbox.ts";
 import { personOnlyStep } from "../scripts/cli/actor.mjs";
 import { runHook } from "../scripts/cli/hooks.mjs";
@@ -73,6 +77,46 @@ test("merging: new rules are proposed; a person's decision stands; moved facts a
   assert.deepEqual(rulesFor({ version: "1", rules: [{ ...d.rules[0], status: "agreed", files: ["telemetry/"] }] }, ["telemetry/ingest.py"]).length, 1);
 });
 
+test("a funnel rule's check passes the code as it is; a tool a stated rule already limits is not proposed twice", () => {
+  // the live setup run: "Reach drizzle-orm through lib/db/queries.ts" came with a check
+  // only queries.ts passed, while schema.ts imports the ORM by design
+  const ev = (file) => ({ file, kind: "import", nodeId: `${file}#i` });
+  const stack = { tools: [
+    { tool: "lib.db.queries", role: "db", origin: "project", home: "lib/db/queries.ts", wraps: ["drizzle-orm"], files: ["lib/db/queries.ts", "a.ts", "b.ts", "c.ts", "d.ts", "e.ts", "f.ts", "g.ts", "h.ts"], users: ["a.ts", "b.ts", "c.ts", "d.ts", "e.ts", "f.ts", "g.ts", "h.ts"], threads: [], evidence: [] },
+    { tool: "drizzle-orm", role: "db", origin: "third-party", files: ["lib/db/queries.ts", "lib/db/schema.ts", "package.json"], threads: [], evidence: [ev("lib/db/queries.ts"), ev("lib/db/schema.ts"), { file: "package.json", kind: "config" }] },
+  ] };
+  const found = census({ stack, model: { nodes: [], edges: [] }, files: {}, plan: null });
+  const c = found.find((x) => x.basis === "funnel:drizzle-orm");
+  assert.deepEqual(c.check, { rule: "import-only", tool: "drizzle-orm", files: ["lib/db/queries.ts", "lib/db/schema.ts"], allowTests: true }, "schema.ts reaches it today: allowed; package.json declares it: not a use");
+  assert.match(c.why, /^8 files use drizzle-orm through lib\/db\/queries\.ts; 1 reach it directly \(lib\/db\/schema\.ts\), and the check allows those: it catches a new one/);
+  const stated = [{ id: "c51", check: { rule: "import-only", tool: "drizzle-orm", files: ["lib/db/queries.ts", "lib/db/schema.ts"] } }];
+  assert.equal(census({ stack, model: { nodes: [], edges: [] }, files: {}, plan: null, stated }).find((x) => x.basis === "funnel:drizzle-orm"), undefined, "c51 already says it");
+  // and from disk, the way every caller reads it
+  const root = mkdtempSync(join(base, "stated-"));
+  assert.ok(censusAt(root, { stack, model: { nodes: [], edges: [] }, files: {} }).some((x) => x.basis === "funnel:drizzle-orm"));
+  addConstraint(root, { kind: "proxy", text: "Only the db modules import drizzle-orm", scope: { all: true }, check: stated[0].check }, "agent");
+  assert.equal(censusAt(root, { stack, model: { nodes: [], edges: [] }, files: {} }).find((x) => x.basis === "funnel:drizzle-orm"), undefined, "a stated rule on disk, even a model's not yet ratified");
+});
+
+test("agreeing reads the code as it is now: a proposal whose facts moved or went is refused, with what the code says", () => {
+  const c1 = { text: "Reach fetch through lib.utils", why: "52 files use fetch through lib/utils.ts", basis: "funnel:fetch", evidence: ["lib/utils.ts"], stamp: "a" };
+  const d = () => mergeCensus({ version: "1", rules: [] }, [c1]).direction;
+  const moved = [{ ...c1, why: "4 files use fetch through lib/utils.ts", stamp: "b" }];
+  assert.deepEqual([...staleRules(d(), moved)], [["d1", { state: "moved", now: "4 files use fetch through lib/utils.ts" }]]);
+  assert.deepEqual([...staleRules(d(), [])], [["d1", { state: "gone" }]]);
+  assert.equal(staleRules(d(), [c1]).size, 0);
+  assert.match(decideRule(d(), "d1", "agree", "a person", new Date(), moved), /^d1 was read from the code as it was at the census, and its facts have moved \(now: 4 files use fetch/);
+  assert.match(decideRule(d(), "d1", "agree", "a person", new Date(), []), /the code no longer shows it/);
+  assert.equal(decideRule(d(), "d1", "drop", "a person", new Date(), []), null, "dropping is always allowed");
+  assert.equal(decideRule(d(), "d1", "agree", "a person", new Date(), [c1]), null, "the same facts: agreed");
+  // the Direction panel's door reads the live census the same way
+  const root = mkdtempSync(join(base, "stale-"));
+  saveDirection(root, d());
+  const r = handleProjectDirection(root, { type: "project-direction-decide", payload: { id: "d1", decision: "agree" } }, { stack: { tools: [] }, model: { nodes: [], edges: [] }, files: {} });
+  assert.match(r.error, /the code no longer shows it/);
+  assert.equal(loadDirection(root).rules[0].status, "proposed");
+});
+
 test("an agreed plan principle is carried with its check; the inbox shows a proposal and a person decides it there", () => {
   const plan = { policies: [{ id: "p1", text: "Ingest never calls the network", why: "it runs offline", status: "agreed", check: { rule: "import-only", tool: "requests", files: ["telemetry/http_client.py"] } }, { id: "p2", text: "maybe", why: "", status: "proposed" }] };
   const found = census({ stack: { tools: [] }, model: { nodes: [], edges: [] }, files: {}, plan });
@@ -105,4 +149,39 @@ test("through the hooks: an agreed rule arrives once with its threads; going aga
   assert.equal(after.block, undefined, "direction never blocks");
   assert.match(ctx(after), new RegExp(`goes against the project's agreed direction \\(advice, not a block[^\\n]*\\n- ${id}: Reach sqlite3 through telemetry\\.storage[^\\n]* — why: 5 files use sqlite3`));
   assert.match(ctx(after), /now: .*rogue\.py/);
+});
+
+test("2026-10-20: each agreed rule has its own two switches — off up front is silent at the prompt, off when broken is silent after an edit", () => {
+  const id = loadDirection(fleet).rules.find((x) => x.basis === "funnel:sqlite3").id;
+  const hook = (event, input) => runHook(event, input, { absRoot: fleet, pipeline: {} });
+  const ctx = (x) => x?.json?.hookSpecificOutput?.additionalContext ?? "";
+  // the GUI's door: a person sets one switch; the reply carries the default for rules with none
+  const p = handleProjectDirection(fleet, { type: "project-direction-deliver", payload: { id, upfront: false } }, facts(fleet));
+  assert.equal(p.error, undefined, p.error);
+  assert.deepEqual(p.defaultDelivery, { upfront: true, onCheck: true });
+  assert.deepEqual(loadDirection(fleet).rules.find((x) => x.id === id).delivery, { upfront: false, onCheck: true });
+  hook("session-start", { session_id: "sw", source: "startup" });
+  assert.doesNotMatch(ctx(hook("prompt", { session_id: "sw", prompt: "make ingest_batch in telemetry/ingest.py log rejected readings" })), /This project's direction/, "not told up front");
+  // still explained when broken
+  const file = join(fleet, "telemetry", "rogue2.py");
+  writeFileSync(file, "import sqlite3\n\n\ndef peek2():\n    return sqlite3.connect('y.db')\n");
+  assert.match(ctx(hook("post-edit", { session_id: "sw", tool_name: "Write", tool_input: { file_path: file } })), /goes against the project's agreed direction/);
+  // and the CLI's door turns that off too
+  assert.equal(runDirection(["set", id, "--when-broken", "off", fleet]).exitCode, 0);
+  hook("session-start", { session_id: "sw2", source: "startup" });
+  writeFileSync(join(fleet, "telemetry", "rogue3.py"), "import sqlite3\n\n\ndef peek3():\n    return sqlite3.connect('z.db')\n");
+  assert.doesNotMatch(ctx(hook("post-edit", { session_id: "sw2", tool_name: "Write", tool_input: { file_path: join(fleet, "telemetry", "rogue3.py") } })), /agreed direction/, "not explained");
+  // what cannot be set: a proposed rule, and the why of a rule nothing checks
+  const d = { version: "1", rules: [
+    { id: "d1", text: "t", why: "w", basis: "b1", evidence: [], status: "proposed", stamp: "s" },
+    { id: "d2", text: "t", why: "w", basis: "b2", evidence: [], status: "agreed", stamp: "s" },
+  ] };
+  assert.match(setRuleDelivery(d, "d1", { upfront: true }, { upfront: true, onCheck: true }), /agree it first/);
+  assert.match(setRuleDelivery(d, "d2", { onCheck: true }, { upfront: true, onCheck: false }), /no check/);
+  // the e2e found it: a rule nothing checks, with the default (both on), refused
+  // every press because the merged value kept "explain when broken" on
+  assert.equal(setRuleDelivery(d, "d2", { upfront: false }, { upfront: true, onCheck: true }), null);
+  assert.deepEqual(d.rules[1].delivery, { upfront: false, onCheck: false });
+  assert.deepEqual(ruleDelivery(d.rules[1], undefined), { upfront: false, onCheck: false });
+  assert.deepEqual(ruleDelivery({ ...d.rules[1], delivery: undefined }, "on-violation"), { upfront: false, onCheck: false }, "no check: never explained");
 });

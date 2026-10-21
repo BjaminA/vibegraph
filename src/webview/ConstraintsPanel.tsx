@@ -10,8 +10,11 @@
 
 import React, { useState } from "react";
 import { X, ListChecks } from "lucide-react";
-import type { ConstraintRecord, ConstraintKind, StackPolicy, StackIndexRecord } from "../shared/protocol";
+import type { ArchModelRecord, ConstraintRecord, ConstraintKind, EntryPoint, StackPolicy, StackIndexRecord } from "../shared/protocol";
+import type { RuleScope } from "../shared/scope_route";
 import { bridge } from "./types";
+import { ScopePicker } from "./rules/ScopePicker";
+import { buildScopeGroups, scopeOfPicked, type ScopeInput } from "./rules/scopeGroups";
 
 const mono = "var(--font-mono)";
 const KINDS: ConstraintKind[] = ["payload-schema", "proxy", "backend-call", "perf-lever", "invariant", "objective", "stack-policy"];
@@ -72,7 +75,15 @@ export interface PolicyPrefill {
   role?: string;
 }
 
-export function ConstraintsPanel({ constraints, stack, prefill, onPrefillConsumed, formOnly = false }: {
+/** The typed escape hatch: comma-separated thread ids (they hold a ":") and paths. */
+function parseTyped(raw: string): RuleScope {
+  const parts = raw.split(",").map((s) => s.trim()).filter((s) => s && s !== "all");
+  const entryPointIds = parts.filter((s) => s.includes(":"));
+  const files = parts.filter((s) => !s.includes(":"));
+  return { ...(entryPointIds.length ? { entryPointIds } : {}), ...(files.length ? { files } : {}) };
+}
+
+export function ConstraintsPanel({ constraints, stack, prefill, onPrefillConsumed, formOnly = false, entryPoints, threads, architecture, files }: {
   constraints: ConstraintRecord[];
   /** M-STACK.1 facts — feeds the tool multi-select. Absent = no index yet. */
   stack?: StackIndexRecord;
@@ -81,13 +92,21 @@ export function ConstraintsPanel({ constraints, stack, prefill, onPrefillConsume
   /** 2026-10-05 — the Rules panel lists the rules itself (ItemFrame); it
    *  takes only the "state one" form from here. */
   formOnly?: boolean;
+  /** 2026-10-19 (PLAN-M-RULES M1) — the facts the grouped scope picker is
+   *  read from; each absent one leaves its groups out. */
+  entryPoints?: EntryPoint[];
+  threads?: ReadonlyArray<{ entryPointId: string | null; filesReached: string[] }>;
+  architecture?: ArchModelRecord | null;
+  files?: readonly string[];
 }) {
   const [kind, setKind] = useState<ConstraintKind>("invariant");
   const [text, setText] = useState("");
-  const [scope, setScope] = useState("all");
+  const [typed, setTyped] = useState("");
   const [formOpen, setFormOpen] = useState(false);
-  // M-STACK.2 — tool scope + the structured policy.
-  const [scopeStack, setScopeStack] = useState<string[]>([]);
+  // the scope: picked chips (scopeGroups keys) or every thread
+  const [picked, setPicked] = useState<string[]>([]);
+  const [all, setAll] = useState(false);
+  // M-STACK.2 — the structured policy.
   const [rule, setRule] = useState<StackPolicy["rule"]>("prefer");
   const [policyTool, setPolicyTool] = useState("");
   const [policyWith, setPolicyWith] = useState("");
@@ -96,32 +115,29 @@ export function ConstraintsPanel({ constraints, stack, prefill, onPrefillConsume
     () => [...new Set((stack?.tools ?? []).map((t) => t.tool))],
     [stack],
   );
+  const scopeInput: ScopeInput = React.useMemo(() => ({
+    entryPoints: entryPoints ?? [], threads: threads ?? [], stack: stack ?? null, architecture: architecture ?? null, files: files ?? [],
+  }), [entryPoints, threads, stack, architecture, files]);
 
   React.useEffect(() => {
     if (!prefill) return;
     setFormOpen(true);
     setKind("stack-policy");
     setPolicyTool(prefill.tool);
-    setScopeStack([prefill.tool]);
-    setScope("");
+    setPicked([`stack:${prefill.tool}`]);
+    setAll(false);
     onPrefillConsumed?.();
     // `prefill` is a one-shot instruction from the Stack panel, not state.
   }, [prefill]);
 
-  const toggleTool = (t: string) =>
-    setScopeStack((prev) => (prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t]));
-
   const add = () => {
     if (!text.trim()) return;
-    const raw = scope.trim();
-    const scopeObj: { all?: boolean; entryPointIds?: string[]; files?: string[]; stack?: string[] } =
-      !raw || raw === "all"
-        ? (scopeStack.length ? {} : { all: true })
-        : {
-          entryPointIds: raw.split(",").map((s) => s.trim()).filter((s) => s.includes(":")),
-          files: raw.split(",").map((s) => s.trim()).filter((s) => s && !s.includes(":")),
-        };
-    if (scopeStack.length) scopeObj.stack = scopeStack;
+    const groups = buildScopeGroups(scopeInput);
+    const opts = groups.flatMap((g) => g.subgroups.flatMap((s) => s.options)).filter((o) => picked.includes(o.key));
+    // a picked tool the groups no longer list (no stack index yet) still scopes by its name
+    for (const k of picked) if (k.startsWith("stack:") && !opts.some((o) => o.key === k)) opts.push({ key: k, kind: "module", label: "", title: "", adds: { stack: [k.slice(6)] }, reaches: 0 });
+    const merged = scopeOfPicked([...opts, { key: "typed", kind: "path", label: "", title: "", adds: parseTyped(typed), reaches: 0 }]);
+    const scopeObj: RuleScope = all || (!merged.entryPointIds?.length && !merged.files?.length && !merged.stack?.length) ? { all: true } : merged;
     bridge.postMessage({
       type: "add-constraint",
       payload: {
@@ -133,7 +149,9 @@ export function ConstraintsPanel({ constraints, stack, prefill, onPrefillConsume
     });
     setText("");
     setFormOpen(false);
-    setScopeStack([]);
+    setPicked([]);
+    setAll(false);
+    setTyped("");
     setPolicyTool("");
     setPolicyWith("");
   };
@@ -192,8 +210,9 @@ export function ConstraintsPanel({ constraints, stack, prefill, onPrefillConsume
             <select data-constraint-kind value={kind} onChange={(e) => setKind(e.target.value as ConstraintKind)} style={inputStyle}>
               {KINDS.map((k) => <option key={k} value={k}>{k}</option>)}
             </select>
-            <input data-constraint-scope value={scope} onChange={(e) => setScope(e.target.value)}
-              placeholder="all · or files/threads: api/, db.py, api/app.py:create_order"
+            <input data-constraint-scope value={typed} onChange={(e) => setTyped(e.target.value)}
+              placeholder="or type paths / thread ids: api/, db.py, api/app.py:create_order"
+              title="Added to what is picked below: a path ending / is a folder; a thread id holds a ':'"
               style={{ ...inputStyle, flex: 1, minWidth: 240 }} />
           </div>
 
@@ -217,30 +236,11 @@ export function ConstraintsPanel({ constraints, stack, prefill, onPrefillConsume
             </div>
           )}
 
-          {/* M-STACK.2 — TOOL scope, fed by the stack index: a constraint
-              scoped this way reaches every thread whose stack uses the tool,
-              including files that adopt it later. */}
-          {toolNames.length > 0 && (
-            <div data-constraint-stack-scope style={{ display: "flex", gap: 4, alignItems: "center", flexWrap: "wrap" }}>
-              <span style={{ fontSize: "var(--fs-11)", color: "var(--text-muted)", fontFamily: mono, marginRight: 4 }}>
-                or scope by tool ·
-              </span>
-              {toolNames.map((t) => {
-                const on = scopeStack.includes(t);
-                return (
-                  <button key={t} data-stack-scope-chip={t} onClick={() => toggleTool(t)}
-                    title={on ? `Remove ${t} from this constraint's scope` : `Scope this constraint to every thread that uses ${t}`}
-                    style={{
-                      background: on ? "color-mix(in oklab, var(--accent-thread) 16%, transparent)" : "none",
-                      border: `1px solid color-mix(in oklab, ${on ? "var(--accent-thread)" : "var(--text-muted)"} 45%, transparent)`,
-                      borderRadius: 4, padding: "1px 6px", cursor: "pointer",
-                      color: on ? "var(--accent-thread)" : "var(--text-muted)",
-                      fontSize: "var(--fs-11)", fontFamily: mono,
-                    }}>{t}</button>
-                );
-              })}
-            </div>
-          )}
+          {/* 2026-10-19 (PLAN-M-RULES M1) — the scope, grouped: processes,
+              threads, scripts, protocols, code, then the folded libraries and
+              runtime; a tool chip is the M-STACK.2 dynamic scope (every
+              thread whose stack uses it, including files that adopt it later). */}
+          <ScopePicker input={scopeInput} picked={picked} onPicked={setPicked} all={all} onAll={setAll} typed={parseTyped(typed)} />
 
           <textarea data-constraint-text value={text} onChange={(e) => setText(e.target.value)} rows={2}
             placeholder="e.g. every /orders payload keeps {id, customer, total}; the gateway batches order-item inserts"

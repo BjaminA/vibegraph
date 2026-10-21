@@ -1,21 +1,19 @@
-// System view — thread-interaction mode (cross-thread calls).
+// The thread call graph (cross-thread calls).
 //
-// A pure derivation, the thread-graph analogue of buildSystemLayout: the
-// envelope's threads[] + entryPoints[] -> a thread-to-thread graph where a
-// DIRECTED edge means "thread A reaches thread B's entry-point head" — i.e.
-// thread A invokes the function that is itself the start of thread B (e.g. a
-// `route` thread calls `db.insert`, which is a `public_api` entry point with
-// its own thread).
+// A pure derivation: the envelope's threads[] + entryPoints[] -> a
+// thread-to-thread graph where a DIRECTED edge means "thread A reaches thread
+// B's entry-point head" — i.e. thread A invokes the function that is itself
+// the start of thread B (e.g. a `route` thread calls `db.insert`, which is a
+// `public_api` entry point with its own thread). The contracts, the export,
+// plan_work, the system map and the thread index read it.
 //
-// Everything here is derivable from data the webview already holds; no IR /
-// schema change. Deterministic (no d3-force) so the layout is test-stable and
-// reads L-R like the rest of the system view.
+// It also drew the System view's thread-interaction mode until 2026-10-20,
+// when that view was removed (the architecture map's lenses answer the same
+// questions); the graph stays, the layout went.
 
-import { Position, MarkerType, type Node, type Edge } from "@xyflow/react";
 import type { EntryPoint, ProjectThread } from "../types";
 import type { CrossingIndexRecord, CrossingRecord } from "../../shared/protocol";
 import type { ThreadNode } from "../threads";
-import { entryLabelSuffixes } from "../../shared/entry_labels.ts";
 
 export interface ThreadGraphNode {
   entryPointId: string;
@@ -135,103 +133,4 @@ export function deriveThreadCalls(
   }
 
   return { nodes, edges, crossings: crossingEdges };
-}
-
-// L-R layered spacing — mirrors buildSystemLayout's COL/ROW idiom.
-const COL_GAP = 320;
-const ROW_GAP = 110;
-const THREAD_ACCENT = "var(--accent-thread)";
-// M-XLANG.3 - a crossing is a different KIND of claim from a call, so it
-// gets its own hue as well as its own dash (confidence is visible, the
-// PLAN-v5 aesthetic rule the `calls` edges already follow).
-const CROSSING_ACCENT = "var(--accent-config)";
-
-/**
- * Build react-flow nodes + edges for the thread-interaction graph. Layering is
- * a longest-path relaxation capped at node-count iterations, so it is
- * cycle-safe and deterministic: callers (no incoming call) sit left, callees
- * step rightward.
- */
-export function buildThreadInteractionLayout(
-  threads: ProjectThread[],
-  entryPoints: EntryPoint[],
-  crossings?: CrossingIndexRecord | null,
-): { nodes: Node[]; edges: Edge[] } {
-  const g = deriveThreadCalls(threads, entryPoints, crossings);
-  const nodeIds = new Set(g.nodes.map((n) => n.entryPointId));
-  // Keep only edges whose both endpoints are real nodes (defensive).
-  const callEdges = g.edges.filter((e) => nodeIds.has(e.from) && nodeIds.has(e.to));
-  const crossEdges = g.crossings.filter((e) => nodeIds.has(e.from) && nodeIds.has(e.to));
-
-  // Longest-path layering, capped to bound cycles. Roots stay at layer 0.
-  const layer = new Map<string, number>();
-  for (const n of g.nodes) layer.set(n.entryPointId, 0);
-  const cap = g.nodes.length;
-  for (let iter = 0; iter < cap; iter++) {
-    let changed = false;
-    for (const e of [...callEdges, ...crossEdges]) {
-      const next = (layer.get(e.from) ?? 0) + 1;
-      if (next > (layer.get(e.to) ?? 0) && next <= cap) {
-        layer.set(e.to, next);
-        changed = true;
-      }
-    }
-    if (!changed) break;
-  }
-
-  const rowInLayer: Record<number, number> = {};
-  const suffixes = entryLabelSuffixes(g.nodes.map((n) => ({ id: n.entryPointId, label: n.label, file: n.file })));
-  const nodes: Node[] = g.nodes.map((gn) => {
-    const l = layer.get(gn.entryPointId) ?? 0;
-    const row = rowInLayer[l] ?? 0;
-    rowInLayer[l] = row + 1;
-    return {
-      id: gn.entryPointId,
-      type: "threadInteraction",
-      position: { x: l * COL_GAP, y: row * ROW_GAP },
-      data: { label: gn.label, suffix: suffixes.get(gn.entryPointId), kind: gn.kind, file: gn.file, entryPointId: gn.entryPointId },
-      sourcePosition: Position.Right,
-      targetPosition: Position.Left,
-      draggable: true,
-    };
-  });
-
-  const edges: Edge[] = callEdges.map((e) => ({
-    id: `tcall:${e.from}->${e.to}`,
-    source: e.from,
-    target: e.to,
-    type: "default", // bezier — curves, not corners
-    markerEnd: { type: MarkerType.ArrowClosed, color: THREAD_ACCENT, width: 16, height: 16 },
-    label: e.count > 1 ? `${e.count}x` : undefined,
-    data: { count: e.count },
-    style: { stroke: THREAD_ACCENT, strokeWidth: 1.5, opacity: 0.7 },
-    labelStyle: { fill: "var(--text-muted)", fontSize: 10, fontFamily: "var(--font-ui)" },
-    labelBgStyle: { fill: "var(--bg-canvas)", opacity: 0.8 },
-  }));
-
-  // M-XLANG.3 - cross-language hops, drawn APART from resolved calls:
-  // dashed, in the config accent, and labelled with the method + path
-  // rather than a call count. An ambiguous one is marked, and draws to
-  // every candidate: the picture must not look more certain than the join.
-  for (const e of crossEdges) {
-    edges.push({
-      id: `crossing:${e.from}->${e.to}:${e.path}`,
-      source: e.from,
-      target: e.to,
-      type: "default",
-      markerEnd: { type: MarkerType.ArrowClosed, color: CROSSING_ACCENT, width: 16, height: 16 },
-      label: `${e.method ?? "?"} ${e.path}${e.confidence === "ambiguous" ? " (ambiguous)" : ""}`,
-      data: { crossing: true, confidence: e.confidence, path: e.path },
-      style: {
-        stroke: CROSSING_ACCENT,
-        strokeWidth: 1.5,
-        strokeDasharray: "5 4",
-        opacity: e.confidence === "ambiguous" ? 0.5 : 0.75,
-      },
-      labelStyle: { fill: "var(--text-muted)", fontSize: 10, fontFamily: "var(--font-mono)" },
-      labelBgStyle: { fill: "var(--bg-canvas)", opacity: 0.85 },
-    });
-  }
-
-  return { nodes, edges };
 }

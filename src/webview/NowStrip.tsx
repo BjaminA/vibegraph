@@ -40,6 +40,12 @@ export function NowStrip({ now, onOpen }: { now: NowState; onOpen: (p: NowPanel)
         {item("rules", true, null, <Scale {...ico} />, `${now.rules} rule${now.rules === 1 ? "" : "s"}`, "rules")}
         {item("direction", true, null, <Compass {...ico} />, now.direction.agreed || now.direction.proposed ? `direction ${now.direction.agreed}${now.direction.proposed ? ` · ${now.direction.proposed} proposed` : ""}` : "no direction yet", "direction")}
       </div>
+      {/* 2026-10-20 — the setup's progress; `vibegraph-knowledge setup` lists every step */}
+      {now.setup && now.setup.done < now.setup.of && (
+        <span data-now-setup title="vibegraph-knowledge setup lists every step and its commands" style={{ fontSize: "var(--fs-11)", color: "var(--text-muted)" }}>
+          setup: {now.setup.done} of {now.setup.of} steps done
+        </span>
+      )}
       <button data-now-next onClick={() => now.next.panel && onOpen(now.next.panel)} disabled={!now.next.panel}
         style={{ ...chip("var(--accent-thread)"), borderRadius: 8, justifyContent: "space-between", whiteSpace: "normal", textAlign: "left", fontWeight: 600, padding: "8px 12px", cursor: now.next.panel ? "pointer" : "default" }}>
         <span>Next: {now.next.text}</span><ArrowRight {...ico} style={{ flexShrink: 0 }} />

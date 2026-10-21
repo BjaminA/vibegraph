@@ -13,8 +13,10 @@
 // Hand-editing + Save is the one capability the chat doesn't replace.
 //
 // Source is fetched self-contained via the existing get-file-source WS
-// flow (the M9.4 ExternalEffectsPanel.EditContextBody is the precedent),
-// then sliced to the target's [line, endLine] span by resolveEditTarget.
+// flow (the M9.4 ExternalEffectsPanel.EditContextBody is the precedent).
+// 2026-10-20 — the editor's model is the WHOLE file at its own path, and a
+// function is a view of it (fileView.ts): the lines outside are hidden, so
+// the language service checks the function in its file; Save sends the span.
 //
 // Chrome (header / mode toggle / bodies / dirty prompt / footer) lives
 // in parts.tsx; this file owns the state machine.
@@ -26,8 +28,9 @@ import { CODE_WRAP_OPTIONS } from "../monaco_options";
 import { defineVibegraphDark, VIBEGRAPH_DARK } from "../themes/vibegraph-dark";
 import { bridge, type AstNode, type ProjectFileData, type ExtensionMessage } from "../types";
 import {
-  resolveEditTarget, sliceTargetSource, loadedKeyToName, type EditTarget,
+  resolveEditTarget, sliceTargetSource, loadedKeyToName, fileTargetOf, spanOf, type EditTarget,
 } from "./resolveEditTarget";
+import { configureLanguageService, confineToSpan, fileModelPath, showSpan, spanText, type Span } from "./fileView";
 // M28.3 — the panel is Edit-only now. The Intent mode (plain-language →
 // one-shot single-function rewrite) was a strict subset of the Claude
 // chat (now docked permanently under this column), so it's UNMOUNTED:
@@ -69,9 +72,17 @@ const PANEL_Z = 988;
 export function NodeEditorPanel(props: NodeEditorPanelProps) {
   const { open, node, filePath, projectData, astNodes, onClose, dock = SOLO_DOCK } = props;
 
-  const target = useMemo(
+  const selected = useMemo(
     () => resolveEditTarget(node, filePath, projectData, astNodes),
     [node, filePath, projectData, astNodes],
+  );
+  // 2026-10-20 — the breadcrumb's file segment opens the whole file; the
+  // function segment returns. A new selection opens its function again.
+  const [fileView, setFileView] = useState(false);
+  useEffect(() => { setFileView(false); }, [node?.id]);
+  const target = useMemo(
+    () => (selected && fileView && !selected.isModule ? fileTargetOf(selected) : selected),
+    [selected, fileView],
   );
   // M-LANG2b — languages without an edit floor (bash until M-LANG4)
   // open READ-ONLY: Monaco locks, the Save footer is replaced by an
@@ -87,6 +98,17 @@ export function NodeEditorPanel(props: NodeEditorPanelProps) {
   const [value, setValue] = useState<string>("");
   const [original, setOriginal] = useState<string>("");
   const [loadedKey, setLoadedKey] = useState<string | null>(null);
+  // One file, several views (fileView.ts): the editor's model is the whole
+  // file (`buffer`, as loaded); the view shows `span` of it. `loadRev` asks
+  // for the model to be put back to the buffer and the span re-shown — on a
+  // load, a refresh after an outside edit, and a Cancel.
+  const [buffer, setBuffer] = useState<string | null>(null);
+  const [span, setSpan] = useState<Span | null>(null);
+  const [loadRev, setLoadRev] = useState(0);
+  const [editorReady, setEditorReady] = useState(0);
+  const monacoRef = useRef<Parameters<OnMount>[1] | null>(null);
+  const spanDeco = useRef<string[]>([]);
+  const applying = useRef(false);
 
   // Dirty-guard machinery: a switch requested while dirty parks the new
   // target in `pendingTarget` (prompt shown); `dismissedKey` records a
@@ -133,12 +155,31 @@ export function NodeEditorPanel(props: NodeEditorPanelProps) {
     if (target.key === dismissedKey) return;    // user chose "keep editing"
     if (dirty) { setPendingTarget(target); return; }
     const sliced = sliceTargetSource(source, target);
+    setBuffer(source);
+    setSpan(spanOf(target));
     setValue(sliced);
     setOriginal(sliced);
     setLoadedKey(target.key);
     setPendingTarget(null);
     setDismissedKey(null);
+    setLoadRev((r) => r + 1);
   }, [open, target, source, sourceFile, loadedKey, dismissedKey, dirty]);
+
+  // Put the whole-file model back to the loaded buffer and show the span.
+  useEffect(() => {
+    const ed = editorRef.current, monaco = monacoRef.current;
+    if (!ed || !monaco || buffer == null) return;
+    const model = ed.getModel();
+    if (!model) return;
+    applying.current = true;
+    if (model.getValue() !== buffer) model.setValue(buffer);
+    spanDeco.current = showSpan(ed, monaco, span, spanDeco.current);
+    applying.current = false;
+    const shown = spanText(ed, spanDeco.current);
+    setValue(shown);
+    setOriginal(shown);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loadRev, editorReady]);
 
   // M28.3 — re-sync the loaded slice after an EXTERNAL edit (chat / MCP).
   // A chat edit rebroadcasts a fresh envelope (useWebSocketHandler replaces
@@ -159,8 +200,11 @@ export function NodeEditorPanel(props: NodeEditorPanelProps) {
       const sliced = sliceTargetSource(msg.payload.source, target);
       setSource(msg.payload.source);
       setSourceFile(file);
+      setBuffer(msg.payload.source);
+      setSpan(spanOf(target));
       setValue(sliced);
       setOriginal(sliced);
+      setLoadRev((r) => r + 1);
     };
     bridge.onMessage(handler);
     bridge.postMessage({ type: "get-file-source", payload: { filePath: file } });
@@ -210,6 +254,8 @@ export function NodeEditorPanel(props: NodeEditorPanelProps) {
   const keepEditing = () => {
     if (pendingTarget) setDismissedKey(pendingTarget.key);
     setPendingTarget(null);
+    // a file / function switch kept back: the breadcrumb says what is shown
+    if (selected && !selected.isModule) setFileView(loadedKey === fileTargetOf(selected).key);
   };
 
   // ── Save / Cancel ─────────────────────────────────────────────────
@@ -253,7 +299,7 @@ export function NodeEditorPanel(props: NodeEditorPanelProps) {
       },
     });
   };
-  const handleCancel = () => { setValue(original); setSaveError(null); };
+  const handleCancel = () => { setValue(original); setSaveError(null); setLoadRev((r) => r + 1); };
 
   // M28.3 — Intent mode (place-intent → proposal → review) is PARKED: the
   // Claude chat docked under this column supersedes it. The server
@@ -296,7 +342,15 @@ export function NodeEditorPanel(props: NodeEditorPanelProps) {
         fontFamily: "var(--font-ui)",
       }}
     >
-      <Header fileLabel={fileLabel} fnName={target?.fnName ?? null} onClose={onClose} />
+      <Header
+        fileLabel={fileLabel}
+        fnName={selected?.fnName ?? null}
+        className={selected?.className ?? null}
+        view={target?.isModule ? "file" : "function"}
+        onOpenFile={selected && !selected.isModule && !fileView ? () => setFileView(true) : undefined}
+        onOpenFunction={fileView ? () => setFileView(false) : undefined}
+        onClose={onClose}
+      />
 
       {/* Edit-only Monaco of the enclosing function. Plain-language edits
           now live in the Claude chat docked beneath this column. */}
@@ -311,12 +365,23 @@ export function NodeEditorPanel(props: NodeEditorPanelProps) {
           <Editor
             height="100%"
             language={monacoLanguageForPath(target?.filePath)}
-            value={value}
-            beforeMount={defineVibegraphDark}
+            // the whole file, at its own path: the view is a span of it
+            path={fileModelPath(target.filePath)}
+            defaultValue={buffer ?? ""}
+            beforeMount={(monaco) => { defineVibegraphDark(monaco); configureLanguageService(monaco); }}
             theme={VIBEGRAPH_DARK}
-            onMount={(ed) => { editorRef.current = ed; }}
-            onChange={(v) => setValue(v ?? "")}
+            onMount={(ed, monaco) => {
+              editorRef.current = ed; monacoRef.current = monaco;
+              confineToSpan(ed, () => spanDeco.current); // disposed with the editor
+              setEditorReady((n) => n + 1);
+            }}
+            onChange={() => {
+              if (applying.current || !editorRef.current) return;
+              setValue(spanText(editorRef.current, spanDeco.current));
+            }}
             options={{
+              // the chat splitter resizes this column
+              automaticLayout: true,
               // M-LANG2b — read-only for languages whose edit floor
               // hasn't landed (bash until M-LANG4): the CST-patch
               // chokepoint is Python-only, so Save cannot exist here.

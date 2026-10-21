@@ -28,6 +28,7 @@ import { MonacoOverlay } from "./MonacoOverlay";
 // Code session take the same code path. Single-function plain-language
 // edits remain in NodeEditorPanel's Intent mode (M18.5).
 import { ChatPanel } from "./ChatPanel";
+import { RegionSplitter, useChatHeight } from "./RegionSplitter";
 import { GateButton } from "./controls/GateButton";
 import { useAutoGrow } from "./useAutoGrow";
 import { ComposePalette } from "./ComposePalette";
@@ -218,14 +219,15 @@ function Graph() {
     bridge.postMessage({ type: "set-model-tiers", payload: next });
   };
   // M-SKILLS.2 — the server owns the enable file (.vibegraph/skills.json)
-  // and sends it with the catalogue on connect; the panel posts the enabled
-  // list and renders the echoed, sanitised result. No localStorage copy: a
-  // stale placeholder could show a skill as on that the server has off.
+  // and sends it with the catalogue on connect; the panel posts ONE switch
+  // per press (2026-10-20) and holds it only until the echo answers. No
+  // localStorage copy: a stale placeholder could show a skill as on that the
+  // server has off.
   const skillsOpen = sheet === "direction";
   const setSkillsOpen = useMemo(() => sheetSetter("direction"), [sheetSetter]);
   const [skillsState, setSkillsState] = useState<SkillsConfigPayload | null>(null);
-  const changeSkills = (enabled: string[], hooks?: string) => {
-    bridge.postMessage({ type: "set-skills-config", payload: { version: "1.0", enabled, ...(hooks ? { hooks } : {}) } });
+  const changeSkills = (change: import("./SkillsPanel").SkillSwitch) => {
+    bridge.postMessage({ type: "set-skills-config", payload: change });
   };
   const [endpointProbe, setEndpointProbe] = useState<import("./ModelTiersPanel").EndpointProbeResult | null>(null);
   const [endpointProbing, setEndpointProbing] = useState(false);
@@ -332,8 +334,6 @@ function Graph() {
   const [pinDock, setPinDock] = useState(false);
   useEffect(() => { if (!sheet) setPinDock(false); }, [sheet]);
   const openInvestigation = useCallback(() => { setPinDock(true); setInvestigateOpen(true); }, [setInvestigateOpen]);
-  // M-ZOOM - the thread the reader zoomed OUT of, highlighted on arrival.
-  const [zoomFocusEntry, setZoomFocusEntry] = useState<string | null>(null);
   const [policyPrefill, setPolicyPrefill] = useState<{ tool: string; role?: string } | null>(null);
   // M20.2 — README status for the active thread's badge (PLAN-v5 §2).
   const [readmeStatus, setReadmeStatus] = useState<ReadmeStatus | null>(null);
@@ -392,6 +392,9 @@ function Graph() {
   const astNodesRef = useRef<AstNode[]>([]);
   const symbolIndexRef = useRef<SymbolEntry[]>([]);
   const projectDataRef = useRef<Record<string, ProjectFileData>>({});
+  // 2026-10-19 — the rule form's grouped scope picker (PLAN-M-RULES M1). After
+  // projectDataRef, which it reads; the threads change on every project update.
+  const ruleScopeFacts = useMemo(() => ({ entryPoints, threads: projectThreads, architecture, files: Object.keys(projectDataRef.current) }), [entryPoints, projectThreads, architecture]);
   const nodesRef = useRef<Node[]>([]);
   // The files panel's markers: nothing reaches it / partly parsed / changed
   // since the export. Declared after projectDataRef, which it reads; the ref
@@ -628,7 +631,9 @@ function Graph() {
   // never overlap it; the chat spans the region's width. When no code
   // panel is open the chat falls back to the full-width bottom bar driven
   // by the floating toggle (project-level conversation from the canvas).
-  const NODE_CHAT_H = 300;
+  // 2026-10-20 — its height is the reader's: a splitter drags it (RegionSplitter.tsx).
+  const chatHeight = useChatHeight();
+  const NODE_CHAT_H = chatHeight.height;
   const panelsCoOpen = codeOpen && editorOpen;
   const regionOpen = editorOpen || codeOpen;
   // Width of the right-side region the docked chat spans.
@@ -1025,22 +1030,8 @@ function Graph() {
   }), [entryPoints, handleSelectEntry, handleSelectFile]);
   useFocusRouter(focusHandlers);
 
-  // M-ZOOM (PLAN-v5 5.2) - thread and system are one continuum, not two
-  // views. Zooming out past the last band leaves the thread for the
-  // system plane, carrying the thread's identity so the plane opens with
-  // it highlighted rather than dumping the reader at the top of a map.
-  useEffect(() => {
-    const onZoomOut = (e: Event) => {
-      const d = (e as CustomEvent).detail as { entryPointId?: string | null };
-      setZoomFocusEntry(d?.entryPointId ?? null);
-      setViewMode("system");
-    };
-    document.addEventListener("vg-zoom-to-system", onZoomOut);
-    return () => document.removeEventListener("vg-zoom-to-system", onZoomOut);
-  }, []);
-  // The focus is spent on arrival: leaving the system view clears it, so a
-  // later visit does not re-highlight a thread nobody asked about.
-  useEffect(() => { if (viewMode !== "system") setZoomFocusEntry(null); }, [viewMode]);
+  // (M-ZOOM's thread → system zoom crossing was removed 2026-10-20: a zoom in
+  // the thread view never changes view — ThreadView.tsx.)
 
   // Sitting-2 — the pin's outcome notice. The pin used to be silent from
   // the file view (its only visible result was a launchpad row in ANOTHER
@@ -1245,7 +1236,6 @@ function Graph() {
             onSelectSubsystem={handleSelectSubsystem}
             stack={stack}
             crossings={crossings}
-            focusEntryPointId={zoomFocusEntry}
             draftingDescription={describing ? describingDesc : null}
             architecture={architecture}
             archPropose={archPropose}
@@ -1960,7 +1950,7 @@ function Graph() {
       {isDirectoryMode && (
         <RulesPanel open={rulesOpen} slot={sheetSlot} state={rules} stack={stack}
           prefill={policyPrefill} onPrefillConsumed={() => setPolicyPrefill(null)} focusRule={focusRule}
-          threadLabel={(id) => entryPoints.find((e) => e.id === id)?.label ?? id} />
+          threadLabel={(id) => entryPoints.find((e) => e.id === id)?.label ?? id} scopeFacts={ruleScopeFacts} />
       )}
       <WorkRunPanel open={workRunOpen} slot={sheetSlot} run={workRun} constraints={constraints} stack={stack}
         onOpenRules={() => setRulesOpen(true)} />
@@ -2113,6 +2103,9 @@ function Graph() {
           dock={chatDock}
           onClearContext={() => setChatContextNode(null)}
         />
+      )}
+      {regionOpen && (
+        <RegionSplitter height={NODE_CHAT_H} width={regionWidth} onResize={chatHeight.resize} onCommit={chatHeight.commit} />
       )}
 
       {expandedAstNode && (

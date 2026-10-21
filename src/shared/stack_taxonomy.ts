@@ -208,8 +208,13 @@ export const JSTS_TOOLS: Record<string, StackRole> = {
   got: "http-client", "cross-fetch": "http-client",
   pg: "db", prisma: "db", "@prisma/client": "db", knex: "db",
   mongoose: "db", mongodb: "db", "better-sqlite3": "db", mysql2: "db",
-  typeorm: "db", drizzle: "db",
-  ioredis: "cache", redis: "cache",
+  typeorm: "db", sequelize: "db", kysely: "db", mysql: "db", sqlite3: "db",
+  // 2026-10-20 — the ORM's package is `drizzle-orm`; the entry read `drizzle`
+  // and never matched (the live setup run left it to the model to classify).
+  // postgres = postgres.js, the driver drizzle and others sit on.
+  "drizzle-orm": "db", postgres: "db", "@libsql/client": "db",
+  "@neondatabase/serverless": "db", "@vercel/postgres": "db", "@planetscale/database": "db",
+  ioredis: "cache", redis: "cache", "@upstash/redis": "cache", "@vercel/kv": "cache",
   bullmq: "queue", bull: "queue", amqplib: "queue", kafkajs: "queue", nats: "queue", mqtt: "queue",
   serialport: "device", onoff: "device", "johnny-five": "device", "modbus-serial": "device", "i2c-bus": "device",
   "aws-sdk": "cloud", "@aws-sdk/client-s3": "cloud", "@google-cloud/storage": "cloud",

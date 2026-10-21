@@ -2,21 +2,19 @@
 // envelope's system tier as subsystem cards on an L-R react-flow canvas:
 // Frontend -> Backend -> Cache/DB/external. Click-to-drill is M19.3.
 //
-// Thread-interaction mode (M-SI): a persisted toggle swaps the subsystem
-// cards for a thread-to-thread graph (one node per thread/entry point, a
-// directed edge wherever one thread reaches another's entry-point head).
-// Clicking a thread node opens that thread.
+// The thread-interaction mode (M-SI: one card per entry point, an edge where
+// one thread reaches another) and the zoom continuum that opened it from a
+// thread (M-ZOOM) were removed on 2026-10-20: the architecture map's lenses
+// answer the same questions better, and a zoom in the thread view dropped the
+// reader here unasked. Two modes: subsystems and the map.
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useMemo, useRef, useState } from "react";
 import { ReactFlow, Background, Controls, type Node, type Edge } from "@xyflow/react";
-import { crossedToThread } from "../threads/lod";
-import { Network, Boxes, Share2, Map as MapIcon } from "lucide-react";
+import { Network, Boxes, Map as MapIcon } from "lucide-react";
 import type { SystemTier, SystemPlan, EntryPoint, ProjectThread } from "../types";
 import { buildSystemLayout } from "./buildSystemLayout";
-import { buildThreadInteractionLayout } from "./threadInteraction";
 import { SubsystemNode } from "./SubsystemNode";
 import { PlannedSubsystemNode } from "./PlannedSubsystemNode";
-import { ThreadInteractionNode } from "./ThreadInteractionNode";
 import { DraftingGhostCard } from "./DraftingGhostCard";
 import { ArchNode } from "./ArchNode";
 import { ArchGroupBox } from "./ArchGroupBox";
@@ -46,7 +44,6 @@ import type { ArchModelRecord, ArchNodeRecord, ArchEdgeRecord, ArchGroupRecord }
 const nodeTypes = {
   subsystem: SubsystemNode,
   plannedSubsystem: PlannedSubsystemNode,
-  threadInteraction: ThreadInteractionNode,
   archNode: ArchNode,
   archGroup: ArchGroupBox,
 };
@@ -58,8 +55,8 @@ const VISIBLE_ONLY_AT = 200;
 /** where the map's first view starts: clear of the toolbar, lens and proposal bars. */
 const MAP_INSET = { top: 136, left: 0, pad: 24, right: 64 };
 // M-ARCH.2 — "map": the architecture model (clusters, boundary tools,
-// protocol edges) under a lens. The subsystem/thread toggle is untouched.
-type SystemMode = "subsystems" | "threads" | "map";
+// protocol edges) under a lens.
+type SystemMode = "subsystems" | "map";
 
 interface Props {
   /** 2026-09-28 — the configuration surface, for the Configuration lens. */
@@ -69,22 +66,16 @@ interface Props {
       SIBLING of the honest tier: composed only inside buildSystemLayout,
       never merged into `system`. */
   plan?: SystemPlan | null;
-  /** Cross-thread-call mode source data. */
+  /** The project's threads (the map's lenses and the topology read them). */
   threads?: ProjectThread[];
   entryPoints?: EntryPoint[];
-  /** M19.3 — drill into a thread (endpoint row / effect-edge click, or a
-      thread node in thread-interaction mode). */
+  /** M19.3 — drill into a thread (endpoint row / effect-edge click). */
   onOpenThread?: (entryPointId: string) => void;
   // M-STACK.3 — the stack facts, so a subsystem card can name the tools
   // behind it instead of a bare kind. Absent = no index (single-file).
   stack?: import("../../shared/protocol").StackIndexRecord | null;
-  /** M-XLANG.1 - cross-language hops, drawn in thread-interaction mode. */
+  /** M-XLANG.1 - cross-language hops (the Journeys lens reads them). */
   crossings?: import("../../shared/protocol").CrossingIndexRecord | null;
-  /** M-ZOOM (PLAN-v5 5.2) - the thread the reader zoomed OUT of. Arriving
-   *  with it set opens the THREAD plane with that card marked, so the
-   *  continuum keeps its place instead of dropping them at the top of a
-   *  map. Zooming back IN past the band descends into it. */
-  focusEntryPointId?: string | null;
   /** M19.3 — drill into a subsystem's code (card-body click). */
   onSelectSubsystem?: (subsystemId: string) => void;
   /** M-GF3.2 — the describe round-trip in flight: the description being
@@ -113,7 +104,6 @@ export function SystemView({
   onOpenThread,
   stack,
   crossings,
-  focusEntryPointId,
   onSelectSubsystem,
   draftingDescription = null,
   architecture = null,
@@ -122,21 +112,13 @@ export function SystemView({
   insight = null,
   mapFocus = null,
 }: Props) {
-  // M-ZOOM - armed after mount for the same reason ThreadView is: this
-  // view is arrived at, and an unarmed descend bounces straight back.
-  const lastZoomRef = useRef<number>(1);
   // The viewport, kept across a Real / Plan / Overlay switch (same lens).
   const keptView = useRef<{ key: string; vp: { x: number; y: number; zoom: number } } | null>(null);
-  const armedRef = useRef(false);
-  useEffect(() => {
-    armedRef.current = false;
-    const t = setTimeout(() => { armedRef.current = true; }, 500);
-    return () => clearTimeout(t);
-  }, [focusEntryPointId]);
   // Nothing remembered (or Subsystems remembered on a project with no
   // subsystem tier): the project's map, never an empty canvas.
   const [modeRaw, setMode] = useState<SystemMode>(() => {
-    try { const m = localStorage.getItem("vg-system-mode"); return m === "threads" || m === "map" ? m : "subsystems"; } catch { return "subsystems"; }
+    // a remembered "threads" (the removed thread-interaction mode) opens the map
+    try { const m = localStorage.getItem("vg-system-mode"); return m === "threads" || m === "map" ? "map" : "subsystems"; } catch { return "subsystems"; }
   });
   const mode: SystemMode = modeRaw === "subsystems" && !(system?.subsystems.length || plan?.subsystems.length) && architecture?.nodes.length ? "map" : modeRaw;
   const persistMode = (next: SystemMode) => {
@@ -147,8 +129,7 @@ export function SystemView({
     }
     return next;
   };
-  // From the map the subsystem/thread toggle returns to subsystems first.
-  const toggleMode = () => setMode((m) => persistMode(m === "subsystems" ? "threads" : "subsystems"));
+  const showSubsystems = () => setMode(persistMode("subsystems"));
   const toggleMap = () => setMode((m) => persistMode(m === "map" ? "subsystems" : "map"));
   const [lens, setLensState] = useState<MapLens>(() => {
     try {
@@ -171,7 +152,7 @@ export function SystemView({
 
   // 2026-10-02 — the DECLARED topology (Resources / Decisions lenses, trace overlay).
   const { topo, hasTopology, topoMapModel, topoDrawn, traceName, setTraceName, traceIndex, setTraceIndex } = useTopologyLens({
-    lens, onMap: mode === "map" && !focusEntryPointId, threads,
+    lens, onMap: mode === "map", threads,
     selectedNodeId: archSelected && "node" in archSelected ? archSelected.node.id : null,
     derived: architecture,
   });
@@ -186,7 +167,7 @@ export function SystemView({
   }, []);
   // 2026-10-06 — Real / Plan / Overlay in the project's words, at the lens's level (useMapModel).
   const { real: realMap, planMapModel, drawn, flows, vocab } = useMapModel({
-    on: mode === "map" && !focusEntryPointId, architecture, lens, planView, planState, planOpen, topology: topo.model?.topology ?? null, threads, inventory: topo.inventory ?? null,
+    on: mode === "map", architecture, lens, planView, planState, planOpen, topology: topo.model?.topology ?? null, threads, inventory: topo.inventory ?? null,
   });
   const [flowOn, setFlowOn] = useState<string | LitPath | null>(null); // a flow's id, or an In / Out row's path
   // What is on screen. The canvas remounts when it changes, so fitView re-runs
@@ -199,7 +180,7 @@ export function SystemView({
   // after a paint, behind a spinner (useDeferredLayout).
   const layoutSize = topoDrawn ? topoDrawn.nodes.length + topoDrawn.edges.length
     : drawn ? drawn.nodes.length + drawn.edges.length
-    : mode === "map" && !focusEntryPointId && architecture ? architecture.nodes.length + architecture.edges.length : 0;
+    : mode === "map" && architecture ? architecture.nodes.length + architecture.edges.length : 0;
   const laidOut = useDeferredLayout((): { nodes: Node[]; edges: Edge[]; hiddenTools?: string[]; hiddenClusters?: string[] } => {
     if (topoMapModel && topoDrawn) {
       // Every drawn edge kept: a grant, a yes / no branch and an evidence read.
@@ -212,7 +193,7 @@ export function SystemView({
       };
     }
     if (planMapModel && drawn) return layoutMap(drawn, lens, planView, vocab);
-    if (mode === "map" && !focusEntryPointId) {
+    if (mode === "map") {
       // 2026-09-29 — the Journeys lens draws pages and the links between
       // them through the Flows pipeline; it needs no architecture model.
       if (lens === "journeys") return buildArchLayout(journeysModel(entryPoints, crossings), "flows");
@@ -221,24 +202,12 @@ export function SystemView({
       if (lens === "config") return buildArchLayout(configModel(architecture, insight?.env), "tools");
       return drawn ? layoutMap(drawn, lens, "real", vocab) : buildArchLayout(architecture, lens === "resources" || lens === "decisions" ? "overview" : lens);
     }
-    if (mode === "threads" || focusEntryPointId) {
-      const laid = buildThreadInteractionLayout(threads, entryPoints, crossings);
-      // M-ZOOM - mark the thread we came from. Data only: the node
-      // component reads `focused` and the spec can assert on it.
-      return focusEntryPointId
-        ? {
-          ...laid,
-          nodes: laid.nodes.map((n) =>
-            n.id === focusEntryPointId ? { ...n, data: { ...n.data, focused: true } } : n),
-        }
-        : laid;
-    }
     // PLAN-v7 Stage 3 — compose honest + planned at render. A plan can exist
     // over an EMPTY honest tier (3b greenfield): the ghost architecture is
     // the whole view then.
     if (system || plan) return buildSystemLayout(system ?? { subsystems: [], edges: [] }, plan, cardHeights ?? undefined);
     return { nodes: [], edges: [] };
-  }, [mode, system, plan, threads, entryPoints, crossings, focusEntryPointId, architecture, lens, cardHeights, insight, planMapModel, drawn, planView, vocab, topoMapModel, topoDrawn, traceName, traceIndex, topo], layoutSize, flowView);
+  }, [mode, system, plan, threads, entryPoints, crossings, architecture, lens, cardHeights, insight, planMapModel, drawn, planView, vocab, topoMapModel, topoDrawn, traceName, traceIndex, topo], layoutSize, flowView);
   const base = laidOut.value ?? EMPTY_LAYOUT;
   // A chip's request for a card on the map (useMapFocus).
   const flowRef = useMapFocus({
@@ -280,7 +249,6 @@ export function SystemView({
       else if (d?.group) setArchSelected({ group: d.group });
       return;
     }
-    if (mode === "threads") { onOpenThread?.(n.id); return; } // n.id === entryPointId
     // PLAN-v7 Stage 3 — a planned subsystem has no code to drill into yet;
     // the honest drill-down is for built subsystems only.
     if (n.type === "plannedSubsystem") return;
@@ -345,8 +313,9 @@ export function SystemView({
       <button
         data-system-mode-toggle
         data-mode={mode}
-        onClick={toggleMode}
-        title={mode === "threads" ? "Show subsystems" : "Show how threads interact"}
+        data-active={mode === "subsystems" ? "true" : "false"}
+        onClick={showSubsystems}
+        title="Subsystems — the system tier's cards: frontend, backend, stores, external services"
         style={{
           position: "absolute",
           // Below the toolbar however far it wraps (overlap pass).
@@ -356,11 +325,14 @@ export function SystemView({
           display: "flex",
           alignItems: "center",
           gap: 6,
-          background: "color-mix(in oklab, var(--bg-node) 90%, transparent)",
-          border: "1px solid var(--border-edge)",
+          // shown as the Architecture button shows itself when it is the one open
+          background: mode === "subsystems"
+            ? "color-mix(in oklab, var(--accent-thread) 18%, var(--bg-node))"
+            : "color-mix(in oklab, var(--bg-node) 90%, transparent)",
+          border: `1px solid ${mode === "subsystems" ? "var(--accent-thread)" : "var(--border-edge)"}`,
           borderRadius: 8,
           padding: "5px 10px",
-          color: "var(--text-secondary)",
+          color: mode === "subsystems" ? "var(--text-primary)" : "var(--text-secondary)",
           fontFamily: "var(--font-ui)",
           fontSize: "var(--fs-11)",
           cursor: "pointer",
@@ -368,10 +340,8 @@ export function SystemView({
           WebkitBackdropFilter: "blur(6px)",
         }}
       >
-        {mode === "threads"
-          ? <Share2 size={14} strokeWidth={1.5} />
-          : <Boxes size={14} strokeWidth={1.5} />}
-        {mode === "threads" ? "Threads" : "Subsystems"}
+        <Boxes size={14} strokeWidth={1.5} />
+        Subsystems
       </button>
 
       {/* M-ARCH.2 — the architecture map: clusters, boundary tools and the
@@ -443,26 +413,15 @@ export function SystemView({
             fontFamily: "var(--font-ui)", fontSize: "var(--fs-12)",
           }}
         >
-          {mode === "threads"
-            ? "No entry-point threads to graph yet."
-            : mode === "map"
-              ? "No architecture model yet — it is derived once the project's threads are extracted."
-              : "No subsystems detected for this project."}
+          {mode === "map"
+            ? "No architecture model yet — it is derived once the project's threads are extracted."
+            : "No subsystems detected for this project."}
         </div>
       )}
 
       <ReactFlow
-        // M-ZOOM - the continuum's other direction: zooming IN past the
-        // band, while a thread is focused, descends into it. Crossing,
-        // once, so sitting zoomed-in does not re-fire.
         onMove={(_, viewport) => {
-          const prev = lastZoomRef.current;
-          lastZoomRef.current = viewport.zoom;
           if (mode === "map") keptView.current = { key: `${lens}`, vp: viewport };
-          if (armedRef.current && focusEntryPointId && crossedToThread(prev, viewport.zoom)) {
-            armedRef.current = false; // one transition per visit
-            onOpenThread?.(focusEntryPointId);
-          }
         }}
         // Remount when the view changes (flowView), and once more when a
         // deferred layout first arrives, so the map is fitted to it.
@@ -494,7 +453,7 @@ export function SystemView({
         onEdgeClick={handleEdgeClick}
         onPaneClick={() => setArchSelected(null)}
       >
-        {mode === "subsystems" && !focusEntryPointId && <MeasuredHeights onHeights={onHeights} padding={FIT_PADDING} />}
+        {mode === "subsystems" && <MeasuredHeights onHeights={onHeights} padding={FIT_PADDING} />}
         <Background color="var(--border-edge)" gap={24} size={1} />
         <Controls style={{ background: "var(--bg-node)", borderColor: "var(--border-edge)" }} />
       </ReactFlow>

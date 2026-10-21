@@ -112,19 +112,29 @@ export function injectionIndex(files, resolveImport) {
   // member of an interface implements it, with or without saying so. Marked
   // `structural` — a name match, weaker than a declaration — and never linked
   // into threads; it only stops "nothing implements it" from being false.
+  // 2026-10-20: the candidate classes are listed ONCE, in file then node
+  // order: rescanning every file's nodes per interface was 1.2 s of a 1.45 s
+  // link on a 743-file tree, paid by every edit's hook.
+  const classes = [];
+  for (const [file, ir] of Object.entries(files)) {
+    const nodes = ir.nodes ?? [];
+    const methodsOf = new Map();
+    for (const m of nodes) if (m.type === "function_def" && m.parentId) (methodsOf.get(m.parentId) ?? methodsOf.set(m.parentId, []).get(m.parentId)).push(m);
+    for (const cls of nodes) {
+      if (cls.type !== "class_def" || cls.parentId) continue;
+      if ((cls.bases ?? []).some((b) => PROTOCOL_BASES.test(String(b).trim()))) continue; // another interface
+      const methods = methodsOf.get(cls.id) ?? [];
+      classes.push({ file, cls, methods, names: new Set(methods.map((m) => m.name)), test: isTestPath(file) });
+    }
+  }
   for (const iface of ifaces.values()) {
     const k = `${iface.file}::${iface.name}`;
     const required = [...iface.members].filter((m) => !iface.optional.has(m));
     if (!required.length || (impls.get(k) ?? []).some((i) => !i.test)) continue;
-    for (const [file, ir] of Object.entries(files)) {
-      const nodes = ir.nodes ?? [];
-      for (const cls of nodes.filter((n) => n.type === "class_def" && !n.parentId && !(iface.file === file && iface.name === n.name))) {
-        if ((cls.bases ?? []).some((b) => PROTOCOL_BASES.test(String(b).trim()))) continue; // another interface
-        const methods = nodes.filter((m) => m.type === "function_def" && m.parentId === cls.id);
-        const names = new Set(methods.map((m) => m.name));
-        if (!required.every((m) => names.has(m))) continue;
-        for (const m of methods.filter((x) => iface.members.has(x.name))) add(iface, { member: m.name, file, line: m.line, id: m.id, test: isTestPath(file), structural: cls.name });
-      }
+    for (const { file, cls, methods, names, test } of classes) {
+      if (iface.file === file && iface.name === cls.name) continue;
+      if (!required.every((m) => names.has(m))) continue;
+      for (const m of methods) if (iface.members.has(m.name)) add(iface, { member: m.name, file, line: m.line, id: m.id, test, structural: cls.name });
     }
   }
 

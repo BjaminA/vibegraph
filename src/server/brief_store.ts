@@ -18,7 +18,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import type { BriefBody, BriefHashes, BriefLine, BriefRecord, BriefSection } from "../shared/brief_types.ts";
-import { loadArchStore, saveArchStore, type ArchStore, type StatedGroup } from "./arch_store.ts";
+import { loadArchStore, saveArchStore, type ArchBaseline, type ArchStore, type StatedGroup } from "./arch_store.ts";
 import { hash16, type BriefFacts } from "./brief_facts.ts";
 import { planSansStatus } from "./brief_anchor.ts";
 
@@ -93,7 +93,7 @@ export function applyBriefGroups(store: ArchStore, groups: BriefBody["groups"], 
 }
 
 /** A person decides one section (or all of them). Returns what changed, or why not. */
-export function decideBrief(root: string, section: BriefSection | "all", decision: "ratify" | "reject", who: string, now: Date = new Date()): { ok: boolean; detail: string } {
+export function decideBrief(root: string, section: BriefSection | "all", decision: "ratify" | "reject", who: string, now: Date = new Date(), opts: { archBaseline?: (store: ArchStore) => ArchBaseline | undefined } = {}): { ok: boolean; detail: string } {
   const rec = loadBrief(root);
   const p = rec.proposed;
   if (!p) return { ok: false, detail: "no brief is waiting for a decision (`vibegraph-knowledge brief` drafts one)" };
@@ -124,7 +124,15 @@ export function decideBrief(root: string, section: BriefSection | "all", decisio
         }
         if (p.scheme) ratified.scheme = p.scheme;
       }
-      if (s === "groups") { arch = applyBriefGroups(arch ?? loadArchStore(root), p.groups, p.names, p.model); }
+      if (s === "groups") {
+        arch = applyBriefGroups(arch ?? loadArchStore(root), p.groups, p.names, p.model);
+        // 2026-10-20 (live setup run): groups ratified here are RATIFIED groups —
+        // without the stamp, setup said "no groups yet", drift had no baseline,
+        // and a re-propose was not gated, all right after a person decided them
+        arch.ratified = { at, model: p.model };
+        const b = opts.archBaseline?.(arch);
+        if (b) arch.baseline = b;
+      }
       if (s === "scopes") {
         arch ??= loadArchStore(root);
         arch.scopes = { ...(arch.scopes ?? {}) };

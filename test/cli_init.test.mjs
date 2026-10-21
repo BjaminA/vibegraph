@@ -14,7 +14,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, 
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { applyInit, BEGIN, END, IGNORE_LINE, POINTER } from "../scripts/cli/init.mjs";
+import { applyInit, BEGIN, END, IGNORE_LINE, POINTER, pointerFor } from "../scripts/cli/init.mjs";
 // These tests act as a PERSON at the command line; a Claude Code terminal sets CLAUDECODE,
 // which makes the CLI refuse a person's steps (scripts/cli/actor.mjs) — so it is cleared here.
 delete process.env.CLAUDECODE;
@@ -87,7 +87,10 @@ test("the CLI reports what it did to each file, and --print prints the block", (
   const cli = (...args) => spawnSync(process.execPath, ["--experimental-strip-types", "--no-warnings", join(ROOT, "scripts", "cli", "main.mjs"), "init", dir, ...args], { encoding: "utf-8" });
   const printed = cli("--print");
   assert.equal(printed.status, 0);
-  assert.equal(printed.stdout, POINTER + "\n");
+  // the block, with its commands pinned to the command that ran (here the checkout's)
+  assert.ok(printed.stdout.startsWith(BEGIN) && printed.stdout.endsWith(END + "\n"));
+  assert.match(printed.stdout, /scripts\/cli\/main\.mjs" check --uncommitted`/);
+  assert.equal(printed.stdout.replace(/`"[^`]*?main\.mjs"/g, "`npx vibegraph-knowledge").replace(/\n"[^\n]*?main\.mjs"/g, "\nnpx vibegraph-knowledge"), POINTER + "\n", "otherwise the same block");
   assert.ok(!existsSync(join(dir, "CLAUDE.md")));
   const wrote = cli();
   assert.equal(wrote.status, 0, wrote.stderr);
@@ -100,3 +103,14 @@ test("the CLI reports what it did to each file, and --print prints the block", (
 });
 
 after(() => rmSync(tmp, { recursive: true, force: true }));
+
+test("the block names the command that installed it, at its version (the live setup run ran npm's latest)", () => {
+  const cli = { invocation: ["npx", "--yes", "vibegraph-knowledge@0.36.0"], version: "0.36.0" };
+  const block = pointerFor(cli);
+  assert.ok(block.includes("`npx --yes vibegraph-knowledge@0.36.0 check --uncommitted`"));
+  assert.ok(!/npx vibegraph-knowledge /.test(block), "no unpinned command is left");
+  assert.equal(pointerFor(null), POINTER, "without an invocation, the portable text");
+  const dir = join(tmp, "pinned"); mkdirSync(dir);
+  applyInit({ root: dir, cli });
+  assert.ok(readFileSync(join(dir, "CLAUDE.md"), "utf-8").includes("npx --yes vibegraph-knowledge@0.36.0 export"));
+});

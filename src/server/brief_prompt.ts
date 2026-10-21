@@ -67,7 +67,7 @@ export function buildBriefPrompt(facts: BriefFacts, vocab: BriefVocabulary, opVo
     "Answer with ONE JSON object and nothing else, in this shape" + (opts.only ? ` (only the ${opts.only} section is asked for)` : "") + ":",
     ...shape,
     "",
-    want("groups") ? "Groups: `keep` a group as it is; `rename` it (new label); `move` boxes into it (members = the boxes to move); `add` a new one. Every box sits in at most one group. Propose no group without a citation." : "",
+    want("groups") ? "Groups: `keep` a group as it is; `rename` it (new label); `move` boxes into it (members = the boxes to move); `add` a new one. Every box sits in at most one group. Propose no group without a citation. A `process` group holds this project's own code (cluster or hub boxes): a library loaded in process goes in the group of the process that loads it, and a service the code reaches is a zone or trust group." : "",
     want("scopes") ? "Scopes: only for the SILENT BOXES listed; cite the code lines shown for them, not only spec lines." : "",
     facts.notes.length ? "Notes: answer each one — a line that follows it cites note:<n>; if the facts contradict a note, say so in `omitted` (note:<n> — why)." : "",
   );

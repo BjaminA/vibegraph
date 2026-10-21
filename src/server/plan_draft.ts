@@ -10,14 +10,15 @@
 // question a person adopts) and {"op":"name","id","label","cite"} (a name for
 // an observed process). Both pass the same quote check.
 
-import type { Plan, PlanSection } from "../shared/plan_types.ts";
+import type { Plan, PlanActor, PlanSection } from "../shared/plan_types.ts";
 import { PLAN_CAPS, PLAN_SECTIONS } from "../shared/plan_types.ts";
 import type { SoftwareSpec } from "../shared/software_types.ts";
 import { normalizeForCite } from "./software_draft.ts";
 import { compactPlan } from "./plan_render.ts";
 import { specHeadlines } from "./software_apply.ts";
 import { STACK_ROLES } from "../shared/stack_taxonomy.ts";
-import type { PlanOp } from "./plan_ops.ts";
+import { applyPlanOps, type PlanOp } from "./plan_ops.ts";
+import { jsonInReply } from "./json_reply.ts";
 
 const MAX_OPS = 40;
 const BUDGET = 50_000;
@@ -47,13 +48,34 @@ export function buildPlanDraftPrompt(plan: Plan, specs: SoftwareSpec[], docs: Ar
 }
 
 export function parsePlanDraftReply(text: string): { ops?: unknown[]; error?: string } {
-  const fenced = /```(?:json)?\s*([\s\S]*?)```/.exec(text)?.[1];
-  const raw = fenced ?? text.slice(text.indexOf("["), text.lastIndexOf("]") + 1);
-  if (!raw.trim()) return { error: "the reply holds no JSON array" };
-  try {
-    const v = JSON.parse(raw);
-    return Array.isArray(v) ? { ops: v } : { error: "the reply is not a JSON array of operations" };
-  } catch (e: any) { return { error: `the reply's JSON does not parse: ${e.message}` }; }
+  const r = jsonInReply(text, "array");
+  return r.error ? { error: r.error === "the reply's JSON is not an array" ? "the reply is not a JSON array of operations" : r.error } : { ops: r.value };
+}
+
+/** Apply a gated draft item by item (2026-10-20, live run: one principle the
+ *  plan's validator refused — `check: null`, then a two-sentence text —
+ *  refused the WHOLE draft, "nothing written", and the session paid for four
+ *  drafts to land one). An item the plan refuses is dropped with its reason;
+ *  the rest land together in one revision. */
+export function applyDraftOps(plan: Plan, ops: PlanOp[], by: PlanActor, now: Date = new Date()): { plan?: Plan; applied: PlanOp[]; refused: string[] } {
+  const applied: PlanOp[] = [];
+  const refused: string[] = [];
+  let trial = plan;
+  for (const op of ops) {
+    const r = applyPlanOps(trial, [op], by, now);
+    if (r.error || !r.plan) {
+      // name the item by what it says ("add policies undefined: …" named nothing)
+      const it = (op as { section?: string; item?: Record<string, unknown> });
+      const said = String(it.item?.text ?? it.item?.id ?? it.item?.tool ?? "").slice(0, 70);
+      refused.push(`${it.section ?? op.op}${said ? ` "${said}${said.length >= 70 ? "…" : ""}"` : ""}: ${(r.error ?? "refused").replace(/^\w+ \w+ [^:]*: /, "")}`);
+      continue;
+    }
+    applied.push(op);
+    trial = r.plan;
+  }
+  if (!applied.length) return { applied, refused };
+  const all = applyPlanOps(plan, applied, by, now);
+  return { plan: all.plan ?? trial, applied, refused };
 }
 
 /** The gate: verified quotes become `groundedIn`; fabricated ones drop the op. */
@@ -79,7 +101,9 @@ export function gatePlanDraft(rawOps: unknown[], sourceTexts: string[]): { ops: 
       continue;
     }
     if (o?.op !== "add" || !PLAN_SECTIONS.includes(o.section as PlanSection) || !o.item || typeof o.item !== "object") { dropped.push(`not an add operation: ${JSON.stringify(raw).slice(0, 80)}`); continue; }
-    const { cite, status: _s, ...item } = o.item as Record<string, unknown>;
+    // `null` on an optional field means "none" (a model writes `"check": null`
+    // for a principle nothing can check; the validator wants it absent)
+    const { cite, status: _s, ...item } = Object.fromEntries(Object.entries(o.item as Record<string, unknown>).filter(([, v]) => v !== null)) as Record<string, unknown>;
     const name = String(item.id ?? item.tool ?? item.text ?? "?").slice(0, 60);
     const where = `${o.section} ${name}`;
     let groundedIn: string | null = null;

@@ -15,13 +15,8 @@ import { spawn } from "child_process";
 // .ts extensions: run directly by node type-stripping in test:build-plan-draft.
 import { resolveClaudeBin, spawnEnv } from "./run/synth_args.ts";
 import { validateBuildPlan } from "./build_plan.ts";
+import { replyObject } from "./json_reply.ts";
 import type { BuildPlan, SystemPlan } from "../shared/protocol";
-
-function stripFence(text: string): string {
-  const t = text.trim();
-  const m = t.match(/^```(?:json)?\s*\n?([\s\S]*?)\n?```$/);
-  return (m ? m[1] : t).trim();
-}
 
 // M-GF3.5 — a Modify on the proposed roadmap: the human's guidance plus the
 // draft it applies to. The drafter REVISES (same JSON contract, full list
@@ -115,7 +110,7 @@ export function draftBuildPlan(sysPlan: SystemPlan, cwd: string, revision?: Road
       }
       let body: any;
       try {
-        body = JSON.parse(stripFence(text));
+        body = replyObject(text);
       } catch {
         resolve({ plan: null, error: `roadmap reply was not JSON: ${text.slice(0, 200)}` });
         return;

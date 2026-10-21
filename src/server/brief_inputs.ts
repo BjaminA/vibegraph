@@ -144,7 +144,7 @@ export function pendingBriefReview(root: string, model: ArchModelRecord): string
   const p = rec.proposed;
   if (!p || !allLines(p.spec).length) return [];
   const inp = briefInputs(root, model, { notes: p.notes });
-  return reviewText(reviewBrief(p.spec, inp.facts, { omitted: p.omitted, absolutes: inp.absolutes }), 12);
+  return reviewText(reviewBrief(p.spec, inp.facts, { omitted: p.omitted, absolutes: inp.absolutes, scheme: p.scheme }), 12);
 }
 
 export { BRIEF_FACT_LIMITS };

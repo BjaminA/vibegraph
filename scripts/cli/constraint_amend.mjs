@@ -17,7 +17,7 @@
 // --files f,g | --tools t,u (any scope flag replaces the whole scope).
 import { loadConstraints } from "../../src/server/constraint_store.ts";
 import { editConstraint, proposeConstraintEdit, decideConstraintProposal } from "../../src/server/constraint_edit.ts";
-import { isAgentRun } from "./actor.mjs";
+import { actorOf } from "./actor.mjs";
 import { personName } from "../../src/server/person.ts";
 
 export const AMEND_SUBS = ["show", "edit", "propose", "accept", "reject"];
@@ -59,7 +59,7 @@ export function formatProposals(c) {
 export function runConstraintAmend({ root, sub, id, pid, values, formatConstraint }) {
   const lines = [];
   if (!id) return { lines, messages: [`${sub} needs a constraint id (see \`constraints list\`)`], exitCode: 2 };
-  const agent = values.as === "agent" || isAgentRun();
+  const agent = values.as === "agent" || actorOf() === "agent";
   if (sub === "show") {
     const c = loadConstraints(root).find((x) => x.id === id);
     if (!c) return { lines, messages: [`no constraint ${id}`], exitCode: 1 };

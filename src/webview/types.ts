@@ -339,7 +339,7 @@ export type WebviewMessage =
   | { type: "probe-model-endpoint"; payload: { endpoint: string; model?: string } }
   // M-SKILLS.2 — which generic skills this project enables; the server
   // validates the names against the shipped catalogue and stamps who/when.
-  | { type: "set-skills-config"; payload: { version: "1.0"; enabled: string[] } }
+  | { type: "set-skills-config"; payload: { skill: string; upfront?: boolean; onCheck?: boolean } }
   | { type: "chat-send"; payload: { text: string; contextNodeId: string | null; clearHistory?: boolean; filePath?: string; threadEntryPointId?: string | null; model?: string } }
   // M-GF3.4 — one turn of the per-stage dialogue. The CURRENT plan snapshot
   // rides along (pending proposal or ratified roadmap — the server only

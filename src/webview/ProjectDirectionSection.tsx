@@ -1,13 +1,17 @@
 // The project's own direction, at the top of the Direction panel (2026-10-16;
 // src/server/project_direction.ts). Read from the code at a press — zero
-// tokens — and decided rule by rule: a proposed rule waits for the person,
-// an agreed one reaches Claude Code sessions as a headline and, when it has a
-// check, is checked after every edit as advice. Never a gate.
+// tokens — and decided rule by rule: a proposed rule waits for the person;
+// an agreed one carries the two switches every direction rule has
+// (direction/DeliverySwitches.tsx, 2026-10-20): told up front with the
+// threads it is about, and/or explained when an edit breaks its check. Never
+// a gate. Every press shows at once and is held until the server answers.
 
 import React, { useEffect, useState } from "react";
 import { ScanSearch, Check, X, RotateCcw } from "lucide-react";
 import { bridge, type ExtensionMessage } from "./types";
-import type { ProjectDirectionPayload, ProjectRule } from "../shared/project_direction_wire";
+import type { ProjectDirectionPayload, ProjectRule, DirectionStatus } from "../shared/project_direction_wire";
+import type { Delivery } from "../shared/generic_skills_wire";
+import { DeliverySwitches, useHeld } from "./direction/DeliverySwitches";
 
 const mono = "var(--font-mono)";
 const small: React.CSSProperties = { fontSize: "var(--fs-11)", color: "var(--text-muted)", lineHeight: 1.5 };
@@ -23,28 +27,34 @@ const sourceOf = (basis: string) => {
   return `from ${basis}`;
 };
 
-function Rule({ r }: { r: ProjectRule }) {
-  const decide = (decision: "agree" | "drop") => bridge.postMessage({ type: "project-direction-decide", payload: { id: r.id, decision } } as never);
+function Rule({ r, status, delivery, onDecide, onDeliver }: {
+  r: ProjectRule; status: DirectionStatus; delivery: Delivery;
+  onDecide: (decision: "agree" | "drop") => void; onDeliver: (patch: Partial<Delivery>) => void;
+}) {
   return (
-    <div data-direction-rule={r.id} data-direction-status={r.status} className="vg-msg-enter"
-      style={{ border: "1px solid var(--border-edge)", borderRadius: 8, padding: 12, display: "flex", flexDirection: "column", gap: 4, opacity: r.status === "dropped" ? 0.6 : 1 }}>
+    <div data-direction-rule={r.id} data-direction-status={status} className="vg-msg-enter"
+      style={{ border: "1px solid var(--border-edge)", borderRadius: 8, padding: 12, display: "flex", flexDirection: "column", gap: 4, opacity: status === "dropped" ? 0.6 : 1 }}>
       <div style={{ display: "flex", gap: 8, alignItems: "baseline" }}>
         <span style={{ fontFamily: mono, fontSize: "var(--fs-11)", color: "var(--text-muted)" }}>{r.id}</span>
         <span style={{ fontSize: "var(--fs-13)", color: "var(--text-primary)", lineHeight: 1.5 }}>{r.text}</span>
       </div>
       <span style={small}>why: {r.why}</span>
       <span style={{ ...small, fontFamily: mono }}>
-        {sourceOf(r.basis)}{r.check ? ` · checked after edits as advice (${String(r.check.rule)})` : " · not checked: said to the session only"}
+        {sourceOf(r.basis)}{r.check ? ` · checked by ${String(r.check.rule)}` : " · nothing checks it"}
       </span>
       {(r.changed || r.missing) && (
         <span className="vg-keep-accent" style={{ fontSize: "var(--fs-11)", color: "var(--accent-warning)" }}>
           {r.missing ? "the code no longer shows this — drop it, or keep it as a rule for new code" : "the facts it was read from moved since you agreed — read the why again"}
         </span>
       )}
+      {status === "agreed" && (
+        <DeliverySwitches value={delivery} canCheck={!!r.check} data={{ "direction-switch": r.id }} onChange={onDeliver}
+          upfrontHint="Claude Code gets this rule once per session, with the first prompt that reaches a thread it is about." />
+      )}
       <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
-        {r.status !== "agreed" && <button data-direction-agree={r.id} style={btn} onClick={() => decide("agree")}><Check size={16} strokeWidth={1.5} />{r.status === "dropped" ? "Agree after all" : "Agree"}</button>}
-        {r.status !== "dropped" && <button data-direction-drop={r.id} style={btn} onClick={() => decide("drop")}><X size={16} strokeWidth={1.5} />Drop</button>}
-        {r.status === "agreed" && r.changed && <button style={btn} onClick={() => decide("agree")}><RotateCcw size={16} strokeWidth={1.5} />Still agree</button>}
+        {status !== "agreed" && <button data-direction-agree={r.id} style={btn} onClick={() => onDecide("agree")}><Check size={16} strokeWidth={1.5} />{status === "dropped" ? "Agree after all" : "Agree"}</button>}
+        {status !== "dropped" && <button data-direction-drop={r.id} style={btn} onClick={() => onDecide("drop")}><X size={16} strokeWidth={1.5} />Drop</button>}
+        {status === "agreed" && r.changed && <button style={btn} onClick={() => onDecide("agree")}><RotateCcw size={16} strokeWidth={1.5} />Still agree</button>}
       </div>
     </div>
   );
@@ -53,6 +63,8 @@ function Rule({ r }: { r: ProjectRule }) {
 export function ProjectDirectionSection() {
   const [state, setState] = useState<ProjectDirectionPayload | null>(null);
   const [reading, setReading] = useState(false);
+  const statusHeld = useHeld<DirectionStatus>();
+  const deliveryHeld = useHeld<Delivery>();
   useEffect(() => {
     const onMsg = (m: ExtensionMessage) => {
       // a decision made in the Inbox: read the rules again
@@ -65,9 +77,25 @@ export function ProjectDirectionSection() {
     bridge.postMessage({ type: "project-direction-get" } as never);
     return () => bridge.removeListener(onMsg);
   }, []);
+  // every reply answers one press of either kind
+  useEffect(() => { statusHeld.answered(); deliveryHeld.answered(); }, [state]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const fallback = state?.defaultDelivery ?? { upfront: true, onCheck: true };
+  const statusOf = (r: ProjectRule) => statusHeld.shown(r.id, r.status);
+  const deliveryOf = (r: ProjectRule) => { const d = deliveryHeld.shown(r.id, r.delivery ?? fallback); return { upfront: d.upfront, onCheck: d.onCheck && !!r.check }; };
+  const decide = (r: ProjectRule, decision: "agree" | "drop") => {
+    statusHeld.press(r.id, decision === "agree" ? "agreed" : "dropped");
+    bridge.postMessage({ type: "project-direction-decide", payload: { id: r.id, decision } } as never);
+  };
+  const deliver = (r: ProjectRule, patch: Partial<Delivery>) => {
+    deliveryHeld.press(r.id, { ...deliveryOf(r), ...patch });
+    bridge.postMessage({ type: "project-direction-deliver", payload: { id: r.id, ...patch } } as never);
+  };
+
   const rules = state?.direction.rules ?? [];
-  const group = (status: ProjectRule["status"]) => rules.filter((r) => r.status === status);
+  const group = (status: DirectionStatus) => rules.filter((r) => statusOf(r) === status);
   const read = () => { setReading(true); bridge.postMessage({ type: "project-direction-census" } as never); };
+  const show = (r: ProjectRule) => <Rule key={r.id} r={r} status={statusOf(r)} delivery={deliveryOf(r)} onDecide={(d) => decide(r, d)} onDeliver={(p) => deliver(r, p)} />;
   return (
     <section data-project-direction style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 24 }}>
       <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
@@ -77,21 +105,20 @@ export function ProjectDirectionSection() {
         </button>
       </div>
       <span style={small}>
-        What this code already does, as rules: a tool reached through the project's own module, a data zone whose every write runs behind one check, and
-        the plan's agreed principles. Zero tokens. You agree or drop each; an agreed rule reaches Claude Code with the threads it is about, and one with a
-        check is checked after every edit — as advice. A rule that must block is a stated rule (the Rules panel).
+        Not generic: what THIS code already does, as rules — a tool reached through the project's own module, a data zone whose every
+        write runs behind one check, and the plan's agreed principles. Zero tokens. Agree or drop each; an agreed rule gets the two switches.
       </span>
       {state?.note && <span data-direction-note style={{ ...small, color: "var(--text-secondary)" }}>{state.note}</span>}
       {state?.error && <span style={{ fontSize: "var(--fs-11)", color: "var(--accent-error)" }}>{state.error}</span>}
       {!rules.length && <span style={small}>No project direction yet — <em>Read from the code</em> finds the patterns it already follows.</span>}
       {group("proposed").length > 0 && <span className="vg-keep-accent" style={{ fontSize: "var(--fs-12)", fontWeight: 600, color: "var(--accent-warning)" }}>Waiting for you ({group("proposed").length})</span>}
-      {group("proposed").map((r) => <Rule key={r.id} r={r} />)}
+      {group("proposed").map(show)}
       {group("agreed").length > 0 && <span style={{ fontSize: "var(--fs-12)", fontWeight: 600 }}>Agreed ({group("agreed").length})</span>}
-      {group("agreed").map((r) => <Rule key={r.id} r={r} />)}
+      {group("agreed").map(show)}
       {group("dropped").length > 0 && (
         <details>
           <summary style={{ ...small, cursor: "pointer" }}>Dropped ({group("dropped").length}) — never proposed again</summary>
-          <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 8 }}>{group("dropped").map((r) => <Rule key={r.id} r={r} />)}</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 8 }}>{group("dropped").map(show)}</div>
         </details>
       )}
     </section>

@@ -69,7 +69,8 @@ export function RuleItem({ row, review }: { row: RuleRowView; review?: boolean }
   const parts = checkParts(check, lead?.described);
   const facts: ItemFact[] = [
     parts ? { label: "rule", parts } : c.policy ? { label: "rule", text: `${c.policy.rule} ${c.policy.tool}${c.policy.with ? ` → ${c.policy.with}` : ""}` } : { label: "rule", text: c.text },
-    { label: "why", text: c.note ?? (parts || c.policy ? c.text : undefined) },
+    // 2026-10-19 — a rule read from the prose (harvest, or proposed from the architecture) says which sentence
+    { label: "why", text: [c.note ?? (parts || c.policy ? c.text : undefined), c.cite ? `from ${c.cite.file}:${c.cite.line} — "${c.cite.quote.slice(0, 120)}"` : undefined].filter(Boolean).join(" · ") || undefined },
     { label: "scope", parts: scopeParts(c, row.threads) },
   ];
   const offenders = row.checks.flatMap((r) => r.offenders);

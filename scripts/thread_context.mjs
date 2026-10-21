@@ -30,7 +30,7 @@ export function threadContexts(env, absRoot, constraints, prebuilt = {}) {
   const stack = prebuilt.stack ?? buildStackIndex(env, absRoot);
   const crossings = prebuilt.crossings ?? buildCrossingIndex(env);
   const graph = prebuilt.graph ?? deriveThreadCalls(env.threads, env.entryPoints, crossings);
-  const baseOpts = contractOptsFor(env, stack);
+  const baseOpts = contractOptsFor(env, stack, crossings);
   // 2026-09-28 - the discovered tests that exercise each thread.
   const tests = testReach(env.threads, env.entryPoints);
   // 2026-09-28 - the environment variables each thread reads.

@@ -77,6 +77,17 @@ test("the verb: scopes, the standard library, and unverifiable is never a pass",
   assert.match(describeCheck(ok), /lib\/ may import only zod, @acme\/\* \(and the standard library\)/);
 });
 
+test("M4: a package imported BY NAME is that package, even when the resolver found its file", () => {
+  // MCP SDK: "constants.ts may import only @modelcontextprotocol/core" read
+  // VIOLATED on `@modelcontextprotocol/core/internal`, resolved to a file.
+  const edges = [{ from: "fwd/constants.ts", to: "packages/core/src/internal.ts", spec: "@acme/core/internal", line: 6 }];
+  const facts = { importEdges: edges, parsedFiles: ["fwd/constants.ts"] };
+  assert.equal(checkConstraint(facts, { rule: "layer", files: ["fwd/"], mayImport: ["@acme/core"], allowStdlib: false }).verdict, "pass");
+  assert.equal(checkConstraint(facts, { rule: "layer", files: ["fwd/"], mayImport: ["@acme/other"], allowStdlib: false }).verdict, "violated", "another package's name does not allow it");
+  const byPath = [{ from: "fwd/constants.ts", to: "packages/core/src/internal.ts", spec: "../packages/core/src/internal", line: 6 }];
+  assert.equal(checkConstraint({ importEdges: byPath, parsedFiles: ["fwd/constants.ts"] }, { rule: "layer", files: ["fwd/"], mayImport: ["@acme/core"] }).verdict, "violated", "a relative path is checked by path, never by a package name");
+});
+
 test("promotion expands module ids to folders; `check` then reports the violation", () => {
   const r = promotePolicy(bad, loadPlan(bad), "p1");
   assert.equal(r.error, undefined, r.error);

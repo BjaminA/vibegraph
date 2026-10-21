@@ -84,11 +84,17 @@ test.describe("thread ranks", () => {
     await expect(page.locator('[data-fold="guard"]')).toHaveCount(0);
     await expect(control.locator("[data-rank-count]")).toHaveText("19 of 22");
 
-    // Remembered across a reload.
-    await control.locator('[data-rank-level="2"]').click();
+    // "All" is not remembered (2026-10-20): it lasts this thread, and a reload
+    // opens at the last Primary / Secondary choice.
     await openThread(page);
     await expect(page.locator("[data-thread-rank-control]")).toHaveAttribute("data-level", "2");
     await expect(cards(page)).toHaveCount(8);
+
+    // Primary / Secondary are remembered across a reload.
+    await page.locator("[data-thread-rank-control]").locator('[data-rank-level="1"]').click();
+    await openThread(page);
+    await expect(page.locator("[data-thread-rank-control]")).toHaveAttribute("data-level", "1");
+    await page.locator("[data-thread-rank-control]").locator('[data-rank-level="2"]').click();
 
     expect(errors).toEqual([]);
   });

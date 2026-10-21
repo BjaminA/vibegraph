@@ -29,9 +29,10 @@ import { hash16 } from "./brief_facts.ts";
 import { BRIEF_LIMITS, CLAIM_VERBS, type BriefBody, type BriefClaim, type BriefGroupOp, type BriefLine, type BriefRecord, type BriefScope, type BriefVocabulary, type BriefPart, type ClaimVerb } from "../shared/brief_types.ts";
 import type { Vocabulary } from "../shared/node_io.ts";
 import { boundLabel } from "./arch_propose.ts";
-import { GROUP_KINDS } from "./arch_store.ts";
+import { GROUP_KINDS, processGroupRefusal } from "./arch_store.ts";
 import type { BriefOnly } from "./brief_prompt.ts";
 import { briefCoverage, checkLine } from "./brief_checks.ts";
+import { jsonObjectInReply } from "./json_reply.ts";
 
 /** A claim as the model wrote it, shape-checked (its verdict comes from the map). */
 function parseClaims(raw: unknown, item: string, refused: Array<{ item: string; reason: string }>): BriefClaim[] {
@@ -55,11 +56,7 @@ const strs = (x: unknown) => (Array.isArray(x) ? x.filter((y): y is string => ty
 
 /** The first JSON object in a reply (a fence or prose around it is tolerated). */
 export function extractJson(text: string): unknown {
-  const fenced = /```(?:json)?\s*([\s\S]*?)```/.exec(text)?.[1];
-  const src = fenced ?? text;
-  const a = src.indexOf("{"), b = src.lastIndexOf("}");
-  if (a < 0 || b <= a) return null;
-  try { return JSON.parse(src.slice(a, b + 1)); } catch { return null; }
+  return jsonObjectInReply(text);
 }
 
 export function parseBrief(text: string, facts: BriefFacts, vocab: BriefVocabulary, opVocab: Vocabulary, meta: { model: string; only?: BriefOnly; now?: () => Date; absolutes?: string[] }): { brief: Proposed | null; error?: string } {
@@ -126,6 +123,8 @@ export function parseBrief(text: string, facts: BriefFacts, vocab: BriefVocabula
     }
     const kind = GROUP_KINDS.includes(g?.kind) ? g.kind : undefined;
     if (op === "add" && !members.length) { refused.push({ item, reason: `add ${id}: no member that exists` }); return; }
+    const notProcess = kind ? processGroupRefusal(id, kind, members.length ? members : (existing?.members ?? [])) : null;
+    if (notProcess) { for (const m of members) placed.delete(m); refused.push({ item, reason: notProcess }); return; }
     groups.push({ op, id, ...(op === "rename" || op === "add" ? { label: boundLabel(str(g?.label, 120) || id) } : {}), ...(kind ? { kind } : {}), ...(members.length ? { members } : {}), cites });
   });
   const names: BriefBody["names"] = {};

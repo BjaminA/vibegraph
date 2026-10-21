@@ -133,6 +133,18 @@ test("tokenizer: *.py tokens are files not symbols; node ids never re-enter as s
   assert.ok(!t.symbols.has("module/insert.fn"));
 });
 
+test("M4 class 1: a library call's segments are not the thread's symbols; the project's are", () => {
+  // MCP SDK, live: every `z.number(…)` made `number` a symbol of 22 threads,
+  // and "a `number`-typed parameter" routed a bug report to three examples.
+  const db = INDEX.find((r) => r.entryPointId === "db.py:query");
+  assert.ok(db.symbols.has("sqlite3.connect"), "an external terminal keeps its whole name");
+  assert.ok(!db.symbols.has("connect") && !db.symbols.has("sqlite3"), "…without its segments");
+  assert.deepEqual(matchQuestion("why does `connect` hang?", INDEX), []);
+  assert.equal(matchQuestion("why does `sqlite3.connect` hang?", INDEX)[0]?.entryPointId, "db.py:query");
+  const app = INDEX.find((r) => r.entryPointId === "app.py:create_user_route");
+  assert.ok(app.symbols.has("create_user") && app.symbols.has("models"), "a step's segments still identify the project's code");
+});
+
 // ── M-SKILL.2 — routing budget + session dedup (applyRoutingBudget) ──
 
 import { applyRoutingBudget } from "../src/server/thread_remit.ts";
@@ -272,4 +284,20 @@ test("mergeMatches: distinct threads interleave by combined score, deterministic
   ];
   assert.deepEqual(mergeMatches(a, b).map((m) => m.entryPointId), ["a", "b", "c"]);
   assert.deepEqual(mergeMatches(a, b, 2).map((m) => m.entryPointId), ["a", "b"]);
+});
+
+test("framework folder names in a path route: (group), [id], [...slug]; a path's tail; camelCase names (the live setup run)", () => {
+  const NEXT = buildRemitIndex([
+    { seed: { file: "app/(chat)/api/vote/route.ts", qualifiedName: "app/(chat)/api/vote/route:GET" }, entryPointId: "app/(chat)/api/vote/route.ts:GET", filesReached: ["app/(chat)/api/vote/route.ts", "lib/db/queries.ts"],
+      nodes: [{ id: "vote:GET", kind: "seed", label: "GET", irNodeId: "module/GET.fn" }, { id: "q:getVotesByChatId", kind: "step", label: "getVotesByChatId", irNodeId: "module/getVotesByChatId.fn" }] },
+    { seed: { file: "app/(chat)/api/chat/route.ts", qualifiedName: "app/(chat)/api/chat/route:POST" }, entryPointId: "app/(chat)/api/chat/route.ts:POST", filesReached: ["app/(chat)/api/chat/route.ts", "lib/db/queries.ts"], nodes: [] },
+    { seed: { file: "app/docs/[...slug]/page.tsx", qualifiedName: "app/docs/[...slug]/page:Page" }, entryPointId: "app/docs/[...slug]/page.tsx:Page", filesReached: ["app/docs/[...slug]/page.tsx"], nodes: [] },
+  ]);
+  const q = "Have the GET handler in app/(chat)/api/vote/route.ts return a count (see lib/db/queries.ts)";
+  assert.deepEqual([...tokenizeQuestion(q).files].sort(), ["app/(chat)/api/vote/route.ts", "lib/db/queries.ts"]);
+  assert.equal(matchQuestion(q, NEXT)[0].entryPointId, "app/(chat)/api/vote/route.ts:GET", "the file it names outranks the shared funnel");
+  assert.equal(matchQuestion("what does api/vote/route.ts do", NEXT)[0].entryPointId, "app/(chat)/api/vote/route.ts:GET", "the tail of exactly one path");
+  assert.equal(matchQuestion("render app/docs/[...slug]/page.tsx", NEXT)[0].entryPointId, "app/docs/[...slug]/page.tsx:Page");
+  assert.deepEqual([...tokenizeQuestion("(edit app/x.ts)").files], ["app/x.ts"], "the prose's parenthesis is not the path's");
+  assert.equal(matchQuestion("add a count next to getVotesByChatId(chatId)", NEXT)[0].entryPointId, "app/(chat)/api/vote/route.ts:GET", "camelCase is code");
 });

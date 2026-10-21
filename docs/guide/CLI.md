@@ -41,7 +41,8 @@ CLI) and says so; everything else is deterministic.
 | `hook install [--target posix\|wsl] [--remove]` | The same hooks without the `CLAUDE.md` block; `--target wsl` = `--windows` | `.claude/settings.local.json` | — |
 | `hook run <event> --file <path>` / `--command "<sh>"` / `--prompt "<text>"` | Fires a hook by hand: builds the payload Claude Code would send; the hook's exit codes (0, or 2 blocked) | nothing (a session record under `~/.cache`) | — |
 | `doctor` | Are the hooks installed, runnable from this side, and have they fired since installed? exit 0 / 1 | nothing | — |
-| `init --skill [--user]` / `--skills plan,…` / `--remove-skill` | Installs (removes) `/vibegraph` and the five task skills | `.claude/skills/`, or `~/.claude/skills/` with `--user` | — |
+| `init --skill [--user]` / `--skills plan,…` / `--remove-skill` | Installs (removes) `/vibegraph` and the six task skills | `.claude/skills/`, or `~/.claude/skills/` with `--user` | — |
+| `setup [--json]` / `setup skip software <name> --why "…"` / `skip direction` | The setup in order (software specs, architecture groups, the Brief, rules, the objective and principles, hooks): where the project stands and the exact next commands, who may run each and which spend tokens | `.vibegraph/setup.json` (only `skip`) | — |
 | `view [<path>] [--port n] [--open]` | Starts the visualisation until Ctrl-C | `.vibegraph/` state, as you use the app | only the app's Claude features |
 
 **Know the code**
@@ -64,11 +65,12 @@ CLI) and says so; everything else is deterministic.
 | `check [--uncommitted \| --git <range>]` | Every stated rule's check: PASS / VIOLATED (names the call) / UNVERIFIABLE; exit 0 / 1 / 2, and 3 when nothing was checkable (not a pass) | nothing | — |
 | `constraints list \| add \| remove \| ratify` | The stated rules, their reasons, scopes and checks; `add --cite file:line` records the prose sentence a rule was read from (refused unless it is there) | `.vibegraph/constraints.json` | — |
 | `constraints harvest [--min N] [--all]` | Rule-shaped sentences in the project's own prose (CLAUDE.md, READMEs, docs, module headers, docstrings) that name code the IR knows, ranked — a place to read, never a rule | nothing | — |
+| `constraints draft [--dry-run] [--reply <file>] [--prompt]` | Rules proposed from the architecture: one model call is shown the processes, tools by role, funnels, hops, silent-fail settings, unguarded flows, the harvest and the census; each rule must cite them, its scope uses the project's spellings, its check is run first. Same as the Rules panel's "Propose rules from the architecture" | `.vibegraph/constraints.json` (agent-stated, for a person) | **yes** — one call |
 | `constraint show \| edit \| propose \| accept \| reject <id>` | A rule's history; change it in place (a person), or propose a change with `--why` (an agent, or anything run inside Claude Code) for a person to accept | `.vibegraph/constraints.json` | — |
 | `seed(s) list \| add \| remove` | Entry points discovery cannot see (most programs are found from `package.json` and `listen` / `argv` / top-level `await`) | `.vibegraph/manual_seeds.json` | — |
 | `skills list \| ratify \| reaffirm \| auto-reaffirm` | Per-thread skills: approve, re-stamp a still-correct stale one | `.vibegraph/thread-skills/` | — |
 | `skills draft <entry>… \| --missing` | Drafts per-thread guidance through the grounding gates (reads the thread's lessons) | `.vibegraph/thread-skills/` | **yes** |
-| `direction [<skill>]` / `enable \| disable <skill>` / `hooks headlines \| on-violation \| off` | The generic coding skills: where they apply, one skill in full, whether the hooks send them | `.vibegraph/skills.json` | — |
+| `direction [<skill>]` / `enable \| disable <skill>` / `set <skill\|dN> --up-front on\|off --when-broken on\|off` | The generic coding skills and the project's agreed rules: where they apply, one skill in full, what Claude is told about each | `.vibegraph/skills.json`, `.vibegraph/direction.json` | — |
 | `lessons list` | Rules sessions broke and put right, with the fix | nothing | — |
 | `plan init "<objective>"` / `show` / `check` | A hypothetical plan: start it, read it, measure the code against it (realised / drifted / not built) | `.vibegraph/plan.json` (init) | — |
 | `plan edit '<op>'` / `agree` / `drop` / `close` / `reopen` | Change the plan by small operations, each one a changelog line (a `rename` op carries every reference; a thread's `entryPoint`, a tool's `via`); `--as agent` records a proposal | `.vibegraph/plan.json` | — |

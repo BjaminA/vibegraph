@@ -4,6 +4,7 @@
 // _validate / _store); server.ts only routes the WS messages here.
 
 import type { ArchModelRecord } from "../shared/protocol.ts";
+import type { ArchBaseline, ArchStore } from "./arch_store.ts";
 import { BRIEF_SECTIONS, type BriefBody, type BriefSection } from "../shared/brief_types.ts";
 import { reviewBrief } from "./brief_review.ts";
 import { gapDossier, gapList, gapPrompt, parseGapReply } from "./gap_explain.ts";
@@ -24,6 +25,8 @@ export interface BriefCtx {
   modelLabel: () => string;
   who: () => string;
   changed: () => void;
+  /** the drift baseline a ratification of the groups starts from */
+  archBaseline?: (store: ArchStore) => ArchBaseline | undefined;
 }
 
 /** What the card draws: the ratified spec (stale lines marked, with what
@@ -35,7 +38,7 @@ export function briefState(ctx: BriefCtx): Record<string, unknown> {
   const p = rec.proposed;
   const inp = model ? briefInputs(root, model, { notes: p?.notes }) : null;
   const ratified = inp && rec.ratified?.spec ? briefWithStaleness(rec, inp.facts) : rec.ratified;
-  const review = (spec: BriefBody["spec"] | undefined, omitted?: string[]) => (inp && spec && allLines(spec).length ? reviewBrief(spec, inp.facts, { omitted, absolutes: inp.absolutes }) : null);
+  const review = (spec: BriefBody["spec"] | undefined, omitted?: string[], scheme?: number) => (inp && spec && allLines(spec).length ? reviewBrief(spec, inp.facts, { omitted, absolutes: inp.absolutes, scheme }) : null);
   // groups first: what a plain Draft does next (brief_groups_first.ts)
   const gs = model ? groupsStep(root, rec, model) : null;
   return {
@@ -43,11 +46,11 @@ export function briefState(ctx: BriefCtx): Record<string, unknown> {
     groupsFirst: gs && gs.step !== "brief" ? { step: gs.step, why: gs.why } : null,
     sync: rec.sync ?? null,
     ratified: ratified ?? null,
-    ratifiedReview: review(ratified?.spec),
+    ratifiedReview: review(ratified?.spec, undefined, ratified?.scheme),
     proposed: p ? {
       model: p.model, at: p.at, spec: p.spec, refused: p.refused.length, refusedList: p.refused.slice(0, 30), omitted: p.omitted, notes: p.notes ?? [],
       sections: BRIEF_SECTIONS.map((s) => ({ section: s, summary: sectionSummary(p, s) })).filter((x) => x.summary),
-      review: review(p.spec, p.omitted),
+      review: review(p.spec, p.omitted, p.scheme),
     } : null,
   };
 }
@@ -120,7 +123,7 @@ export function briefDecide(ctx: BriefCtx, section: string, decision: "ratify" |
   const root = ctx.root();
   if (!root) return { ok: false, error: "the Brief needs a project directory" };
   if (section !== "all" && !BRIEF_SECTIONS.includes(section as BriefSection)) return { ok: false, error: `no section ${section}` };
-  const r = decideBrief(root, section as BriefSection | "all", decision, ctx.who());
+  const r = decideBrief(root, section as BriefSection | "all", decision, ctx.who(), new Date(), { archBaseline: ctx.archBaseline });
   if (r.ok) ctx.changed();
   return r.ok ? { ok: true, detail: r.detail } : { ok: false, error: r.detail };
 }

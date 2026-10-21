@@ -39,6 +39,18 @@ import type { NodeScopeRecord } from "../shared/node_io.ts";
 export const ARCH_STORE_FILE = path.join(".vibegraph", "architecture.json");
 export const GROUP_KINDS = ["host", "region", "subnet", "trust", "network", "process", "account", "zone"] as const;
 
+/** A `process` group is a process THIS project runs (2026-10-20, live run: a
+ *  Brief proposed "In-process client libraries (drizzle-orm, fetch)" as a
+ *  process — two libraries that run inside the web server, not a process of
+ *  their own). It must hold a box of the project's own code (a cluster, or a
+ *  dispatcher hub). A member that is itself a group, or match rules that may
+ *  bring code in later, are not judged. Both proposal gates ask this. */
+export function processGroupRefusal(id: string, kind: string, members: readonly string[], opts: { isGroup?: (m: string) => boolean; hasRules?: boolean } = {}): string | null {
+  if (kind !== "process" || !members.length || opts.hasRules) return null;
+  if (members.some((m) => m.startsWith("cluster:") || m.startsWith("hub:") || opts.isGroup?.(m))) return null;
+  return `${id}: a process group runs this project's code, and it holds only ${members.slice(0, 4).join(", ")}${members.length > 4 ? ", …" : ""} — a library loaded in process belongs in the group of the process that loads it; a service the code reaches is a zone or trust group`;
+}
+
 /** `match` (2026-10-05) — rules a box joins the group by (src/shared/
  *  arch_rules.ts), so code added later lands in its group with no model;
  *  `exclude` — boxes the rules must not bring in; `planned` — the plan item
@@ -231,6 +243,12 @@ export function ratifiedAt(store: ArchStore): { at: string; model: string } | nu
   for (const g of store.groups) {
     const m = /^ratified from (.+?) \(([^)]*)\)/.exec(g.note ?? "");
     if (m) return { at: m[2], model: m[1] };
+  }
+  // a group the Brief wrote: it is written only when a person ratifies it
+  // (before 2026-10-20 that path set no stamp; the note has no date)
+  for (const g of store.groups) {
+    const m = /^from the brief \((.+?)\)/.exec(g.note ?? "");
+    if (m) return { at: "", model: m[1] };
   }
   return null;
 }

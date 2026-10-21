@@ -45,6 +45,22 @@ test("the oracle: every one of the six stated rules surfaces from the README at 
   assert.equal(report.candidates.filter((c) => c.file === "gateway/auth.ts").length, 1, "the header repeated in the docstring is listed once");
 });
 
+// M3 measured the prose writer scoping each rule to the file its sentence names (scope overlap
+// 0.36 against the gold) and adding no checks: the harvest now suggests what the rule GOVERNS
+test("a suggested scope reads what the rule governs; a funnel module suggests its import-only check", () => {
+  // with a check: the precise scope — the check catches a break wherever it is written
+  assert.deepEqual(at("README.md", 10).suggestedScope, { stack: ["telemetry.http_client", "requests"] }, "a funnel scopes every thread using it or its tool");
+  assert.deepEqual(at("README.md", 10).suggestedCheck, { rule: "import-only", tool: "requests", files: ["telemetry/http_client.py"] }, "the gold c1's own check");
+  // not a prohibition: what it names, precisely
+  assert.deepEqual(at("README.md", 11).suggestedScope, { entryPointIds: ["gateway/server.ts:getExport", "telemetry/app.py:export_route"] }, "a route served twice scopes both");
+  assert.deepEqual(at("README.md", 15).suggestedScope, { files: ["telemetry/"] }, "a module not built yet scopes its folder");
+  // a prohibition with NO check must be delivered before the edit: the whole area a violation could be written in
+  assert.deepEqual(at("README.md", 12).suggestedScope, { files: ["telemetry/"] }, "'paged only via notify': the service, as the person scoped it");
+  assert.deepEqual(at("README.md", 13).suggestedScope, { files: ["gateway/"] }, "'the gateway never forwards': the area the sentence names, not both /ingest servers");
+  assert.deepEqual(at("README.md", 14).suggestedScope, { files: ["telemetry/"] }, "'never one row at a time': the service — a superset of the person's three files, the principle's cost");
+  assert.match(formatHarvest(report), /scope: --tools telemetry\.http_client,requests · try: --check/);
+});
+
 test("behaviour-describing docstrings and perfect-tense descriptions stay under the threshold", () => {
   const all = harvestRules(FLEET, env, stack, { min: 0 }).candidates;
   const q = (part) => all.find((c) => c.quote.includes(part));

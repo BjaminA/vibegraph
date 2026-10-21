@@ -55,12 +55,20 @@ export const POINTER = [
   END,
 ].join("\n");
 
-function upsertBlock(existing) {
+/** The block with its commands pinned (2026-10-20, live run: a hooked session
+ *  ran `npx vibegraph-knowledge check` — whatever npm had, older than what set
+ *  the project up — and read its false violations as "pre-existing"). The same
+ *  rule as a skill's note: the command that installed it, at its version. */
+export function pointerFor(cli = null) {
+  return cli?.invocation?.length ? POINTER.replaceAll("npx vibegraph-knowledge", cli.invocation.join(" ")) : POINTER;
+}
+
+function upsertBlock(existing, block = POINTER) {
   const b = existing.indexOf(BEGIN);
   const e = existing.indexOf(END);
-  if (b >= 0 && e > b) return existing.slice(0, b) + POINTER + existing.slice(e + END.length);
+  if (b >= 0 && e > b) return existing.slice(0, b) + block + existing.slice(e + END.length);
   const sep = existing.length === 0 ? "" : existing.endsWith("\n\n") ? "" : existing.endsWith("\n") ? "\n" : "\n\n";
-  return `${existing}${sep}${POINTER}\n`;
+  return `${existing}${sep}${block}\n`;
 }
 
 function hasIgnore(text) {
@@ -73,18 +81,19 @@ function hasIgnore(text) {
 /**
  * @returns {{ claudeMd: "created"|"updated"|"unchanged"|"printed", gitignore: "created"|"updated"|"unchanged"|"skipped", paths: {claudeMd, gitignore} }}
  */
-export function applyInit({ root, print = false }) {
+export function applyInit({ root, print = false, cli = null }) {
+  const block = pointerFor(cli);
   const claudeMd = join(root, "CLAUDE.md");
   const gitignore = join(root, ".gitignore");
   if (print) return { claudeMd: "printed", gitignore: "skipped", paths: { claudeMd, gitignore } };
 
   let claudeState;
   if (!existsSync(claudeMd)) {
-    writeFileSync(claudeMd, POINTER + "\n");
+    writeFileSync(claudeMd, block + "\n");
     claudeState = "created";
   } else {
     const before = readFileSync(claudeMd, "utf-8");
-    const after = upsertBlock(before);
+    const after = upsertBlock(before, block);
     if (after === before) claudeState = "unchanged";
     else { writeFileSync(claudeMd, after); claudeState = "updated"; }
   }
@@ -195,7 +204,7 @@ export const SKILL_NAME = "vibegraph";
 // planning, debugging, a security review and a pre-commit review. Claude Code
 // keeps only a skill's name and description in context until a task matches,
 // so these cost ~100 tokens each until used. scripts/cli/claude-skills/<name>/.
-export const TASK_SKILLS = ["plan", "debug", "security", "review", "rules"];
+export const TASK_SKILLS = ["setup", "plan", "debug", "security", "review", "rules"];
 export const ALL_SKILLS = [SKILL_NAME, ...TASK_SKILLS.map((t) => `${SKILL_NAME}-${t}`)];
 
 /** `plan,debug` → ["vibegraph", "vibegraph-plan", "vibegraph-debug"]; the
@@ -225,7 +234,40 @@ export function applySkills({ names = ALL_SKILLS, ...rest }) {
   return names.map((name) => ({ name, ...applySkill({ ...rest, name }) }));
 }
 
-export function applySkill({ root, loc, user = false, remove = false, home = homedir(), name = SKILL_NAME }) {
+/** 2026-10-20 (the live setup run: the skill offered `vibegraph-knowledge …`
+ *  OR `npx --yes vibegraph-knowledge@latest …`, and Claude ran `@latest` — the
+ *  published version, which had no `setup` command — then improvised). An
+ *  installed skill names the exact command that installed it, the way a hook
+ *  does (cliInvocation): `@latest` becomes this version, and one line at the
+ *  top says which command every step means. */
+export function pinSkillCli(body, { invocation, version = null }) {
+  const cli = invocation.join(" ");
+  const pinned = version ? body.replace(/vibegraph-knowledge@latest/g, `vibegraph-knowledge@${version}`) : body;
+  const note = `> **In this project, run VibeGraph as \`${cli}\`** — the command that installed this skill${version ? ` (version ${version})` : ""}. Wherever a step says \`vibegraph-knowledge …\`, put that command in place of the word \`vibegraph-knowledge\`: \`vibegraph-knowledge setup\` means \`${cli} setup\`. Do not use \`npx … vibegraph-knowledge@latest\`: it fetches whatever version is published, which may not be this one.\n`;
+  return pinned.replace(/^(---\n[\s\S]*?\n---\n)/, `$1\n${note}`);
+}
+
+/** The installed vibegraph skills that differ from what THIS version installs
+ *  (2026-10-20, live run: a session followed a skill installed before the fix
+ *  to its own note and made the mistake the fix was for — an installed skill
+ *  is a copy, and nothing said it was old). Compared without the pinned
+ *  command note and version, which differ by how it was installed. */
+export function outdatedSkills({ root, loc, home = homedir() }) {
+  const unpin = (b) => b.replace(/^> \*\*In this project, run VibeGraph as .*\n\n?/m, "").replace(/vibegraph-knowledge@\d+\.\d+\.\d+(?:-[\w.]+)?/g, "vibegraph-knowledge@latest");
+  const out = [];
+  for (const [base, user] of [[join(root, ".claude"), false], [join(home, ".claude"), true]]) {
+    for (const name of ALL_SKILLS) {
+      const path = join(base, "skills", name, "SKILL.md");
+      if (!existsSync(path) || out.some((o) => o.path === path)) continue;
+      let source;
+      try { source = readFileSync(skillSource(loc, name), "utf-8"); } catch { continue; }
+      if (unpin(readFileSync(path, "utf-8")) !== unpin(source)) out.push({ name, path, user });
+    }
+  }
+  return out;
+}
+
+export function applySkill({ root, loc, user = false, remove = false, home = homedir(), name = SKILL_NAME, cli = null }) {
   const dir = join(user ? join(home, ".claude") : join(root, ".claude"), "skills", name);
   const path = join(dir, "SKILL.md");
   if (remove) {
@@ -233,7 +275,8 @@ export function applySkill({ root, loc, user = false, remove = false, home = hom
     rmSync(dir, { recursive: true, force: true });
     return { path, state: "removed" };
   }
-  const body = readFileSync(skillSource(loc, name), "utf-8");
+  const source = readFileSync(skillSource(loc, name), "utf-8");
+  const body = cli ? pinSkillCli(source, cli) : source;
   const had = existsSync(path) ? readFileSync(path, "utf-8") : null;
   if (had === body) return { path, state: "unchanged" };
   mkdirSync(dir, { recursive: true });

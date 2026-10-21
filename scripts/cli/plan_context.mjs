@@ -70,15 +70,29 @@ export function objectiveReminder(plan) {
   return `Plan objective (rev ${plan.revision}${waiting ? `; ${waiting}` : ""}): ${plan.objective} — keep this work on it.`;
 }
 
-/** The block to add to this prompt, or null. Updates `state.planRev`. */
-export function planForPrompt(absRoot, state) {
+/** The block to add to this prompt, or null. Updates `state.planRev` only when
+ *  the plan (or its changes) is sent. `room` (2026-10-20, live run: the whole
+ *  plan went first and pushed the routed thread out of the prompt): what it
+ *  may take — over it, the objective line and a pointer, the plan left unsent
+ *  so a later prompt delivers it. */
+export function planForPrompt(absRoot, state, room = Infinity) {
   let plan;
   try { plan = loadPlan(absRoot); } catch { return null; }
   if (!plan || plan.closed) return null;
   const sent = state.planRev;
-  if (sent === plan.revision) return objectiveReminder(plan);
+  const reminder = objectiveReminder(plan);
+  if (sent === plan.revision) return reminder;
+  const full = compactPlan(plan, sent === undefined ? undefined : sent);
+  if (full.length > room) return `${reminder} (The plan itself did not fit this prompt: \`vibegraph-knowledge plan show\`.)`;
   state.planRev = plan.revision;
-  return compactPlan(plan, sent === undefined ? undefined : sent);
+  return full;
+}
+
+/** What `planForPrompt` needs at least: the objective line and its pointer. */
+export function planReserve(absRoot) {
+  let plan;
+  try { plan = loadPlan(absRoot); } catch { return 0; }
+  return !plan || plan.closed ? 0 : objectiveReminder(plan).length + 90;
 }
 
 /** 2026-10-01 — after an edit: a function the plan NAMES that this edit made

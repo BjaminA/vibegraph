@@ -8,7 +8,8 @@
 //   npm run test:envelope-cache
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
-import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync, appendFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync, appendFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { buildEnvelopeCached } from "../scripts/envelope_cache.mjs";
@@ -94,4 +95,61 @@ test("a TypeScript edit in a file several threads walk", () => {
   const r = cached();
   assert.equal(r.cache.mode, "incremental");
   assert.deepStrictEqual(r.envelope, full());
+});
+
+// ── the store (2026-10-20, scripts/envelope_store.mjs): one blob per parsed
+// IR, linked IR and thread, named by the sha1 of its text, and a manifest ──
+const blobs = () => new Set(readdirSync(join(cacheDir, "blobs")).filter((f) => f.endsWith(".json")).map((f) => f.slice(0, -5)));
+const manifest = () => JSON.parse(readFileSync(join(cacheDir, "meta.json"), "utf-8"));
+const sha1 = (s) => createHash("sha1").update(s).digest("hex");
+const same = (a, b, msg) => assert.equal(JSON.stringify(a), JSON.stringify(b), msg ?? "byte for byte, key order included");
+
+test("the stored envelope reads back byte for byte; every blob is named by its content and none is orphaned", () => {
+  const r = cached();
+  assert.equal(r.cache.mode, "hit");
+  same(r.envelope, full());
+  const m = manifest();
+  const named = new Set([...Object.values(m.parsed).map((p) => p.blob), ...Object.values(m.files), ...m.threads, m.shell]);
+  assert.deepEqual([...blobs()].sort(), [...named].sort(), "the folder holds exactly what the manifest names");
+  for (const name of named) assert.equal(sha1(readFileSync(join(cacheDir, "blobs", `${name}.json`), "utf-8")), name);
+});
+
+test("an edit writes only what it changed: its parse, the linked files that moved, the threads re-extracted", () => {
+  const before = blobs();
+  const m0 = manifest();
+  edit("telemetry/alerts.py", "limit = max(limit, 2)", "limit = max(limit, 3)");
+  const r = cached();
+  assert.equal(r.cache.mode, "incremental");
+  same(r.envelope, full());
+  const m1 = manifest();
+  const newThreads = m1.threads.filter((b) => !m0.threads.includes(b));
+  const allowed = new Set([
+    m1.parsed["telemetry/alerts.py"].blob,
+    ...Object.entries(m1.files).filter(([f, b]) => m0.files[f] !== b).map(([, b]) => b),
+    ...newThreads,
+    m1.shell,
+  ]);
+  for (const b of blobs()) if (!before.has(b)) assert.ok(allowed.has(b), `blob ${b} was written though nothing it holds changed`);
+  assert.ok(newThreads.length <= r.cache.extracted, "a reused thread keeps its blob");
+  assert.ok(newThreads.length < m1.threads.length, "the threads that do not walk the file are not written again");
+});
+
+test("a blob that is gone (pruned by a concurrent run, deleted by hand) costs a rebuild, never a partial envelope", () => {
+  const m = manifest();
+  rmSync(join(cacheDir, "blobs", `${m.threads[0]}.json`));
+  rmSync(join(cacheDir, "blobs", `${Object.values(m.parsed)[0].blob}.json`), { force: true });
+  const r = cached();
+  same(r.envelope, full());
+  assert.match(r.cache.reason, /could not be read/);
+  assert.equal(cached().cache.mode, "hit", "and the store is whole again");
+});
+
+test("a version-1 cache (two whole-map files) is rebuilt and its files removed", () => {
+  writeFileSync(join(cacheDir, "envelope.json"), "{}");
+  writeFileSync(join(cacheDir, "parsed.json"), "{}");
+  writeFileSync(join(cacheDir, "meta.json"), JSON.stringify({ ...manifest(), version: "1" }));
+  const r = cached();
+  assert.equal(r.cache.mode, "full");
+  same(r.envelope, full());
+  for (const f of ["envelope.json", "parsed.json"]) assert.equal(existsSync(join(cacheDir, f)), false, `${f} removed`);
 });

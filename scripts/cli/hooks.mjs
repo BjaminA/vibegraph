@@ -38,17 +38,18 @@ import { threadContexts } from "../thread_context.mjs";
 import { runConstraintChecks, workingTreeDelta } from "./check.mjs";
 import { appendLesson, fileDiff, offenderFile } from "./lessons.mjs";
 import { fitContract, restOfContract } from "./contract_fit.mjs";
-import { buildRemitIndex, matchQuestion, applyRoutingBudget } from "../../src/server/thread_remit.ts";
+import { buildRemitIndex, matchQuestion, applyRoutingBudget, tokenizeQuestion } from "../../src/server/thread_remit.ts";
 import { buildKeywordIndex, matchKeywords } from "../../src/server/thread_keywords.ts";
 import { loadConstraints, formatConstraintsBlock } from "../../src/server/constraint_store.ts";
 import { formatContractBlock } from "../../src/server/thread_contract.ts";
 import { getThreadSkill, injectableSkillText } from "../../src/server/thread_skill_store.ts";
 import { affectedTests } from "../../src/shared/test_reach.ts";
-import { verbMayGate } from "../../src/server/quality/standings.ts";
+import { findingsOf, OFFENDERS_PER_CHECK, renderFindings, rescopeHint, countLine, testsLine } from "./hook_findings.mjs";
+import { appendHookLog, deliverySnapshot, logEntry, noteFindings, noteRouting } from "./hook_log.mjs";
 import { archForPrompt } from "./arch_context.mjs";
 import { promptBriefLines, gapLinesForPrompt, editBriefNote } from "./brief_context.mjs";
 import { orientation, inboxNote } from "./orientation.mjs";
-import { planAffectedNote, planForPrompt, plannedThreadsForPrompt } from "./plan_context.mjs";
+import { planAffectedNote, planForPrompt, planReserve, plannedThreadsForPrompt } from "./plan_context.mjs";
 import { softwareForPrompt } from "./software_context.mjs";
 import { directionForPrompt, directionForFindings } from "./direction.mjs";
 import { fitText } from "./hook_text.mjs";
@@ -86,68 +87,22 @@ const resetDelivery = (state) => { for (const k of DELIVERY_KEYS) delete state[k
 export { fitText };
 const capped = (text) => fitText(text, INLINE_CAP, "`vibegraph-knowledge check --uncommitted` or the export has it all");
 
-// ── findings: every non-pass verdict, one per offender ─────────────────
-
-export function findingsOf(checkResult) {
-  const out = [];
-  for (const row of checkResult.results) {
-    if (row.verdict === "pass") continue;
-    const offenders = row.offenders.length ? row.offenders : ["-"];
-    for (const o of offenders) {
-      out.push({
-        key: `${row.id}|${row.rule}|${row.verdict}|${o}`,
-        id: row.id, rule: row.rule, verdict: row.verdict, offender: o === "-" ? null : o,
-        described: row.described, reason: row.reason,
-        gates: row.verdict === "violated" && (row.gates ?? verbMayGate(row.rule)),
-      });
-    }
-  }
-  return out;
-}
-
-/** At most this many offender lines per check; the rest are counted. */
-export const OFFENDERS_PER_CHECK = 5;
-
-/** One block per rule: its stated text (with the reason people wrote), then
- *  each check that failed and where — one line per distinct offender (two
- *  clauses naming the same call are one line), at most OFFENDERS_PER_CHECK a
- *  check, the reason once per check rather than once per offender. */
-export function renderFindings(list, textById) {
-  const byId = new Map();
-  for (const f of list) { if (!byId.has(f.id)) byId.set(f.id, []); byId.get(f.id).push(f); }
-  return [...byId].map(([id, fs]) => {
-    const byCheck = new Map();
-    for (const f of fs) {
-      const k = `${f.described}|${f.verdict}`;
-      if (!byCheck.has(k)) byCheck.set(k, { f, at: new Set() });
-      if (f.offender) byCheck.get(k).at.add(f.offender);
-    }
-    const lines = [`- [${id}] ${textById.get(id) ?? fs[0].described}`];
-    for (const { f, at } of byCheck.values()) {
-      const all = [...at];
-      const shown = all.slice(0, OFFENDERS_PER_CHECK);
-      lines.push(`  check: ${f.described} → ${f.verdict.toUpperCase()}${shown.length ? ` at ${shown.join(", ")}${all.length > shown.length ? ` (+${all.length - shown.length} more)` : ""}` : ""}\n    ${f.reason}`);
-    }
-    return lines.join("\n");
-  }).join("\n");
-}
-
-/** When a block is on a rule that may not fit the change: the exact command
- *  to PROPOSE a re-scope (a person accepts it) — never an edit of .vibegraph/. */
-export function rescopeHint(list) {
-  const ids = [...new Set(list.map((f) => f.id))];
-  return `If the rule itself is too narrow for a legitimate change, do not edit .vibegraph/ — propose a re-scope for a person to accept: \`vibegraph-knowledge constraint propose ${ids[0]} --check '<the check as JSON>' --why "<why the change is legitimate>"\` (\`vibegraph-knowledge constraint show ${ids[0]}\` prints the current one).`;
-}
-
-/** "[c3] 2 offenders, [c5] 1" — what was already there, in one line. */
-function countLine(list) {
-  const by = new Map();
-  for (const f of list) { if (!by.has(f.id)) by.set(f.id, new Set()); by.get(f.id).add(f.offender ?? "-"); }
-  return [...by].map(([id, s]) => `[${id}] ${s.size} offender${s.size === 1 ? "" : "s"}`).join(", ");
-}
+// ── findings (hook_findings.mjs; re-exported for this module's importers) ──
+export { findingsOf, OFFENDERS_PER_CHECK, renderFindings, rescopeHint, testsLine };
 
 function check(absRoot, loaded) {
   return runConstraintChecks({ root: absRoot, loaded, uncommitted: true, commit: "working-tree" });
+}
+
+/** The session's baseline: what the tree already had, and the source stamp it
+ *  was taken at. The stamp is "source as of the last check", and a baseline IS
+ *  a check (M4 class 2: without it the session's first shell command — an
+ *  `ls`, a `git status` — found no stamp and ran a full check). */
+function takeBaseline(absRoot, loaded, state) {
+  if (state.baseline) return;
+  state.baseline = findingsOf(check(absRoot, loaded)).map((f) => f.key);
+  state.sourceStamp ??= sourceStamp(absRoot);
+  untrustedBaseline(loaded.envelope, absRoot, state); projectDirectionBaseline(absRoot, loaded, state);
 }
 
 /** Files the parser could not read. Said, never swallowed: a rule touching
@@ -180,7 +135,7 @@ function onSessionStart(input, { absRoot, loaded, state, constraints }) {
   } else if (state.oriented) {
     return null; // resumed with its context intact
   }
-  if (!state.baseline) state.baseline = findingsOf(check(absRoot, loaded)).map((f) => f.key);
+  takeBaseline(absRoot, loaded, state);
   untrustedBaseline(loaded.envelope, absRoot, state); projectDirectionBaseline(absRoot, loaded, state);
   out.unshift(orientation(absRoot, loaded, constraints));
   const pn = parseNote(loaded);
@@ -191,15 +146,20 @@ function onSessionStart(input, { absRoot, loaded, state, constraints }) {
 
 // ── prompt: routed context ─────────────────────────────────────────────
 
-function onPrompt(input, { absRoot, loaded, state, constraints }) {
+function onPrompt(input, { absRoot, loaded, state, constraints, trace }) {
   const env = loaded.envelope;
   const out = [];
   let room = INLINE_CAP - HEADER.length - 400;
-  if (!state.baseline) { state.baseline = findingsOf(check(absRoot, loaded)).map((f) => f.key); untrustedBaseline(env, absRoot, state); projectDirectionBaseline(absRoot, loaded, state); }
+  takeBaseline(absRoot, loaded, state);
   const pn = parseNote(loaded);
   if (pn && state.parseNote !== pn) { out.push(pn); state.parseNote = pn; room -= pn.length; }
-  const planBlock = planForPrompt(absRoot, state);
-  if (planBlock) { out.push(planBlock); room -= planBlock.length; }
+  // The routed threads come first (2026-10-20, live run: the whole plan and five
+  // software specs went in ahead of the task's own thread, which was the part
+  // cut): the plan takes what is left after them, its objective line kept room
+  // for, and is placed here, above them.
+  const reserve = planReserve(absRoot);
+  room -= reserve;
+  const planAt = out.length;
 
   const prompt = String(input.prompt ?? "");
   const long = prompt.trim().length >= MIN_PROMPT_CHARS;
@@ -212,10 +172,12 @@ function onPrompt(input, { absRoot, loaded, state, constraints }) {
   let weak = [];
   if (long && !strong.length && !planned.ids.length) {
     const docOf = (file, id) => (env.files[file]?.nodes ?? []).find((n) => n.id === id)?.docstring ?? null;
-    weak = matchKeywords(prompt, buildKeywordIndex(env.threads, docOf), { limit: 2 });
+    const named = tokenizeQuestion(prompt);
+    weak = matchKeywords(prompt, buildKeywordIndex(env.threads, docOf), { limit: 2, named: [...named.nodeIds, ...named.files, ...named.symbols] });
   }
   let routedForSoftware = [];
   const matches = strong.length ? strong : weak.map((w) => ({ entryPointId: w.entryPointId, qualifiedName: w.qualifiedName, matchedOn: [], score: w.score, weakTerms: w.terms }));
+  noteRouting(trace, matches, planned.ids);
 
   if (matches.length) {
     const ctx = threadContexts(env, absRoot, constraints, { only: new Set(matches.map((m) => m.entryPointId)) });
@@ -237,7 +199,6 @@ function onPrompt(input, { absRoot, loaded, state, constraints }) {
     const injected = new Map(Object.entries(state.injectedSkills ?? {}));
     const deferred = [];
     const routedEps = applied.routed.map((r) => r.entryPointId);
-    routedForSoftware = routedEps;
     const archFor = archForPrompt(absRoot, env, routedEps, state, constraints);
     const dirFor = directionForPrompt(absRoot, env, routedEps, state);
     const sentBefore = [state.briefSent, state.gapsSent]; // what counts as sent only once it is
@@ -260,6 +221,18 @@ function onPrompt(input, { absRoot, loaded, state, constraints }) {
       if (block.length > room) { [state.arch, state.direction] = JSON.parse(before).map((x) => x ?? undefined); deferred.push(r.qualifiedName); continue; }
       room -= block.length; briefFor = [];
       for (const k of fresh) sentRules.add(k.id);
+      // A GUESS is said as one, and costs what one is worth (M4 class 1: a
+      // guessed thread's contract filled the inline limit on the MCP SDK, and
+      // the 2026-10-07 field report saw the same with test threads). Its rules
+      // go above; its contract and skill wait for a prompt that names its
+      // code, or one command — nothing about them is recorded as sent.
+      if (terms) {
+        const t = `\n(A guess, so its contract and skill are not sent. If this is the place: \`vibegraph-knowledge brief ${r.entryPointId}\` prints them, or name its code in a prompt.)`;
+        out.push(block + t); room -= t.length;
+        continue;
+      }
+      // the software specs follow the threads actually given — never a guess or a deferred one
+      routedForSoftware.push(r.entryPointId);
       if (r.skill && r.skill.length + 40 <= room) {
         block += `\n## Ratified thread skill\n${r.skill}`;
         room -= r.skill.length + 40;
@@ -301,6 +274,7 @@ function onPrompt(input, { absRoot, loaded, state, constraints }) {
     // the threads did not fit: their Brief and gap lines are short — alone if they fit, else not remembered as sent
     if (briefFor.length) { const t = briefFor.join("\n"); if (t.length <= room) { out.push(t); room -= t.length; } else [state.briefSent, state.gapsSent] = sentBefore; }
     if (deferred.length) out.push(`(Also matched, not sent — over the inline limit: ${deferred.join(", ")}. Name one to receive it.)`);
+    trace.deferred = deferred;
     state.contracts = [...sentContracts];
     state.partialContracts = partial;
     state.rules = [...sentRules];
@@ -317,7 +291,9 @@ function onPrompt(input, { absRoot, loaded, state, constraints }) {
     }
     state.globalRulesSent = true;
   }
-  const softwareBlock = softwareForPrompt(absRoot, env, routedForSoftware, state);
+  const planBlock = planForPrompt(absRoot, state, room + reserve);
+  if (planBlock) { out.splice(planAt, 0, planBlock); room += reserve - planBlock.length; }
+  const softwareBlock = softwareForPrompt(absRoot, env, routedForSoftware, state, Math.max(0, room));
   if (softwareBlock) out.push(softwareBlock);
   state.stopBlocks = 0;
   if (!out.length) return null;
@@ -370,15 +346,15 @@ function newFindings(absRoot, loaded, state, textById, sessionId) {
   return { fresh, introduced: fresh.filter((f) => !before.has(f.key)), earlier: fresh.filter((f) => before.has(f.key)), note };
 }
 
-function onPostEdit(input, { absRoot, loaded: load, state, constraints }) {
+function onPostEdit(input, { absRoot, loaded: load, state, constraints, trace }) {
   // Bash: no file path to key on. Check only when some source file moved.
   // 2026-10-07 — Claude Code on Windows edits through its PowerShell tool too
   // (field report: those edits were never checked); the same, by the stamp.
   if (input.tool_name === "Bash" || input.tool_name === "PowerShell") {
     const stamp = sourceStamp(absRoot);
-    if (state.sourceStamp === stamp) return null;
+    if (state.sourceStamp === stamp) { trace.skipped = "no source file changed since the last check"; return null; }
     state.sourceStamp = stamp;
-    return afterEdit(null, input, { absRoot, loaded: load(), state, constraints });
+    return afterEdit(null, input, { absRoot, loaded: load(), state, constraints, trace });
   }
   const target = input.tool_input?.file_path ?? input.tool_input?.notebook_path;
   if (typeof target !== "string") return null;
@@ -386,12 +362,12 @@ function onPostEdit(input, { absRoot, loaded: load, state, constraints }) {
   const rel = relative(absRoot, abs).split("\\").join("/");
   if (rel.startsWith("..") || rel.startsWith(".vibegraph/") || !languageForFile(basename(abs), abs)) return null;
   state.sourceStamp = sourceStamp(absRoot);
-  return afterEdit(rel, input, { absRoot, loaded: load(), state, constraints });
+  return afterEdit(rel, input, { absRoot, loaded: load(), state, constraints, trace });
 }
 
 /** After an edit: `rel` is the edited file, or null when a shell command
  *  changed an unknown set (then every changed file's parse and tests). */
-function afterEdit(rel, input, { absRoot, loaded, state, constraints }) {
+function afterEdit(rel, input, { absRoot, loaded, state, constraints, trace }) {
   const textById = new Map(constraints.map((c) => [c.id, c.text]));
   const notes = [];
   let files = rel ? [rel] : [];
@@ -402,6 +378,7 @@ function afterEdit(rel, input, { absRoot, loaded, state, constraints }) {
   // Only a file with NO IR blocks: a partly read one is still checked.
   const broken = files.filter((f) => loaded.parseErrors?.[f]);
   if (broken.length) {
+    trace.skipped = `blocked: ${broken.join(", ")} does not parse`;
     return { block: `VibeGraph could not parse ${broken.join(", ")} after this edit, so no rule can be checked against it: ${String(loaded.parseErrors[broken[0]]).slice(0, 400)}` };
   }
   const partial = files.filter((f) => loaded.partialParses?.[f]);
@@ -413,6 +390,7 @@ function afterEdit(rel, input, { absRoot, loaded, state, constraints }) {
   for (const n of [untrusted, planAffectedNote(absRoot, loaded.envelope, files, state), editBriefNote(absRoot, loaded.envelope, files, state)]) if (n) notes.push(n);
   const gating = introduced.filter((f) => f.gates);
   const advisory = introduced.filter((f) => !f.gates);
+  noteFindings(trace, { introduced, earlier, blocked: gating });
   if (advisory.length) {
     notes.push(`This edit introduced (not blocking — ${advisory.some((f) => f.verdict === "violated") ? "a violation of a rule whose check is advisory until calibrated, or " : ""}a rule the IR could not settle):\n${renderFindings(advisory, textById)}`);
   }
@@ -431,22 +409,11 @@ function afterEdit(rel, input, { absRoot, loaded, state, constraints }) {
   };
 }
 
-/** A few tests by name; many by file (2026-10-07, field report: several
- *  hundred names cut off at the inline limit) — the names are one command away. */
-export function testsLine(what, tests, files) {
-  const ids = tests.map((t) => t.entryPointId);
-  if (ids.length <= 8) return `Discovered tests that reach ${what}: ${ids.join(", ")}`;
-  const byFile = new Map();
-  for (const id of ids) { const f = id.slice(0, id.lastIndexOf(":")) || id; byFile.set(f, (byFile.get(f) ?? 0) + 1); }
-  const parts = [...byFile].sort((a, b) => b[1] - a[1]).map(([f, n]) => `${n} in \`${f}\``);
-  const shown = parts.slice(0, 6).join(", ") + (parts.length > 6 ? `, and ${parts.length - 6} more file(s)` : "");
-  return `${ids.length} discovered tests reach ${what}: ${shown}. Their names: \`vibegraph-knowledge affected ${files.slice(0, 3).join(" ")}${files.length > 3 ? " …" : ""}\`.`;
-}
-
-function onStop(input, { absRoot, loaded, state, constraints }) {
+function onStop(input, { absRoot, loaded, state, constraints, trace }) {
   const textById = new Map(constraints.map((c) => [c.id, c.text]));
-  const { fresh } = newFindings(absRoot, loaded, state, textById, input.session_id);
+  const { fresh, introduced, earlier } = newFindings(absRoot, loaded, state, textById, input.session_id);
   const gating = fresh.filter((f) => f.gates);
+  noteFindings(trace, { introduced, earlier, fresh, blocked: input.stop_hook_active || (state.stopBlocks ?? 0) >= 2 ? [] : gating });
   if (!gating.length) {
     const other = [
       fresh.length ? `VibeGraph: ${fresh.length} new advisory or unverifiable finding(s) this session — run \`vibegraph-knowledge check --uncommitted\`.` : null,
@@ -469,20 +436,24 @@ function onStop(input, { absRoot, loaded, state, constraints }) {
 /** Run one hook. Returns `{json}` to print on exit 0, `{block}` — a reason
  *  for stderr and exit 2, the form Claude Code shows to Claude on both
  *  PostToolUse and Stop — or null for silence. */
-export function runHook(event, input, { absRoot, pipeline }) {
+export function runHook(event, input, { absRoot, pipeline, log = false }) {
   const sessionPath = sessionFile(absRoot, input.session_id);
   const state = readSession(sessionPath);
   try {
+    const t0 = Date.now(), trace = {}, before = deliverySnapshot(state);
     let memo = null;
     const load = () => (memo ??= loadEnvelope(absRoot, null, pipeline ?? {}, { cache: true }));
     const constraints = existsSync(join(absRoot, ".vibegraph", "constraints.json")) ? loadConstraints(absRoot) : [];
     // post-edit loads lazily: a shell command that changed no code costs a
     // stat walk, not a parse.
-    const out = event === "session-start" ? onSessionStart(input, { absRoot, loaded: load(), state, constraints })
-      : event === "prompt" ? onPrompt(input, { absRoot, loaded: load(), state, constraints })
-        : event === "post-edit" ? onPostEdit(input, { absRoot, loaded: load, state, constraints })
-          : event === "stop" ? onStop(input, { absRoot, loaded: load(), state, constraints }) : null;
+    const ctx = { absRoot, state, constraints, trace };
+    const out = event === "session-start" ? onSessionStart(input, { ...ctx, loaded: load() })
+      : event === "prompt" ? onPrompt(input, { ...ctx, loaded: load() })
+        : event === "post-edit" ? onPostEdit(input, { ...ctx, loaded: load })
+          : event === "stop" ? onStop(input, { ...ctx, loaded: load() }) : null;
     writeSession(sessionPath, state);
+    // `hook log` (hook_log.mjs): what this firing did — real firings only.
+    if (log) appendHookLog(absRoot, logEntry(event, input, out, trace, { absRoot, ms: Date.now() - t0, parsed: memo !== null, before, after: deliverySnapshot(state) }));
     return out;
   } catch (e) {
     return { json: { systemMessage: `VibeGraph ${event} hook failed, so nothing was checked this time: ${String(e?.message ?? e).slice(0, 300)}` } };

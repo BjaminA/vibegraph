@@ -28,6 +28,7 @@ async function mapFor(root) {
     const { loadPlan } = await import("../../src/server/plan_store.ts");
     const { reconcilePlan } = await import("../../src/server/plan_reconcile.ts");
     const { staleBriefLines, pendingBriefReview } = await import("../../src/server/brief_inputs.ts");
+    const { censusAt } = await import("../../src/server/project_direction.ts");
     const { envelope } = loadEnvelope(root, null, pipelineHere(root), { cache: true });
     const stack = buildStackIndex(envelope, root);
     const model = archModelForEnvelope(envelope, stack, buildCrossingIndex(envelope), root, undefined, { applyStore: false });
@@ -38,6 +39,7 @@ async function mapFor(root) {
       briefStale: () => { try { return staleBriefLines(root, archModelForEnvelope(envelope, stack, buildCrossingIndex(envelope), root)); } catch { return []; } },
       briefReview: () => { try { return pendingBriefReview(root, archModelForEnvelope(envelope, stack, buildCrossingIndex(envelope), root)); } catch { return []; } },
       archBaseline: (store) => archBaseline(applyArchStore(model, store), readInfraManifests(root).facts, plan),
+      census: () => censusAt(root, { stack, model, files: envelope.files }),
     };
 }
 
@@ -78,7 +80,7 @@ export async function runInbox(args) {
   const out = [];
   let failed = 0;
   for (const id of chosen) {
-    const r = decideInbox(root, id, sub, map ? { archBaseline: map.archBaseline, model: map.model, rec: map.rec() } : {});
+    const r = decideInbox(root, id, sub, map ? { archBaseline: map.archBaseline, model: map.model, rec: map.rec(), census: map.census } : {});
     if (!r.ok) failed++;
     out.push(`${r.ok ? "✓" : "✗"} ${id}: ${r.detail}`);
   }

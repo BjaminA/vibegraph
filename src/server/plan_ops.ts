@@ -12,7 +12,7 @@
 // included) before anything is written, and a refusal says why.
 
 import type { Plan, PlanActor, PlanSection } from "../shared/plan_types.ts";
-import { PLAN_CAPS, PLAN_SECTIONS, planItemId } from "../shared/plan_types.ts";
+import { OBJECTIVE_QUESTION, PLAN_CAPS, PLAN_SECTIONS, planItemId } from "../shared/plan_types.ts";
 import { validatePlan, validateItem, emptyPlan } from "./plan_store.ts";
 import { validateStore } from "./plan_store_items.ts";
 import { renameSymbolRefs } from "./plan_affected.ts";
@@ -202,6 +202,13 @@ function applyOne(plan: Plan, op: PlanOp, by: PlanActor, changes: string[], now:
     }
     plan.objective = op.text;
     changes.push(describe(op));
+    // stating it answers the question that asked for it (2026-10-20, live run:
+    // "What is this project for?" stayed open, counted on every prompt, after a
+    // person had stated the objective). A PROPOSED objective is not touched:
+    // adopting one (the inbox, the Plan panel) closes it with its own record.
+    const asked = plan.open.filter((q) => q.text === OBJECTIVE_QUESTION).map((q) => q.id);
+    const answered = asked.filter((id) => resolveQuestion(plan, id, "closed", by, now, "answered: a person stated the objective") === null);
+    if (answered.length) changes.push(`answered by the objective: ${answered.join(", ")}`);
     return null;
   }
   if (op.op === "close" || op.op === "reopen") {

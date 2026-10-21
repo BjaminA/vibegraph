@@ -27,12 +27,13 @@
 import * as fs from "fs";
 import * as path from "path";
 import type { ArchModelRecord } from "../shared/protocol.ts";
-import { GROUP_KINDS, type ArchProposal, type ProposedGroup, type ProposedName, type StatedGroup } from "./arch_store.ts";
+import { GROUP_KINDS, processGroupRefusal, type ArchProposal, type ProposedGroup, type ProposedName, type StatedGroup } from "./arch_store.ts";
 import type { ArchDrift } from "../shared/protocol.ts";
 import type { Plan } from "../shared/plan_types.ts";
 import { describeRule, resolveMembers, validateRule, type GroupRule } from "../shared/arch_rules.ts";
 import { factCitation, type InfraFact } from "./infra_manifests.ts";
 import { docFiles } from "./stack_classify.ts";
+import { jsonObjectInReply } from "./json_reply.ts";
 
 export interface DocExcerpt { file: string; line: number; text: string }
 
@@ -105,7 +106,7 @@ export function buildProposePrompt(model: ArchModelRecord, facts: InfraFact[], d
   L.push(
     "You are proposing the DEPLOYMENT and TRUST grouping of a software architecture that was derived from code.",
     "The boxes and arrows below are facts: you may not add, remove or rename-away any of them, and you may not describe protocols or payloads — those were read from the code already.",
-    "You propose ONLY: (1) groups — deployment/trust boundaries (kinds: " + GROUP_KINDS.join(", ") + ") that wrap existing node ids, nestable by `parent`; (2) display names for existing nodes, when the evidence names them better; (3) the primary path — the entry points a newcomer should walk first; (4) a narrative of at most two sentences.",
+    "You propose ONLY: (1) groups — deployment/trust boundaries (kinds: " + GROUP_KINDS.join(", ") + ") that wrap existing node ids, nestable by `parent` — a `process` group holds this project's own code (cluster or hub nodes), never only tools; (2) display names for existing nodes, when the evidence names them better; (3) the primary path — the entry points a newcomer should walk first; (4) a narrative of at most two sentences.",
     "EVERY group, name and path must cite evidence: `file:line` of a deployment fact or doc line listed below, or a node / edge id listed below. Cite only what is listed. If nothing listed supports an item, leave its evidence empty — it will be shown as INFERRED, which is better than a citation that does not hold.",
     "",
     "GROUPS MUST OUTLAST THE CODE THEY SEE TODAY. The project will grow; a group that only lists today's boxes holds nothing that is added later. So give each group a `match`: rules a box joins it by, checked by code on every change. A rule is an object whose fields must ALL hold; a group's `match` is a list of rules, ANY of which admits a box. Fields: `kind` (cluster | tool | hub), `rootPrefix` (the package root starts with this folder; \"\" = the project root), `pathPrefix` (an entry point's file starts with this), `family` (list: web, api, mcp, scripts, cli, model, library), `framework` (list), `role` (a tool's role, list), `tool` (tool names; \"@scope/\" matches a package scope). Prefer folder- and package-shaped rules (`rootPrefix`, `pathPrefix`, `tool` scopes) that describe WHY a box belongs, not a list of today's ids. Keep `wraps` for a box no rule describes. `exclude` lists box ids a rule must not bring in.",
@@ -162,15 +163,7 @@ export function buildProposePrompt(model: ArchModelRecord, facts: InfraFact[], d
   return L.join("\n");
 }
 
-function jsonOf(text: string): Record<string, unknown> | null {
-  let body = text.trim();
-  const fence = /```(?:json)?\s*([\s\S]*?)```/.exec(body);
-  if (fence) body = fence[1].trim();
-  const a = body.indexOf("{");
-  const b = body.lastIndexOf("}");
-  if (a < 0 || b <= a) return null;
-  try { return JSON.parse(body.slice(a, b + 1)); } catch { return null; }
-}
+const jsonOf = (text: string): Record<string, unknown> | null => jsonObjectInReply(text);
 
 /** Validate a reply against what the model was shown. Nothing is coerced:
  *  an unknown id is refused and named; an unsupported citation is dropped. */
@@ -230,6 +223,8 @@ export function parseProposal(
       refused.push({ item: `group ${id}`, reason: match.length ? "its rules match nothing in the map and it anchors to no planned item" : "wraps nothing that exists" });
       continue;
     }
+    const notProcess = plannedAt ? null : processGroupRefusal(id, kind, [...new Set([...wraps, ...byRule])], { isGroup: (m) => proposedIds.has(m) || statedIds.has(m) });
+    if (notProcess) { refused.push({ item: `group ${id}`, reason: notProcess }); continue; }
     const parent = typeof g.parent === "string" && (proposedIds.has(g.parent) || statedIds.has(g.parent)) && g.parent !== id ? g.parent : undefined;
     groups.push({
       id, kind, label, wraps, ...(parent ? { parent } : {}),

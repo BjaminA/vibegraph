@@ -1,7 +1,7 @@
 // M-CRYSTAL.1 — build-time stand-in for @xyflow/react in the CLI bundle.
 //
-// src/webview/system/threadInteraction.ts derives the thread call graph
-// (which the export needs) and ALSO decorates its edges for react-flow
+// src/webview/system/archLayout.ts lays out the architecture map (which the
+// HTML artifact and the Archify file need) and decorates it for react-flow
 // (which a CLI does not render). The only react-flow values it touches are
 // these two enums, so the bundle aliases the package to this file rather
 // than shipping react-flow and React inside a command-line tool. esbuild

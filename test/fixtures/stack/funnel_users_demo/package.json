@@ -1,0 +1,7 @@
+{
+  "name": "funnel-users-demo",
+  "private": true,
+  "dependencies": {
+    "drizzle-orm": "0.34.1"
+  }
+}

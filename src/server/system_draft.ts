@@ -24,13 +24,8 @@ import { spawn } from "child_process";
 // (same convention as compose_draft.ts; esbuild resolves them fine).
 import { resolveClaudeBin, spawnEnv } from "./run/synth_args.ts";
 import { validateSystemPlan } from "./system_plan.ts";
+import { replyObject } from "./json_reply.ts";
 import type { SystemPlan } from "../shared/protocol";
-
-function stripFence(text: string): string {
-  const t = text.trim();
-  const m = t.match(/^```(?:json)?\s*\n?([\s\S]*?)\n?```$/);
-  return (m ? m[1] : t).trim();
-}
 
 export function buildPrompt(description: string): string {
   return [
@@ -130,7 +125,7 @@ export function draftSystemPlan(description: string, cwd: string): Promise<Syste
       }
       let body: any;
       try {
-        body = JSON.parse(stripFence(text));
+        body = replyObject(text);
       } catch {
         resolve({ plan: null, error: `model reply was not JSON: ${text.slice(0, 200)}` });
         return;

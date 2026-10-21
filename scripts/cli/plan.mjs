@@ -22,8 +22,8 @@ import { headText } from "./head_text.mjs";
 import { workingTreeDelta } from "./check.mjs";
 import { importGraph, workspacePackages } from "../../src/server/import_graph.ts";
 import { promotePolicy } from "../../src/server/plan_promote.ts";
-import { PLAN_SECTIONS } from "../../src/shared/plan_types.ts";
-import { isAgentRun, PERSONS_STEP } from "./actor.mjs";
+import { OBJECTIVE_QUESTION, PLAN_SECTIONS } from "../../src/shared/plan_types.ts";
+import { actorOf, personRefusal } from "./actor.mjs";
 import { observeSkeleton, OBSERVED_OBJECTIVE } from "../../src/server/plan_observe.ts";
 import { buildCrossingIndex } from "../../src/server/crossings.ts";
 import { archModelForEnvelope } from "../../src/server/arch_envelope.ts";
@@ -81,7 +81,7 @@ export function runPlan(args) {
   const [sub, ...rest] = parsed.positionals;
   const root = resolve(cliPath(parsed.values.root ?? "."));
   // Claude Code running this is a model, whatever it asks for (actor.mjs).
-  const by = parsed.values.as === "agent" || isAgentRun() ? "agent" : "human";
+  const by = parsed.values.as === "agent" ? "agent" : actorOf();
   const done = (text, exitCode = 0) => ({ exitCode, text: text.endsWith("\n") ? text : `${text}\n` });
   const apply = (ops) => {
     const r = applyPlanOps(loadPlan(root), ops, by);
@@ -95,13 +95,13 @@ export function runPlan(args) {
   if (sub === "observe") {
     // 2026-10-06 (M2) — the observed skeleton: zero tokens, every item proposed
     const existing = loadPlan(root);
-    if (!existing && isAgentRun()) return done(`refused: \`plan observe\` would START a plan — ${PERSONS_STEP}`, 1);
+    if (!existing && personRefusal()) return done(`refused: \`plan observe\` would START a plan — ${personRefusal()}`, 1);
     const { envelope } = loadEnvelope(root, null, pipelineHere(root), { cache: true });
     const model = archModelForEnvelope(envelope, buildStackIndex(envelope, root), buildCrossingIndex(envelope), root, undefined, { applyStore: false });
     const { ops, notes } = observeSkeleton(model, existing);
     let base = existing;
     if (!base) {
-      const r0 = applyPlanOps(null, [{ op: "set-objective", text: OBSERVED_OBJECTIVE }, { op: "add", section: "open", item: { text: "What is this project for? State the objective (plan edit set-objective), or draft one: plan draft --direction" } }], "human");
+      const r0 = applyPlanOps(null, [{ op: "set-objective", text: OBSERVED_OBJECTIVE }, { op: "add", section: "open", item: { text: OBJECTIVE_QUESTION } }], "human");
       if (r0.error) return done(`refused: ${r0.error}`, 1);
       base = r0.plan;
     }

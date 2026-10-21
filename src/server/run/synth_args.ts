@@ -16,6 +16,7 @@ import { REASONING_DENIED_TOOLS, promptArgs, promptStdin } from "../reasoning_to
 import { claudeCommand, parseArgv, pinnedModel } from "../find_claude.ts";
 import { spawn } from "child_process";
 import * as path from "path";
+import { replyObject } from "../json_reply.ts";
 import {
   DEFAULT_TIERS, tierArgs, resolveTierRoute, routeLabel, serviceSuffix,
   type ModelTier, type TierSettings, type ProviderKind,
@@ -174,14 +175,6 @@ export function getShimPath(): string {
   return shimPath;
 }
 
-// Strip a leading/trailing ```json … ``` (or bare ```) fence if the model
-// wrapped its JSON in one despite being asked not to.
-function stripFence(text: string): string {
-  const t = text.trim();
-  const m = t.match(/^```(?:json)?\s*\n?([\s\S]*?)\n?```$/);
-  return (m ? m[1] : t).trim();
-}
-
 // M-RUN2.1 — a METHOD run needs an example instance too: the prompt gains
 // the class source and asks for constructor args alongside the method args.
 export interface InstanceContext {
@@ -260,7 +253,7 @@ export function synthesizeArgs(entryFn: string, fnSource: string, cwd: string, i
       }
       let obj: any;
       try {
-        obj = JSON.parse(stripFence(text));
+        obj = replyObject(text);
       } catch {
         resolve({ args: null, error: `model reply was not JSON: ${text.slice(0, 200)}` });
         return;

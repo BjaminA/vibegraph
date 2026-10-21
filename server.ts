@@ -33,6 +33,7 @@ import { buildStackIndex, contractStackForFile, stackForThread, stackCalledOnThr
 import { floorPureLibraries } from "./src/server/floor_libraries";
 import { REASONING_DENIED_TOOLS, promptArgs, promptStdin } from "./src/server/reasoning_tools";
 import { classifyEstimate, classifyRun, type ClassifyCtx } from "./src/server/classify_server";
+import { ruleDraftEstimate, ruleDraftRun, type RuleDraftCtx } from "./src/server/rule_draft_server";
 import { buildCrossingIndex, type CrossingIndex } from "./src/server/crossings";
 import { handleInvestigation, listInvestigations, readInvestigation, renderHandoff, readRel } from "./src/server/investigations";
 import { diffEditChecks, formatEditCheck, type EditCheckRow } from "./src/server/edit_check";
@@ -40,6 +41,7 @@ import { derivedPolicyClauses, checkPolicyClause, describePolicyClause } from ".
 import { startHookedRun, stopHookedRun, decideHookedRun, currentHookedRun, replyHookedRun, finishHookedRun, type HookedRunDeps } from "./src/server/hooked_runner";
 import { framingFacts, runFraming } from "./src/server/hooked_framing";
 import { handleProjectDirection } from "./src/server/project_direction_server";
+import { censusAt } from "./src/server/project_direction";
 import { nowState } from "./src/server/now_state";
 import { hostAllowed, originAllowed, jsonContentType, staticPath, ensurePrivateIgnore, type GuardConfig } from "./src/server/local_guard";
 import { computeDataflow, findingsByThread, formatDataflowMd, type DataflowReport } from "./src/server/dataflow";
@@ -449,6 +451,7 @@ const briefCtx: BriefCtx = {
   run: (prompt) => _runReadmeLlm(prompt, "thinking", "gen"), modelLabel: () => tierLabel("thinking"),
   who: () => personName(inputPath),
   changed: () => { reapplyArchStore(); broadcastProjectUpdate(); refreshArchDocs(); const s = JSON.stringify({ type: "brief-state", payload: briefState(briefCtx) }); for (const c of clients) c.send(s); },
+  archBaseline: (store) => (latestArchDerived ? archBaseline(applyArchStore(latestArchDerived, store), readInfraManifests(inputPath).facts, loadPlan(inputPath)) : undefined),
 };
 
 // 2026-10-12 — "Classify N unclassified tools" (src/server/classify_server.ts)
@@ -458,6 +461,15 @@ const classifyCtx: ClassifyCtx = {
   stack: () => latestStack, claudeAvailable: () => claudeCliAvailable,
   run: (prompt) => _runReadmeLlm(prompt, "thinking", "gen"), modelLabel: () => tierLabel("thinking"),
   changed: () => { void refreshDerived(); },
+};
+
+// 2026-10-19 — "Propose rules from the architecture" (src/server/rule_draft_server.ts, PLAN-M-RULES M2)
+const ruleDraftCtx: RuleDraftCtx = {
+  root: () => (isDirectory ? readmeRootDir() : null),
+  envelope: () => (isDirectory ? { files: relativeProjectFiles() as Record<string, any>, entryPoints: latestEntryPoints, threads: latestThreads } : null),
+  stack: () => latestStack, claudeAvailable: () => claudeCliAvailable,
+  run: (prompt) => _runReadmeLlm(prompt, "thinking", "gen"), modelLabel: () => tierLabel("thinking"),
+  changed: () => broadcastProjectUpdate(),
 };
 
 function archDecide(decision: "ratify" | "reject"): { ok: boolean; error?: string } {
@@ -1922,12 +1934,21 @@ function liveStackProfile(): ReturnType<typeof deriveStackProfile>["profile"] {
   return deriveStackProfile(env as never, latestStack, { project: readmeRootDir(), commit: projectCommitLabel() }).profile;
 }
 
+// `var`: read by broadcastProjectUpdate, which may run before this line does
+var catalogueMemo: { threads: unknown; stack: unknown; catalogue: ReturnType<typeof catalogueOf> } | null = null; // eslint-disable-line no-var
 /** The `skills-config` wire payload: the enable file plus the shipped
  *  catalogue with each skill's breadth MEASURED on this project. */
 function skillsConfigPayload(): { config: SkillsConfig; catalogue: ReturnType<typeof catalogueOf> } {
-  let profile: ReturnType<typeof liveStackProfile> | null = null;
-  if (isDirectory) { try { profile = liveStackProfile(); } catch (e: any) { console.warn(`  [skills] profile unavailable for the catalogue: ${e?.message ?? e}`); } }
-  return { config: liveSkillsConfig(), catalogue: catalogueOf(GENERIC_SKILLS, profile) };
+  // 2026-10-20 — the catalogue (each skill's measured breadth) depends on the
+  // derive, never on the switches: rebuilt only when the threads or stack
+  // were replaced, so flipping a switch echoes at once (it rebuilt the whole
+  // profile on every toggle, which made the panel feel unresponsive).
+  if (catalogueMemo?.threads !== latestThreads || catalogueMemo?.stack !== latestStack) {
+    let profile: ReturnType<typeof liveStackProfile> | null = null;
+    if (isDirectory) { try { profile = liveStackProfile(); } catch (e: any) { console.warn(`  [skills] profile unavailable for the catalogue: ${e?.message ?? e}`); } }
+    catalogueMemo = { threads: latestThreads, stack: latestStack, catalogue: catalogueOf(GENERIC_SKILLS, profile) };
+  }
+  return { config: liveSkillsConfig(), catalogue: catalogueMemo.catalogue };
 }
 
 /** Quality layer — the packet's CLOSING BAR, computed at the objective gate
@@ -2738,6 +2759,14 @@ function broadcastProjectUpdate(ws?: WebSocket) {
   // M7 wave 1 — fan out to MCP subscribers via vibegraph://project/ir
   // resource-updated notifications.
   notifyProjectUpdated();
+  // 2026-10-20 — the Direction panel's "applies to N of M threads" is measured
+  // on the threads: sent at connect (often before the first derive finished)
+  // and refreshed only by a toggle, it read "unmeasured". A derive that
+  // replaced the threads or the stack re-sends it.
+  if (!ws && (catalogueMemo?.threads !== latestThreads || catalogueMemo?.stack !== latestStack)) {
+    const s = JSON.stringify({ type: "skills-config", payload: skillsConfigPayload() });
+    for (const c of clients) c.send(s);
+  }
 }
 
 // M26.4 — bounded refresh feedback: the webview shows a subtle
@@ -8311,8 +8340,8 @@ function setupWebSocket() {
           console.log(`[models] ${(["thinking", "routine", "worker"] as ModelTier[]).map((t) => `${t}=${routeLabel(resolveTierRoute(t, tiers))}`).join(" ")}`);
         } else if (msg.type === "now-get") {
           // 2026-10-16 — the project's state and one next step (src/server/now_state.ts)
-          ws.send(JSON.stringify({ type: "now-state", payload: isDirectory ? nowState(analyzedRoot(), { briefStale: latestArch ? staleBriefLines(analyzedRoot(), latestArch) : [] }) : null }));
-        } else if (msg.type === "project-direction-get" || msg.type === "project-direction-census" || msg.type === "project-direction-decide") {
+          ws.send(JSON.stringify({ type: "now-state", payload: isDirectory ? nowState(analyzedRoot(), { briefStale: latestArch ? staleBriefLines(analyzedRoot(), latestArch) : [], stack: latestStack }) : null }));
+        } else if (msg.type === "project-direction-get" || msg.type === "project-direction-census" || msg.type === "project-direction-decide" || msg.type === "project-direction-deliver") {
           // 2026-10-16 — the project's own direction (src/server/project_direction.ts); the panel is a person
           const p = isDirectory ? handleProjectDirection(analyzedRoot(), msg, { stack: latestStack as never, model: latestArchDerived ?? { nodes: [], edges: [] } as never, files: relativeProjectFiles() as never })
             : { direction: { version: "1" as const, rules: [] }, error: "project direction needs a project directory" };
@@ -8328,7 +8357,7 @@ function setupWebSocket() {
           if (isDirectory) { try { saveSkillsConfig(inputPath, next); } catch (e: any) { console.warn(`  [skills] could not save: ${e?.message ?? e}`); } }
           const echo = JSON.stringify({ type: "skills-config", payload: skillsConfigPayload() });
           for (const c of clients) c.send(echo);
-          console.log(`[skills] enabled: ${next.enabled.join(", ") || "(none)"}`);
+          console.log(`[skills] in use: ${next.enabled.map((n) => `${n} (${[next.delivery?.[n]?.upfront ? "up front" : "", next.delivery?.[n]?.onCheck ? "when broken" : ""].filter(Boolean).join(", ")})`).join(", ") || "(none)"}`);
         } else if (msg.type === "probe-model-endpoint") {
           // M-PROVIDER — the Models panel's Test button: the endpoint is
           // validated inside the probe; only Ollama's own routes are called.
@@ -8409,6 +8438,7 @@ function setupWebSocket() {
               const r = decideInbox(root, msg.payload.id, msg.payload.decision, {
                 who: personName(root), model: latestArchDerived, rec: recNow(),
                 archBaseline: (store) => (latestArchDerived ? archBaseline(applyArchStore(latestArchDerived, store), readInfraManifests(root).facts, plan) : undefined),
+                census: () => censusAt(root, { stack: latestStack as never, model: latestArchDerived ?? { nodes: [], edges: [] } as never, files: relativeProjectFiles() as never }),
               });
               reply = r.ok ? { message: r.detail } : { error: r.detail };
               if (r.ok) { reapplyArchStore(); broadcastProjectUpdate(); refreshArchDocs(); }
@@ -8479,6 +8509,12 @@ function setupWebSocket() {
             const decision = msg.payload?.decision === "reject" ? "reject" : "ratify";
             result(briefDecide(briefCtx, typeof msg.payload?.section === "string" ? msg.payload.section : "all", decision));
           }
+        } else if (msg.type === "rule-draft-estimate" || msg.type === "rule-draft-run") {
+          // the estimate spends nothing; the run is the one model call, its
+          // survivors stored agent-stated for a person in "Awaiting you"
+          const reply = (payload: unknown) => ws.send(JSON.stringify({ type: "rule-draft-result", payload: { action: msg.type === "rule-draft-run" ? "run" : "estimate", ...(payload as object) } }));
+          if (msg.type === "rule-draft-estimate") reply(ruleDraftEstimate(ruleDraftCtx));
+          else ruleDraftRun(ruleDraftCtx).then(reply, (e) => reply({ ok: false, error: String(e?.message ?? e) }));
         } else if (msg.type === "classify-estimate" || msg.type === "classify-run") {
           // the estimate spends nothing; the run is the one model call, its
           // answers stored agent-stated for a person to ratify in the inbox
@@ -8837,11 +8873,12 @@ tryListen();
 // default rather than trusted into the page.
 const START_VIEW = process.env.VG_START_VIEW === "index" ? "index" : "architecture";
 // Thread ranks (2026-09-25): which nodes a thread draws before the user picks
-// — primary by default. The e2e suites pin "all" (their assertions predate
-// ranks); a user's own choice, once made, is remembered by the page.
-const THREAD_RANK = ["all", "secondary"].includes(process.env.VG_THREAD_RANK ?? "")
+// — Secondary by default (2026-10-20, was Primary). The e2e suites pin "all"
+// (their assertions predate ranks); a user's Primary / Secondary choice is
+// remembered by the page, "All" lasts one thread.
+const THREAD_RANK = ["all", "primary"].includes(process.env.VG_THREAD_RANK ?? "")
   ? process.env.VG_THREAD_RANK!
-  : "primary";
+  : "secondary";
 // The Agent Manager's first engine (2026-09-29): the hooked Claude Code run
 // by default; the legacy suites pin "orchestrated" (playwright.config.ts).
 const AGENT_ENGINE = process.env.VG_AGENT_ENGINE === "orchestrated" ? "orchestrated" : "hooked";

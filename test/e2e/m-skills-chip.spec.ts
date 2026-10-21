@@ -50,8 +50,10 @@ test.describe("M-SKILLS.3 — the chat chip names the generic direction that rod
     await page.click("[data-skills-toggle]");
     const row = page.locator('[data-skills-panel] [data-skill-row="boundary-integrity"]');
     await expect(row).toBeVisible({ timeout: 10_000 });
-    await page.click('[data-skill-toggle="boundary-integrity"]');
+    // 2026-10-20 — "Tell Claude up front" is what rides the chat
+    await page.click('[data-skill-switch="boundary-integrity"][data-delivery="upfront"]');
     await expect(row).toHaveAttribute("data-skill-enabled", "true", { timeout: 10_000 });
+    await expect.poll(() => (existsSync(SKILLS_FILE) ? readFileSync(SKILLS_FILE, "utf-8") : ""), { timeout: 10_000 }).toContain('"boundary-integrity"');
     await page.keyboard.press("Escape");
 
     // Open a thread, so the turn has an active entry point (the generic

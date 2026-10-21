@@ -107,6 +107,22 @@ test("binding: a call through PROJECT code is named as project code, never a too
   assert.match(attributionLabel(a), /project code, unlinked/);
 });
 
+test("call-site: when several tools key one call, the first non-project one in index order wins (the 2026-10-20 lookup keeps the scan's order)", () => {
+  const site = { file: "ops/run.sh", nodeId: "module/go.fn/fetch_it.call", kind: "call" };
+  const stack = {
+    tools: [
+      { tool: "ops.lib", role: "http-client", origin: "project", home: "ops/lib.sh", files: ["ops/run.sh"], evidence: [site] },
+      { tool: "curl", role: "http-client", origin: "unknown", files: ["ops/run.sh"], evidence: [{ file: "ops/other.sh", nodeId: site.nodeId, kind: "call" }, site] },
+      { tool: "wget", role: "http-client", origin: "unknown", files: ["ops/run.sh"], evidence: [site] },
+    ],
+  };
+  const at = (file) => attributeBoundary({ language: "bash", label: "fetch_it", kind: "external", effectKind: "http", file, irNodeId: site.nodeId, stack });
+  assert.equal(at("ops/run.sh")?.tool, "curl");
+  assert.equal(at("ops/run.sh")?.how, "call-site");
+  assert.equal(at("ops/other.sh")?.tool, "curl", "the same node id in another file is another call");
+  assert.equal(at("ops/third.sh")?.how === "call-site", false, "no evidence names this file's call");
+});
+
 test("call-site: a bash command word joins on the very node the index keyed", () => {
   const a = attributeBoundary({
     language: "bash", label: "curl", kind: "external", effectKind: "http",

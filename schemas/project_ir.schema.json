@@ -231,6 +231,11 @@
           "type": "string"
         },
         "files": { "type": "array", "items": { "type": "string" } },
+        "users": {
+          "description": "2026-10-20 (additive, OPTIONAL): origin \"project\" only - the importers that take a binding of the funnel whose body uses what it wraps (imported by name, or a resolved call lands in one). A subset of `files` without `home`: importing a module is not using what one of its functions wraps.",
+          "type": "array",
+          "items": { "type": "string" }
+        },
         "threads": { "type": "array", "items": { "type": "string" } },
         "calledOn": {
           "description": "M-BOUNDARY.2 (additive, OPTIONAL): the threads with a BOUNDARY attributed to this tool - a subset of `threads`, which is file-level presence.",

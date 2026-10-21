@@ -74,7 +74,14 @@ export function orientation(absRoot, loaded, all) {
     ? `Ratified thread skills (${skills.ratified.length}): ${skills.ratified.slice(0, 12).join(", ")}${skills.ratified.length > 12 ? ", …" : ""} — each arrives when a prompt names its thread.${skills.draft ? ` ${skills.draft} draft(s) await ratification.` : ""}`
     : `No ratified thread skills${skills.draft ? ` (${skills.draft} draft(s) await ratification)` : ""}.`);
   const dir = enabledDirection(absRoot);
-  if (dir && dir.mode !== "off") lines.push(`Generic direction enabled: ${dir.skills.map((s) => s.name).join(", ")} — ${dir.mode === "headlines" ? "rule headlines arrive with a thread they apply to" : "a rule's why arrives when its check fires"}; \`vibegraph-knowledge direction <skill>\` has each rule's why.`);
+  if (dir) {
+    // 2026-10-20 — per skill: told up front, and/or explained when an edit breaks a check it binds
+    const said = [
+      dir.upfront.length ? `${dir.upfront.map((s) => s.name).join(", ")} — rule headlines arrive with a thread they apply to` : null,
+      dir.onCheck.length ? `${dir.onCheck.map((s) => s.name).join(", ")} — a rule's why arrives when an edit breaks its check` : null,
+    ].filter(Boolean);
+    lines.push(`Generic direction in use: ${said.join("; ")}; \`vibegraph-knowledge direction <skill>\` has each rule's why.`);
+  }
   const readme = join(absRoot, ".vibegraph", "knowledge", "README.md");
   if (existsSync(readme)) {
     const hours = Math.round((Date.now() - statSync(readme).mtimeMs) / 3_600_000);

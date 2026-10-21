@@ -13,6 +13,7 @@ import type { SoftwareSpec, SoftwareSource, SoftwareRule } from "../shared/softw
 import { SOFTWARE_CAPS } from "../shared/software_types.ts";
 import { STACK_ROLES } from "../shared/stack_taxonomy.ts";
 import { isSafeTool } from "./software_store.ts";
+import { jsonInReply } from "./json_reply.ts";
 
 const CHECK_VERBS = ["callers-only", "import-only", "calls-through", "payload-keys", "guards", "not-in-loop", "handles-failure", "annotated", "co-changes"];
 const SOURCE_BUDGET = 60_000;
@@ -68,12 +69,27 @@ export function buildSpecPrompt(tool: string, sources: Array<{ ref: string; text
   ].join("\n");
 }
 
-/** The JSON object in a reply (bare, or fenced), or the reason there is none. */
+/** The JSON object in a reply (bare, fenced, or among prose), or the reason
+ *  there is none — string-aware, since a spec quotes docs full of fences. */
 export function parseSpecReply(text: string): { value?: any; error?: string } {
-  const fenced = /```(?:json)?\s*([\s\S]*?)```/.exec(text)?.[1];
-  const body = fenced ?? text.slice(text.indexOf("{"), text.lastIndexOf("}") + 1);
-  if (!body.trim()) return { error: "the reply holds no JSON object" };
-  try { return { value: JSON.parse(body) }; } catch (e: any) { return { error: `the reply's JSON does not parse: ${e.message}` }; }
+  return jsonInReply(text, "object");
+}
+
+/** How much of a spec its documents back (2026-10-20, the live setup run): a
+ *  3 KB marketing README left 18 of 58 items with no quote, and a hosting
+ *  provider's page drafted for a database driver left 20 of 57, while the
+ *  specs drawn from full READMEs had 1–2. A quarter or more uncited = the
+ *  source is thin, and a person ratifying should know it before, not after.
+ *  An item a person wrote (`by: "human"`) is their read, never "inferred". */
+export function specCoverage(spec: Pick<SoftwareSpec, "operations" | "states" | "permissions" | "rules">): { items: number; inferred: number; thin: boolean } {
+  const all = [...spec.operations, ...spec.states, ...spec.permissions, ...spec.rules] as Array<{ cite?: string | null; by?: string }>;
+  const inferred = all.filter((x) => !x.cite && x.by !== "human").length;
+  return { items: all.length, inferred, thin: all.length >= 4 && inferred * 4 >= all.length };
+}
+
+/** The one sentence every surface says about a thin spec. */
+export function thinSpecNote(tool: string, c: { items: number; inferred: number }): string {
+  return `${c.inferred} of ${c.items} items in ${tool}'s spec have no quote in its documents (${Math.round((100 * c.inferred) / c.items)}%) — the source is thin: re-draft from a fuller page (the API reference for what this project calls) before ratifying`;
 }
 
 const str = (x: unknown, max: number) => (typeof x === "string" && x.trim() ? x.trim().slice(0, max) : null);

@@ -14,7 +14,7 @@ import { fitText, INLINE_CAP, runHook, renderFindings, OFFENDERS_PER_CHECK } fro
 import { readLessons, runLessons } from "../scripts/cli/lessons.mjs";
 import { fitContract, restOfContract } from "../scripts/cli/contract_fit.mjs";
 import { runSkills } from "../scripts/cli/skills.mjs";
-import { keywordTerms } from "../src/server/thread_keywords.ts";
+import { keywordTerms, withoutNamedCode } from "../src/server/thread_keywords.ts";
 import { applyHooks, hookCommand, HOOK_MARKER } from "../scripts/cli/init.mjs";
 // These tests act as a PERSON at the command line; a Claude Code terminal sets CLAUDECODE,
 // which makes the CLI refuse a person's steps (scripts/cli/actor.mjs) — so it is cleared here.
@@ -100,7 +100,9 @@ test("an edit made through Bash is caught too; a Bash call that changed no code 
   // h2h4: a headless session made all 18 of its tool calls through Bash.
   hook("prompt", { session_id: "sh", prompt: "add paging to telemetry/ingest.py" });
   const bash = () => hook("post-edit", { session_id: "sh", tool_name: "Bash", tool_input: { command: "…" } });
-  assert.equal(bash().block, undefined, "first Bash call: nothing new");
+  // 2026-10-19 (M4 class 2): the baseline records the source stamp, so even
+  // the FIRST Bash call is free — it used to find no stamp and run a check.
+  assert.equal(bash(), null, "first Bash call: no source file moved since the baseline, no parse");
   assert.equal(bash(), null, "no source file moved: skipped without a parse");
   appendFileSync(join(root, "telemetry/ingest.py"), DIRECT_NOTIFY);
   const r = bash();
@@ -197,6 +199,25 @@ test("a prompt that names no code gets a keyword guess, labelled as one", () => 
   assert.match(ctx, /check this is the right place/);
   const none = hook("prompt", { session_id: "kw2", prompt: "hello there, how are you today?" });
   assert.ok(!none || !/Possibly related/.test(none.json.hookSpecificOutput.additionalContext), "no shared words, no guess");
+});
+
+test("M4 class 1: a guess sends its rules and a pointer, never its contract; naming the code sends the contract", () => {
+  // MCP SDK, live: a keyword guess's contract filled the inline limit with an
+  // unrelated example. A guess now costs what a guess is worth.
+  const r = hook("prompt", { session_id: "kw3", prompt: "make the csv export carry one more column" });
+  const ctx = r.json.hookSpecificOutput.additionalContext;
+  assert.match(ctx, /Possibly related: thread telemetry\/export:export_csv/);
+  assert.match(ctx, /A guess, so its contract and skill are not sent.*vibegraph-knowledge brief telemetry\/export\.py:export_csv/);
+  assert.doesNotMatch(ctx, /Thread contract \(IR fact/, "no contract on a guess");
+  assert.ok(ctx.length < 3000, `${ctx.length} chars for a guess`);
+  // the contract was not recorded as sent: naming the code now delivers it
+  const named = hook("prompt", { session_id: "kw3", prompt: "add the column in telemetry/export.py export_csv" });
+  assert.match(named.json.hookSpecificOutput.additionalContext, /Thread contract \(IR fact/);
+});
+
+test("M4 class 1: the words inside code a prompt names are not keyword words", () => {
+  assert.equal(withoutNamedCode("add `TRACERESPONSE_META_KEY` next to TRACESTATE_META_KEY", ["TRACESTATE_META_KEY"]).trim().replace(/\s+/g, " "), "add next to");
+  assert.deepEqual(keywordTerms(withoutNamedCode("bump `MAX_BATCH_SIZE` in the csv export", ["MAX_BATCH_SIZE"])), ["bump", "csv", "export"]);
 });
 
 test("a blocked violation that clears becomes a lesson, and skill drafting reads it", async () => {

@@ -141,3 +141,23 @@ test("B7: one source for prompt and allow-list; a model copy without its source 
   assert.equal(citationChange("rule:c1", saved, noSource), null, "the guarded code cannot be read: not known, never 'changed'");
   assert.equal(citationChange("rule:c1", saved, facts), null);
 });
+
+test("groups: a process group holds the project's own code, never only tools (the live setup run)", () => {
+  const tools = [...facts.boxes].filter((b) => b.startsWith("tool:")).slice(0, 2);
+  const cluster = [...facts.boxes].find((b) => b.startsWith("cluster:"));
+  assert.ok(tools.length && cluster, "the fixture has tool and cluster boxes");
+  const cite = [...(facts.cites instanceof Map ? facts.cites.keys() : facts.cites)].find((c) => typeof c === "string" && c.includes("->"));
+  assert.ok(cite, "an edge to cite");
+  const ask = (members) => parseBrief(JSON.stringify({ spec: { function: [], method: [], feature: [] }, groups: [{ op: "add", id: "g-libs", label: "In-process client libraries", kind: "process", members, cites: [cite] }], omitted: [] }), facts, vocab, opVocab, { model: "test" });
+  const only = ask(tools);
+  assert.equal(only.brief, null, "nothing else was proposed, so nothing survives");
+  assert.match(only.error, /groups\[0\] — g-libs: a process group runs this project's code, and it holds only tool:/);
+  assert.equal(ask([cluster, ...tools]).brief.groups.length, 1);
+});
+
+test("a current draft with no data claims is not told it is old (the live setup run)", () => {
+  const cite = [...facts.cites.keys()].find((c) => c.includes("->"));
+  const spec = { function: [{ text: "Serves the chat through one web process.", words: ["serves"], cites: [cite], boxes: [] }], method: [], feature: [] };
+  assert.match(reviewBrief(spec, facts, { scheme: 2 }).summary, /no line states a data claim \(who reads or writes what\)/);
+  assert.match(reviewBrief(spec, facts, {}).summary, /written before claims were checked/, "a draft with no scheme is from before claims");
+});

@@ -19,7 +19,7 @@ import { briefInputs } from "../../src/server/brief_inputs.ts";
 import { linesReader } from "../../src/server/node_scope.ts";
 import { personName } from "../../src/server/person.ts";
 import { claimChanges, claimLabel, decideClaim, loadClaims, proposeClaim } from "../../src/server/claim_store.ts";
-import { isAgentRun } from "./actor.mjs";
+import { actorOf } from "./actor.mjs";
 import { readFileSync } from "node:fs";
 import { spawnClassifier } from "./classify.mjs";
 import { gapDossier, gapList, gapPrompt, parseGapReply } from "../../src/server/gap_explain.ts";
@@ -107,7 +107,7 @@ export function runClaim(args, env = process.env) {
   const { facts } = briefInputs(root, model);
   const r = proposeClaim(root, model, facts, readLines, {
     subject: v.subject, verb: v.verb, object: v.object, partition: v.partition ?? [], not: v.not === true,
-    cites: v.cite ?? [], why: v.why, by: isAgentRun(env) ? "agent" : "person",
+    cites: v.cite ?? [], why: v.why, by: actorOf(env) === "agent" ? "agent" : "person",
   });
   if (!r.ok) return done(`claim refused:\n${r.reasons.map((x) => `  - ${x}`).join("\n")}`, 1);
   return done(`claim ${r.claim.id} PROPOSED · inferred: ${claimLabel(r.claim, facts.labels)} — ${r.claim.cites.length} cited line(s) hashed${r.note ? `\n  ${r.note}` : ""}\n  a person decides: \`vibegraph-knowledge claim agree|reject ${r.claim.id}\`, or the inbox`);

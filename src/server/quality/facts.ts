@@ -46,8 +46,11 @@ export interface FactsInput {
 }
 
 /** The server's injection recipe for computeThreadContract, shared. */
-export function contractOptsFor(env: EnvelopeLike, stack: StackIndex) {
-  const crossings = buildCrossingIndex(env as never);
+export function contractOptsFor(env: EnvelopeLike, stack: StackIndex, prebuilt: ReturnType<typeof buildCrossingIndex> | null = null) {
+  // 2026-10-20: the caller's index when it has one, else built when a
+  // contract first asks: a check that never reads a contract paid 0.9 s for
+  // it on a 743-file tree after every edit, and the prompt hook built two
+  let crossings = prebuilt;
   // M-ARCH.1 — indexed once. Node ids are structural paths, so the same id
   // recurs across files (`module/main.fn`); the per-file map answers a
   // (file, id) lookup exactly and the global map answers "which file owns
@@ -85,7 +88,7 @@ export function contractOptsFor(env: EnvelopeLike, stack: StackIndex) {
       return { framework: ep.framework ?? null, params: fn?.params ?? [] };
     },
     stackIndex: stack,
-    crossingsFor: (id: string) => crossings.byThread[id] ?? [],
+    crossingsFor: (id: string) => (crossings ??= buildCrossingIndex(env as never)).byThread[id] ?? [],
   };
 }
 
@@ -190,10 +193,10 @@ export function buildQualityFacts(input: FactsInput): QualityFacts {
 
   // ── attribution, from the contracts (computed once, lazily) ──
   let attributions: Map<string, { tool: string; role: string; how: string; via?: string }> | null = null;
-  const opts = contractOptsFor(env, stack);
   const attributionIndex = () => {
     if (attributions) return attributions;
     attributions = new Map();
+    const opts = contractOptsFor(env, stack);
     for (const t of env.threads) {
       let c: ThreadContract;
       try { c = computeThreadContract(t, opts as never); } catch { continue; }
@@ -207,7 +210,13 @@ export function buildQualityFacts(input: FactsInput): QualityFacts {
 
   return {
     references,
-    importsByFile: Object.fromEntries(Object.entries(stack.byFile ?? {}).map(([f, tools]) => [f, [...(tools as string[])]])),
+    // 2026-10-19 (PLAN-M-RULES M3) — parsed source files only: the stack
+    // index also lists a MANIFEST (package.json, requirements.txt, Cargo.toml)
+    // as using every tool it declares, and `import-only openai in
+    // model/client.ts` read VIOLATED on a project whose one importer it was —
+    // "imported outside model/client.ts: package.json". A manifest declares a
+    // dependency; it imports nothing. (Stack policies read this map too.)
+    importsByFile: Object.fromEntries(Object.entries(stack.byFile ?? {}).filter(([f]) => f in (env.files ?? {})).map(([f, tools]) => [f, [...(tools as string[])]])),
     // 2026-10-01 — the project import graph, for the `layer` verb (lazily
     // read: only that verb looks).
     parsedFiles: Object.keys(env.files ?? {}),

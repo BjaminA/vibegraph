@@ -29,7 +29,7 @@ import { languageForPath } from "../shared/languages.ts";
 import type { CrossingRecord, CrossingTargetRecord, CrossingIndexRecord } from "../shared/protocol.ts";
 // M-FLOW.2 — the script-literal join, shared with scripts/discover_project.mjs
 // (plain JS so a spawned discoverer and the server read ONE rule).
-import { nodeCallee, nodeScriptRefs, quotedLiterals, resolveScriptFiles, invokedNameVariants, variantRefs } from "../../scripts/frontends/script_refs.mjs";
+import { nodeCallee, quotedLiterals, resolveScriptFiles, scriptFileIndex, scriptRefIndex, invokedNameVariants, variantRefs } from "../../scripts/frontends/script_refs.mjs";
 // 2026-09-29 — the navigation join (Link / router / redirect → a page).
 import { navigationCrossings } from "./navigation.ts";
 export { navPath } from "./navigation.ts";
@@ -285,12 +285,17 @@ function variantHops(n: any, file: string, ep: string, reached: string[], varian
   return out;
 }
 
+/** What every thread's command pass shares, built once per index (per thread it
+ *  was most of the index on a 743-file tree): the path-suffix index, each
+ *  file's scopes, each file's nodes that can name a script. */
+type CommandCtx = { fileKeys: ReturnType<typeof scriptFileIndex>; scopes: Map<string, Map<string, string | null>>; refsIn: ReturnType<typeof scriptRefIndex> };
+
 function commandCrossings(
   env: CrossingEnvelopeLike, ep: string, th: { nodes?: any[] }, reached: string[],
-  entriesByFile: Map<string, RouteEntryLike[]>,
+  entriesByFile: Map<string, RouteEntryLike[]>, ctx: CommandCtx,
 ): Crossing[] {
   const out: Crossing[] = [];
-  const fileKeys = Object.keys(env.files);
+  const { fileKeys } = ctx;
   const variants = variantsOf(env);
   // The functions this thread EXECUTES per file (its seed and steps), so a
   // literal counts when it sits in one of their bodies or at module level of
@@ -305,11 +310,12 @@ function commandCrossings(
   }
   const seenSuffix = new Set<string>();
   for (const file of reached) {
+    const candidates = ctx.refsIn(file);
+    if (!candidates.length) continue;
     const nodes = env.files[file]?.nodes ?? [];
-    const scope = scopeOf(nodes);
+    const scope = ctx.scopes.get(file) ?? ctx.scopes.set(file, scopeOf(nodes)).get(file)!;
     const fns = walked.get(file) ?? new Set<string>();
-    for (const n of nodes) {
-      if (!n || typeof n.id !== "string") continue;
+    for (const { node: n, refs } of candidates) {
       const sc = scope.get(n.id) ?? null;
       // M-FLOW.5 — a function_def's own literals (parameter defaults) count
       // when THAT function is a step; a module-level definition nobody on
@@ -317,13 +323,10 @@ function commandCrossings(
       const inWalkedFn = n.type === "function_def" ? fns.has(n.id) : (sc !== null && fns.has(sc));
       const moduleLevel = sc === null && n.type !== "function_def";
       if (!inWalkedFn && !moduleLevel) continue;
-      // A dynamic `import("./x.js")` or `require("./x")` LOADS a module; that
-      // is the linker's business (or a named resolution gap), not a script
-      // run — 57 of the first real run's hops were these.
-      const callee = nodeCallee(n);
-      if (/(^|\.)(import|require)$/.test(callee)) continue;
+      // (a dynamic `import()` or `require` LOADS a module, which is the
+      // linker's business: scriptRefIndex never lists one)
       out.push(...variantHops(n, file, ep, reached, variants, entriesByFile, seenSuffix, inWalkedFn));
-      for (const { literal, suffix, scriptShaped } of nodeScriptRefs(n)) {
+      for (const { literal, suffix, scriptShaped } of refs) {
         const { files: all, matched } = resolveScriptFiles(fileKeys, suffix);
         // A file the thread already walked is a resolved call, not a hop; a
         // file naming itself is not a crossing either.
@@ -461,6 +464,7 @@ export function buildCrossingIndex(env: CrossingEnvelopeLike): CrossingIndex {
   }
 
   const pages = routes.filter((e) => (e.metadata as any)?.next === "page");
+  const commandCtx: CommandCtx = { fileKeys: scriptFileIndex(Object.keys(env.files)), scopes: new Map(), refsIn: scriptRefIndex(env.files, variantsOf(env)) };
   const all: Crossing[] = [];
   const byThread: Record<string, Crossing[]> = {};
   const navigation: Crossing[] = [];
@@ -530,7 +534,7 @@ export function buildCrossingIndex(env: CrossingEnvelopeLike): CrossingIndex {
       }
     }
     // M-FLOW.2 — the hops that are not HTTP.
-    found.push(...commandCrossings(env, ep, th, reached, entriesByFile));
+    found.push(...commandCrossings(env, ep, th, reached, entriesByFile, commandCtx));
     found.push(...toolCrossings(env, ep, reached, reachedNodeIds, toolEntries));
     if (found.length) {
       byThread[ep] = found;

@@ -33,6 +33,15 @@
 .vg-chip[role="button"]:hover { border-color: hsl(var(--h) var(--s) var(--l-fg)); }
 .vg-chip[role="button"]:focus-visible { outline: 2px solid hsl(var(--h) var(--s) var(--l-fg)); outline-offset: 1px; }
 .vg-chip svg { flex: none; opacity: 0.9; }
+/* 2026-10-19 — a chip that toggles into a rule's scope (rules/ScopePicker.tsx):
+   picked = a stronger fill and the full-strength border; the count is how many
+   threads that chip alone reaches */
+.vg-scope-chip { cursor: pointer; font-size: var(--fs-12); }
+.vg-scope-chip:hover { border-color: hsl(var(--h) var(--s) var(--l-fg)); }
+.vg-scope-chip:focus-visible { outline: 2px solid hsl(var(--h) var(--s) var(--l-fg)); outline-offset: 1px; }
+.vg-scope-chip[aria-pressed="true"] { background: hsl(var(--h) var(--s) var(--l-fill) / calc(var(--a-fill) * 2.5)); border-color: hsl(var(--h) var(--s) var(--l-fg)); }
+.vg-scope-chip .vg-scope-label { overflow: hidden; text-overflow: ellipsis; max-width: 32ch; }
+.vg-scope-chip .vg-scope-n { color: var(--text-muted); font-size: var(--fs-11); }
 
 /* ── verdict: a judgement, a different shape ────────────────────────────── */
 .vg-verdict {
@@ -124,6 +133,12 @@ button.vg-verdict[aria-pressed="true"] { border-color: hsl(var(--h) var(--s) var
 .vg-sheet-nav button[aria-current="true"] { background: var(--sel); color: var(--text-primary); }
 .vg-sheet-nav button i { font-style: normal; color: var(--text-muted); font-size: var(--fs-12); }
 .vg-sheet-content { padding: 16px 20px; display: flex; flex-direction: column; gap: 12px; overflow: auto; min-width: 0; }
+/* 2026-10-19 — a docked sheet is 520px: a 200px nav column left its content
+   ~260px (the rule form's scope chips wrapped one per line). Docked, the nav is
+   a wrapping row on top, as on a narrow screen. */
+.vg-sheet[data-docked="true"] .vg-sheet-body { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
+.vg-sheet[data-docked="true"] .vg-sheet-nav { flex-direction: row; flex-wrap: wrap; border-right: 0; border-bottom: 1px solid var(--border-edge); }
+.vg-sheet[data-docked="true"] .vg-sheet-content { padding: 12px 16px; }
 @media (max-width: 760px) {
   .vg-sheet-body { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
   .vg-sheet-nav { flex-direction: row; flex-wrap: wrap; border-right: 0; border-bottom: 1px solid var(--border-edge); }

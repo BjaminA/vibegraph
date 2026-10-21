@@ -17,13 +17,14 @@ import { SheetPortal, SheetBody, type SheetSlot } from "./panels/PanelSheet";
 import { Chip, Verdict } from "./panels/Chip";
 import { ConstraintsPanel, type PolicyPrefill } from "./ConstraintsPanel";
 import { RuleItem, ProposalItem } from "./rules/ruleItems";
+import { RuleDraftButton } from "./rules/RuleDraftButton";
 import type { RulesState } from "./useRulesState";
 
 type Section = "awaiting" | "all" | "violated" | "unverifiable" | "threads" | "history" | "classifications";
 const small: React.CSSProperties = { fontSize: "var(--fs-12)", color: "var(--text-muted)", lineHeight: 1.5 };
 const heading: React.CSSProperties = { fontSize: "var(--fs-13)", fontWeight: 600, color: "var(--text-secondary)", margin: "4px 0 0" };
 
-export function RulesPanel({ open, slot, state, stack, prefill, onPrefillConsumed, focusRule, threadLabel }: {
+export function RulesPanel({ open, slot, state, stack, prefill, onPrefillConsumed, focusRule, threadLabel, scopeFacts }: {
   open: boolean;
   slot: SheetSlot | null;
   state: RulesState;
@@ -33,6 +34,8 @@ export function RulesPanel({ open, slot, state, stack, prefill, onPrefillConsume
   /** a rule chip clicked elsewhere: open on it */
   focusRule?: string | null;
   threadLabel: (entryPointId: string) => string;
+  /** 2026-10-19 — what the form's grouped scope picker is read from */
+  scopeFacts?: Pick<React.ComponentProps<typeof ConstraintsPanel>, "entryPoints" | "threads" | "architecture" | "files">;
 }) {
   const [picked, setPicked] = useState<Section | null>(null);
   if (!open || !slot) return null;
@@ -74,6 +77,7 @@ export function RulesPanel({ open, slot, state, stack, prefill, onPrefillConsume
         </div>
       )}
 
+      {(section === "awaiting" || section === "all") && state.loaded && <RuleDraftButton />}
       {section === "awaiting" && (
         <div className="vg-queue" data-rules-queue>
           <b>Awaiting you · a person's step (an agent cannot take these)</b>
@@ -88,7 +92,7 @@ export function RulesPanel({ open, slot, state, stack, prefill, onPrefillConsume
         <>
           {list(rules, true)}
           {!rules.length && <div style={small}>No rules stated. A rule says what the code cannot reveal; its checkable half is verified after every edit.</div>}
-          <ConstraintsPanel constraints={rules.map((r) => r.constraint)} stack={stack ?? undefined} prefill={prefill} onPrefillConsumed={onPrefillConsumed} formOnly />
+          <ConstraintsPanel constraints={rules.map((r) => r.constraint)} stack={stack ?? undefined} prefill={prefill} onPrefillConsumed={onPrefillConsumed} formOnly {...scopeFacts} />
         </>
       )}
       {section === "violated" && (of("violated").length ? list(of("violated")) : <div style={small}>No rule is violated.</div>)}

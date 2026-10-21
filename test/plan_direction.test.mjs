@@ -21,6 +21,8 @@ import { spawnSync } from "node:child_process";
 import { loadPlan } from "../src/server/plan_store.ts";
 import { buildInbox, decideInbox } from "../src/server/inbox.ts";
 import { OBSERVED_OBJECTIVE } from "../src/server/plan_observe.ts";
+import { saveBrief } from "../src/server/brief_store.ts";
+import { loadArchStore, saveArchStore } from "../src/server/arch_store.ts";
 
 let tmp, root;
 const cli = (args, env = {}) => spawnSync(process.execPath, ["--experimental-strip-types", "--no-warnings", "scripts/cli/main.mjs", ...args, "--root", root], { encoding: "utf-8", env: { ...process.env, CLAUDECODE: "", ...env } });
@@ -86,6 +88,43 @@ test("plan draft --direction: the prose goes to the model; the gate keeps only w
   assert.equal(pol.status, "proposed");
   assert.deepEqual(pol.check.rule, "callers-only");
   assert.ok(!plan.policies.some((p) => p.text === "the order service is read-only"), "a made-up quote is dropped");
+});
+
+test("2026-10-20 (live setup run): one item the plan refuses is dropped and named, never the whole draft; a refused reply is kept", () => {
+  // the session paid for four drafts: `check: null` refused all of them, then a two-sentence principle did
+  const reply = join(tmp, "reply-mixed.json");
+  writeFileSync(reply, JSON.stringify([
+    { op: "add", section: "policies", item: { text: "status is written by the runner alone", why: "the README", check: null, cite: "The runner is the only process that writes release status." } },
+    { op: "add", section: "policies", item: { text: `The order service answers status queries and never writes, ${"because the runner owns every release decision and ".repeat(5)}so on.`, why: "over the one-line cap", cite: "The order service answers status queries and never writes." } },
+  ]));
+  const r = cli(["plan", "draft", "--direction", "--reply", reply]);
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  assert.match(r.stdout, /1 item\(s\) proposed/);
+  assert.match(r.stdout, /the plan refused 1 item\(s\) \(the rest were written\):\n {2}refused: policies "The order service answers status queries and never writes, because the…": text must be one sentence/);
+  const pol = loadPlan(root).policies.find((p) => p.text === "status is written by the runner alone");
+  assert.ok(pol && !("check" in pol), "check: null means no check");
+  // a reply nothing survives, from a model: kept, with the command that re-reads it
+  const STUB = join(process.cwd(), "test/fixtures/run_effects/fake_claude_json.mjs");
+  const k = cli(["plan", "draft", "--direction"], { VG_CLAUDE_BIN: STUB, FAKE_SYNTH_RESPONSE: "I could not find a direction in these documents.", VG_CACHE_DIR: join(tmp, "cache") });
+  assert.equal(k.status, 1);
+  const kept = /the reply is kept: (\S+)/.exec(k.stdout + k.stderr)?.[1];
+  assert.ok(kept, k.stdout + k.stderr);
+  assert.match(k.stdout + k.stderr, /re-read it without spending: vibegraph-knowledge plan draft --direction --root \S+ --reply \S+draft-direction\.txt/);
+});
+
+test("2026-10-20 (setup): the draft also reads what a person ratified — the Brief and the groups — and asks for axioms that can be wrong", () => {
+  saveBrief(root, { version: "1", ratified: { spec: { function: [{ text: "Releases signed orders to partners through one runner", cites: ["svc/runner.ts"] }], method: [], feature: [] }, at: "2026-10-20T10:00:00.000Z", by: "ben", model: "test" } });
+  saveArchStore(root, { ...loadArchStore(root), groups: [{ id: "g1", kind: "host", label: "Release host", wraps: [], note: "the runner and its queue, one box" }], ratified: { at: "2026-10-20T10:00:00.000Z", model: "test" } });
+  const dry = cli(["plan", "draft", "--direction", "--dry-run"]);
+  assert.match(dry.stdout, /=== DOCUMENT \d+: the ratified Brief \(\.vibegraph\/brief\.json\) ===[\s\S]*Releases signed orders to partners through one runner/);
+  assert.match(dry.stdout, /=== DOCUMENT \d+: the ratified architecture groups \(\.vibegraph\/architecture\.json\) ===\n- Release host: the runner and its queue, one box/);
+  assert.match(dry.stdout, /concrete enough to be WRONG/, "the hint asks for axioms that name something");
+  // a principle quoting the Brief passes the gate
+  const reply = join(tmp, "reply-brief.json");
+  writeFileSync(reply, JSON.stringify([{ op: "add", section: "policies", item: { text: "every release goes through the one runner", why: "the Brief", cite: "Releases signed orders to partners through one runner" } }]));
+  const r = cli(["plan", "draft", "--direction", "--reply", reply]);
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  assert.ok(loadPlan(root).policies.some((p) => p.text === "every release goes through the one runner" && p.groundedIn));
 });
 
 test("a person adopts the objective from the inbox — without its citation", () => {

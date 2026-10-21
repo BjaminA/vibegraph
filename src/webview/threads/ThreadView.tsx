@@ -38,7 +38,7 @@ import { CHIP_LEFT, CHIP_LINE_H, MIN_BOX_W, chipLabel, chipLines, placeChips } f
 import { ThreadEdge, type ThreadEdgeData } from "./ThreadEdge";
 import { ThreadNodeTooltip, type AnchorRect } from "./ThreadNodeTooltip";
 import { attributeBoundary, type Attribution } from "../../shared/stack_attribution";
-import { tierForZoom, crossedToSystem } from "./lod";
+import { tierForZoom } from "./lod";
 import { foldByFile, FOLD_ABOVE } from "./thread_fold";
 import { placeThreadLabels } from "./label_place";
 /** An edge longer than this (flow px, |dx|+|dy|) in a big thread draws as stubs. */
@@ -778,9 +778,17 @@ function ThreadCanvas({ thread: rawThread, width, height, projectIR, entryPoints
   // stayed off-viewport. Pending fit lives in a ref; an added-empty
   // re-run leaves it alone, and only unmount clears it.
   const pendingGrowthFit = useRef<number | null>(null);
+  // Growth is the EXTRACTED thread gaining nodes (a save re-extracts it), never
+  // the drawn set changing (2026-10-20): switching the level to "All", or
+  // expanding a nest, "added" every node it revealed, and the view flew to fit
+  // all of them at a tiny zoom — on a big thread, below the band that then
+  // opened the System view. A level or a nest has its own fit; this fits only
+  // the new nodes that are drawn.
+  const drawnRef = useRef<Set<string>>(new Set());
+  drawnRef.current = new Set(thread.nodes.map((n) => n.id));
   useEffect(() => {
-    const seed = thread.seed.qualifiedName;
-    const ids = new Set(thread.nodes.map((n) => n.id));
+    const seed = rawThread.seed.qualifiedName;
+    const ids = new Set(rawThread.nodes.map((n) => n.id));
     const prev = prevIdsRef.current;
     prevIdsRef.current = { seed, ids };
     if (!rf || !rf.fitView) return;
@@ -790,9 +798,10 @@ function ThreadCanvas({ thread: rawThread, width, height, projectIR, entryPoints
     if (pendingGrowthFit.current !== null) window.clearTimeout(pendingGrowthFit.current);
     pendingGrowthFit.current = window.setTimeout(() => {
       pendingGrowthFit.current = null;
-      rf.fitView({ nodes: added.map((id) => ({ id })), padding: 0.4, duration: 300, maxZoom: 1 });
+      const shown = added.filter((id) => drawnRef.current.has(id));
+      if (shown.length) rf.fitView({ nodes: shown.map((id) => ({ id })), padding: 0.4, duration: 300, maxZoom: 1 });
     }, 60);
-  }, [rf, thread.nodes, thread.seed.qualifiedName]);
+  }, [rf, rawThread.nodes, rawThread.seed.qualifiedName]);
   useEffect(() => () => {
     if (pendingGrowthFit.current !== null) window.clearTimeout(pendingGrowthFit.current);
   }, []);
@@ -1079,53 +1088,22 @@ function ThreadCanvas({ thread: rawThread, width, height, projectIR, entryPoints
   // TIER switches ride quantized useStore selectors in the node
   // components themselves.
   const lodWrapRef = useRef<HTMLDivElement | null>(null);
-  // M-ZOOM (PLAN-v5 §5.2) - the band below `overview` leaves the thread
-  // for the system plane. Fires on CROSSING, once, so sitting at the
-  // bottom of the range does not re-fire; and the hint below announces it
-  // before it happens, because a view change nobody asked for is the
-  // failure mode.
-  const lastZoomRef = useRef<number>(1);
+  // 2026-10-20 — the thread view never changes VIEW on a zoom. M-ZOOM made
+  // the band below `overview` leave for the system plane, and every fit the
+  // view made itself could cross it: switching to "All" on a big thread, a
+  // small thread's automatic re-fit, a nest expanding — the reader was
+  // dropped into the thread-interaction view (removed with it) mid-read.
+  // Zooming is a rendering change only: the tiers below.
   const [atOverview, setAtOverview] = useState(false);
-  // ARMING matters more than it looks. This view can be ARRIVED at from
-  // the system plane, and it mounts before react-flow has reported a
-  // viewport - so an unarmed handler compares the real zoom against a
-  // placeholder, reads that as a crossing, and bounces straight back.
-  // Two views each doing that is an infinite ping-pong, which is exactly
-  // how it failed the first time (the browser died, not the assertion).
-  const armedRef = useRef(false);
-  useEffect(() => {
-    armedRef.current = false;
-    lastZoomRef.current = rf.getViewport().zoom;
-    const t = setTimeout(() => { armedRef.current = true; }, 500);
-    return () => clearTimeout(t);
-  }, []);
-  // A move the VIEW makes (a file card's zoom-in, a stub's jump, framing the
-  // fold) must never read as the reader zooming out to the system plane:
-  // an animated viewport change over a long distance "flies" — d3 zooms far
-  // out mid-flight — and crossed the 0.14 band on the way (found by the
-  // big-thread click-through: a file card opened the System view).
   const moveView = (vp: { x: number; y: number; zoom: number }, duration: number) => {
-    armedRef.current = false;
-    // Re-arm when the move has LANDED (a timer re-armed mid-flight once and
-    // the tail of the fly still crossed the band).
-    Promise.resolve(rf.setViewport(vp, { duration })).then(() => {
-      window.setTimeout(() => { lastZoomRef.current = rf.getViewport().zoom; armedRef.current = true; }, 60);
-    });
+    rf.setViewport(vp, { duration });
   };
   const onZoomMove = (zoom: number) => {
-    const prev = lastZoomRef.current;
-    lastZoomRef.current = zoom;
     // Only re-render when the TIER changes, not once per zoom frame.
     setAtOverview((was) => {
       const now = tierForZoom(zoom) === "overview";
       return was === now ? was : now;
     });
-    if (armedRef.current && crossedToSystem(prev, zoom)) {
-      armedRef.current = false; // one transition per visit
-      document.dispatchEvent(new CustomEvent("vg-zoom-to-system", {
-        detail: { entryPointId: rawThread.entryPointId ?? null },
-      }));
-    }
   };
   // Stubbed long edges are drawn only when one of their ENDS is near the
   // view: react-flow keeps an edge whose straight line crosses the viewport,
@@ -1188,8 +1166,7 @@ function ThreadCanvas({ thread: rawThread, width, height, projectIR, entryPoints
   }, [atOverview, thread.nodes, thread.edges, thread.seed.file, layout.positions]);
   // Entering the fold frames the file grid: it is a different picture, laid
   // out apart from the steps. The zoom stays inside the overview band —
-  // above the system-view threshold (0.14) and below the fold's (0.28) — so
-  // framing can neither leave the thread nor unfold it.
+  // below the fold's (0.28) — so framing cannot unfold it.
   // A stub's chip jumps to the edge's far end, at a readable zoom.
   useEffect(() => {
     const onJump = (ev: Event) => {
@@ -1269,23 +1246,6 @@ function ThreadCanvas({ thread: rawThread, width, height, projectIR, entryPoints
           M-NA7 — wide + shallow dims match the L-R thread aspect (the
           default 200×150 squeezed a long thread into a grey smear). */}
       {!hideMiniMap && <VgMiniMap nodeColor={threadNodeColor} width={260} height={110} />}
-      {/* M-ZOOM - announce the next band BEFORE crossing it. The tiers
-          are a continuum; the one that changes view has to be asked for
-          knowingly, so it is named while you are still in the thread. */}
-      {atOverview && (
-        <div
-          data-zoom-hint
-          style={{
-            position: "absolute", bottom: 12, left: "50%", transform: "translateX(-50%)",
-            zIndex: 5, pointerEvents: "none",
-            padding: "3px 10px", borderRadius: 4,
-            background: "var(--bg-node)", border: "1px solid var(--border-edge)",
-            color: "var(--text-muted)", fontSize: 11, fontFamily: "var(--font-ui)",
-            opacity: 0.9,
-          }}>
-          keep zooming out for the system view
-        </div>
-      )}
       <MeasuredCards onSizes={setCardSizes} />
     </ReactFlow>
     </div>
@@ -1639,7 +1599,7 @@ export function ThreadView({ thread, projectIR, entryPoints, editorOpen, codeOpe
 
   // Thread ranks — the level (Primary | + Secondary | All) and the remits the
   // user opened, then the projection both the canvas and the control read.
-  const rankState = useRankState();
+  const rankState = useRankState(thread.seed.qualifiedName);
   const ranks = useRankedView(
     thread, projectIR ?? null, stack ?? null, crossings ?? null, rankState.level, rankState.openRemits,
   );

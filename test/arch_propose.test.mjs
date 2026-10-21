@@ -23,7 +23,7 @@ import { buildCrossingIndex } from "../src/server/crossings.ts";
 import { archModelForEnvelope } from "../src/server/arch_envelope.ts";
 import { readInfraManifests } from "../src/server/infra_manifests.ts";
 import { buildProposePrompt, docExcerpts, parseProposal } from "../src/server/arch_propose.ts";
-import { applyArchStore, emptyStore, loadArchStore, saveArchStore, ratifyProposal, rejectProposal } from "../src/server/arch_store.ts";
+import { applyArchStore, emptyStore, loadArchStore, saveArchStore, ratifyProposal, rejectProposal, processGroupRefusal } from "../src/server/arch_store.ts";
 // These tests act as a PERSON at the command line; a Claude Code terminal sets CLAUDECODE,
 // which makes the CLI refuse a person's steps (scripts/cli/actor.mjs) — so it is cleared here.
 delete process.env.CLAUDECODE;
@@ -100,6 +100,19 @@ test("a reply with no JSON is an error, never an empty proposal; an unknown kind
   const r = parseProposal(JSON.stringify({ groups: [{ id: "g1", kind: "planet", label: "Earth", wraps: ["cluster:web:."] }] }), derived, facts, docs, { model: "x" });
   assert.equal(r.proposal.groups.length, 0);
   assert.match(r.proposal.refused[0].reason, /kind "planet"/);
+});
+
+test("a process group holds this project's code: libraries loaded in process are not a process of their own", () => {
+  // the live setup run: "In-process client libraries (drizzle-orm, fetch)" proposed as a process
+  const tools = derived.nodes.filter((n) => n.kind === "tool").map((n) => n.id).slice(0, 2);
+  assert.ok(tools.length, "the fixture has tool nodes");
+  const ask = (wraps) => parseProposal(JSON.stringify({ groups: [{ id: "g-libs", kind: "process", label: "In-process libraries", wraps }] }), derived, facts, docs, { model: "x" }).proposal;
+  const only = ask(tools);
+  assert.equal(only.groups.length, 0);
+  assert.match(only.refused[0].reason, /g-libs: a process group runs this project's code, and it holds only tool:/);
+  assert.equal(ask(["cluster:web:.", ...tools]).groups.length, 1, "the web process with the libraries it loads is one");
+  assert.equal(processGroupRefusal("g", "zone", tools), null, "a zone of services is fine");
+  assert.equal(processGroupRefusal("g", "process", ["hub:scripts/run.sh:run"]), null, "a dispatcher is the project's code");
 });
 
 test("the applied model keeps every element's source, and still validates", () => {

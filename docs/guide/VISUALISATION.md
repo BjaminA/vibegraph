@@ -226,8 +226,10 @@ Nothing is thrown away. A card that owns hidden nodes shows **+N**; hover it
 for what they are ("12 hidden: 5 local ops, 4 logs, 3 UI state"), click it to
 show them in place, and click **hide** to fold them again. Identical calls from
 one place collapse to `×N`. The counter says how many cards are drawn out of
-the thread's total. VibeGraph remembers your choice; the first one comes from
-`VG_THREAD_RANK` (`primary` by default; `secondary` or `all`).
+the thread's total. VibeGraph remembers Primary or Secondary; **All** lasts
+for the thread in front of you, and the next thread opens at your remembered
+level. The first level comes from `VG_THREAD_RANK` (`secondary` by default;
+`primary` or `all`).
 
 The **code view** shows the same ranks beside the source: a bar in the gutter
 of every line a thread reaches — blue for primary (it leaves your code, or it

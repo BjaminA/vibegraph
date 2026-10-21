@@ -10,7 +10,7 @@ import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { applySpecEdit, editRule, editUnknown } from "../../src/server/software_edit.ts";
-import { isAgentRun } from "./actor.mjs";
+import { actorOf } from "./actor.mjs";
 
 export const SOFTWARE_EDIT_HELP = `  edit <tool>        the whole spec in $EDITOR; on save every quote is re-checked, what you changed is marked
                      as yours, and a ratified spec stays ratified (a model's edit sends it back to draft)
@@ -28,7 +28,7 @@ function report(r, done) {
 }
 
 export function runSoftwareEdit({ root, spec, action, sub, values, done, env = process.env }) {
-  const by = isAgentRun(env) ? "agent" : "human";
+  const by = actorOf(env);
   if (action === "edit") {
     const dir = mkdtempSync(join(tmpdir(), "vg-spec-"));
     const file = join(dir, `${spec.tool.replace(/[@/]/g, "_")}.json`);

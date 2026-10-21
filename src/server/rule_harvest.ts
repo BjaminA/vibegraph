@@ -43,6 +43,10 @@ export interface RuleCandidate {
   markers: string[];
   /** a grammar clause the sentence's shape maps to — a suggestion to check, never stored here */
   suggestedCheck?: Record<string, unknown>;
+  /** 2026-10-19 (M3) — the scope the rule GOVERNS, read from what it names: a funnel module →
+   *  every thread using it or its tool; a route → its thread; a function → its file; a module not
+   *  built yet → its folder. The prose writer had scoped each rule to the file its sentence sits on. */
+  suggestedScope?: { entryPointIds?: string[]; files?: string[]; stack?: string[] };
   narrative: boolean;
 }
 export interface HarvestReport {
@@ -54,7 +58,7 @@ export interface HarvestReport {
 
 interface IrNodeLike { type?: string; name?: string; docstring?: string; line?: number; id?: string; argKeys?: unknown[] }
 interface IrLike { language?: string; nodes?: IrNodeLike[]; envReads?: Array<{ name?: unknown }> }
-interface StackLike { tools?: Array<{ tool: string; origin?: string }> }
+interface StackLike { tools?: Array<{ tool: string; origin?: string; home?: string; wraps?: string[] }> }
 
 export const HARVEST_LIMITS = [
   "a candidate is a rule-shaped sentence, not a rule: a person (or the /vibegraph-rules skill with a person ratifying) decides which are the operators' rules",
@@ -203,12 +207,27 @@ export function markersIn(text: string): Array<{ name: string; strength: number 
   return out;
 }
 
-interface Known { files: Set<string>; byBase: Map<string, string[]>; dirs: Set<string>; functions: Set<string>; tools: Set<string>; envs: Set<string>; routes: Set<string>; keys: Set<string> }
-interface EntryLike { metadata?: { route?: unknown } }
+interface Known {
+  files: Set<string>; byBase: Map<string, string[]>; dirs: Set<string>; functions: Set<string>; tools: Set<string>; envs: Set<string>; routes: Set<string>; keys: Set<string>;
+  /** funnel home file → the funnel's tool name and what it wraps */
+  funnels: Map<string, { tool: string; wraps: string[] }>;
+  fnFiles: Map<string, Set<string>>;
+  /** every entry point serving the route (a gateway and the service behind it can both serve `/ingest`) */
+  routeEntry: Map<string, string[]>;
+  entryFile: Map<string, string>;
+}
+interface EntryLike { id?: string; file?: string; metadata?: { route?: unknown } }
 
 function knownOf(files: Record<string, IrLike>, stack: StackLike | null, entryPoints: ReadonlyArray<EntryLike>): Known {
-  const k: Known = { files: new Set(Object.keys(files)), byBase: new Map(), dirs: new Set(), functions: new Set(), tools: new Set(), envs: new Set(), routes: new Set(), keys: new Set() };
-  for (const e of entryPoints) if (typeof e.metadata?.route === "string") k.routes.add(e.metadata.route);
+  const k: Known = { files: new Set(Object.keys(files)), byBase: new Map(), dirs: new Set(), functions: new Set(), tools: new Set(), envs: new Set(), routes: new Set(), keys: new Set(), funnels: new Map(), fnFiles: new Map(), routeEntry: new Map(), entryFile: new Map() };
+  for (const e of entryPoints) {
+    if (e.id && e.file) k.entryFile.set(e.id, e.file);
+    if (typeof e.metadata?.route !== "string") continue;
+    k.routes.add(e.metadata.route);
+    if (e.id) (k.routeEntry.get(e.metadata.route) ?? k.routeEntry.set(e.metadata.route, []).get(e.metadata.route)!).push(e.id);
+  }
+  for (const t of stack?.tools ?? []) if (t.origin === "project" && t.home) k.funnels.set(t.home, { tool: t.tool, wraps: t.wraps ?? [] });
+  for (const [f, ir] of Object.entries(files)) for (const n of ir.nodes ?? []) if (n.type === "function_def" && n.name) (k.fnFiles.get(n.name) ?? k.fnFiles.set(n.name, new Set()).get(n.name)!).add(f);
   for (const f of k.files) {
     const base = path.posix.basename(f);
     (k.byBase.get(base) ?? k.byBase.set(base, []).get(base)!).push(f);
@@ -262,13 +281,61 @@ export function anchorsIn(text: string, k: Known): HarvestAnchor[] {
   return [...out.values()];
 }
 
-function suggest(text: string, anchors: HarvestAnchor[], markers: string[]): Record<string, unknown> | undefined {
+const DOOR = (markers: string[]) => markers.some((m) => m === "through" || m === "only" || m === "the one" || m === "never" || m === "must");
+
+function suggest(text: string, anchors: HarvestAnchor[], markers: string[], k: Known): Record<string, unknown> | undefined {
   const tools = anchors.filter((a) => a.kind === "tool").map((a) => a.id);
   const files = anchors.filter((a) => a.kind === "file" && !a.id.endsWith("/")).map((a) => a.id);
-  if (tools.length !== 1) return undefined;
-  if (files.length === 1 && markers.some((m) => m === "through" || m === "only" || m === "the one" || m === "never")) return { rule: "import-only", tool: tools[0], files };
-  if (!files.length && markers.some((m) => m === "never" || m === "forbidden" || m === "must not")) return { policy: { tool: tools[0], rule: "forbid" } };
+  if (tools.length === 1) {
+    if (files.length === 1 && DOOR(markers)) return { rule: "import-only", tool: tools[0], files };
+    if (!files.length && markers.some((m) => m === "never" || m === "forbidden" || m === "must not")) return { policy: { tool: tools[0], rule: "forbid" } };
+    return undefined;
+  }
+  // "every call leaves through <funnel file>": the funnel's one wrapped tool is imported only there
+  const funnel = files.length === 1 && !tools.length ? k.funnels.get(files[0]) : undefined;
+  if (funnel?.wraps.length === 1 && DOOR(markers)) return { rule: "import-only", tool: funnel.wraps[0], files };
   return undefined;
+}
+
+const PROHIBITION = new Set(["never", "no other", "the one", "only", "must not", "forbidden"]);
+const area = (f: string) => (f.includes("/") ? `${f.split("/")[0]}/` : f);
+
+/** The scope a rule governs, from what its sentence names (never the file the sentence sits in,
+ *  unless it names nothing else). A scope decides who is TOLD before an edit; a check catches a
+ *  break after it wherever it is written. So a prohibition WITHOUT a check must reach the whole
+ *  area a violation could be written in — its anchors' top-level folders, narrowed to the ones the
+ *  sentence names as a word ("the gateway never forwards…") — and one with a check keeps the
+ *  precise scope. M3 measured the precise-only suggestion at 0.35 routing overlap with a person's
+ *  scopes, which scoped "no other module may call notify" to the whole service. */
+function suggestScope(anchors: HarvestAnchor[], k: Known, markers: string[] = [], text = "", hasCheck = false): RuleCandidate["suggestedScope"] {
+  const precise = preciseScope(anchors, k);
+  if (!precise || hasCheck || !markers.some((m) => PROHIBITION.has(m))) return precise;
+  const areas = new Set<string>([...(precise.files ?? []).map(area), ...(precise.entryPointIds ?? []).map((id) => area(k.entryFile.get(id) ?? id.split(":")[0]))]);
+  if (!areas.size) return precise;
+  const named = [...areas].filter((a) => a.endsWith("/") && new RegExp(`\\b${a.slice(0, -1).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(text));
+  return { files: named.length ? named : [...areas], ...(precise.stack ? { stack: precise.stack } : {}) };
+}
+
+function preciseScope(anchors: HarvestAnchor[], k: Known): RuleCandidate["suggestedScope"] {
+  const entryPointIds = new Set<string>(), files = new Set<string>(), stack = new Set<string>();
+  for (const a of anchors) {
+    if (a.kind === "route") for (const id of k.routeEntry.get(a.id) ?? []) entryPointIds.add(id);
+    else if (a.kind === "tool") stack.add(a.id);
+    else if (a.kind === "file") {
+      const f = k.funnels.get(a.id);
+      if (f) { stack.add(f.tool); for (const w of f.wraps) stack.add(w); } else files.add(a.id);
+    } else if (a.kind === "function") {
+      const defs = k.fnFiles.get(a.id.split(".").pop()!);
+      if (defs?.size === 1) files.add([...defs][0]);
+    } else if (a.kind === "path") files.add(`${a.id.split("/").slice(0, -1).join("/")}/`);
+  }
+  // a funnel's own file is inside its stack scope: listing it again adds nothing
+  const out = {
+    ...(entryPointIds.size ? { entryPointIds: [...entryPointIds] } : {}),
+    ...(files.size ? { files: [...files] } : {}),
+    ...(stack.size ? { stack: [...stack] } : {}),
+  };
+  return Object.keys(out).length ? out : undefined;
 }
 
 /** Named anchors count 2 each (to 3); the implicit anchor of a header or
@@ -330,8 +397,9 @@ export function harvestRules(
       file, line: s.line, where, ...(s.under ? { under: s.under } : {}), quote: s.text.slice(0, 400), anchors, markers: names,
       narrative: NARRATIVE.test(s.text) || RECORD_PATH.test(file) || (!!s.under && RECORD_HEADING.test(s.under)),
     };
-    const suggestedCheck = suggest(s.text, anchors, names);
-    out.push({ score: score(c, found.length, Math.max(...ms.map((m) => m.strength)), !!s.table), ...c, ...(suggestedCheck ? { suggestedCheck } : {}) });
+    const suggestedCheck = suggest(s.text, anchors, names, k);
+    const suggestedScope = suggestScope(anchors, k, names, s.text, !!suggestedCheck);
+    out.push({ score: score(c, found.length, Math.max(...ms.map((m) => m.strength)), !!s.table), ...c, ...(suggestedCheck ? { suggestedCheck } : {}), ...(suggestedScope ? { suggestedScope } : {}) });
   };
   for (const rel of walkProse(root)) {
     let text: string;
@@ -383,7 +451,9 @@ export function formatHarvest(r: HarvestReport, opts: { min?: number; all?: bool
   for (const c of shown) {
     L.push(`[${String(c.score).padStart(2)}] ${c.file}:${c.line}${c.where !== "prose" ? ` (${c.where})` : ""}${c.under ? ` — under "${c.under.slice(0, 60)}"` : ""}${c.narrative ? " · narrative?" : ""}`);
     L.push(`     "${c.quote.length > 220 ? `${c.quote.slice(0, 217)}…` : c.quote}"`);
-    L.push(`     names: ${c.anchors.map((a) => `${a.kind} ${a.id}`).join(", ")} · markers: ${c.markers.join(", ")}${c.suggestedCheck ? ` · try: --check '${JSON.stringify(c.suggestedCheck)}'` : ""}`);
+    L.push(`     names: ${c.anchors.map((a) => `${a.kind} ${a.id}`).join(", ")} · markers: ${c.markers.join(", ")}`);
+    const sc = c.suggestedScope;
+    if (sc || c.suggestedCheck) L.push(`     scope:${sc?.files ? ` --files ${sc.files.join(",")}` : ""}${sc?.stack ? ` --tools ${sc.stack.join(",")}` : ""}${sc?.entryPointIds ? ` --threads ${sc.entryPointIds.join(",")}` : ""}${c.suggestedCheck ? ` · try: --check '${JSON.stringify(c.suggestedCheck)}'` : ""}`);
   }
   const more = [...folded].filter(([f]) => f !== "…").map(([f, n]) => `${n} more in ${f}`);
   if (more.length || folded.get("…")) L.push(`… ${[...more, ...(folded.get("…") ? [`${folded.get("…")} more`] : [])].join("; ")} (--all)`);

@@ -34,6 +34,10 @@ export interface PlanGrounding {
 export type PlanPolicyStatus = PlanStatus | "promoted";
 export type PlanActor = "human" | "agent";
 
+/** The open question `plan observe` asks when it starts a plan with no
+ *  objective; a person stating the objective answers it (plan_ops.ts). */
+export const OBJECTIVE_QUESTION = "What is this project for? State the objective (plan edit set-objective), or draft one: plan draft --direction";
+
 export const PLAN_CAPS = {
   processes: 12,
   boundaries: 16,

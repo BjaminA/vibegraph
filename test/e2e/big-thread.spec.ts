@@ -34,9 +34,6 @@ test("a 1,002-node thread: culled, folds by file, a card jumps in, a step opens 
   test.setTimeout(180_000);
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(e.message));
-  let systemEvents = 0;
-  await page.exposeFunction("__vgSystem", () => { systemEvents++; });
-  await page.addInitScript(() => document.addEventListener("vg-zoom-to-system", () => (window as unknown as { __vgSystem: () => void }).__vgSystem()));
   await page.goto("/");
   await page.waitForSelector("[data-thread-index-row]", { timeout: 60_000 });
   const banner = page.locator("[data-key-banner]");
@@ -83,6 +80,38 @@ test("a 1,002-node thread: culled, folds by file, a card jumps in, a step opens 
   await expect(page.locator("[data-node-editor-panel] .view-lines")).toContainText("step5_", { timeout: 15_000 });
   await page.screenshot({ path: join(REVIEW_DIR, "file-card-then-step.png") });
 
-  expect(systemEvents, "never left for the system view").toBe(0);
+  // never left the thread: a zoom is a rendering change, never a view change
+  await expect(page.locator("[data-system-view]")).toHaveCount(0);
+  expect(errors, errors.join("\n")).toEqual([]);
+});
+
+// 2026-10-20 — the reported bug: on a big thread, switching the level to "All"
+// fitted the view to every node it revealed, at a tiny zoom, and the zoom
+// continuum read that as the reader zooming out and opened the System view's
+// thread-interaction cards. A zoom never changes view now, and a level switch
+// is not "the thread grew" — down to the canvas's floor, the thread stays.
+test("switching the level and zooming to the floor never leaves the thread", async ({ page }) => {
+  test.setTimeout(180_000);
+  const errors: string[] = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  await page.goto("/");
+  await page.waitForSelector("[data-thread-index-row]", { timeout: 60_000 });
+  const banner = page.locator("[data-key-banner]");
+  if (await banner.count() > 0) await banner.locator("button").click();
+  await page.locator('[data-thread-index-row][data-entry-id="run.ts:main"]').click();
+  await page.waitForSelector(".react-flow__node", { timeout: 60_000 });
+  const control = page.locator("[data-thread-rank-control]");
+  await control.locator('[data-rank-level="2"]').click();
+  await page.waitForTimeout(1200);
+  await control.locator('[data-rank-level="3"]').click();
+  await page.waitForTimeout(1500); // the level's own fit, and nothing else
+  await expect(page.locator("[data-thread-view]")).toBeVisible();
+  const pane = await page.locator(".react-flow__pane").boundingBox();
+  await page.mouse.move(pane!.x + pane!.width / 2, pane!.y + pane!.height / 2);
+  for (let i = 0; i < 40; i++) { await page.mouse.wheel(0, 400); await page.waitForTimeout(40); }
+  await page.waitForTimeout(800);
+  expect((await dom(page)).zoom).toBeLessThan(0.14); // past where the System view used to open
+  await expect(page.locator("[data-thread-view]")).toBeVisible();
+  await expect(page.locator("[data-system-view]")).toHaveCount(0);
   expect(errors, errors.join("\n")).toEqual([]);
 });

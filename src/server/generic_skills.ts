@@ -20,7 +20,8 @@ import { dirname, join } from "node:path";
 import { evaluatePredicate, predicateFacts, type Predicate, type PredicateScope, type ProfileLike, type TaskFacts } from "./quality/predicate.ts";
 import { sourceHashOf } from "./readme_store.ts";
 import { SKILL_INJECTION_BUDGET_CHARS } from "./thread_remit.ts";
-import type { SkillsConfig, SkillCatalogueEntry } from "../shared/generic_skills_wire.ts";
+import type { SkillsConfig, SkillCatalogueEntry, Delivery } from "../shared/generic_skills_wire.ts";
+import { DELIVERY_OFF, deliveryInUse, legacyDelivery, skillDelivery } from "../shared/generic_skills_wire.ts";
 
 export type { SkillsConfig, SkillCatalogueEntry };
 
@@ -223,9 +224,21 @@ export function readSkillsConfig(root: string): { config: SkillsConfig; problems
   try {
     const raw = JSON.parse(readFileSync(p, "utf-8"));
     if (!raw || raw.version !== "1.0" || !Array.isArray(raw.enabled)) return { config: off, problems: [`${p}: not a v1.0 skills config — nothing enabled`] };
-    const enabled = raw.enabled.filter((x: unknown) => typeof x === "string");
-    const hooks = HOOK_MODES.includes(raw.hooks) ? { hooks: raw.hooks } : {};
-    return { config: { version: "1.0", enabled, ...(raw.enabledBy && typeof raw.enabledBy === "object" ? { enabledBy: raw.enabledBy } : {}), ...hooks }, problems: [] };
+    const listed = raw.enabled.filter((x: unknown) => typeof x === "string");
+    const hooks = HOOK_MODES.includes(raw.hooks) ? { hooks: raw.hooks as SkillsConfig["hooks"] } : {};
+    // Every skill's switches, explicit: its own if the file has them, else
+    // what the legacy page-wide mode meant for an enabled skill.
+    const delivery: Record<string, Delivery> = {};
+    for (const n of listed) delivery[n] = legacyDelivery(hooks.hooks);
+    if (raw.delivery && typeof raw.delivery === "object") {
+      for (const [n, d] of Object.entries(raw.delivery as Record<string, unknown>)) {
+        const v = d as { upfront?: unknown; onCheck?: unknown } | null;
+        if (v && typeof v.upfront === "boolean" && typeof v.onCheck === "boolean") delivery[n] = { upfront: v.upfront, onCheck: v.onCheck };
+      }
+    }
+    for (const n of Object.keys(delivery)) if (!deliveryInUse(delivery[n])) delete delivery[n];
+    const enabled = Object.keys(delivery);
+    return { config: { version: "1.0", enabled, ...(raw.enabledBy && typeof raw.enabledBy === "object" ? { enabledBy: raw.enabledBy } : {}), delivery, ...hooks }, problems: [] };
   } catch (e: any) {
     return { config: off, problems: [`${p}: ${e?.message ?? e} — nothing enabled`] };
   }
@@ -238,7 +251,8 @@ export interface RoutedGenericSkill {
   skillVersion: string;
   /** The body to inject, or null with the reason below. */
   skill: string | null;
-  omitted?: "disabled" | "not-applicable" | "over-budget" | "already-in-session";
+  /** check-only: in use, but only to explain a broken check — never sent up front */
+  omitted?: "disabled" | "check-only" | "not-applicable" | "over-budget" | "already-in-session";
   /** The facts / regimes / task keys the predicate read — the provenance line's "applies because". */
   appliesOn: string[];
   evidence: GenericSkill["evidence"];
@@ -264,12 +278,13 @@ export interface SelectInput {
 export function selectGenericSkills(input: SelectInput): { routed: RoutedGenericSkill[]; injected: Array<[string, string]> } {
   const routed: RoutedGenericSkill[] = [];
   const injected: Array<[string, string]> = [];
-  const enabled = new Set(input.config.enabled);
   const scope: PredicateScope = { profile: input.profile, entryPointId: input.entryPointId, task: input.task };
   let remaining = input.budgetChars;
   for (const s of input.skills) {
     const base = { name: s.name, skillVersion: s.skillVersion, appliesOn: predicateFacts(s.applies_when), evidence: s.evidence };
-    if (!enabled.has(s.name)) { routed.push({ ...base, skill: null, omitted: "disabled" }); continue; }
+    // A prompt is "up front": only a skill told up front rides it.
+    const d = skillDelivery(input.config, s.name);
+    if (!d.upfront) { routed.push({ ...base, skill: null, omitted: d.onCheck ? "check-only" : "disabled" }); continue; }
     if (!evaluatePredicate(s.applies_when, scope)) { routed.push({ ...base, skill: null, omitted: "not-applicable" }); continue; }
     if (input.alreadyInjected.get(s.name) === s.bodyHash) { routed.push({ ...base, skill: null, omitted: "already-in-session" }); continue; }
     if (s.body.length > remaining) { routed.push({ ...base, skill: null, omitted: "over-budget" }); continue; }
@@ -325,14 +340,31 @@ export function sanitiseSkillsConfig(
   stamp: { source: "human"; id?: string; at: string },
   prev?: SkillsConfig,
 ): SkillsConfig {
-  const r = (raw ?? {}) as { enabled?: unknown; hooks?: unknown };
-  const wanted = Array.isArray(r.enabled) ? r.enabled.filter((x): x is string => typeof x === "string") : [];
-  const enabled = [...new Set(wanted.filter((n) => known.includes(n)))];
+  const r = (raw ?? {}) as { enabled?: unknown; hooks?: unknown; skill?: unknown; upfront?: unknown; onCheck?: unknown; delivery?: unknown };
+  const hooks = HOOK_MODES.includes(r.hooks as never) ? r.hooks as SkillsConfig["hooks"] : prev?.hooks;
+  const delivery: Record<string, Delivery> = {};
+  if (typeof r.skill === "string") {
+    // 2026-10-20 — ONE switch from the panel, merged into what is set
+    for (const n of known) if (prev) { const d = skillDelivery(prev, n); if (deliveryInUse(d)) delivery[n] = d; }
+    if (known.includes(r.skill)) {
+      const was = delivery[r.skill] ?? { ...DELIVERY_OFF };
+      delivery[r.skill] = { upfront: typeof r.upfront === "boolean" ? r.upfront : was.upfront, onCheck: typeof r.onCheck === "boolean" ? r.onCheck : was.onCheck };
+    }
+  } else if (r.delivery && typeof r.delivery === "object") {
+    for (const [n, d] of Object.entries(r.delivery as Record<string, unknown>)) {
+      const v = d as { upfront?: unknown; onCheck?: unknown } | null;
+      if (known.includes(n) && v && typeof v.upfront === "boolean" && typeof v.onCheck === "boolean") delivery[n] = { upfront: v.upfront, onCheck: v.onCheck };
+    }
+  } else {
+    // the older shape: an enabled list, each skill on as the page-wide mode says
+    const wanted = Array.isArray(r.enabled) ? r.enabled.filter((x): x is string => typeof x === "string") : [];
+    for (const n of new Set(wanted.filter((x) => known.includes(x)))) delivery[n] = legacyDelivery(hooks);
+  }
+  for (const n of Object.keys(delivery)) if (!deliveryInUse(delivery[n])) delete delivery[n];
+  const enabled = Object.keys(delivery);
   const enabledBy: NonNullable<SkillsConfig["enabledBy"]> = {};
   for (const n of enabled) enabledBy[n] = prev?.enabledBy?.[n] ?? stamp;
-  // The hook mode: a valid one from the payload, else whatever was set.
-  const hooks = HOOK_MODES.includes(r.hooks as never) ? r.hooks as SkillsConfig["hooks"] : prev?.hooks;
-  return { version: "1.0", enabled, ...(enabled.length ? { enabledBy } : {}), ...(hooks ? { hooks } : {}) };
+  return { version: "1.0", enabled, ...(enabled.length ? { enabledBy } : {}), delivery, ...(hooks ? { hooks } : {}) };
 }
 
 const evidenceTag = (s: GenericSkill) => (s.evidence === "validated" ? "drilled" : "unvalidated");
@@ -375,7 +407,7 @@ export function countApplicable(skill: GenericSkill, profile: ProfileLike, task?
 export function catalogueOf(skills: GenericSkill[], profile: ProfileLike | null): SkillCatalogueEntry[] {
   return skills.map((s) => ({
     name: s.name, description: s.description, dimension: s.dimension, skillVersion: s.skillVersion,
-    evidence: s.evidence, binds: s.binds,
+    evidence: s.evidence, binds: s.binds, rules: s.rules.map((r) => r.text),
     ...(profile ? countApplicable(s, profile) : { fires: 0, of: 0 }),
   }));
 }

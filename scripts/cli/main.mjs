@@ -20,15 +20,17 @@ import { resolvePython } from "./pyenv.mjs";
 import { exportKnowledge } from "../export_knowledge.mjs";
 import { formatCheckReport, runConstraintChecks } from "./check.mjs";
 import { hookInputFromWindows, cliPath } from "./winpath.mjs";
-import { applyHooks, applyInit, ALL_SKILLS, applySkills, hookCommand, windowsHookCommand, POINTER, skillsFromList } from "./init.mjs";
+import { applyHooks, applyInit, ALL_SKILLS, applySkills, cliInvocation, hookCommand, windowsHookCommand, pointerFor, skillsFromList } from "./init.mjs";
 import { spawnSync } from "node:child_process";
 import { HOOK_EVENTS, runHook } from "./hooks.mjs";
 import { doctorReport, hookRunPayload, recordFired } from "./hook_tools.mjs";
+import { hookLogText } from "./hook_log.mjs";
 import { runConfig, CONFIG_USAGE } from "./config.mjs";
 import { hostWarnings, installMismatch, nodeTooOld } from "./host_check.mjs";
 import { describeClaude } from "../../src/server/find_claude.ts";
 import { LESSONS_USAGE, runLessons } from "./lessons.mjs";
 import { DIRECTION_USAGE, runDirection } from "./direction.mjs";
+import { SETUP_USAGE, runSetup } from "./setup.mjs";
 import { DATAFLOW_USAGE, runDataflow } from "./dataflow.mjs";
 import { PLAN_USAGE, runPlan } from "./plan.mjs";
 import { runPlanDraft } from "./plan_draft.mjs";
@@ -86,6 +88,7 @@ usage:
   ${PACKAGE_NAME} ${DATAFLOW_USAGE}
   ${PACKAGE_NAME} ${PLAN_USAGE}
   ${PACKAGE_NAME} ${SOFTWARE_USAGE}
+  ${PACKAGE_NAME} ${SETUP_USAGE}
   ${PACKAGE_NAME} init [<root>] [--print]        point Claude at the folder: one marked block in CLAUDE.md
                                                (replaced on re-run, never duplicated) and the gitignore
                                                line for .vibegraph/knowledge/. --print shows the block only.
@@ -103,11 +106,17 @@ usage:
   ${PACKAGE_NAME} hook run <event> [<root>] [--file <path> | --command "<sh>"] [--prompt "<text>"] [--session <id>]
                                                fire a hook by hand: the stdin JSON is built for you, the
                                                exit codes are the hook's (0 · 2 blocked). Events: ${HOOK_EVENTS.join(", ")}
+  ${PACKAGE_NAME} hook log [<root>] [--session <id> | --list] [--json]
+                                               what each real hook firing did: event, ms, the threads a
+                                               prompt routed to and HOW (node id / file / symbol / KEYWORD
+                                               guess / planned), what was sent, deferred or cut, and the
+                                               findings an edit introduced (block or advisory). Default:
+                                               the session that fired last. Never the prompt or a command.
   ${PACKAGE_NAME} doctor [<root>]                are the hooks installed, runnable from this side, and have
                                                they fired since installed? which Claude is found? exit 0 · 1 a warning
   ${PACKAGE_NAME} ${CONFIG_USAGE}
       --skill              also install the Claude Code skills into .claude/skills/: /vibegraph (set up and
-                           use this) and the task skills /vibegraph-plan, -debug, -security, -review (which
+                           use this) and the task skills /vibegraph-setup, -plan, -debug, -security, -review, -rules (which
                            knowledge file and command to open for that task; ~100 tokens each until used);
                            with --user into ~/.claude/skills/ instead (every project on this machine, and
                            nothing else is written)
@@ -165,6 +174,22 @@ Python 3 with libcst is required for the parse step; when libcst is missing it i
 into a directory this tool owns (VIBEGRAPH_KNOWLEDGE_HOME, default ~/.cache/${PACKAGE_NAME}).
 VG_PYTHON names the interpreter; VIBEGRAPH_PYDEPS names a directory that already holds libcst.
 `;
+
+/** One command's lines of USAGE: its own line(s) and the indented options under them. */
+export function usageFor(command) {
+  const lines = USAGE.split("\n");
+  // the usage writes a command with an alias as `constraint(s)`: match either
+  // spelling (the live run's `constraints draft --help` got the whole usage)
+  const stem = command.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/s$/, "");
+  const head = new RegExp(`^  ${PACKAGE_NAME} ${stem}(?:s|\\(s\\))?\\b`);
+  const out = [];
+  for (let i = 0; i < lines.length; i++) {
+    if (!head.test(lines[i])) continue;
+    out.push(lines[i]);
+    for (let j = i + 1; j < lines.length && !lines[j].startsWith(`  ${PACKAGE_NAME} `) && lines[j].trim(); j++) out.push(lines[j]);
+  }
+  return out.length ? `usage:\n${out.join("\n")}\n` : USAGE;
+}
 
 function fail(msg, code = 2) {
   process.stderr.write(`${msg}\n`);
@@ -332,7 +357,7 @@ function cmdInit(args) {
   const loc = locate();
   // The Claude Code skills: into ~/.claude/skills with --user (and nothing
   // else — a user-level install touches no project), else the project's.
-  // --skill installs the setup skill and all five task skills; --skills
+  // --skill installs the base skill and all six task skills; --skills
   // plan,debug chooses; --remove-skill takes every one of ours out.
   if (parsed.values.skill || parsed.values.skills || parsed.values["remove-skill"]) {
     let results;
@@ -342,7 +367,9 @@ function cmdInit(args) {
     if (!user) { try { skRoot = projectRoot(parsed.positionals[0]); } catch (e) { return fail(e.message); } }
     try {
       const names = remove ? ALL_SKILLS : skillsFromList(parsed.values.skills);
-      results = applySkills({ names, root: skRoot, loc, user, remove });
+      // 2026-10-20 — each installed skill names the command that installed it (init.mjs pinSkillCli)
+      const version = packageVersion(loc);
+      results = applySkills({ names, root: skRoot, loc, user, remove, cli: { invocation: cliInvocation(process.argv, process.execPath, process.execArgv, version), version } });
     } catch (e) { return fail(e.message); }
     for (const sk of results) {
       process.stdout.write(`${sk.path}: skill ${sk.state}${sk.state === "installed" || sk.state === "updated" ? ` (/${sk.name}; ${user ? "every project on this machine" : "this project"})` : ""}\n`);
@@ -355,11 +382,14 @@ function cmdInit(args) {
     const code = installHooks(loc, absRoot, { remove: parsed.values["remove-hooks"] === true, windows: parsed.values.windows === true });
     if (code !== 0 || parsed.values["remove-hooks"]) return code;
   }
-  const r = applyInit({ root: absRoot, print: parsed.values.print === true });
-  if (r.claudeMd === "printed") { process.stdout.write(POINTER + "\n"); return 0; }
+  const initCli = { invocation: cliInvocation(process.argv, process.execPath, process.execArgv, packageVersion(loc)), version: packageVersion(loc) };
+  const r = applyInit({ root: absRoot, print: parsed.values.print === true, cli: initCli });
+  if (r.claudeMd === "printed") { process.stdout.write(pointerFor(initCli) + "\n"); return 0; }
   process.stdout.write(`${r.paths.claudeMd}: ${r.claudeMd} (the block between ${"<!-- vibegraph-knowledge:begin/end -->"} is replaced on re-run)\n`);
   process.stdout.write(`${r.paths.gitignore}: ${r.gitignore} (.vibegraph/knowledge/ is generated; never commit it)\n`);
   if (r.claudeMd !== "unchanged") process.stdout.write(`next: ${PACKAGE_NAME} export${existsSync(join(absRoot, ".vibegraph", "knowledge")) ? " (the folder exists; re-run to refresh it)" : ""}\n`);
+  // 2026-10-20 — the rest of the setup, in order (software specs, groups, the Brief, rules, the objective, hooks)
+  if (r.claudeMd !== "unchanged") process.stdout.write(`then: ${PACKAGE_NAME} setup — the rest of the setup in order, with the exact commands for each step (or /vibegraph-setup in Claude Code)\n`);
   const twoInstalls = installMismatch(absRoot, packageVersion(loc));
   if (twoInstalls) process.stderr.write(`note: ${twoInstalls}\n`);
   return 0;
@@ -464,12 +494,14 @@ function cmdConstraints(argsIn) {
         force: { type: "boolean" }, "dry-run": { type: "boolean" },
         // harvest (2026-10-17): the threshold and the whole list; add --cite: the source line a rule was read from
         min: { type: "string" }, cite: { type: "string" }, quote: { type: "string" },
+        // draft (2026-10-19): a saved model reply, the prompt shown, the model
+        reply: { type: "string" }, prompt: { type: "boolean" }, model: { type: "string" },
       },
     });
   } catch (e) { return fail(`${e.message}\n\n${USAGE}`); }
   const { sub, args: rest, root } = subAndRoot(parsed.positionals);
   const values = { ...parsed.values, ...(listJson ? { json: true } : {}), pid: rest[1] };
-  const pipeline = (sub === "add" && (values.check || values.json)) || sub === "harvest" ? (() => { try { return pipelineFor(locate(), resolve(cliPath(root ?? "."))); } catch { return {}; } })() : undefined;
+  const pipeline = (sub === "add" && (values.check || values.json)) || sub === "harvest" || sub === "draft" ?(() => { try { return pipelineFor(locate(), resolve(cliPath(root ?? "."))); } catch { return {}; } })() : undefined;
   return report(runConstraints({ root, sub, id: rest[0], values, pipeline }));
 }
 
@@ -514,9 +546,16 @@ function cmdHook(args) {
     parsed = parseArgs({ args, allowPositionals: true, options: {
       root: { type: "string" }, "vg-hook": { type: "boolean" }, target: { type: "string" }, remove: { type: "boolean" },
       file: { type: "string" }, prompt: { type: "string" }, tool: { type: "string" }, command: { type: "string" }, session: { type: "string" },
+      list: { type: "boolean" }, json: { type: "boolean" },
     } });
   } catch (e) { return fail(`${e.message}\n\n${USAGE}`); }
   const sub = parsed.positionals[0];
+  if (sub === "log") {
+    let absRoot;
+    try { absRoot = projectRoot(parsed.positionals[1]); } catch (e) { return fail(e.message); }
+    process.stdout.write(hookLogText(absRoot, parsed.values));
+    return 0;
+  }
   if (sub === "install") {
     const target = parsed.values.target ?? "posix";
     if (!["posix", "wsl"].includes(target)) return fail("--target must be posix (Claude Code runs where this project is) or wsl (Claude Code runs on Windows against this WSL project)");
@@ -526,7 +565,7 @@ function cmdHook(args) {
   }
   const manual = sub === "run";
   const event = manual ? parsed.positionals[1] : sub;
-  if (!HOOK_EVENTS.includes(event)) return fail(`hook event must be one of: ${HOOK_EVENTS.join(", ")} (or: hook install | hook run <event>)`);
+  if (!HOOK_EVENTS.includes(event)) return fail(`hook event must be one of: ${HOOK_EVENTS.join(", ")} (or: hook install | hook run <event> | hook log)`);
   let input = {};
   if (manual) {
     let r;
@@ -553,7 +592,7 @@ function cmdHook(args) {
   let pipeline;
   try { pipeline = pipelineFor(locate(), absRoot); } catch (e) { return silent(`VibeGraph ${event} hook could not start the parser: ${e.message}`); }
   const t0 = Date.now();
-  const r = runHook(event, input, { absRoot, pipeline });
+  const r = runHook(event, input, { absRoot, pipeline, log: !manual });
   // VG_HOOK_LOG: one JSON line per run (event, ms, blocked) — what a drill
   // reports as the hooks' cost. Never the payload, never the prompt.
   if (process.env.VG_HOOK_LOG) {
@@ -655,9 +694,21 @@ function cmdView(args) {
 export function main(argv) {
   // Every Python child speaks UTF-8, whatever the locale (Windows: cp1252).
   process.env.PYTHONUTF8 ??= "1";
-  const [command, ...rest] = argv;
+  let [command, ...rest] = argv;
+  // 2026-10-20 (live run, session 3): given the pinned command in a skill,
+  // the model ran `<cli> vibegraph-knowledge setup`. The tool's own name is
+  // never a command, so as the first argument it is dropped — and every check
+  // below, the person's-step refusal included, sees the real command.
+  if (command === "vibegraph-knowledge" || command === "vgk") [command, ...rest] = rest;
   if (!command || command === "--help" || command === "-h" || command === "help") { process.stdout.write(USAGE); return 0; }
   if (command === "--version" || command === "-v" || command === "version") { process.stdout.write(`${toolLabel(locate())}\n`); return 0; }
+  // 2026-10-20 (the live setup run: `software add --help` answered "Unknown
+  // option '--help'") — `--help` / `-h` after a command is that command's
+  // usage; a command with a fuller help of its own is handed `help`
+  if (rest.includes("--help") || rest.includes("-h")) {
+    if (command === "software" || command === "plan") rest = ["help"];
+    else { process.stdout.write(usageFor(command)); return 0; }
+  }
   // 2026-09-30 — the steps that are a person's, refused when Claude Code runs them (actor.mjs).
   // 2026-10-07 — an old Node, or the Windows install run from WSL (host_check.mjs)
   const old = nodeTooOld();
@@ -697,6 +748,7 @@ export function main(argv) {
   if (command === "plan" && rest[0] === "draft") return runPlanDraft(rest.slice(1)).then((r) => { (r.exitCode === 0 ? process.stdout : process.stderr).write(r.text); return r.exitCode; });
   if (command === "plan") { const r = runPlan(rest); (r.exitCode === 0 ? process.stdout : process.stderr).write(r.text); return r.exitCode; }
   if (command === "direction") { const r = runDirection(rest); process.stdout.write(r.text); return r.exitCode; }
+  if (command === "setup") { const r = runSetup(rest, { cli: cliInvocation(process.argv, process.execPath, process.execArgv, packageVersion(locate())).join(" ") });(r.exitCode === 0 ? process.stdout : process.stderr).write(r.text); return r.exitCode; }
   if (command === "software") return runSoftware(rest).then((r) => { (r.exitCode === 0 ? process.stdout : process.stderr).write(r.text); return r.exitCode; });
   return fail(`unknown command: ${command}\n\n${USAGE}`);
 }

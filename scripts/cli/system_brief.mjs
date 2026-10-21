@@ -29,6 +29,10 @@ import { groupsStep } from "../../src/server/brief_groups_first.ts";
 import { reaffirmBrief, setBriefSync, staleBriefLineList, staleFocus } from "../../src/server/brief_sync.ts";
 import { spawnClassifier } from "./classify.mjs";
 import { cliPath } from "./winpath.mjs";
+import { archBaseline } from "../../src/server/arch_drift.ts";
+import { applyArchStore } from "../../src/server/arch_store.ts";
+import { readInfraManifests } from "../../src/server/infra_manifests.ts";
+import { loadPlan } from "../../src/server/plan_store.ts";
 
 export const SYSTEM_BRIEF_USAGE = `brief codebase [<root>] [--estimate] [--dry-run] [--only spec|groups|scopes|path] [--stale] [--note "<correction>"]… [--reply <file>] [--skip-groups]
                                   THE BRIEF: one model call (SPENDS TOKENS; --estimate says how many first) writes the system's
@@ -58,7 +62,13 @@ export function runSystemBrief({ root, sub, section, values, pipeline, env = pro
   }
   if (sub === "ratify" || sub === "reject") {
     if (section && !BRIEF_SECTIONS.includes(section)) { messages.push(`no section ${section} — one of ${BRIEF_SECTIONS.join(", ")}`); return done(2); }
-    const r = decideBrief(absRoot, section ?? "all", sub, personName(absRoot));
+    // ratifying the groups starts drift from the map as it is now (read only when asked)
+    const archBaselineNow = (store) => {
+      const { envelope } = loadEnvelope(absRoot, values.envelope, pipeline ?? {}, { cache: true });
+      const derived = archModelForEnvelope(envelope, buildStackIndex(envelope, absRoot), buildCrossingIndex(envelope), absRoot, undefined, { applyStore: false });
+      return archBaseline(applyArchStore(derived, store), readInfraManifests(absRoot).facts, loadPlan(absRoot));
+    };
+    const r = decideBrief(absRoot, section ?? "all", sub, personName(absRoot), new Date(), { archBaseline: archBaselineNow });
     (r.ok ? lines : messages).push(r.detail);
     return done(r.ok ? 0 : 1);
   }
@@ -79,7 +89,7 @@ export function runSystemBrief({ root, sub, section, values, pipeline, env = pro
       for (const s of BRIEF_SECTIONS) { const t = sectionSummary(rec.proposed, s); if (t) lines.push(`  ${s}: ${t}`); }
       for (const l of allLines(rec.proposed.spec)) lines.push(`    [${l.words.join(", ")}] ${l.text}${l.cites.length ? "" : " (INFERRED)"}`);
       if (rec.proposed.refused.length) lines.push(`  refused: ${rec.proposed.refused.length} item(s) — ${rec.proposed.refused.slice(0, 3).map((r) => `${r.item}: ${r.reason}`).join("; ")}`);
-      if (allLines(rec.proposed.spec).length) lines.push(...reviewText(reviewBrief(rec.proposed.spec, inpShow.facts, { omitted: rec.proposed.omitted, absolutes: inpShow.absolutes })).map((l) => `  ${l}`));
+      if (allLines(rec.proposed.spec).length) lines.push(...reviewText(reviewBrief(rec.proposed.spec, inpShow.facts, { omitted: rec.proposed.omitted, absolutes: inpShow.absolutes, scheme: rec.proposed.scheme })).map((l) => `  ${l}`));
       lines.push("  decide: vibegraph-knowledge brief codebase ratify|reject [spec|groups|scopes|path]  (or the inbox)");
     }
     const r = briefWithStaleness(rec, inpShow.facts);
@@ -88,7 +98,7 @@ export function runSystemBrief({ root, sub, section, values, pipeline, env = pro
       for (const [t, part] of [["Function", "function"], ["Method", "method"], ["Key features", "feature"]]) {
         for (const l of r.spec[part]) lines.push(`  ${t}: ${l.text}${l.stale?.length ? `  [STALE: ${l.stale.join(", ")} changed]` : ""}`, ...(l.staleWhy ?? []).map((w) => `      ${w}`));
       }
-      lines.push(...reviewText(reviewBrief(r.spec, inpShow.facts, { absolutes: inpShow.absolutes })).map((l) => `  ${l}`));
+      lines.push(...reviewText(reviewBrief(r.spec, inpShow.facts, { absolutes: inpShow.absolutes, scheme: r.scheme })).map((l) => `  ${l}`));
     }
     if (!rec.proposed && !r?.spec) lines.push("no brief yet — `vibegraph-knowledge brief codebase --estimate`, then `vibegraph-knowledge brief codebase`");
     return done(0);
@@ -150,7 +160,7 @@ export function runSystemBrief({ root, sub, section, values, pipeline, env = pro
   if (parsed.brief.refused.length) lines.push(`  refused ${parsed.brief.refused.length}:`, ...parsed.brief.refused.slice(0, 12).map((r) => `    ${r.item}: ${r.reason}`));
   if (parsed.brief.omitted.length) lines.push(`  left out: ${parsed.brief.omitted.slice(0, 4).join("; ")}`);
   if (inp.facts.silentRest.length && only !== "scopes") lines.push(`  ${inp.facts.silentRest.length} silent box(es) left for \`brief --only scopes\``);
-  if (allLines(p.spec).length) lines.push(...reviewText(reviewBrief(p.spec, inp.facts, { omitted: p.omitted, absolutes: inp.absolutes })).map((l) => `  ${l}`));
+  if (allLines(p.spec).length) lines.push(...reviewText(reviewBrief(p.spec, inp.facts, { omitted: p.omitted, absolutes: inp.absolutes, scheme: p.scheme })).map((l) => `  ${l}`));
   lines.push("  decide: vibegraph-knowledge brief codebase ratify|reject [section], or the inbox — a person's step");
   if (gs.step === "groups") lines.push("  then draft the brief: `vibegraph-knowledge brief codebase` (it reads the codebase through the groups you agreed)");
   return done(0);

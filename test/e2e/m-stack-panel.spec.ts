@@ -86,7 +86,8 @@ test.describe("M-STACK — the Stack panel: facts, and the policies stated about
     await expect(form).toBeVisible();
     await expect(page.locator("[data-constraint-kind]")).toHaveValue("stack-policy");
     await expect(page.locator("[data-constraint-policy-tool]")).toHaveValue("sqlite3");
-    await expect(page.locator('[data-stack-scope-chip="sqlite3"]')).toBeVisible();
+    // the tool arrives PICKED in the grouped scope picker (PLAN-M-RULES M1)
+    await expect(page.locator('[data-scope-picked] [data-scope-option="stack:sqlite3"]')).toBeVisible();
 
     await page.selectOption("[data-constraint-rule]", "replace-with");
     await page.fill("[data-constraint-policy-with]", "api.db");

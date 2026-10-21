@@ -219,3 +219,23 @@ test("describeCheck reads like the sentence a human would have written", () => {
     "every call to `notify` goes through `should_notify`",
   );
 });
+
+// 2026-10-19 (PLAN-M-RULES M3) — found by scoring proposed rules: on a project
+// with a package.json, `import-only openai in model/client.ts` read VIOLATED
+// with "imported outside model/client.ts: package.json". The facts took the
+// stack index's file list whole, and a manifest is listed as using every tool
+// it declares. A manifest declares; it does not import. Facts from a REAL
+// envelope, because the hand-written facts above cannot carry the bug.
+test("a manifest that declares a package is not an importer of it", async () => {
+  const { buildPolyglotEnvelope } = await import("../scripts/regen_polyglot.mjs");
+  const { buildStackIndex } = await import("../src/server/stack.ts");
+  const { checkStatedRules } = await import("../src/server/constraint_report.ts");
+  const root = "test/fixtures/harvest/ops_demo";
+  const env = buildPolyglotEnvelope(root, { skipSystem: true }).envelope;
+  const stack = buildStackIndex(env, root);
+  assert.ok(stack.byFile["package.json"]?.includes("openai"), "the fixture's manifest declares openai (the case under test)");
+  const rule = (tool, file) => ({ id: "x", kind: "proxy", text: "t", scope: { all: true }, source: "human", createdAt: "", check: { rule: "import-only", tool, files: [file] } });
+  const r = checkStatedRules({ envelope: env, root, stack, constraints: [rule("openai", "model/client.ts"), rule("pg", "db/provision.ts"), rule("openai", "db/provision.ts")] });
+  assert.deepEqual(r.results.map((x) => x.verdict), ["pass", "pass", "violated"]);
+  assert.deepEqual(r.results[2].offenders, ["model/client.ts"], "a real importer outside the allow-list is still caught");
+});

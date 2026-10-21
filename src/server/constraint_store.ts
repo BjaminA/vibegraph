@@ -25,6 +25,7 @@ import { isConstraintCheck, type ConstraintCheck } from "./constraint_grammar.ts
 import { isRun1Check, type Run1Check } from "./quality/verbs/index.ts";
 import { demoteOrphanedPromotions } from "./plan_store.ts";
 import { stampWriter } from "./writer_stamp.ts";
+import { scopeReaches, type RoutableThread } from "../shared/scope_route.ts";
 export type AnyConstraintCheck = ConstraintCheck | Run1Check;
 
 export type Constraint = ConstraintRecord;
@@ -314,14 +315,7 @@ export function findDuplicate(list: Constraint[], text: string): Constraint | nu
 
 // ── routing ──────────────────────────────────────────────────────────────
 
-export interface RoutableThread {
-  entryPointId: string | null;
-  filesReached: string[];
-  /** M-STACK.2 — the tool names this thread's files use (the stack index's
-   *  byThread slice). Absent = no stack index; stack scopes then match
-   *  nothing, which is honest: no facts, no routing. */
-  stack?: string[];
-}
+export type { RoutableThread } from "../shared/scope_route.ts";
 
 /** 2026-10-01 — the files a constraint is STATED for, out of `files`: its
  *  `scope.files` (a path ending "/" is a folder — routeConstraints' rule) or,
@@ -339,19 +333,8 @@ export function statedScopeFiles(c: Pick<Constraint, "scope">, files: readonly s
  *  TOOL the thread's stack uses, or everything. Order preserved
  *  (statement order = priority). */
 export function routeConstraints(list: Constraint[], thread: RoutableThread): Constraint[] {
-  return list.filter((c) => {
-    if (c.scope.all) return true;
-    if (thread.entryPointId && c.scope.entryPointIds?.includes(thread.entryPointId)) return true;
-    for (const f of c.scope.files ?? []) {
-      if (f.endsWith("/") ? thread.filesReached.some((r) => r.startsWith(f)) : thread.filesReached.includes(f)) return true;
-    }
-    // The dynamic half: a stack scope follows the FACTS, so a file added
-    // tomorrow that imports the tool is inside this scope with no edit.
-    for (const t of c.scope.stack ?? []) {
-      if (thread.stack?.includes(t)) return true;
-    }
-    return false;
-  });
+  // the predicate lives in src/shared/scope_route.ts: the Rules panel previews with it
+  return list.filter((c) => scopeReaches(c.scope, thread));
 }
 
 const SOURCE_LABEL: Record<ConstraintSource, string> = {

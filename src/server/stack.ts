@@ -32,6 +32,7 @@ import {
 // index builds); re-exported here so server code has one import point —
 // the constraint_store precedent.
 import type { StackEvidenceRef, StackToolRecord, StackIndexRecord } from "../shared/protocol.ts";
+import { boundName, funnelUsers, wrappingBindings, type FunnelIrNode } from "./funnel_users.ts";
 import { importBindings, localBindings, attributeBoundary, isOwnCrateSpec, type ImportBinding, type LocalBinding } from "../shared/stack_attribution.ts";
 
 export type { StackRole, StackOrigin };
@@ -143,7 +144,9 @@ function joinRel(dir: string, rest: string): string {
   return out.join("/");
 }
 
-function collect(env: StackEnvelopeLike): { observations: Observation[]; imports: ImportGraph; projectSpecs: Set<string> } {
+type ImportTakes = (from: string, to: string) => { imports: FunnelIrNode[]; refTargets: string[] };
+
+function collect(env: StackEnvelopeLike): { observations: Observation[]; imports: ImportGraph; projectSpecs: Set<string>; takes: ImportTakes } {
   const files = Object.keys(env.files);
   const fileSet = new Set(files);
   const byModulePath = new Map<string, string>();
@@ -186,10 +189,16 @@ function collect(env: StackEnvelopeLike): { observations: Observation[]; imports
   // M-BOUNDARY.1 — `file|spec` for every specifier that resolves inside
   // the project, so import BINDINGS know which names are project code.
   const projectSpecs = new Set<string>();
-  const addImport = (from: string, to: string) => {
+  // 2026-10-20 — WHAT each import takes, so a funnel's users are the files
+  // that take a wrapping binding, not every importer (funnel_users.ts).
+  const importNodes = new Map<string, FunnelIrNode[]>();
+  const refTargets = new Map<string, string[]>();
+  const pairKey = (from: string, to: string) => `${from}|${to}`;
+  const addImport = (from: string, to: string, node?: FunnelIrNode) => {
     if (from === to) return;
     if (!imports.has(from)) imports.set(from, new Set());
     imports.get(from)!.add(to);
+    if (node) (importNodes.get(pairKey(from, to)) ?? importNodes.set(pairKey(from, to), []).get(pairKey(from, to))!).push(node);
   };
 
   // Cross-file `reference` edges are already resolved by the linkers: a
@@ -198,6 +207,7 @@ function collect(env: StackEnvelopeLike): { observations: Observation[]; imports
     for (const e of ir.edges ?? []) {
       if (e?.type === "reference" && typeof e.targetFile === "string" && fileSet.has(e.targetFile)) {
         addImport(f, e.targetFile);
+        if (typeof e.target === "string") (refTargets.get(pairKey(f, e.targetFile)) ?? refTargets.set(pairKey(f, e.targetFile), []).get(pairKey(f, e.targetFile))!).push(e.target);
       }
     }
   }
@@ -235,7 +245,7 @@ function collect(env: StackEnvelopeLike): { observations: Observation[]; imports
               : fileSet.has(joinRel(dirOf(file), spec.split(".").join("/") + "/__init__.py"))
                 ? joinRel(dirOf(file), spec.split(".").join("/") + "/__init__.py")
                 : undefined);
-          if (target) { addImport(file, target); projectSpecs.add(`${file}|${spec}`); continue; }
+          if (target) { addImport(file, target, n); projectSpecs.add(`${file}|${spec}`); continue; }
           if (modulePrefixes.has(spec.split(".")[0])) { projectSpecs.add(`${file}|${spec}`); continue; } // this project's own package
           // M-ARCH.1 — a module FILE this project parses, imported across a
           // directory the linker did not follow (a sibling pipeline dir on
@@ -249,7 +259,7 @@ function collect(env: StackEnvelopeLike): { observations: Observation[]; imports
             const owners = pyModuleFiles.get(root0);
             if (owners && classifyTool("python", pythonToolName(spec)).role === "unknown") {
               projectSpecs.add(`${file}|${spec}`);
-              if (owners.length === 1) addImport(file, owners[0]);
+              if (owners.length === 1) addImport(file, owners[0], n);
               continue;
             }
           }
@@ -265,7 +275,7 @@ function collect(env: StackEnvelopeLike): { observations: Observation[]; imports
         // this reads that one fact.
         if (typeof n.aliasTarget === "string" && fileSet.has(n.aliasTarget)) {
           projectSpecs.add(`${file}|${spec}`);
-          addImport(file, n.aliasTarget);
+          addImport(file, n.aliasTarget, n);
           continue;
         }
         // M-CMD.3 — `@/x` is a PATH ALIAS by construction: npm forbids an
@@ -280,7 +290,7 @@ function collect(env: StackEnvelopeLike): { observations: Observation[]; imports
           projectSpecs.add(`${file}|${spec}`);
           const base = joinRel(dirOf(file), spec.replace(/\.(m?js|ts|tsx)$/, ""));
           for (const cand of [`${base}.ts`, `${base}.tsx`, `${base}/index.ts`, `${base}/index.tsx`]) {
-            if (fileSet.has(cand)) { addImport(file, cand); break; }
+            if (fileSet.has(cand)) { addImport(file, cand, n); break; }
           }
           continue;
         }
@@ -305,7 +315,7 @@ function collect(env: StackEnvelopeLike): { observations: Observation[]; imports
           const spec = Array.isArray(n.names) && typeof n.names[0] === "string" ? n.names[0] : "";
           if (!spec) continue;
           for (const cand of [joinRel(dirOf(file), spec), spec]) {
-            if (fileSet.has(cand)) { addImport(file, cand); break; }
+            if (fileSet.has(cand)) { addImport(file, cand, n); break; }
           }
         } else if (t === "call") {
           const word = typeof n.funcName === "string" ? n.funcName : "";
@@ -346,13 +356,14 @@ function collect(env: StackEnvelopeLike): { observations: Observation[]; imports
         const header = angled ? raw.slice(1, -1) : raw;
         if (!angled) {
           const local = basenames.get(header.split("/").pop()!);
-          if (local) { addImport(file, local); continue; }
+          if (local) { addImport(file, local, n); continue; }
         }
         observations.push({ tool: header, file, nodeId: n.id, line: n.line, kind: "include", language: lang });
       }
     }
   }
-  return { observations, imports, projectSpecs };
+  const takes: ImportTakes = (from, to) => ({ imports: importNodes.get(pairKey(from, to)) ?? [], refTargets: refTargets.get(pairKey(from, to)) ?? [] });
+  return { observations, imports, projectSpecs, takes };
 }
 
 /** The crate a Rust IR belongs to, as the parser read it from the
@@ -461,7 +472,7 @@ function sortTools(a: StackTool, b: StackTool): number {
 }
 
 export function buildStackIndex(env: StackEnvelopeLike, projectRoot?: string): StackIndex {
-  const { observations, imports, projectSpecs } = collect(env);
+  const { observations, imports, projectSpecs, takes } = collect(env);
   const manifests = readManifests(projectRoot);
   const tools = new Map<string, StackTool>();
 
@@ -588,6 +599,11 @@ export function buildStackIndex(env: StackEnvelopeLike, projectRoot?: string): S
       const evidence: StackEvidence[] = [];
       for (const w of list) for (const e of w.evidence) if (e.file === file) evidence.push(e);
       for (const imp of importers) evidence.push({ file: imp, kind: "import" });
+      const seedIds = evidence.filter((e) => e.kind === "call" && e.nodeId).map((e) => e.nodeId!);
+      const seedNames = evidence.filter((e) => e.kind === "import" && e.nodeId)
+        .flatMap((e) => { const node = (ir.nodes ?? []).find((x: FunnelIrNode) => x?.id === e.nodeId); return Array.isArray(node?.names) ? node.names.filter((x: unknown): x is string => typeof x === "string").map(boundName) : []; });
+      const users = funnelUsers(wrappingBindings(ir.nodes ?? [], seedIds, seedNames),
+        importers.map((imp) => ({ file: imp, ...takes(imp, file) })));
       projectTools.push({
         tool: name, role, origin: "project",
         wraps: [...new Set(list.map((w) => w.tool))].sort(),
@@ -595,6 +611,7 @@ export function buildStackIndex(env: StackEnvelopeLike, projectRoot?: string): S
         // importers that reach it.
         home: file,
         files: [...new Set([file, ...importers])].sort(),
+        users,
         threads: [],
         evidence,
       });

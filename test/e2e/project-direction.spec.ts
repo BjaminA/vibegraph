@@ -7,7 +7,7 @@
  *   npm run test:e2e-project-direction
  */
 import { test, expect } from "@playwright/test";
-import { rmSync } from "node:fs";
+import { readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 
 const FIXTURE = process.env.VG_FIXTURE ?? "";
@@ -45,5 +45,29 @@ test.describe("project direction", () => {
     await page.click("[data-direction-census]");
     await expect(section.locator(`[data-direction-rule='${qid}']`)).toHaveAttribute("data-direction-status", "dropped");
     await expect(section.locator(`[data-direction-rule='${id}']`)).toHaveAttribute("data-direction-status", "agreed");
+  });
+
+  test("2026-10-20: an agreed rule carries the two switches, flips at once, and the choice is stored", async ({ page }) => {
+    await page.goto("/");
+    await page.waitForSelector("[data-thread-index]", { timeout: 30_000 });
+    await page.click("[data-work-run-toggle]");
+    await page.click("[data-sheet-tab='direction']");
+    const section = page.locator("[data-project-direction]");
+    const agreed = section.locator("[data-direction-rule][data-direction-status='agreed']").first();
+    await expect(agreed).toBeVisible({ timeout: 15_000 });
+    const id = await agreed.getAttribute("data-direction-rule");
+    const up = agreed.locator('[data-delivery="upfront"]');
+    const broken = agreed.locator('[data-delivery="oncheck"]');
+    // both on by default, as the old default mode meant — unless nothing checks it
+    await expect(up).toHaveAttribute("aria-checked", "true");
+    const checked = /checked by /.test((await agreed.textContent()) ?? "");
+    if (checked) await expect(broken).toHaveAttribute("aria-checked", "true");
+    else await expect(broken).toHaveAttribute("aria-disabled", "true");
+    await up.click();
+    await expect(up).toHaveAttribute("aria-checked", "false", { timeout: 250 });
+    const stored = () => JSON.parse(readFileSync(join(ROOT, ".vibegraph", "direction.json"), "utf-8")).rules.find((r: { id: string }) => r.id === id)?.delivery;
+    await expect.poll(stored, { timeout: 10_000 }).toEqual({ upfront: false, onCheck: checked });
+    // a proposed or dropped rule has nothing to switch: it is not told at all
+    await expect(section.locator("[data-direction-rule][data-direction-status='dropped'] [role='switch']")).toHaveCount(0);
   });
 });

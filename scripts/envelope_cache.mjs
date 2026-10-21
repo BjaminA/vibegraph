@@ -29,30 +29,30 @@
 // The system tier is NOT built here (it scans non-source files on its own
 // walk): this serves check / affected / coverage / the hooks, which never read
 // it. The cache lives outside the project, under ~/.cache, so it can never be
-// committed.
+// committed. What is stored, and how an edit rewrites only what it changed, is
+// scripts/envelope_store.mjs.
 
 import { projectIgnore } from "../src/server/project_ignore.ts";
-import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync } from "node:fs";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildPolyglotEnvelope } from "./regen_polyglot.mjs";
 import { shouldSkipDir, languageForFile } from "../src/server/languages.ts";
+import { getBlob, pruneBlobs, putBlob, sha1, writeAtomic } from "./envelope_store.mjs";
 
-const CACHE_VERSION = "1";
+// 2: one blob per parsed IR, linked IR and thread (envelope_store.mjs); a
+// version-1 cache is rebuilt and its two whole-map files removed
+const CACHE_VERSION = "2";
+const LEGACY_FILES = ["envelope.json", "parsed.json"];
 const HERE = fileURLToPath(import.meta.url);
 // package.json too (2026-10-01): its `bin` and `scripts` make entry points.
 const CONTEXT_FILE = /^(tsconfig.*\.json|jsconfig.*\.json|Cargo\.toml|package\.json)$/;
 const METHOD_ID = /^module\/[^/]+\.class\/[^/]+\.fn$/;
 
-const sha1 = (s) => createHash("sha1").update(s).digest("hex");
-
-export function cacheDirFor(absRoot, env = process.env) {
-  const base = env.VG_CACHE_DIR
-    ?? join(env.XDG_CACHE_HOME ?? join(homedir(), ".cache"), "vibegraph-knowledge", "envelopes");
-  return join(base, sha1(absRoot).slice(0, 16));
-}
+// cacheDirFor moved to cache_dir.mjs (the server's CommonJS bundle reads it
+// without this module's pipeline); re-exported so every importer is unchanged.
+export { cacheDirFor } from "./cache_dir.mjs";
+import { cacheDirFor } from "./cache_dir.mjs";
 
 /** Every file the pipeline's walk can see (the walk skips the same dirs). */
 function walkAll(dir, root, out, ig = projectIgnore(root)) {
@@ -91,10 +91,22 @@ function readJson(path) {
   try { return JSON.parse(readFileSync(path, "utf-8")); } catch { return null; }
 }
 
-function writeAtomic(path, text) {
-  const tmp = `${path}.${process.pid}.tmp`;
-  writeFileSync(tmp, text);
-  renameSync(tmp, path);
+/** The stored envelope a manifest names, or null when any part is missing. */
+function readStored(dir, meta) {
+  try {
+    const result = getBlob(dir, meta.shell);
+    result.envelope.files = Object.fromEntries(Object.entries(meta.files).map(([f, name]) => [f, getBlob(dir, name)]));
+    result.envelope.threads = meta.threads.map((name) => getBlob(dir, name));
+    return result;
+  } catch { return null; }
+}
+
+/** The previous threads, each remembered with its blob name (a reused thread
+ *  is written again under the name it was read from). Null when unreadable. */
+function readThreads(dir, meta, names) {
+  try {
+    return meta.threads.map((name) => { const t = getBlob(dir, name); names.set(t, name); return t; });
+  } catch { return null; }
 }
 
 /** Drop the cache of any project that no longer exists (temp copies, test
@@ -122,6 +134,11 @@ export function buildEnvelopeCached(root, opts = {}) {
   const absRoot = resolve(root);
   const dir = opts.cacheDir ?? cacheDirFor(absRoot);
   const scriptsDir = opts.pipeline?.scriptsDir ?? dirname(HERE);
+  // optional stage timings (ms): the cache's own reads, hashes and writes,
+  // beside the pipeline's parse / link / discover / extract
+  const timings = opts.timings ?? null;
+  let tMark = Date.now();
+  const lap = (name) => { if (timings) { const now = Date.now(); timings[`cache:${name}`] = (timings[`cache:${name}`] ?? 0) + now - tMark; tMark = now; } };
 
   // ── fingerprints (content, not mtime) ──
   const all = walkAll(absRoot, absRoot, []).sort((a, b) => (a.rel < b.rel ? -1 : a.rel > b.rel ? 1 : 0));
@@ -139,7 +156,9 @@ export function buildEnvelopeCached(root, opts = {}) {
     ctx: sha1(ctxParts.join("\n\0\n")),
   };
 
+  lap("fingerprint");
   const meta = readJson(join(dir, "meta.json"));
+  lap("read meta");
   const sameGlobal = !!meta && meta.version === CACHE_VERSION
     && meta.key.tool === key.tool && meta.key.paths === key.paths && meta.key.ctx === key.ctx;
   const movedSources = sameGlobal
@@ -147,20 +166,27 @@ export function buildEnvelopeCached(root, opts = {}) {
     : null;
 
   if (sameGlobal && movedSources.length === 0) {
-    const cached = readJson(join(dir, "envelope.json"));
+    const cached = readStored(dir, meta);
+    lap("read envelope");
     if (cached) return { ...cached, cache: { mode: "hit", parsed: 0, extracted: 0, reason: "nothing moved" } };
   }
 
   // ── build, reusing what is still valid ──
-  const parsedPrev = sameGlobal ? (readJson(join(dir, "parsed.json")) ?? {}) : {};
-  const prevEnv = sameGlobal ? readJson(join(dir, "envelope.json")) : null;
+  // A parse is read from its blob only when it is reused, the threads only
+  // when select() can reuse some; a thread keeps the name it was read from, so
+  // an unchanged one is never written again.
+  const parsedPrev = sameGlobal ? (meta.parsed ?? {}) : {};
+  const threadNames = new Map();
   const parsedNext = {};
   let parsedCount = 0;
   const parseCache = {
     lookup(rel, langId) {
       const p = parsedPrev[rel];
-      if (p && p.hash === sources[rel] && p.lang === langId) { parsedNext[rel] = p; return p.ir; }
-      return null;
+      if (!p || p.hash !== sources[rel] || p.lang !== langId) return null;
+      let ir;
+      try { ir = getBlob(dir, p.blob); } catch { return null; } // unreadable: parsed again
+      parsedNext[rel] = { ...p, ir };
+      return ir;
     },
     store(rel, langId, ir) { parsedCount += 1; parsedNext[rel] = { hash: sources[rel], lang: langId, ir }; },
   };
@@ -171,9 +197,11 @@ export function buildEnvelopeCached(root, opts = {}) {
   const globalSig = {};
   const threadCache = {
     select(seeds, files) {
+      const t0 = Date.now();
       for (const [f, ir] of Object.entries(files)) { linkedHash[f] = sha1(JSON.stringify(ir)); globalSig[f] = globalSignature(ir); }
+      if (timings) timings["cache:hash linked IR (inside extract)"] = Date.now() - t0;
       const all = { toExtract: seeds, cached: new Map() };
-      if (!prevEnv || !meta?.linkedHash) { extractedCount = seeds.length; return all; }
+      if (!sameGlobal || !meta.linkedHash) { extractedCount = seeds.length; return all; }
       const changed = new Set();
       for (const f of new Set([...Object.keys(linkedHash), ...Object.keys(meta.linkedHash)])) {
         if (linkedHash[f] === meta.linkedHash[f]) continue;
@@ -186,7 +214,15 @@ export function buildEnvelopeCached(root, opts = {}) {
           return all;
         }
       }
-      const prev = new Map(prevEnv.envelope.threads.map((t) => [`${t.entryPointId}\u0000${t.seed?.file}`, t]));
+      const t1 = Date.now();
+      const prevThreads = readThreads(dir, meta, threadNames);
+      if (timings) timings["cache:read threads (inside extract)"] = Date.now() - t1;
+      if (!prevThreads) {
+        reason += "; the stored threads could not be read, so every thread was re-extracted";
+        extractedCount = seeds.length;
+        return all;
+      }
+      const prev = new Map(prevThreads.map((t) => [`${t.entryPointId}\u0000${t.seed?.file}`, t]));
       const cached = new Map();
       const toExtract = [];
       for (const s of seeds) {
@@ -201,16 +237,33 @@ export function buildEnvelopeCached(root, opts = {}) {
   };
 
   const built = buildPolyglotEnvelope(absRoot, { ...(opts.pipeline ?? {}), parseCache, threadCache, skipSystem: true, timings: opts.timings });
+  tMark = Date.now();
   const result = {
     envelope: built.envelope, parseErrors: built.parseErrors, partialParses: built.partialParses ?? {}, skippedDirs: built.skippedDirs,
     unresolvedSeeds: built.unresolvedSeeds, languages: built.languages,
   };
   try {
     mkdirSync(dir, { recursive: true });
-    writeAtomic(join(dir, "envelope.json"), JSON.stringify(result));
-    writeAtomic(join(dir, "parsed.json"), JSON.stringify(parsedNext));
-    writeAtomic(join(dir, "meta.json"), JSON.stringify({ version: CACHE_VERSION, root: absRoot, key, sources, linkedHash, globalSig }));
+    // blobs first, the manifest last (envelope_store.mjs). What was read keeps
+    // its name and is written again only if a concurrent run pruned it; a
+    // linked file's name is the hash select() already took of its text.
+    // Nothing touches the parses, the linked files or the reused threads
+    // between where they were named and here.
+    const parsed = {};
+    for (const [rel, p] of Object.entries(parsedNext)) {
+      parsed[rel] = { hash: p.hash, lang: p.lang, blob: putBlob(dir, () => JSON.stringify(p.ir), p.blob ?? null) };
+    }
+    const env = result.envelope;
+    const files = {};
+    for (const [f, ir] of Object.entries(env.files)) files[f] = putBlob(dir, () => JSON.stringify(ir), linkedHash[f] ?? null);
+    const threads = env.threads.map((t) => putBlob(dir, () => JSON.stringify(t), threadNames.get(t) ?? null));
+    const shell = putBlob(dir, JSON.stringify({ ...result, envelope: { ...env, files: null, threads: null } }));
+    writeAtomic(join(dir, "meta.json"), JSON.stringify({ version: CACHE_VERSION, root: absRoot, key, sources, linkedHash, globalSig, parsed, files, threads, shell }));
+    lap("write");
+    pruneBlobs(dir, new Set([...Object.values(parsed).map((p) => p.blob), ...Object.values(files), ...threads, shell]));
+    for (const f of LEGACY_FILES) rmSync(join(dir, f), { force: true });
     pruneGone(dirname(dir));
+    lap("prune");
   } catch (e) {
     reason += `; cache not written (${e?.message ?? e})`;
   }

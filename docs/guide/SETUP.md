@@ -222,7 +222,7 @@ should share them.
 | `PORT` | `4200` | the visualisation's port |
 | `VG_HOST` | `127.0.0.1` | the address it binds. Anything else exposes an **unauthenticated** server beyond your machine — the server says so loudly. |
 | `VG_START_VIEW` | architecture map | set to `index` to open on the thread list instead |
-| `VG_THREAD_RANK` | `primary` | how much of a thread is drawn at first: `primary`, `secondary` or `all` (the canvas switch overrides it, and is remembered) |
+| `VG_THREAD_RANK` | `secondary` | how much of a thread is drawn at first: `primary`, `secondary` or `all` (the canvas switch overrides it; Primary and Secondary are remembered, All lasts one thread) |
 | `VG_CLAUDE_BIN` | found for you (below) | the Claude Code used for every model call: a path (used whole — spaces are fine), a JSON array `["<path>","--model","opus"]`, or a quoted command line |
 | `VG_CLAUDE_ARGS` | — | extra arguments for every Claude call (e.g. `--model sonnet`) |
 

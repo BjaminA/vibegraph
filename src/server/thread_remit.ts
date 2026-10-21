@@ -16,6 +16,7 @@ import { LANGUAGES } from "../shared/languages.ts";
 // Minimal structural inputs (ProjectThread.nodes is unknown[] on the wire;
 // we read only the fields the remit needs, absent fields simply add nothing).
 interface RemitNodeShape {
+  kind?: unknown;
   id?: unknown;
   label?: unknown;
   irNodeId?: unknown;
@@ -74,6 +75,14 @@ function addSymbolForms(symbols: Set<string>, name: string): void {
   for (const seg of trimmed.split(/[.:]/)) if (seg) symbols.add(seg);
 }
 
+/** A name as written, without its segments (a terminal outside the project). */
+function addWholeName(symbols: Set<string>, name: string): void {
+  const trimmed = name.trim();
+  if (!trimmed) return;
+  symbols.add(trimmed);
+  if (trimmed.includes(":")) symbols.add(trimmed.replace(/:/g, "."));
+}
+
 export function buildRemitIndex(threads: RemitThreadInput[]): ThreadRemit[] {
   const index: ThreadRemit[] = [];
   for (const thread of threads) {
@@ -87,10 +96,17 @@ export function buildRemitIndex(threads: RemitThreadInput[]): ThreadRemit[] {
     for (const raw of thread.nodes) {
       const n = raw as RemitNodeShape;
       if (typeof n.irNodeId === "string") nodeIds.add(n.irNodeId);
-      if (typeof n.id === "string") addSymbolForms(symbols, n.id);
-      if (typeof n.label === "string") addSymbolForms(symbols, n.label);
-      if (typeof n.qualifiedTarget === "string") addSymbolForms(symbols, n.qualifiedTarget);
-      if (typeof n.receiverBoundFrom === "string") addSymbolForms(symbols, n.receiverBoundFrom);
+      // 2026-10-19 (PLAN-M-RULES M4, class 1): a NAME's segments identify the
+      // project's own code (`alerts.notify` → `notify`), not a library call's:
+      // every `z.number(…)` made `number` a symbol of 22 threads on the MCP
+      // SDK, and a bug report saying "`number`-typed" was routed to three
+      // unrelated examples whose contracts filled the inline limit. An
+      // external / dynamic / unresolved terminal keeps its whole name.
+      const add = n.kind === undefined || n.kind === "seed" || n.kind === "step" ? addSymbolForms : addWholeName;
+      if (typeof n.id === "string") add(symbols, n.id);
+      if (typeof n.label === "string") add(symbols, n.label);
+      if (typeof n.qualifiedTarget === "string") add(symbols, n.qualifiedTarget);
+      if (typeof n.receiverBoundFrom === "string") add(symbols, n.receiverBoundFrom);
     }
     index.push({
       entryPointId: thread.entryPointId,
@@ -117,10 +133,23 @@ const SOURCE_EXT_ALTERNATION = LANGUAGES
   .flatMap((l) => l.extensions)
   .map((e) => e.slice(1))
   .join("|");
+// 2026-10-20 (live setup run): a path segment may carry the folder
+// conventions frameworks route by — Next.js `(group)`, `[id]`, `[...slug]`,
+// `@slot`, SvelteKit `+page` — or a question naming
+// `app/(chat)/api/vote/route.ts` matched only `api/vote/route.ts`, which no
+// file is, and the thread it names was never routed. The file part may hold
+// dots (`a.test.ts`, `[...slug].tsx`).
 const FILE_TOKEN_RE = new RegExp(
-  `(?:[A-Za-z0-9_\\-.]+\\/)*[A-Za-z0-9_\\-]+\\.(?:${SOURCE_EXT_ALTERNATION})\\b`,
+  `(?:[A-Za-z0-9_\\-.()\\[\\]@+]+\\/)*[A-Za-z0-9_\\-.()\\[\\]@+]+\\.(?:${SOURCE_EXT_ALTERNATION})\\b`,
   "g",
 );
+/** A file token without the prose around it: "(see app/x.ts" loses its "(". */
+const trimFileToken = (t: string): string => {
+  let s = t;
+  const opens = (x: string) => (x.match(/\(/g) ?? []).length - (x.match(/\)/g) ?? []).length;
+  while (s.startsWith("(") && opens(s) > 0) s = s.slice(1);
+  return s;
+};
 const BACKTICK_RE = /`([^`]+)`/g;
 const WORD_TOKEN_RE = /[A-Za-z_][A-Za-z0-9_]*(?:[.:][A-Za-z_][A-Za-z0-9_]*)*(?:\(\))?/g;
 
@@ -136,7 +165,7 @@ function stripCall(token: string): string {
 
 export function tokenizeQuestion(question: string): QuestionTokens {
   const nodeIds = new Set(extractNodeIdTokens(question));
-  const files = new Set(question.match(FILE_TOKEN_RE) ?? []);
+  const files = new Set((question.match(FILE_TOKEN_RE) ?? []).map(trimFileToken));
   const symbols = new Set<string>();
   // Backticked spans: the author marked it as code — accept any single token.
   for (const m of question.matchAll(BACKTICK_RE)) {
@@ -148,7 +177,8 @@ export function tokenizeQuestion(question: string): QuestionTokens {
   // Un-backticked: only tokens that are code-shaped on their own.
   for (const m of question.matchAll(WORD_TOKEN_RE)) {
     const raw = m[0];
-    const codeShaped = raw.endsWith("()") || raw.includes("_") || raw.includes(".") || raw.includes(":");
+    // camelCase is code too (`getVotesByChatId`, written with its arguments)
+    const codeShaped = raw.endsWith("()") || raw.includes("_") || raw.includes(".") || raw.includes(":") || /^[a-z][a-z0-9]*[A-Z]/.test(raw);
     if (!codeShaped) continue;
     const token = stripCall(raw);
     // M-LANG6 — a token shaped like ANY registered language's source
@@ -164,12 +194,10 @@ export function tokenizeQuestion(question: string): QuestionTokens {
 
 function fileMatches(token: string, files: Set<string>): boolean {
   if (files.has(token)) return true;
-  // Bare-basename mention matches iff exactly one remit file carries it.
-  if (!token.includes("/")) {
-    const hits = [...files].filter((f) => f === token || f.endsWith(`/${token}`));
-    return hits.length === 1;
-  }
-  return false;
+  // A bare basename — or the tail of a path ("api/vote/route.ts") — matches
+  // iff exactly one remit file ends with it.
+  const hits = [...files].filter((f) => f === token || f.endsWith(`/${token}`));
+  return hits.length === 1;
 }
 
 export interface MatchOptions {

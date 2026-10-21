@@ -62,10 +62,9 @@ test.use({ video: "on" });
 async function openSystemView(page: import("@playwright/test").Page) {
   await page.click('button:has-text("System")');
   await page.waitForSelector('[data-system-view]', { timeout: 15_000 });
-  // The subsystem/threads mode toggle persists in localStorage; force
-  // subsystems mode if a previous run left threads mode behind.
+  // The mode persists in localStorage; the Subsystems button selects it.
   const mode = await page.locator("[data-system-view]").getAttribute("data-system-mode");
-  if (mode === "threads") await page.click("[data-system-mode-toggle]");
+  if (mode !== "subsystems") await page.click("[data-system-mode-toggle]");
   await expect(page.locator("[data-subsystem-node]").first()).toBeVisible({ timeout: 15_000 });
 }
 

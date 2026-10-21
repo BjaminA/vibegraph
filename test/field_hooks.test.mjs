@@ -3,7 +3,8 @@
 // edits made through PowerShell, and noise in what the hooks send.
 //
 //   F1  a person's step needs an interactive terminal as well as no
-//       CLAUDECODE — the mark does not cross the Windows → WSL hop
+//       CLAUDECODE — the mark does not cross the Windows → WSL hop; a
+//       record (a stated rule, a plan edit) says "human" only on the same terms
 //   E2  doctor names a hook path that no longer exists (an nvm upgrade)
 //   E4  everyday words do not route a prompt to a thread; a test thread
 //       needs a prompt about tests
@@ -14,11 +15,11 @@
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { cpSync, mkdtempSync, rmSync } from "node:fs";
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { personRefusal, wslMarkAdvice, NO_TERMINAL, PERSONS_STEP } from "../scripts/cli/actor.mjs";
+import { actorNote, actorOf, personRefusal, wslMarkAdvice, NO_TERMINAL, PERSONS_STEP } from "../scripts/cli/actor.mjs";
 import { missingPaths } from "../scripts/cli/hook_tools.mjs";
 import { testsLine } from "../scripts/cli/hooks.mjs";
 import { buildKeywordIndex, matchKeywords } from "../src/server/thread_keywords.ts";
@@ -41,6 +42,37 @@ test("F1: a person's step is refused with no terminal, whatever the environment 
     { encoding: "utf-8", env, stdio: ["pipe", "pipe", "pipe"] });
   assert.equal(r.status, 1, r.stderr);
   assert.match(r.stderr, /refused: `plan agree` — this is a person's step, and no terminal is attached/);
+});
+
+test("F1 / M4 class 6: with no mark and no terminal a RECORD is a model's, never a person's", () => {
+  // Measured from a Windows-side Claude Code (2026-10-19): across wsl.exe
+  // CLAUDECODE, CLAUDE_CODE_ENTRYPOINT and WSLENV are unset and stdin is not a
+  // terminal — and `constraints add` stored that session's rule as human-stated.
+  assert.equal(actorOf({}, { stdinTTY: false }), "agent");
+  assert.equal(actorOf({}, { stdinTTY: true }), "human");
+  assert.equal(actorOf({ CLAUDECODE: "1" }, { stdinTTY: true }), "agent");
+  assert.equal(actorOf({ VG_PERSON_NO_TTY: "1" }, { stdinTTY: false }), "human", "a person's own script says so");
+  assert.match(actorNote({}, { stdinTTY: false }), /no terminal is attached/);
+  assert.equal(actorNote({ CLAUDECODE: "1" }, { stdinTTY: false }), null, "the mark already says it; no note");
+
+  const proj = join(tmp, "attrib");
+  mkdirSync(proj, { recursive: true });
+  writeFileSync(join(proj, "app.py"), "def handler():\n    return 1\n");
+  const add = (extra, text) => {
+    const env = { ...process.env, ...extra };
+    delete env.CLAUDECODE; delete env.CLAUDE_CODE_ENTRYPOINT; delete env.NODE_TEST_CONTEXT;
+    if (!extra.VG_PERSON_NO_TTY) delete env.VG_PERSON_NO_TTY;
+    return spawnSync(process.execPath, ["--experimental-strip-types", "--no-warnings", join(ROOT, "scripts/cli/main.mjs"), "constraints", "add", "--kind", "invariant", "--text", text, "--files", "app.py", proj],
+      { encoding: "utf-8", env, stdio: ["pipe", "pipe", "pipe"] });
+  };
+  const hop = add({}, "handler stays pure because the cache replays it");
+  assert.equal(hop.status, 0, hop.stderr);
+  assert.match(hop.stdout, /stated c1 \(agent/);
+  assert.match(hop.stderr + hop.stdout, /recorded as a model's: no terminal is attached/);
+  const script = add({ VG_PERSON_NO_TTY: "1" }, "handler returns an int because the caller sums it");
+  assert.match(script.stdout, /stated c2 \(human\)/);
+  const stored = JSON.parse(readFileSync(join(proj, ".vibegraph", "constraints.json"), "utf-8")).constraints;
+  assert.deepEqual(stored.map((c) => c.source), ["agent", "human"]);
 });
 
 test("F1: doctor's advice when WSLENV does not carry CLAUDECODE into WSL", () => {

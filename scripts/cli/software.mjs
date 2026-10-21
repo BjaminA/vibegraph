@@ -6,18 +6,19 @@
 // that may touch the network: `--from https://…` fetches that page, and
 // nothing else is ever fetched. `--dry-run` prints the prompt and spends
 // nothing; `--reply <file>` uses a saved model reply instead of spawning.
-import { existsSync, readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
+import { cacheDirFor } from "../cache_dir.mjs";
 import { parseArgs } from "node:util";
 import { spawnClassifier } from "./classify.mjs";
 import { loadEnvelope } from "../quality_check.mjs";
 import { pipelineHere } from "./pipeline.mjs";
 import { listSpecs, loadSpec, saveSpec, removeSpec, saveSource, isSafeTool } from "../../src/server/software_store.ts";
-import { buildSpecPrompt, parseSpecReply, gateSpec, htmlToText } from "../../src/server/software_draft.ts";
+import { buildSpecPrompt, parseSpecReply, gateSpec, htmlToText, specCoverage, thinSpecNote } from "../../src/server/software_draft.ts";
 import { ratifySpec, specIntoPlan } from "../../src/server/software_server.ts";
 import { formatSpecMd, specUsage } from "../../src/server/software_apply.ts";
 import { runSoftwareEdit, SOFTWARE_EDIT_HELP } from "./software_edit.mjs";
-import { isAgentRun } from "./actor.mjs";
+import { actorOf } from "./actor.mjs";
 import { cliPath } from "./winpath.mjs";
 
 export const SOFTWARE_USAGE = `software add <tool> --from <url|file>… | list | show <tool> | edit <tool> | rule … | unknown … | ratify <tool> | plan <tool> | remove <tool>
@@ -112,17 +113,27 @@ export async function runSoftware(args) {
       if (!r.ok) return done(`the model could not be run: ${r.error}`, 3);
       reply = r.text; by = r.label + (parsed.values.model ? ` --model ${parsed.values.model}` : "");
     }
+    // A refused reply is KEPT (2026-10-20): the live run paid for the same
+    // draft twice when a parse refusal threw the reply away.
+    const keep = (why) => {
+      if (parsed.values.reply) return done(`refused: ${why}`, 1);
+      const file = join(cacheDirFor(root), "software-replies", `${tool}.txt`);
+      try { mkdirSync(dirname(file), { recursive: true }); writeFileSync(file, reply); } catch { return done(`refused: ${why}`, 1); }
+      return done(`refused: ${why}\nthe reply is kept: ${file}\nre-run without spending: vibegraph-knowledge software add ${tool} ${refs.map((r) => `--from ${r}`).join(" ")} --reply ${file}`, 1);
+    };
     const p = parseSpecReply(reply);
-    if (p.error) return done(`refused: ${p.error}`, 1);
+    if (p.error) return keep(p.error);
     const sources = texts.map((t) => saveSource(root, tool, t.ref, t.text));
     const g = gateSpec(p.value, tool, sources, texts.map((t) => t.text), by);
-    if (g.error) return done(`refused: ${g.error}`, 1);
+    if (g.error) return keep(g.error);
     const saved = saveSpec(root, g.spec);
-    if (saved.error) return done(`refused: ${saved.error}`, 1);
+    if (saved.error) return keep(saved.error);
+    const cov = specCoverage(g.spec);
     return done([
       `drafted .vibegraph/software/ ${tool}: ${g.spec.operations.length} operations, ${g.spec.states.length} states, ${g.spec.permissions.length} permissions, ${g.spec.rules.length} rules — a DRAFT, used nowhere until ratified`,
       `citation gate: ${g.dropped.length} dropped (quote not in the documents), ${g.inferred.length} inferred (no quote)`,
       ...g.dropped.map((d) => `  dropped: ${d}`), ...g.inferred.map((d) => `  inferred: ${d}`),
+      ...(cov.thin ? [`THIN SOURCE: ${thinSpecNote(tool, cov)} — e.g. vibegraph-knowledge software add ${tool} ${refs.map((r) => `--from ${r}`).join(" ")} --from <the API reference page>`] : []),
       `read it: vibegraph-knowledge software show ${tool}; then: vibegraph-knowledge software ratify ${tool}`,
     ].join("\n"));
   }
@@ -149,7 +160,7 @@ export async function runSoftware(args) {
       params[m[1]] = m[2];
     }
     const only = parsed.values.rules ? parsed.values.rules.split(",").map((s) => s.trim()).filter(Boolean) : undefined;
-    const r = specIntoPlan(root, tool, params, isAgentRun() ? "agent" : "human", only);
+    const r = specIntoPlan(root, tool, params, actorOf(), only);
     return r.error ? done(`refused: ${r.error}`, 1) : done(`${r.message}; agree each in the Plan panel or with \`plan agree\``);
   }
   return done(`unknown software subcommand: ${sub}\n\n${HELP}`, 2);

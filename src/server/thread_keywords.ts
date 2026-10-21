@@ -108,10 +108,23 @@ export function buildKeywordIndex(
   return docs;
 }
 
+/** The prompt with the code it NAMES taken out (2026-10-19, PLAN-M-RULES M4,
+ *  class 1): a backticked span, a file, a node id or a dotted / underscored /
+ *  called name was already looked up by the remit matcher, and the words
+ *  INSIDE it are not the person's words — `TRACERESPONSE_META_KEY` gave
+ *  "key", and "key" with two more guessed a sticky-notes example on the MCP
+ *  SDK. `named` is what tokenizeQuestion found (thread_remit.ts). */
+export function withoutNamedCode(prompt: string, named: Iterable<string> = []): string {
+  let s = prompt.replace(/`[^`]*`/g, " ");
+  for (const t of [...named].sort((a, b) => b.length - a.length)) if (t) s = s.split(t).join(" ");
+  return s;
+}
+
 /** BM25 over the thread documents; at most `limit` results, each carrying the
- *  words it matched. Empty when nothing clears the two-word floor. */
-export function matchKeywords(prompt: string, docs: Doc[], { limit = 2 }: { limit?: number } = {}): KeywordMatch[] {
-  const q = [...new Set(keywordTerms(prompt))];
+ *  words it matched. Empty when nothing clears the two-word floor. `named`:
+ *  the code-shaped tokens of the prompt, whose words are not counted. */
+export function matchKeywords(prompt: string, docs: Doc[], { limit = 2, named = [] }: { limit?: number; named?: Iterable<string> } = {}): KeywordMatch[] {
+  const q = [...new Set(keywordTerms(withoutNamedCode(prompt, named)))];
   if (!q.length || !docs.length) return [];
   if (!PROMPT_ABOUT_TESTS.test(prompt)) docs = docs.filter((d) => !d.isTest);
   if (!docs.length) return [];

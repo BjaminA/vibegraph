@@ -68,6 +68,16 @@ vibegraph-knowledge constraints add --kind invariant --files telemetry/ $ref
   --check '{"rule":"calls-through","target":"notify","through":"should_notify"}'
 ```
 
+**The whole setup, in order.** `vibegraph-knowledge setup` says where the
+project stands and gives the exact commands for the next step. The order is:
+specs for the bespoke software the code builds on (found from the packages it
+actually calls, each with the docs link it found), the architecture groups and
+the Brief, the rules, the objective and the project's principles, then the
+hooks. Each command says who may run it (you, Claude, or either) and whether it
+spends tokens. `/vibegraph-setup` walks a Claude Code session through it:
+Claude runs the proposing steps after one yes from you, and stops at every
+decision that is yours.
+
 Then start Claude Code as usual. From the **next** session:
 
 | When | The hook | What Claude gets |
@@ -85,12 +95,14 @@ rules only on disk, Claude never opened them and broke one (6/7). With the
 hooks it kept all seven, in **163 s for $1.19**, where the orchestrated
 Agent Manager needed 2,346 s and $12.08 for the same result.
 
-`init --skill` also installs five Claude Code skills. A skill costs about 100
+`init --skill` also installs seven Claude Code skills. A skill costs about 100
 tokens until a task matches it:
 
 | Skill | For | Opens |
 |---|---|---|
 | `/vibegraph` | setting it up, stating rules, a blocked edit | `init`, `export`, `constraints`, `check` |
+| `/vibegraph-setup` | the whole setup, one step at a time | `setup`, `software add`, `brief codebase`, `constraints`, `plan draft --direction` |
+| `/vibegraph-rules` | turning the rules in a project's prose into stated rules | `constraints harvest`, `constraints add --as agent --cite` |
 | `/vibegraph-plan` | a change whose blast radius is unclear | `export --task` → `plan.md`, `brief`, the rules and stack, `affected` |
 | `/vibegraph-debug` | a failure whose cause is not in the file you are in | the thread index, `flows.md`, `brief`, where static knowledge ends |
 | `/vibegraph-security` | a security review or threat model | `dataflow`, what leaves the project, trust groups, configuration |
@@ -323,13 +335,16 @@ blocks. Name-based, and it says what it cannot see.
 
 Six coding skills (boundary integrity, change coupling, failure visibility,
 repetition cost, resolvability, retry root cause). Each rule in them carries
-its reason and the check that backs it. Every skill is off by default. When
-one is on, the hooks send its rule headlines once per session, or only a
-rule's reason when its check fires, or nothing. The full text is always
-available on demand (`direction <skill>`). The panel shows where each skill
-applies.
+its reason and the check that backs it. Every skill is off by default, and
+each has two switches. **Tell Claude up front** sends its rule headlines once
+per session where it applies, and the whole skill to the chat panel and
+workers. **Explain when an edit breaks it** sends a rule and its reason beside
+the finding when the check it is tied to fires. Both off means off. The
+project's own agreed direction rules, above them on the same page, carry the
+same two switches. The full text is always available on demand
+(`direction <skill>`). The panel shows where each skill applies.
 
-![The Generic direction panel: six skills, where each applies, and what the hooks send](docs/screenshots/11-direction.png)
+![The Direction panel: the project's own rules and the six generic skills, each with its two switches](docs/screenshots/11-direction.png)
 
 ### Other views
 
@@ -354,7 +369,8 @@ CLI) and says so; everything else is deterministic.
 | `hook install [--target posix\|wsl] [--remove]` | The same hooks without the `CLAUDE.md` block; `--target wsl` = `--windows` | `.claude/settings.local.json` | — |
 | `hook run <event> --file <path>` / `--command "<sh>"` / `--prompt "<text>"` | Fires a hook by hand: builds the payload Claude Code would send; the hook's exit codes (0, or 2 blocked) | nothing (a session record under `~/.cache`) | — |
 | `doctor` | Are the hooks installed, runnable from this side, and have they fired since installed? exit 0 / 1 | nothing | — |
-| `init --skill [--user]` / `--skills plan,…` / `--remove-skill` | Installs (removes) `/vibegraph` and the five task skills | `.claude/skills/`, or `~/.claude/skills/` with `--user` | — |
+| `init --skill [--user]` / `--skills plan,…` / `--remove-skill` | Installs (removes) `/vibegraph` and the six task skills | `.claude/skills/`, or `~/.claude/skills/` with `--user` | — |
+| `setup [--json]` / `setup skip software <name> --why "…"` / `skip direction` | The setup in order (software specs, architecture groups, the Brief, rules, the objective and principles, hooks): where the project stands and the exact next commands, who may run each and which spend tokens | `.vibegraph/setup.json` (only `skip`) | — |
 | `view [<path>] [--port n] [--open]` | Starts the visualisation until Ctrl-C | `.vibegraph/` state, as you use the app | only the app's Claude features |
 
 **Know the code**
@@ -377,11 +393,12 @@ CLI) and says so; everything else is deterministic.
 | `check [--uncommitted \| --git <range>]` | Every stated rule's check: PASS / VIOLATED (names the call) / UNVERIFIABLE; exit 0 / 1 / 2 | nothing | — |
 | `constraints list \| add \| remove \| ratify` | The stated rules, their reasons, scopes and checks; `add --cite file:line` records the prose sentence a rule was read from | `.vibegraph/constraints.json` | — |
 | `constraints harvest` | Rule-shaped sentences in the project's own prose that name code the IR knows, ranked — a place to read, never a rule (`/vibegraph-rules` turns them into rules for a person to ratify) | nothing | — |
+| `constraints draft` | Rules proposed from the architecture, each citing the facts it rests on, stored agent-stated for a person (the Rules panel's "Propose rules from the architecture") | `.vibegraph/constraints.json` | **yes** — one call |
 | `constraint show \| edit \| propose \| accept \| reject <id>` | A rule's history; change it in place (a person), or propose a change with `--why` (an agent, or anything run inside Claude Code) for a person to accept | `.vibegraph/constraints.json` | — |
 | `seed(s) list \| add \| remove` | Entry points discovery cannot see (most programs are found from `package.json` and `listen` / `argv` / top-level `await`) | `.vibegraph/manual_seeds.json` | — |
 | `skills list \| ratify \| reaffirm \| auto-reaffirm` | Per-thread skills: approve, re-stamp a still-correct stale one | `.vibegraph/thread-skills/` | — |
 | `skills draft <entry>… \| --missing` | Drafts per-thread guidance through the grounding gates (reads the thread's lessons) | `.vibegraph/thread-skills/` | **yes** |
-| `direction [<skill>]` / `enable \| disable <skill>` / `hooks headlines \| on-violation \| off` | The generic coding skills: where they apply, one skill in full, whether the hooks send them | `.vibegraph/skills.json` | — |
+| `direction [<skill>]` / `enable \| disable <skill>` / `set <skill\|dN> --up-front on\|off --when-broken on\|off` | The generic coding skills and the project's agreed rules: where they apply, one skill in full, what Claude is told about each | `.vibegraph/skills.json`, `.vibegraph/direction.json` | — |
 | `lessons list` | Rules sessions broke and put right, with the fix | nothing | — |
 | `plan init "<objective>"` / `show` / `check` | A hypothetical plan: start it, read it, measure the code against it (realised / drifted / not built) | `.vibegraph/plan.json` (init) | — |
 | `plan edit '<op>'` / `agree` / `drop` / `close` / `reopen` | Change the plan by small operations, each one a changelog line (a `rename` op carries every reference; a thread's `entryPoint`, a tool's `via`); `--as agent` records a proposal | `.vibegraph/plan.json` | — |

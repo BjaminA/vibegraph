@@ -3,6 +3,503 @@
 `vibegraph-knowledge` and the VibeGraph app. Newest first. Each entry says what
 changed and, where an existing user would notice, how behaviour differs.
 
+## 0.36.0 (2026-10-21): rules proposed and measured, the setup in one order, hooks in under half the time
+
+0.35.0 was cut in the repository but never published to npm, so on npm 0.36.0
+follows 0.34.3 and carries both sets of changes.
+
+### M1 — a rule's scope, picked from grouped, coloured chips
+
+On a large project the "state a rule" form showed every tool the stack index
+knows as one flat wall of grey chips (100+), threads were not offered at all,
+and files were typed by hand. The scope is now picked from groups read from
+facts the envelope already carries — a group with no facts is not drawn:
+
+- **Architecture** — the map's processes (each scopes by its entry points) and
+  the groups a person stated;
+- **Threads** — entry points by kind and framework (routes per framework, MCP
+  tools, programs, tests, public API);
+- **Scripts** — shell, package and command scripts, and folders holding two or
+  more of them;
+- **Protocols** — tools a boundary leaves through, by role (HTTP, databases,
+  model APIs, platform SDKs, MCP, queues, cloud, remote access) — role before
+  origin, so `sqlite3` and `fetch` are a database and an HTTP client although
+  they ship with the language;
+- **Code** — the project's own funnel modules and its folders;
+- **Libraries** and **Runtime** — folded.
+
+Each chip is a toggle in its kind's colours (the kind table: processes teal,
+stores blue, external services orange, modules purple, paths grey) with the
+number of threads it alone reaches; a search box filters across groups; the
+picked chips sit above the groups; and a live line says how many threads the
+scope reaches — computed with the server's own routing predicate, now one
+function in `src/shared/scope_route.ts` that `routeConstraints` delegates to.
+The typed field stays, as an addition to what is picked. Docked panels (the
+default since 0.35.0) lay their section nav out as a row on top: the 200px
+column left a 520px sheet's content ~260px wide.
+
+Tests: test:rule-scope-groups (6 — each chip's count equals the server's
+routing for that scope), test:e2e-rule-scope (the groups, colours, search, the
+live reach and the stored scope on the fleet example); test:e2e-stack's
+prefill assertion follows the picked chip.
+
+### M2 — "Propose rules from the architecture"
+
+A button in the Rules panel and `constraints draft` — the ONE token-spending
+step for rules (one model call per press; its usage says so). The harvest and
+the direction census stay zero-token; they are inputs here.
+
+- **What the model is shown** (`src/server/rule_draft.ts`, deterministic,
+  capped, ~3,000 tokens on the fleet example): the architecture's processes and
+  stated groups, the tools by role and which threads leave through each, the
+  project's own funnels, the hops between processes, the configuration that
+  fails silently when unset, the unguarded data flows, the top harvested
+  sentences, the census's proposals and the plan — each fact with an id — plus
+  the rules already stated (not to restate) and the scope vocabulary in the
+  project's own spellings.
+- **The gate** (`src/server/rule_draft_gate.ts`): a rule must cite fact ids it
+  was shown or it is refused and listed "without evidence"; scope tokens the
+  project does not spell are dropped, and a scope left naming nothing refuses
+  the rule; a check is tidied (an empty list means absent), validated, then RUN
+  against the code — VIOLATED is kept and labelled, UNVERIFIABLE is removed and
+  said; a restatement of a stated rule (by text, or by the same check in any key
+  order) is refused. Survivors are stored **agent-stated** with the facts in
+  their note and a harvested sentence as their `cite`, and wait in "Awaiting
+  you"; a rule's card now shows the sentence it was read from.
+- `--dry-run` spawns nothing; `--reply <file>` gates a saved reply; `--prompt`
+  shows what the model is shown.
+
+**Live run** on the fleet example (`reviews/m-rules/DRAFT.md`): 105 s, $0.39,
+12 rules proposed and stored, none restating the six stated ones, three
+`import-only` checks passing; read by hand, seven real, four for a person's
+judgement, one a change request. The run found three things now fixed: an
+empty `forbid: []` refused a payload check (the prompt's own example showed
+both lists), a payload check aimed at a route path rather than a function, and
+the note cutting off the reason a check was removed.
+
+Tests: test:rule-draft (5: the dossier pinned; the gate on a stub reply with
+one good rule, one fabricated cite, one restatement, one undecidable check and
+one scope naming nothing; a saved reply; key order; empty lists),
+test:e2e-rule-draft (button → estimate → proposals awaiting you with their
+evidence → refusals shown → Ratify).
+
+### M3 — rule writing measured, and what the measurement fixed
+
+Three writers (`/vibegraph-rules` from the prose, `constraints draft` from the
+architecture, both) on three trees (the fleet example with its rules removed,
+the same with its prose hints removed, the review's five shapes), scored by a
+new `scripts/dev/score_rules.mjs` against gold rules and a bypass tree of
+planted breaks (`reviews/m-rules/REPORT.md`). Every writer found the rules the
+prose states; the architecture alone found 3 of 6 on the blind tree — the three
+it missed are the reasons only a person holds. Fixed from the numbers:
+
+- **`import-only` reported false violations on any project with a manifest.**
+  `package.json` (or `requirements.txt`, `Cargo.toml`) was counted as importing
+  every package it declares, so "openai is imported only in model/client.ts"
+  read VIOLATED on code that kept it — in a verb that blocks edits, and in the
+  map stack policies read. Import facts now come from parsed source files only.
+- **The harvest suggests the scope a rule governs** (a funnel → every thread
+  using it or its tool; a route → every entry serving it; a function → its file)
+  and a funnel's import-only check. A prohibition with no check widens to the
+  area a violation could be written in — it must be delivered before the edit —
+  narrowed to the area the sentence names. Suggested scopes went from 0.35 to
+  0.53 routing overlap with a person's. `constraints harvest` prints them;
+  `/vibegraph-rules` uses them and writes "reason not stated" rather than
+  inventing one.
+- **A check for a stated rule that has none** can be proposed: the draft prompt
+  marks such rules, the reply may carry `checks`, and a restatement that brings
+  a check becomes a proposal on the stated rule instead of a refusal. Live: three
+  checks proposed in one pass, one of them the gold rule's own.
+- **`constraints draft` (and the button) refuse while 12 or more proposals
+  already wait for a person** — one live tree reached thirty. `--force` overrides.
+
+Tests: test:rule-harvest (+1), test:rule-draft (+3), test:constraint-grammar
+(+1, on a real envelope with a manifest).
+
+### M4 — the hooks with code, examined
+
+`vibegraph-knowledge hook log [--session <id> | --list] [--json]` prints what
+each real hook firing did: event, milliseconds, whether it parsed, the threads
+a prompt routed to and how each matched (node id, file, symbol, a keyword guess,
+a planned thread), what was newly sent, what the inline limit deferred or cut,
+and the findings an edit introduced. It is kept under `~/.cache`, never the
+prompt and never a command line. Then 13 live Sonnet sessions on three trees
+(the fleet example blind with M3's rules, the ops fixture, the MCP TypeScript
+SDK replaying a real fix), recorded in `reviews/m-rules/HOOKS.md`. Fixed from
+what the log showed:
+
+- **A wrong guess no longer fills the context.** On the SDK, a keyword guess
+  built from words inside identifiers the prompt named ("key" from
+  `TRACERESPONSE_META_KEY`) sent an unrelated example's contract, 9,415 chars.
+  A backticked "`number`" matched 22 threads that only call `z.number()`.
+  - The remit index now splits names into segments only for the project's own
+    code; a library call keeps its whole name.
+  - The words inside named code no longer feed the keyword guess.
+  - A keyword guess sends its rules and the command that prints its contract,
+    never the contract itself. A prompt that names the code still gets it.
+- **The first shell command of a session is free.** The baseline records the
+  source stamp, so a first `git status` no longer runs a full check.
+- **A violation the tree already had is not "introduced" by an edit that moves
+  its line.** A finding's identity no longer includes line numbers, which four
+  checks print.
+- **A rule stated across `wsl.exe` is recorded as a model's.** There a
+  Windows-side Claude carries no mark and no terminal, and `constraints add`,
+  plan edits, spec edits, claims and rule changes recorded "human". Recording
+  now follows the same rule as refusing: a person needs a terminal, or
+  `VG_PERSON_NO_TTY=1` in their own script.
+- **`layer` read a package's own subpath as a violation.** "May import only
+  `@acme/core`" failed on `@acme/core/internal` once the resolver found its
+  file. An import written as a package name is now that package.
+
+Measured, not fixed: a real edit on the 1,161-file SDK costs 9 to 10.6 s of
+hook time, made of link, re-extraction and cache I/O. The cold first session
+start took 30 s, against the 60 s hook timeout.
+
+Tests: test:hook-log (4, new), test:hooks (+2), test:remit (+1),
+test:field-hooks (+1), test:plan-layers (+1).
+
+### The Direction page: two switches on every rule
+
+One drop-down for the whole page decided what the hooks sent. It sat under
+"Generic direction" but also governed the project's own rules, its options
+described a mechanism ("only a rule's why"), and "nothing" was just the
+default. Now every generic skill and every agreed project rule carries the
+same two switches:
+
+- **Tell Claude up front.** Its rules arrive once per session, with the first
+  prompt that reaches a thread they apply to. A generic skill told up front also
+  reaches the chat panel, work-run workers and thread agents in full; one not
+  told up front no longer does.
+- **Explain when an edit breaks it.** When an edit trips the check a rule is
+  tied to, the rule and its reason arrive beside the finding. A rule that
+  nothing checks shows this switch disabled, with the reason.
+
+Both off means not used. A short explanation heads the page, and each skill
+lists its rules. A switch flips the moment it is pressed. It used to wait for
+the server, which rebuilt every skill's measured breadth on each toggle, so the
+catalogue is now rebuilt only when the threads change. The breadth is
+re-sent after each derive; the panel showed "breadth unmeasured" when it
+opened before the first derive finished.
+
+Existing files keep their behaviour: `.vibegraph/skills.json`'s `hooks` mode is
+read as each skill's starting switches (`headlines` both, `on-violation`
+explain only, `off` neither) and stays the default for project rules agreed
+later. The CLI follows: `direction set <skill|dN> --up-front on|off
+--when-broken on|off`. `direction hooks <mode>` remains and sets every skill
+and agreed rule at once. `direction` and `direction project` show each item's
+switches.
+
+Tests: test:direction (+1), test:generic-skills (+1), test:project-direction
+(+1), test:e2e-skills-inject (the switches flip within 250 ms, persist and
+survive a reload), test:e2e-project-direction (+1), test:e2e-skills-chip.
+
+### `setup`: the whole setup, in one order
+
+`vibegraph-knowledge setup` says where a project stands and gives the exact
+commands for the next step. It spends no tokens and changes nothing. The order
+is fixed and read from the project's files:
+
+1. **Software specs** for the tools the code leaves the project through. A
+   candidate is a third-party package the code calls (not only imports) whose
+   role makes it a boundary: a platform SDK, a database, a cache, a queue, a
+   cloud or remote service, a model API or an agent protocol. A called package
+   no table knows is classified first (`classify --apply`), because its role
+   decides whether it needs a spec at all. Packages of one npm scope are one
+   candidate. A shell command no table knows is listed but never holds the
+   step open. A package used in an ordinary way is set aside with a reason,
+   using `setup skip software <name> --why "…"`.
+2. **Architecture groups**, which the Brief proposes first.
+3. **The Brief.**
+4. **Rules**, harvested, drafted and ratified.
+5. **The objective and the project's principles.**
+6. **Direction**, which is optional.
+7. **Hooks**, installed and seen to fire.
+
+Each command says who may run it (you, Claude, or either) and whether it spends
+tokens. Specs come first because the Brief, the plan draft and the rule draft
+read them.
+
+- **`/vibegraph-setup`**, a new task skill, walks a Claude Code session through
+  it. Claude runs the zero-token steps, asks once before the first step that
+  spends tokens, and never takes a person's step. It pushes back on axioms
+  that cannot be wrong.
+- **`plan draft --direction` also reads what a person ratified.** That is the
+  Brief and the architecture groups, as quotable documents beside the prose. It
+  asks for an objective in one concrete line, and principles concrete enough to
+  be wrong ("state of the art" is not one).
+- **The app's "Next" line follows the same order**, after decisions waiting for
+  you and stale Brief lines. The strip shows the setup's progress. The order of
+  that line changes: groups and the Brief now come before the objective, and
+  direction is suggested only when it has something waiting.
+- **`init` ends by pointing at `setup`.**
+- **`cacheDirFor` moved to `scripts/cache_dir.mjs`** and is re-exported from
+  where it was. The server's CommonJS bundle can read it without the parse
+  pipeline, whose top-level `await` CommonJS cannot carry.
+
+Tests: test:setup (5, new; fixture `test/fixtures/setup/setup_demo`),
+test:now-state (the new order), test:plan-direction (+1), test:e2e-now,
+test:task-skills.
+
+### `setup`, run live: what the first real project fixed
+
+`/vibegraph-setup` was run end to end with real Claude Code sessions on a
+public Next.js chat app (154 files, 24 threads). Every fix is general, with a
+test of its own.
+
+- **Not knowing a package is not a reason to write its spec.** Six of the
+  first eight candidates were UI libraries no table knew. They are now
+  classified first, and only boundary roles become candidates (above).
+- **Docs sources, in order:** the installed package's manifest; a line of the
+  project's docs that names the package exactly or says it is docs; the
+  package's published README, at the version the manifest declares (jsDelivr
+  for npm, PyPI for Python); and only then a line that merely mentions the
+  name. The live run drafted the `postgres` driver from the README's link to
+  its hosting provider, and 20 of the 57 items had no quote.
+- **A thin draft says so.** When a quarter or more of a spec's items have no
+  quote in its documents, `software add` prints a THIN SOURCE line, and
+  `setup` lists the draft with a re-draft command before the ratify one. A
+  3 KB README left 18 of 58 items unquoted; the specs drawn from full READMEs
+  had 1–2.
+- **A refused reply is kept.** It is saved under the cache with the command
+  that re-runs it with `--reply`, at no cost. The live run paid for one
+  draft twice.
+- **One reader for a model's JSON** (`src/server/json_reply.ts`). Ten parsers
+  took the first ``` fence in a reply. A spec reply quotes documentation full
+  of fences, so a sound reply was refused with "Unexpected token '*'". The
+  reader finds every top-level `{…}`/`[…]` with brackets counted outside JSON
+  strings, and takes the largest. When that one does not parse, the reply is
+  refused; a fragment inside it is never accepted as the whole. Software
+  specs, plan drafts, the Brief, rule drafts, classification, architecture
+  proposals, node scope, gap explanations, the roadmap and system drafts, and
+  example inputs all read through it.
+- **A funnel's users are the files that use what it wraps.** The direction
+  census proposed "Reach fetch through lib.utils: 52 files use fetch through
+  lib/utils.ts". Those 52 files imported the module for its class-name helper,
+  and only four took the fetch wrapper. Stack tools gain `users`
+  (`src/server/funnel_users.ts`): importers that take a binding whose body
+  uses the wrapped tool. That covers a call the index keyed, a call through
+  the file's own import of the tool, another wrapping binding (to a fixpoint),
+  and a wrapper passed as a value (`memo(PureArtifact)`). A namespace import
+  with no resolved call into one is not counted. `files` is unchanged. On the
+  live app, the false rule is gone; the census proposes the real one:
+  drizzle and postgres through `lib/db/queries.ts`, used by all 14 files.
+- **A manifest line is not a direct use.** The census listed `package.json`
+  among the files that "reach drizzle-orm directly".
+- **The table knew `drizzle`, not `drizzle-orm`** (the ORM's package), so it
+  never matched. Added beside it: `postgres`, `kysely`, `sequelize`, `mysql`,
+  `sqlite3`, `@libsql/client`, `@neondatabase/serverless`, `@vercel/postgres`,
+  `@planetscale/database` (db) and `@upstash/redis`, `@vercel/kv` (cache).
+- **An installed skill names the exact command that installed it**, at its
+  version, never `@latest`. The first session fetched whatever npm had.
+- **`--help` after a command** prints that command's usage.
+- **The setup skill runs model steps in the foreground.** It uses the longest
+  timeout and never ends its turn while one runs: the first session sent one
+  to the background and lost it.
+- **`setup` prints each command as the command that ran it**, ready to paste.
+  A session handed the person "replace `vibegraph-knowledge` with the full
+  node command". The skill's note now gives an example
+  (`vibegraph-knowledge setup` means `<cli> setup`), because "use that command
+  with the same arguments" was read as `<cli> vibegraph-knowledge setup`. The
+  CLI now drops its own name given as the first argument; it is never a
+  command, and the person's-step refusal still sees the real one.
+- **A direction proposal is read against the code as it is now.** The census
+  stores what it found, and a proposal stored before the funnel fix still said
+  "52 files" and was offered for agreement. Agreeing now re-runs the census
+  (zero tokens), from the CLI, the Direction panel and the inbox, and refuses
+  a proposal whose facts have moved or gone, saying what the code shows now.
+  `direction project` marks such a rule NOW, and `setup` puts `direction
+  project census` before the agree command. Dropping is always allowed.
+- **An installed skill an older version wrote is named.** A session followed a
+  skill installed before a fix, read the old note, and made the mistake the fix
+  was for. An installed skill is a copy and nothing said it was old. `setup` now
+  opens with a note naming each project or user skill that differs from what
+  this version installs, compared without the pinned command and version, and
+  gives the `init --skill` command that refreshes it. The setup skill says to
+  refresh first.
+- **A `process` group holds the project's own code.** A Brief proposed
+  "In-process client libraries (drizzle-orm, fetch)" as a process. Both
+  proposal gates (the Brief's groups and `architecture --propose`) now refuse
+  a process group with no cluster or dispatcher box, and say why: a library
+  loaded in process belongs in the group of the process that loads it, and a
+  service the code reaches is a zone or trust group. Both prompts say it too.
+- **Groups ratified through the Brief are ratified.** The Brief wrote them to
+  `architecture.json` as stated groups but set no `ratified` stamp, so every
+  check for ratified groups said no. Right after a person ratified them,
+  `setup` said "no groups yet", drift had no baseline, a re-propose was not
+  gated, and `plan draft --direction` did not quote them. Ratifying the groups
+  now stamps them and records the drift baseline, from the CLI, the Brief card
+  and the inbox. A store an earlier version wrote this way is recognised from
+  its "from the brief" notes.
+- **A census funnel rule passes the code as it is.** "Reach drizzle-orm
+  through lib/db/queries.ts" came with an `import-only` check that allowed
+  only the funnel, while `schema.ts` imports the ORM by design, and the census
+  named it in the same rule. The check now allows the files that reach the
+  tool directly today and catches a new one. A tool a stated rule already
+  limits with `import-only` is not proposed again: the census had restated two
+  drafted rules. Every caller reads the plan and the stated rules through one
+  `censusAt`.
+- **With no plan, the objective step is a person's.** `setup` offered Claude
+  `plan draft --direction`, which needs a plan, and starting one is a person's
+  step, so a session tried `plan init "placeholder"`. `setup` now puts `plan
+  observe` and `plan init` first, and the draft refusal names both. With a
+  plan already started, the person's command is `plan edit set-objective`,
+  not `plan init`.
+- **`plan draft` keeps what it can.** One principle the plan's validator
+  refused (`"check": null`, then one over the one-line cap) refused the whole
+  draft, "nothing written". The session paid for four drafts to land one, and
+  went reading VibeGraph's own source to find out why. `null` on an optional
+  field now means "none". An item the plan refuses is dropped and named by
+  what it says, and the rest land in one revision. A reply nothing survives is
+  kept, with the `--reply` command that re-reads it at no cost.
+- **What a prompt gets first is the task's own thread.** In the first hooked
+  session, the prompt hook put the whole plan (seven principles with their
+  reasons) and the AI SDK's spec in ahead of the routed threads. Those threads
+  were what the inline limit cut: "Also matched, not sent". The routed threads
+  now come first. The plan takes what is left, with room always kept for its
+  objective line; when the full plan does not fit, that line and a pointer go,
+  and a later prompt sends the plan. Software specs are budgeted too: one the
+  code calls before one it only imports, and one that does not fit is named,
+  not cut mid-text. They follow only the threads actually given, never a
+  keyword guess or a deferred thread.
+- **The CLAUDE.md block names the command that installed it**, as the skills
+  do. A hooked session ran `npx vibegraph-knowledge check`, npm's published
+  version, older than the one that set the project up, and read its false
+  violations on `package.json` as "pre-existing".
+- **Stating the objective answers "What is this project for?"** The question
+  `plan observe` opens stayed open and was counted on every prompt. A
+  proposed objective is still closed by its own adoption, and `setup` now
+  points at `inbox agree objective:<id>`, which adopts it and closes it in one
+  step, instead of retyping it with `set-objective`.
+- **A path with a framework's folder names routes.** A prompt naming
+  `app/(chat)/api/vote/route.ts` matched only `api/vote/route.ts`, which no
+  file is, so the thread it named was never routed. Five threads that merely
+  pass through `lib/db/queries.ts` were routed instead. Path segments now
+  accept Next.js `(group)`, `[id]`, `[...slug]` and `@slot`, and SvelteKit
+  `+page`; the file part may hold dots (`a.test.ts`); a parenthesis from the
+  prose around a path is not part of it. The tail of a path matches when
+  exactly one file ends with it, as a bare basename did, and a camelCase
+  name written with its arguments is code.
+- **`<command> --help` works for an aliased command** (`constraints` /
+  `constraint`); it printed the whole usage.
+- **A Brief draft with no data claims** is told so, not that it was "written
+  before claims were checked". That message is now kept for drafts that
+  really are older.
+
+Tests: test:funnel-users (5, fixture `test/fixtures/stack/funnel_users_demo`),
+test:json-reply (4), test:software-add (3), test:setup (+6),
+test:project-direction (+2), test:arch-propose (+1), test:brief-checks (+2),
+test:brief-groups-first (+1), test:plan-direction (+1), test:prompt-priority
+(3, new), test:cli-init (+1), test:remit (+1), test:now-state, test:stack.
+
+### The thread view stays a thread view
+
+- **A zoom never changes view.** On a big thread the view would sometimes
+  jump to the System view and show the thread-interaction cards, one per
+  entry point. M-ZOOM made the band below the overview zoom leave the thread
+  for the system plane, and fits the view made on its own could cross it. The
+  worst was switching to **All**: it counted every node it revealed as "the
+  thread grew" and flew the view out to fit them all. The crossing is gone,
+  both ways. A level switch or an opened nest is no longer read as growth:
+  only a re-extract is, and only its drawn new nodes are fitted. The
+  "keep zooming out for the system view" hint goes with it.
+- **The thread-interaction view is removed.** The architecture map's lenses
+  answer the same questions better. The System view has two modes,
+  Subsystems and Architecture, and a remembered thread mode opens the map.
+  The thread call graph behind it (`deriveThreadCalls`) stays: the contracts,
+  the export, `plan_work` and the system map read it.
+- **Threads open at Secondary.** The default level is Secondary (was
+  Primary). **All** lasts for the thread in front of you; it is no longer
+  remembered, so one inspection no longer opens every later thread with
+  thousands of nodes. A level stored as All before this is ignored.
+
+Tests: test:e2e-big-thread (+1: switch to Secondary, back to All, wheel to
+the zoom floor, and the thread stays; red on the prior commit, the view gone
+into the System view), test:e2e-thread-rank (All is not remembered),
+test:lod (no zoom changes view), test:thread-interaction (the graph only);
+test:e2e-zoom, system-thread-interaction and w4-thread-hue removed with the
+view they drove.
+
+### The side editor: a function is a view of its file
+
+- **The red underlines come from the whole file.** The editor was handed a
+  function's lines on their own, as an anonymous snippet, so every name
+  imported above the function read "Cannot find name", and JSX in a `.tsx`
+  read as an error. The editor's model is now the whole file at its own
+  path. A function view hides the lines outside the function and keeps the
+  cursor and any selection inside it (Ctrl+End, Ctrl+A), and it numbers the
+  lines as the file does. Save still sends just the function through the CST
+  rewriter. The TypeScript service also stops reporting what it cannot see
+  from one file: modules, Node and test-runner typings, the JSX runtime.
+  Real errors in the file are still reported.
+- **The breadcrumb is the file's hierarchy:** project › file › Class ›
+  function. Click the file to open all of it; click the function to go back.
+  An unsaved edit still asks first.
+- **The chat beneath the code resizes.** Drag the line between them, or
+  focus it and use the arrow keys. The height is remembered, and the code
+  keeps room for at least its header and a few lines.
+
+Tests: test:e2e-editor-file-view (new: the file's line numbers, no error
+markers on the function, Ctrl+End stays in the view, Cancel restores it,
+the breadcrumb both ways, the splitter by mouse, by keys and across a
+reload). On the prior commit, the same function showed "Cannot find name
+'queryUsers'". The save-error spec caught Ctrl+End escaping into the hidden
+lines before the clamp existed.
+
+### The hooks after an edit: 10 s to 4 s on a large tree
+
+M4 measured 9 to 10.6 s of hook time per edit on the MCP TypeScript SDK (743
+parsed files, 862 threads) and left it open. A CPU profile of the real
+post-edit hook found the time in work repeated per item, not in the work
+itself:
+
+- **The injection index rescanned every file per interface.** Finding the
+  classes that implement an interface by their members walked every node of
+  every file once per interface: 1.2 s of a 1.45 s link. The candidate classes
+  are now listed once. Link: 1.45 s to 0.21 s.
+- **Attribution scanned every tool's evidence for every boundary.** The
+  call-site rule is now a lookup built once per stack index
+  (`src/shared/stack_sites.ts`), keeping the scan's first-match order.
+- **The crossing index matched each literal against every path, once per
+  thread.** Paths are indexed by suffix once, and each file's nodes that can
+  name a script are found once rather than for every thread that reaches the
+  file. Discovery uses the same index.
+- **The checks built a crossing index they never read.** The contract
+  options built it eagerly, while a rule check needs it only for attribution.
+  It is built on first use, and a caller that already has one passes it in:
+  the prompt hook was building two. Rule check: 1.79 s to 0.38 s.
+- **The cache rewrote 150 MB after every edit.** The envelope and the parse
+  map were two whole files, stringified and written again on each edit (0.75
+  s), and the incremental path read back 56 MB of linked IR it then rebuilt.
+  The cache now keeps one file per parsed IR, linked IR and thread, each named
+  by the hash of its text, under a small manifest
+  (`scripts/envelope_store.mjs`). An edit writes its parse, the linked files
+  whose links moved and the threads it re-extracted. The previous threads are
+  read only when some can be reused. A missing piece costs a rebuild, never a
+  partial envelope. A version-1 cache is rebuilt once and its two files
+  removed. Cache write: 0.75 s to 0.06 s. Peak memory: 1.0 GB to 0.52 GB.
+
+Measured on the SDK by alternating `HEAD` and this change, each with its own
+cache, five edits each:
+
+| | before | after |
+|---|---|---|
+| post-edit hook, median wall time | 10.2 s | 4.3 s |
+| prompt hook with nothing moved, median | 6.2 s | 2.7 s |
+
+Every derived structure is unchanged, checked by hash on the SDK and on a
+1,816-file copy of this repository's own code: linked files, threads, entry
+points, symbol index, crossings, stack index, injections, contracts and check
+results.
+
+Still to pay: the Python extraction receives every linked file to re-extract
+the threads that walk the edited one (about 1 s), a checkout's Node start-up
+costs 0.6 s, and the Python probe 0.15 to 0.25 s on every hook call.
+
+Tests: test:envelope-cache (+4: the stored envelope reads back byte for byte
+with no orphaned blob, an edit writes only what it changed, a missing blob
+rebuilds, a version-1 cache is replaced), test:flow (the suffix index answers
+as the scan did), test:stack-attribution (first match in index order).
+
 ## 0.35.0 — 2026-10-18 — the field review: rules from the prose, declared means deployed, panels beside the graph
 
 ### From a field review on a large project
