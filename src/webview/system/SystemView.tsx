@@ -112,7 +112,9 @@ export function SystemView({
   insight = null,
   mapFocus = null,
 }: Props) {
-  // The viewport, kept across a Real / Plan / Overlay switch (same lens).
+  // The viewport, kept across a Real / Overlay switch (same lens). The plan
+  // alone is laid out in its own coordinates, so it keeps its own: carried
+  // across, the Real map's pan cut the plan's cards off (2026-10-21).
   const keptView = useRef<{ key: string; vp: { x: number; y: number; zoom: number } } | null>(null);
   // Nothing remembered (or Subsystems remembered on a project with no
   // subsystem tier): the project's map, never an empty canvas.
@@ -176,6 +178,7 @@ export function SystemView({
   // Stage 3: the ghost count joins it so a plan arriving / clearing also
   // re-fits — ghosts land in view, not off-canvas.
   const flowView = `${mode}:${mode === "map" ? `${lens}:${planView}` : ""}:${plan ? plan.subsystems.length : 0}`;
+  const keptKey = `${lens}:${planView === "plan" ? "plan" : "real"}`;
   // The size the next layout will be — above LAYOUT_DEFER_AT it is computed
   // after a paint, behind a spinner (useDeferredLayout).
   const layoutSize = topoDrawn ? topoDrawn.nodes.length + topoDrawn.edges.length
@@ -421,7 +424,7 @@ export function SystemView({
 
       <ReactFlow
         onMove={(_, viewport) => {
-          if (mode === "map") keptView.current = { key: `${lens}`, vp: viewport };
+          if (mode === "map") keptView.current = { key: keptKey, vp: viewport };
         }}
         // Remount when the view changes (flowView), and once more when a
         // deferred layout first arrives, so the map is fitted to it.
@@ -439,7 +442,7 @@ export function SystemView({
         onInit={(inst) => {
           flowRef.current = inst;
           if (mode !== "map" || !base.nodes.length) return;
-          if (keptView.current?.key === lens) { inst.setViewport(keptView.current.vp); return; }
+          if (keptView.current?.key === keptKey) { inst.setViewport(keptView.current.vp); return; }
           const r = wrapRef.current?.getBoundingClientRect();
           if (r) inst.setViewport(readableViewport(layoutBounds(base.nodes), r.width, r.height, MAP_INSET, lens === "birdseye" ? 0.35 : undefined));
         }}

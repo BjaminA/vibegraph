@@ -84,8 +84,9 @@ reads in ten seconds: processes, stores, outside callers, decision
 structures and trust boundaries, with each store's zones and SDKs folded into
 its card and everything planned but not built folded into one *N planned, not
 built* chip. Overview adds the zones in their store's box; Tools and Payloads
-draw everything. Zooming out never adds a box, and switching Real / Plan /
-Overlay keeps the lens and your zoom.
+draw everything. Zooming out never adds a box. Switching between Real and
+Overlay keeps the lens and your place on the map; Plan keeps the lens and fits
+the plan, which is laid out on its own.
 
 **Real uses the project's own words** once plan check calls an item realised:
 a process takes the plan's name (the chip *named · plan*; the code's name is
@@ -306,7 +307,15 @@ is written exactly as you typed it and the result says it was not formatted.
 
 - **Edit** — click a node (or open the node editor from the toolbar), change
   its code in the editor, **Save**. The file on disk changes; the views
-  re-derive.
+  re-derive. The editor shows a function as a view of its file: the file's
+  line numbers, errors checked against the whole file (so a name imported
+  above the function is not flagged), and a breadcrumb (project › file ›
+  class › function) whose file segment opens the whole file and whose
+  function segment returns. The cursor stays inside the function's lines.
+  The Claude chat beneath the editor resizes: drag the line between them, or
+  focus it and use the arrow keys.
+
+  ![The side editor on ingest_route: the function at app.py's line numbers, the breadcrumb, the chat beneath](../screenshots/19-side-editor.png)
 - **Intent** — describe the change in words; Claude drafts it, you see a
   preview, and only **Save** writes it.
 - **Describe an insertion** (toolbar) — Claude drafts new code for a place you

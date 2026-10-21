@@ -122,11 +122,43 @@ test.describe("docs screenshots — fleet-telemetry", () => {
     await page.locator("[data-investigation-delete]").click();
   });
 
+  test("side editor: a function shown as a view of its file", async ({ page }) => {
+    await boot(page);
+    await openThread(page, "telemetry/app.py:ingest_route");
+    await page.locator('[data-thread-rank-control] [data-rank-level="2"]').click(); // the level a thread opens at
+    await page.waitForTimeout(1200);
+    await page.locator(".vg-thread-node-seed").first().click();
+    await expect(page.locator("[data-node-editor-panel]")).toBeVisible({ timeout: 10_000 });
+    await page.waitForSelector("[data-node-editor-panel] .monaco-editor .view-line", { timeout: 10_000 });
+    await page.mouse.move(2, 2);
+    await page.waitForTimeout(1500);
+    await shot(page, "19-side-editor.png");
+  });
+
   test("generic direction: the skills, where they apply, what the hooks send", async ({ page }) => {
     await boot(page);
     await page.click("[data-skills-toggle]");
     await page.waitForTimeout(800);
     await shot(page, "11-direction.png");
+  });
+});
+
+test.describe("docs screenshots: pump-wear", () => {
+  test.skip(!SHOTS || !FIX.includes("pump-wear"), "VG_DOCS_SHOTS=1 VG_FIXTURE=examples/pump-wear");
+  test.setTimeout(120_000);
+  test("the Arch view and one file as a diagram", async ({ page }) => {
+    await boot(page);
+    await page.locator('[data-toolbar-group="views"]').getByRole("button", { name: "Arch", exact: true }).click();
+    await expect(page.locator("[data-architecture-view]")).toBeVisible({ timeout: 10_000 });
+    await page.mouse.move(2, 2);
+    await page.waitForTimeout(1200);
+    await shot(page, "03-arch.png");
+    await page.click('[data-side-panel-tab="files"]');
+    await page.click('[data-file-tree-row="model.py"]');
+    await page.waitForSelector(".react-flow__node", { timeout: 15_000 });
+    await page.mouse.move(2, 2);
+    await page.waitForTimeout(1500);
+    await shot(page, "04-fileview.png");
   });
 });
 
@@ -149,13 +181,18 @@ test.describe("docs screenshots — the plan", () => {
     await page.mouse.move(2, 2);
     await page.waitForTimeout(500);
     await shot(page, "16-plan-panel.png");
-    await page.click("[data-plan-toggle]");
+    // the panel is a sheet over a scrim (2026-10-05): its own close button
+    await page.locator("[data-sheet-close]").click();
+    await expect(page.locator("[data-sheet-scrim]")).toHaveCount(0);
     await openMap(page, "overview");
     await page.locator('[data-plan-view="plan"]').click();
     await page.mouse.move(2, 2);
     await page.waitForTimeout(1200);
     await shot(page, "17-plan-map.png");
     await page.locator('[data-plan-view="overlay"]').click();
+    await page.waitForTimeout(800);
+    // the map opens at a readable zoom from the top-left; the picture shows it all
+    await page.locator(".react-flow__controls-fitview").click();
     await page.mouse.move(2, 2);
     await page.waitForTimeout(1200);
     await shot(page, "18-plan-overlay.png");
@@ -170,6 +207,9 @@ test.describe("docs screenshots — Agent Manager", () => {
     await page.click("[data-work-run-toggle]");
     await page.locator("[data-work-run-task]").fill("add a wipe() to app.py that calls store.purge");
     await page.click("[data-hooked-start]");
+    // a run is a conversation (0.35.0): it waits for the next message until Finish
+    await expect(page.locator("[data-hooked-status]")).toHaveAttribute("data-hooked-status", "waiting", { timeout: 60_000 });
+    await page.click("[data-hooked-finish]");
     await expect(page.locator("[data-hooked-status]")).toHaveAttribute("data-hooked-status", "awaiting-review", { timeout: 60_000 });
     await page.mouse.move(2, 2);
     await page.waitForTimeout(800);

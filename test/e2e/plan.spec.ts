@@ -148,12 +148,21 @@ test.describe("the hypothetical plan", () => {
     const t2 = (await toggle.boundingBox())!;
     expect((await insp.boundingBox())!.y).toBeGreaterThanOrEqual(t2.y + t2.height);
     await page.locator("[data-arch-inspector-close]").click();
+    // the Overview lens at the docs' size: there the Real map's pan, carried
+    // into the plan alone, cut its tool column off the right edge
+    await page.setViewportSize({ width: 1500, height: 940 });
+    await page.locator('[data-arch-lens="overview"]').click();
+    await page.waitForTimeout(800);
 
     await toggle.locator('[data-plan-view="plan"]').click();
     // 3 processes + 4 tools; every one a dashed ghost.
     await expect(page.locator('[data-arch-source="planned"]')).toHaveCount(7, { timeout: 10_000 });
     await expect(page.locator('[data-arch-source="derived"]')).toHaveCount(0);
     await expect(page.locator('[data-arch-id="plan:dashboard"]')).toBeVisible();
+    // 2026-10-21: the plan alone is drawn in its own coordinates, so the
+    // switch must not carry the Real map's pan into it (the cards landed off
+    // the right edge, half cut)
+    for (const card of await page.locator('[data-arch-source="planned"]').all()) await expect(card).toBeInViewport({ ratio: 0.99 }); // sub-pixel
     await page.mouse.move(2, 2);
     await page.screenshot({ path: join(REVIEW, "2-map-plan.png") });
 

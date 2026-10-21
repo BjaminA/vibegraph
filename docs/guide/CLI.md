@@ -182,7 +182,7 @@ names and re-check the rules after every edit; `CLAUDE.md` points it at
 Then add what only your team knows:
 
 ```bash
-vibegraph-knowledge constraints add --kind invariant --all $ref
+vibegraph-knowledge constraints add --kind invariant --all \
   --text "Every outbound HTTP call goes through lib/http_client.py: it routes via the egress proxy and attaches the service token."
 vibegraph-knowledge export        # re-export whenever the rules or the code change
 ```
@@ -411,7 +411,7 @@ dispatch, and a value that goes into a database or file and comes back out
 It does no secret scanning and knows no CVEs — run `npm audit` /
 `pip-audit` / `cargo audit` for dependencies.
 
-![dataflow on the test fixture: seven unguarded flows across Python, TypeScript and bash](../screenshots/15-dataflow.png)
+![dataflow on the test fixture: eight unguarded flows across Python, TypeScript and bash](../screenshots/15-dataflow.png)
 
 ### `plan` — a hypothetical project, kept apart from the real one
 

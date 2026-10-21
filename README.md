@@ -63,8 +63,8 @@ add `--windows` to `init --hooks` (see [SETUP.md](docs/guide/SETUP.md)).
 cd /path/to/your/project
 vibegraph-knowledge init --hooks --skill     # four hooks (per user, never committed) + the skills
 vibegraph-knowledge export                   # .vibegraph/knowledge/: the map, one contract per thread, the rules
-vibegraph-knowledge constraints add --kind invariant --files telemetry/ $ref
-  --text "Operators are paged only through alerts.notify after should_notify's dedup — a flapping sensor once paged forty times a minute." $ref
+vibegraph-knowledge constraints add --kind invariant --files telemetry/ \
+  --text "Operators are paged only through alerts.notify after should_notify's dedup — a flapping sensor once paged forty times a minute." \
   --check '{"rule":"calls-through","target":"notify","through":"should_notify"}'
 ```
 
@@ -174,6 +174,14 @@ entry point reaches dimmed, with the reason on hover. In **Files**, unreached,
 partly parsed and changed-since-export files are marked.
 
 ![The code view on http_client.py: environment reads marked, rank bars in the gutter](docs/screenshots/06-code-insight.png)
+
+Click a node to edit it in the side editor. A function is shown as a view of
+its file: the file's own line numbers, errors checked against the whole file,
+and a breadcrumb (project › file › class › function) that opens the whole file
+and comes back. Save sends just the function through the CST chokepoint. The
+Claude chat sits beneath it; drag the line between them to resize.
+
+![The side editor on ingest_route: the function at its own line numbers in app.py, the breadcrumb, and the Claude chat beneath](docs/screenshots/19-side-editor.png)
 
 ### Investigation board
 
@@ -329,7 +337,7 @@ The same findings appear in `security.md`, in each thread's contract, and in
 the post-edit hook when an edit adds one. That hook only advises; it never
 blocks. Name-based, and it says what it cannot see.
 
-![dataflow on the test fixture: seven unguarded flows in three languages, each with its source and path](docs/screenshots/15-dataflow.png)
+![dataflow on the test fixture: eight unguarded flows in three languages, each with its source and path](docs/screenshots/15-dataflow.png)
 
 ### Generic direction
 

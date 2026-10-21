@@ -18,12 +18,18 @@ CLI="env NODE_NO_WARNINGS=1 node $ROOT/scripts/cli/main.mjs"
 
 npm run -s build >/dev/null
 
-copy() { mkdir -p "$TMP/$2"; cp -r "$ROOT/$1" "$TMP/$2/"; find "$TMP/$2" -name __pycache__ -prune -exec rm -rf {} +; }
+# Tracked files only: an untracked file or a local .vibegraph/ state (a
+# roadmap, a seed, work in progress) must never reach the published pictures.
+copy() {
+  mkdir -p "$TMP/$2"
+  ( cd "$ROOT/$(dirname "$1")" && git ls-files -z -- "$(basename "$1")" | xargs -0 cp --parents -t "$TMP/$2" )
+}
 copy examples/fleet-telemetry fx
 copy test/fixtures/journeys/journeys_demo jx
 copy test/fixtures/hooked_run/hooked_demo hx
 copy test/fixtures/dataflow/taint_demo dx
 copy test/fixtures/plan/plan_demo px
+copy examples/pump-wear pw
 
 shots() { # <fixture dir> <port> [extra env...]
   local fix="$1" port="$2"; shift 2
@@ -34,6 +40,7 @@ shots() { # <fixture dir> <port> [extra env...]
 shots "$TMP/fx/fleet-telemetry" 4310
 shots "$TMP/jx/journeys_demo" 4311
 shots "$TMP/px/plan_demo" 4314
+shots "$TMP/pw/pump-wear" 4315
 shots "$TMP/hx/hooked_demo" 4312 VG_AGENT_ENGINE=hooked \
   VG_CLAUDE_BIN="node $ROOT/test/fixtures/hooked_run/fake_claude_hooked.mjs"
 

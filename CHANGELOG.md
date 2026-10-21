@@ -3,6 +3,30 @@
 `vibegraph-knowledge` and the VibeGraph app. Newest first. Each entry says what
 changed and, where an existing user would notice, how behaviour differs.
 
+## Unreleased
+
+### The map fits the plan when you switch to it
+
+Switching the architecture map from Real to Plan kept the Real map's pan and
+zoom, keyed by lens alone. The plan alone is laid out in its own coordinates,
+so on the Overview lens its tool column landed off the right edge, half cut.
+The kept viewport is now shared only by views drawn in the same coordinates:
+Real and Overlay keep your place, as before; Plan is fitted. test:e2e-plan
+checks every planned card is fully in view after the switch (red on the prior
+code: a card 78% in view).
+
+### The pictures in the README and guides, current again
+
+- Every screenshot is regenerated from the current app. The Arch and Diagram
+  pictures, last taken in August with the old toolbar, are now generated too
+  (on `examples/pump-wear`), and a new one shows the side editor.
+- The generator copies only tracked files, so local state (a roadmap, manual
+  seeds, untracked work) can no longer appear in a published picture. Two of
+  its steps had stopped working: the Plan panel now closes as a sheet, and an
+  Agent Manager run waits for Finish.
+- The first command in the README and one in `CLI.md` ended their lines with
+  `$ref` where the shell continuation `\` belonged.
+
 ## 0.36.0 (2026-10-21): rules proposed and measured, the setup in one order, hooks in under half the time
 
 0.35.0 was cut in the repository but never published to npm, so on npm 0.36.0
