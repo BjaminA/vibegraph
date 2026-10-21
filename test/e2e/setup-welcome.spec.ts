@@ -25,6 +25,20 @@ test.describe("setup welcome", () => {
   test.beforeEach(clearDismissal);
   test.afterAll(clearDismissal);
 
+  test("installed hooks do not hide the offer (a project started again with its hooks kept)", async ({ page }) => {
+    const settings = join(process.cwd(), FIXTURE, ".claude", "settings.local.json");
+    const hadDir = existsSync(dirname(settings));
+    mkdirSync(dirname(settings), { recursive: true });
+    writeFileSync(settings, JSON.stringify({ hooks: { UserPromptSubmit: [{ hooks: [{ type: "command", command: "vgk hook prompt --vg-hook" }] }] } }) + "\n");
+    try {
+      await page.goto("/");
+      await expect(page.locator("[data-setup-guide='welcome']")).toBeVisible({ timeout: 30_000 });
+      await expect(page.locator("[data-setup-step='hooks']")).not.toHaveAttribute("data-setup-status", "todo");
+    } finally {
+      rmSync(hadDir ? settings : dirname(settings), { recursive: true, force: true });
+    }
+  });
+
   test("a new project is offered the setup; Not now sets it aside; the sidebar opens it again", async ({ page }) => {
     await page.goto("/");
     const guide = page.locator("[data-setup-guide]");

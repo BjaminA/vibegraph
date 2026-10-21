@@ -3,6 +3,23 @@
 `vibegraph-knowledge` and the VibeGraph app. Newest first. Each entry says what
 changed and, where an existing user would notice, how behaviour differs.
 
+## 0.37.1 (2026-10-21): the setup offered to a project with its hooks installed
+
+### The setup offered to a project with its hooks installed
+
+- **Installed hooks no longer count as the setup started.** A project whose
+  `.vibegraph` had been deleted to start again was never offered the setup,
+  because `init --hooks` had been run on it earlier. Installing the hooks is
+  often the first thing run on a project and says nothing about its groups,
+  Brief or rules, so the offer now ignores them.
+- **The side panel's setup line is a button that looks like one:** "Setup
+  guide · N of M steps done", drawn as a chip beside the rules and direction
+  chips. It was muted underlined text and easy to miss.
+
+Tests: test:setup-welcome (installed hooks now leave a project new),
+test:e2e-setup-welcome (+1: the popup opens on a project with its hooks
+installed; red on 0.37.0), test:e2e-now (the button's text).
+
 ## 0.37.0 (2026-10-21): the setup offered to a new project, Claude's work seen while it runs, the Brief review fixed
 
 ### A new project is offered the setup

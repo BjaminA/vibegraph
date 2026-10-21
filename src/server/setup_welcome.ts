@@ -7,15 +7,17 @@
 // done steps: on a project with no bespoke software that step already reads
 // done. Nothing of the setup started here = no groups, Brief, plan, setup or
 // direction file, no software spec, no stated rule (a package's classification
-// is not one), no hooks. "Not
-// now" is remembered per person under ~/.cache, never in the project.
+// is not one). Installed hooks do not count: `init --hooks` is often the first
+// thing run on a project, before any of the setup (the first field report: a
+// project whose .vibegraph had been deleted to start again was never offered
+// it, because its hooks were still installed). "Not now" is remembered per
+// person under ~/.cache, never in the project.
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { cacheDirFor } from "../../scripts/cache_dir.mjs";
 import { loadConstraints, statedRules } from "./constraint_store.ts";
 import { listSpecs } from "./software_store.ts";
-import { SETUP_HOOK_MARKER } from "./setup_state.ts";
 
 const PROJECT_FILES = ["architecture.json", "brief.json", "plan.json", "setup.json", "direction.json"];
 
@@ -24,7 +26,6 @@ export function isFreshProject(root: string): boolean {
   if (PROJECT_FILES.some((f) => existsSync(join(root, ".vibegraph", f)))) return false;
   try { if (statedRules(loadConstraints(root)).length) return false; } catch { return false; }
   try { if (listSpecs(root).length) return false; } catch { /* none */ }
-  try { if (readFileSync(join(root, ".claude", "settings.local.json"), "utf-8").includes(SETUP_HOOK_MARKER)) return false; } catch { /* none */ }
   return true;
 }
 

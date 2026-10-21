@@ -33,13 +33,14 @@ The browser shows a boot animation while this runs, then opens on the
 **architecture map**. (`VG_START_VIEW=index` opens on the thread list instead.)
 
 On a project where nothing of the setup has started (no groups, Brief, plan,
-rules, software spec or hooks), it first offers the **setup**: a guide listing
+rules or software spec; installed hooks do not count), it first offers the
+**setup**: a guide listing
 its steps in order, which ones ask Claude and which are yours to decide.
 **Start the setup** opens where the first step is decided; **Set up from
 Claude Code** gives the commands that walk the same steps from a terminal;
 **Not now** sets the offer aside for this project (kept under `~/.cache`,
-never in the project). The side panel's "setup: N of M steps done" line opens
-the guide again. `VG_WELCOME=off` stops the offer.
+never in the project). The side panel's "Setup guide · N of M steps done" button
+opens the guide again. `VG_WELCOME=off` stops the offer.
 
 The server binds `127.0.0.1` only. It has no authentication — do not expose it.
 

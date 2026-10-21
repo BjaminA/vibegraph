@@ -37,9 +37,9 @@ test("a project is new until any part of the setup starts in it", () => {
   assert.equal(isFreshProject(root), true);
   mkdirSync(join(root, ".claude"));
   writeFileSync(join(root, ".claude", "settings.local.json"), JSON.stringify({ hooks: { UserPromptSubmit: [{ hooks: [{ type: "command", command: `vgk hook prompt ${SETUP_HOOK_MARKER}` }] }] } }));
-  assert.equal(isFreshProject(root), false, "the hooks installed");
-  writeFileSync(join(root, ".claude", "settings.local.json"), JSON.stringify({ permissions: {} }));
-  assert.equal(isFreshProject(root), true, "someone else's settings are not ours");
+  // the first field report: .vibegraph deleted to start again, the hooks still
+  // installed, and the project was never offered the setup
+  assert.equal(isFreshProject(root), true, "installed hooks are not the setup: `init --hooks` often comes first");
 });
 
 test("offered once: 'Not now' is kept per person under the cache, and VG_WELCOME=off stops it", () => {

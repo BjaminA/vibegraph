@@ -44,8 +44,8 @@ export function NowStrip({ now, onOpen }: { now: NowState; onOpen: (p: NowPanel)
       {/* 2026-10-20 — the setup's progress; 2026-10-21: it opens the setup guide (setup/SetupGuide.tsx) */}
       {now.setup && now.setup.done < now.setup.of && (
         <button type="button" data-now-setup onClick={openSetupGuide} title="Every setup step, in order, and where each is decided"
-          style={{ alignSelf: "flex-start", display: "inline-flex", alignItems: "center", gap: 4, background: "transparent", border: "none", padding: 0, cursor: "pointer", fontFamily: "var(--font-ui)", fontSize: "var(--fs-11)", color: "var(--text-muted)", textDecoration: "underline", textDecorationColor: "var(--border-edge)", textUnderlineOffset: 4 }}>
-          <ListChecks {...ico} />setup: {now.setup.done} of {now.setup.of} steps done
+          style={{ ...chip(null), alignSelf: "flex-start", color: "var(--text-primary)" }}>
+          <ListChecks {...ico} />Setup guide · {now.setup.done} of {now.setup.of} steps done
         </button>
       )}
       <button data-now-next onClick={() => now.next.panel && onOpen(now.next.panel)} disabled={!now.next.panel}
