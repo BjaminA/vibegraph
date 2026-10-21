@@ -42,18 +42,16 @@ test.describe("the Brief card", () => {
     await expect(card.locator("[data-brief-run]")).toHaveText("Propose groups first");
     await expect(card.locator("[data-brief-skip-groups]")).toBeVisible();
     await card.locator("[data-brief-run]").click();
-    await expect(card).toHaveAttribute("data-brief-state", "proposed", { timeout: 20_000 });
-    await expect(card.locator("[data-brief-groups-first]")).toBeVisible();
-    // 2026-10-21 — the proposed groups are ON the map before they are decided:
-    // dashed, said in the proposal bar, their boxes lit and the rest dimmed
+    // 2026-10-21 — the groups first are the map's own proposal (the same call as
+    // "Propose groups"): pending in the map's proposal bar, drawn on the map
+    // before they are decided, and the Brief waits for them
+    const bar = page.locator("[data-arch-proposal-bar]");
+    await expect(bar).toHaveAttribute("data-arch-proposal-state", "pending", { timeout: 20_000 });
     await expect(page.locator('[data-arch-group="g-orders"]')).toHaveAttribute("data-arch-group-source", "proposed", { timeout: 15_000 });
-    await expect(page.locator("[data-arch-brief-groups]")).toContainText("The Brief proposes 1 group change");
-    await expect(page.locator('[data-arch-id="cluster:scripts:decider"]')).not.toHaveAttribute("data-arch-dim", "true");
-    await expect(page.locator('[data-arch-dim="true"]').first()).toBeVisible();
-    await card.locator('[data-brief-ratify="groups"]').click();
-    await expect(card).toHaveAttribute("data-brief-state", "none", { timeout: 15_000 });
+    await expect(card).toHaveAttribute("data-brief-state", "none");
+    await expect(card.locator("[data-brief-groups-note]")).toContainText("a proposed architecture waits for a person");
+    await bar.locator("[data-arch-ratify]").click();
     await expect(page.locator('[data-arch-group="g-orders"]')).toHaveAttribute("data-arch-group-source", "stated", { timeout: 15_000 });
-    await expect(page.locator("[data-arch-brief-groups]")).toHaveCount(0);
     // the groups are settled: the brief itself
     await card.locator("[data-brief-ask]").click();
     await expect(card.locator("[data-brief-run]")).toHaveText("Draft it");

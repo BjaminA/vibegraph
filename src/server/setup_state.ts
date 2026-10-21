@@ -154,9 +154,14 @@ export function setupState(root: string, opts: { stack?: Pick<StackIndexRecord, 
     ? { id: "groups", title: "Architecture groups", status: "done", core: true, facts: [`${store.groups.length} group(s), ratified${groupsAt.at ? ` ${groupsAt.at.slice(0, 10)}` : ""}`], commands: [], now: { text: "", panel: null } }
     : proposedGroups || store.proposal
       ? { id: "groups", title: "Architecture groups", status: "waiting", core: true, facts: [`${proposedGroups || store.proposal?.groups.length || 0} proposed group(s) wait for a person`],
-        commands: [cmd("brief codebase show", "either", "the proposal"), cmd("brief codebase ratify groups", "you", "or the Brief card on the map")], now: { text: "Decide the proposed architecture groups", panel: null } }
-      : { id: "groups", title: "Architecture groups", status: "todo", core: true, facts: ["no groups yet: the Brief proposes them first, from the derived map and the deployment files"],
-        commands: [cmd("brief codebase --estimate", "either", "how many tokens it will take"), cmd("brief codebase", "claude", "proposes the groups (a person decides them)", true)], now: { text: "Propose the architecture groups (the Brief)", panel: null } });
+        // 2026-10-21: groups are proposed by the architecture proposal (brief_groups_first.ts);
+        // a groups section of a Brief is still decided through the Brief
+        commands: proposedGroups
+          ? [cmd("brief codebase show", "either", "the proposal"), cmd("brief codebase ratify groups", "you", "or the Brief card on the map")]
+          : [cmd("architecture", "either", "the map with the proposal drawn on it, zero tokens"), cmd("architecture --ratify", "you", "or Ratify on the map; --reject drops it")],
+        now: { text: "Decide the proposed architecture groups", panel: null } }
+      : { id: "groups", title: "Architecture groups", status: "todo", core: true, facts: ["no groups yet: proposed first, from the derived map, the deployment files and the docs"],
+        commands: [cmd("brief codebase --estimate", "either", "how many tokens it will take"), cmd("brief codebase", "claude", "proposes the groups, the same call as the map's Propose groups (a person decides them)", true)], now: { text: "Propose the architecture groups (the Brief)", panel: null } });
 
   const proposedSpec = !!brief.proposed?.spec;
   steps.push(brief.ratified?.spec

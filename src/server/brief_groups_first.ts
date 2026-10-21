@@ -7,6 +7,14 @@
 // architecture.json) the brief is drafted with them as citable statements and
 // without a groups section of its own (a pending proposal then waits beside it).
 // `--skip-groups` keeps the one-call draft.
+//
+// 2026-10-21 — the groups are PROPOSED by the architecture proposal
+// (arch_propose.ts), the same call as the map's "Propose groups": the derived
+// map, the deployment files, the docs, the plan, and rules a later box joins
+// by. The Brief's own groups section had proposed them from a one-line
+// instruction, with members and no rules; on a real project the setup's run
+// (which took this path) grouped worse than the map's button. This step only
+// decides WHEN groups come first; `--only groups` still revises them in a Brief.
 
 import type { ArchModelRecord } from "../shared/protocol.ts";
 import type { BriefRecord } from "../shared/brief_types.ts";
@@ -31,7 +39,7 @@ export function groupsStep(root: string, rec: BriefRecord, model: ArchModelRecor
     return { step: "brief", skipGroups: true, note: `${pendingBrief ? "the brief's proposed groups" : "a proposed architecture"} still wait${pendingBrief ? "" : "s"} for a person; this draft reads the codebase through the groups already settled` };
   }
   if (pendingBrief || store.proposal) {
-    return { step: "wait", why: `${pendingBrief ? "the brief's proposed groups" : "a proposed architecture"} wait for a person — ratify or reject ${pendingBrief ? "them (`brief codebase ratify|reject groups`, the card or the inbox)" : "it on the map (or `architecture --ratify|--reject`)"}, then draft the brief; or draft now with --skip-groups` };
+    return { step: "wait", why: `${pendingBrief ? "the brief's proposed groups wait" : "a proposed architecture waits"} for a person — ratify or reject ${pendingBrief ? "them (`brief codebase ratify|reject groups`, the card or the inbox)" : "it on the map (or `architecture --ratify|--reject`)"}, then draft the brief; or draft now with --skip-groups` };
   }
   if (settled) return { step: "brief", skipGroups: true };
   return { step: "groups", why: "no groups are settled yet: the groups are proposed first (which boxes deploy together, which trust zone they share), because the brief reads the codebase through them — decide them, then draft the brief" };

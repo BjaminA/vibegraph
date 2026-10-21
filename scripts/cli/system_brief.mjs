@@ -28,6 +28,7 @@ import { personName } from "../../src/server/person.ts";
 import { groupsStep } from "../../src/server/brief_groups_first.ts";
 import { reaffirmBrief, setBriefSync, staleBriefLineList, staleFocus } from "../../src/server/brief_sync.ts";
 import { spawnClassifier } from "./classify.mjs";
+import { runArchitecture } from "./architecture.mjs";
 import { cliPath } from "./winpath.mjs";
 import { archBaseline } from "../../src/server/arch_drift.ts";
 import { applyArchStore } from "../../src/server/arch_store.ts";
@@ -38,8 +39,9 @@ export const SYSTEM_BRIEF_USAGE = `brief codebase [<root>] [--estimate] [--dry-r
                                   THE BRIEF: one model call (SPENDS TOKENS; --estimate says how many first) writes the system's
                                   function / method / key features, names, scopes and a start-here path — cited,
                                   vocabulary-checked, its data claims checked against the map, PROPOSED with a review sheet;
-                                  GROUPS FIRST: with no settled groups the call proposes the groups alone — decide them, then
-                                  draft again and the brief reads the codebase through them (--skip-groups: one call, as before);
+                                  GROUPS FIRST: with no settled groups the call is the architecture proposal (architecture
+                                  --propose) — decide the groups, then draft again and the brief reads the codebase through
+                                  them (--skip-groups: one call, as before);
                                   --note: brief again, the model must answer each correction (cited as note:<n>)
       brief codebase show [<root>]                      the pending brief and the ratified one (STALE lines marked)
       brief codebase ratify|reject [spec|groups|scopes|path] [<root>]   a person decides (all sections when none is named)
@@ -108,9 +110,26 @@ export function runSystemBrief({ root, sub, section, values, pipeline, env = pro
   // groups first (brief_groups_first.ts): unsettled groups are proposed alone, and decided, before the brief
   const gs = groupsStep(absRoot, loadBrief(absRoot), model, { only: values.only, stale: values.stale, skip: values["skip-groups"] === true });
   if (gs.step === "wait") { messages.push(gs.why); return done(1); }
-  if (gs.step === "groups") lines.push(`groups first: ${gs.why}`);
+  if (gs.step === "groups") {
+    // 2026-10-21 — proposed the ONE way, the architecture proposal (`architecture
+    // --propose`, arch_propose.ts): the derived map, the deployment files, the
+    // docs and the plan, with rules a later box joins by. The Brief's own groups
+    // section grouped worse on a real project (brief_groups_first.ts).
+    lines.push(`groups first: ${gs.why}`);
+    const arch = (opts) => runArchitecture({ root: absRoot, envelope: values.envelope, pipeline, action: "propose", model: values.model, env, ...opts });
+    if (values.estimate) {
+      const prompt = arch({ dryRun: true }).lines.join("\n");
+      lines.push(`the groups: 1 call, ~${Math.round(prompt.length / 4000)}k input tokens (the architecture proposal); the Brief is a second call, once a person has decided them`);
+      return done(0);
+    }
+    const r = arch({ replyFile: values.reply, dryRun: values["dry-run"] === true });
+    lines.push(...r.lines.filter((l) => !l.startsWith("decide it:")));
+    messages.push(...r.messages);
+    if (r.exitCode === 0 && !values["dry-run"]) lines.push("  decide them: vibegraph-knowledge architecture --ratify | --reject, or on the map — a person's step", "  then draft the brief: `vibegraph-knowledge brief codebase` (it reads the codebase through the groups you agreed)");
+    return done(r.exitCode);
+  }
   if (gs.step === "brief" && gs.note) lines.push(`note: ${gs.note}`);
-  const only = gs.step === "groups" ? "groups" : values.only;
+  const only = values.only;
   const skipGroups = gs.step === "brief" && gs.skipGroups;
   if (values.estimate && !values.stale) {
     const e = briefEstimate(absRoot, model);
@@ -162,6 +181,5 @@ export function runSystemBrief({ root, sub, section, values, pipeline, env = pro
   if (inp.facts.silentRest.length && only !== "scopes") lines.push(`  ${inp.facts.silentRest.length} silent box(es) left for \`brief --only scopes\``);
   if (allLines(p.spec).length) lines.push(...reviewText(reviewBrief(p.spec, inp.facts, { omitted: p.omitted, absolutes: inp.absolutes, scheme: p.scheme })).map((l) => `  ${l}`));
   lines.push("  decide: vibegraph-knowledge brief codebase ratify|reject [section], or the inbox — a person's step");
-  if (gs.step === "groups") lines.push("  then draft the brief: `vibegraph-knowledge brief codebase` (it reads the codebase through the groups you agreed)");
   return done(0);
 }

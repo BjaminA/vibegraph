@@ -3,6 +3,38 @@
 `vibegraph-knowledge` and the VibeGraph app. Newest first. Each entry says what
 changed and, where an existing user would notice, how behaviour differs.
 
+## 0.39.1 (2026-10-21): groups are proposed one way
+
+### Groups are proposed one way, wherever you ask
+
+Run all grouped a real project worse than the map's "Propose groups". They
+were two different calls: the map's is the architecture proposal (the derived
+map, the deployment files, the docs and the plan, with `match` rules a later
+box joins a group by), while Run all, the Brief card's "Propose groups first"
+and `brief codebase` used the Brief's own groups section, one line of
+instruction with members and no rules.
+
+- **Every path now proposes groups through the architecture proposal**
+  (`arch_propose.ts`): the map's button, the setup's Run all, the Brief
+  card's "Propose groups first" and `brief codebase` with no settled groups
+  (which now prints the proposal and says `architecture --ratify | --reject`).
+  The proposal waits in the map's proposal bar; the Brief waits for it.
+- A Brief's own groups section (`brief codebase --only groups`) is unchanged
+  and is still decided through the Brief.
+- The Brief card hears when a groups proposal lands or is decided on the map
+  or in the Inbox; it kept saying "no groups are settled".
+- The setup's commands for a pending groups proposal are `architecture` and
+  `architecture --ratify`.
+- The wait message said "a proposed architecture wait for a person".
+
+Tests: test:brief-groups-first (the groups-first draft is the architecture
+proposal prompt, its rule kept, the Brief waits, `architecture --ratify`
+settles it; a Brief's groups section still ratifies through the Brief),
+test:e2e-brief (Propose groups first: the map's proposal bar, ratified on the
+map, then the Brief). Checked zero-token on a copy of the reporting project:
+the groups-first dry run is the architecture proposal prompt, with its
+deployment facts and doc lines.
+
 ## 0.39.0 (2026-10-21): the setup runs from the app
 
 ### The setup runs from the app: "Run the next step" and "Run all"

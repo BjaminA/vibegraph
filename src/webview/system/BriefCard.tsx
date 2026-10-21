@@ -118,7 +118,10 @@ export function BriefCard({ onLight }: { onLight: (boxes: string[] | null) => vo
   const [busyHere, setBusy] = useState<string | null>(null);
   // 2026-10-21 — a draft is the server's task (tasks/guiTasks.ts): it runs on
   // with the card closed, and the card reads it back when it reopens
-  const task = useGuiTask("brief");
+  const briefTask = useGuiTask("brief");
+  // 2026-10-21 — "Propose groups first" runs the map's groups proposal, a "groups" task
+  const groupsTask = useGuiTask("groups");
+  const task = groupsTask?.state === "running" ? groupsTask : briefTask;
   const busy = busyHere ?? (task?.state === "running" ? "brief-run" : null);
   useEffect(() => {
     if (takeMapOpen("brief")) setOpen(true); // asked for before the map mounted

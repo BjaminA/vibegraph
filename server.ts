@@ -208,6 +208,8 @@ import { newStreamState, streamResult, streamStep } from "./src/server/llm_strea
 import { withBriefGroupPreview } from "./src/server/brief_group_preview";
 import { dismissWelcome } from "./src/server/setup_welcome";
 import { setupState } from "./src/server/setup_state";
+import { groupsStep } from "./src/server/brief_groups_first";
+import { loadBrief } from "./src/server/brief_store";
 import { runSetup, setupActions, setupRunSummary, type SetupRunCtx } from "./src/server/setup_run";
 import { softwareAddRun } from "./src/server/software_add";
 import { isKnownChatModel } from "./src/shared/chat_models";
@@ -426,7 +428,19 @@ async function archProposeCore(guidance?: string, opts: { update?: boolean; run?
   reapplyArchStore();
   broadcastProjectUpdate();
   refreshArchDocs();
+  broadcastBriefState();
   return { ok: true, groups: parsed.proposal.groups.length, names: Object.keys(parsed.proposal.names).length, refused: parsed.proposal.refused.length };
+}
+
+/** The groups, proposed ONE way (arch_propose.ts: the derived map, the
+ *  deployment files, the docs, the plan, rules a later box joins by) — from
+ *  the map's button, the Brief's groups-first step and the setup's run alike.
+ *  2026-10-21 (Ben, on the setup's run): the Brief's own groups section had
+ *  proposed them from a one-line instruction, with no rules, and read worse. */
+async function proposeGroupsWith(run: (prompt: string) => Promise<string | null>): Promise<{ ok: boolean; error?: string; detail?: string }> {
+  const r = await archProposeCore(undefined, { run });
+  if (!r.ok) return { ok: false, error: r.error };
+  return { ok: true, detail: `${r.groups ?? 0} group${r.groups === 1 ? "" : "s"} and ${r.names ?? 0} name${r.names === 1 ? "" : "s"} proposed${r.refused ? `, ${r.refused} refused by the gate` : ""}: decide them on the map` };
 }
 
 /** After a proposal changes, the exported architecture documents follow it
@@ -507,7 +521,7 @@ function setupRunCtx(task: GuiTaskHandle): SetupRunCtx {
       if (r.ok) broadcastProjectUpdate();
       return r;
     },
-    groups: () => briefDraft({ ...briefCtx, run }),
+    groups: () => proposeGroupsWith(run),
     brief: () => briefDraft({ ...briefCtx, run }),
     rules: async () => { const r = await ruleDraftRun({ ...ruleDraftCtx, run }); const n = (r as { stored?: string[] }).stored?.length ?? 0; return { ...r, detail: `${n} rule${n === 1 ? "" : "s"} proposed` }; },
     census: () => {
@@ -554,7 +568,15 @@ function archDecide(decision: "ratify" | "reject"): { ok: boolean; error?: strin
   reapplyArchStore();
   broadcastProjectUpdate();
   refreshArchDocs();
+  broadcastBriefState();
   return { ok: true };
+}
+
+/** The Brief card waits on the groups (brief_groups_first.ts): it hears when a
+ *  groups proposal lands or is decided on the map (2026-10-21). */
+function broadcastBriefState(): void {
+  const s = JSON.stringify({ type: "brief-state", payload: briefState(briefCtx) });
+  for (const c of clients) c.send(s);
 }
 
 /** 2026-10-01 — groups read off the plan, stored as a PENDING proposal
@@ -8546,7 +8568,7 @@ function setupWebSocket() {
                 census: () => censusAt(root, { stack: latestStack as never, model: latestArchDerived ?? { nodes: [], edges: [] } as never, files: relativeProjectFiles() as never }),
               });
               reply = r.ok ? { message: r.detail } : { error: r.detail };
-              if (r.ok) { reapplyArchStore(); broadcastProjectUpdate(); refreshArchDocs(); }
+              if (r.ok) { reapplyArchStore(); broadcastProjectUpdate(); refreshArchDocs(); broadcastBriefState(); }
             }
             const after = loadPlan(root);
             const rec = after ? reconcilePlanMemo(after, planEnv() as any, latestStack, root) : null;
@@ -8614,7 +8636,10 @@ function setupWebSocket() {
             const only = ["spec", "groups", "scopes", "path"].includes(msg.payload?.only) ? msg.payload.only : undefined;
             const notes = Array.isArray(msg.payload?.notes) ? msg.payload.notes.filter((n: unknown): n is string => typeof n === "string") : undefined;
             const stale = msg.payload?.stale === true;
-            runGuiTask("brief", stale ? "Re-briefing the stale lines" : notes?.length ? "Briefing again with your notes" : "Drafting the Brief", "map",
+            // groups first: proposed the one way (proposeGroupsWith), as the map's own task
+            const gs = latestArch ? groupsStep(inputPath, loadBrief(inputPath), latestArch, { only, stale, skip: msg.payload?.skipGroups === true }) : null;
+            if (gs?.step === "groups") runGuiTask("groups", "Proposing groups", "map", (task) => proposeGroupsWith(taskRun(task)), (r) => r.detail ?? "groups proposed: decide them on the map", result);
+            else runGuiTask("brief", stale ? "Re-briefing the stale lines" : notes?.length ? "Briefing again with your notes" : "Drafting the Brief", "map",
               (task) => briefDraft({ ...briefCtx, run: taskRun(task) }, { only, stale, skipGroups: msg.payload?.skipGroups === true, guidance: typeof msg.payload?.guidance === "string" ? msg.payload.guidance : undefined, notes }),
               (r) => (r as { detail?: string }).detail ?? "Brief drafted: decide it in the Brief card", result);
           } else {

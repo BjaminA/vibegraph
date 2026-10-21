@@ -7,7 +7,8 @@
 //   - a full draft with no settled groups proposes the GROUPS alone, and
 //     waits for a person; once settled the brief is drafted without a groups
 //     section and a STATED group is citable (group:<id>); --skip-groups keeps
-//     the one call
+//     the one call. Since 2026-10-21 the groups alone are the architecture
+//     proposal (`architecture --propose`, with rules), not the Brief's section
 //   - a tool box's definition (the stack taxonomy's TOOL_NOTES) is in the
 //     facts as tool-def:<package>
 //   - `checked` says a property is tested: it needs a [verify] citation, and a
@@ -37,21 +38,30 @@ const saved = (o) => { const f = join(tmp, `r${Math.random().toString(36).slice(
 const GROUPS = { groups: [{ op: "add", id: "g-orders", label: "Order decisions", kind: "process", members: ["cluster:scripts:decider"], cites: ["cluster:scripts:decider->zone:ledger/status:uses:write"] }], names: {}, omitted: [] };
 const SPEC = { spec: { function: [{ text: "Decides when an order is released, by a state machine run in the decider.", words: ["decides"], cites: ["topology:sm:order-phase", "group:g-orders"], boxes: ["cluster:scripts:decider"] }], method: [], feature: [] }, omitted: [] };
 
-test("with no settled groups the first draft proposes the groups alone, and the brief waits for a person", () => {
-  const first = cli(["brief", "codebase", proj, "--reply", saved({ ...GROUPS, ...SPEC })]);
+// 2026-10-21 — the groups first are the ARCHITECTURE PROPOSAL (the map's
+// "Propose groups"), with rules a later box joins by; its reply shape
+const ARCH = { groups: [{ id: "g-orders", kind: "process", label: "Order decisions", match: [{ kind: "cluster", rootPrefix: "scripts" }], wraps: ["cluster:scripts:decider"], evidence: [] }], names: {}, narrative: "Orders are decided by a script." };
+
+test("with no settled groups the first draft is the architecture proposal, and the brief waits for a person", () => {
+  const dry = cli(["brief", "codebase", proj, "--dry-run"]);
+  assert.match(dry.stdout, /You are proposing the DEPLOYMENT and TRUST grouping/, "the map's own proposal prompt, not the Brief's");
+  assert.match(dry.stdout, /GROUPS MUST OUTLAST THE CODE/);
+  const first = cli(["brief", "codebase", proj, "--reply", saved(ARCH)]);
   assert.equal(first.status, 0, first.stderr);
   assert.match(first.stdout, /^groups first: no groups are settled yet/m);
-  const p = JSON.parse(readFileSync(join(proj, ".vibegraph/brief.json"), "utf-8")).proposed;
-  assert.deepEqual([p.groups.map((g) => g.id), p.spec.function.length], [["g-orders"], 0], "only the groups were asked for and kept");
+  assert.match(first.stdout, /architecture --ratify \| --reject/);
+  const proposal = JSON.parse(readFileSync(join(proj, ".vibegraph/architecture.json"), "utf-8")).proposal;
+  assert.deepEqual(proposal.groups.map((g) => [g.id, g.match]), [["g-orders", [{ kind: "cluster", rootPrefix: "scripts" }]]], "kept with its rule");
+  assert.ok(!existsSync(join(proj, ".vibegraph/brief.json")), "no Brief was drafted");
   const wait = cli(["brief", "codebase", proj, "--reply", saved(SPEC)]);
   assert.equal(wait.status, 1);
-  assert.match(wait.stderr, /the brief's proposed groups wait for a person/);
+  assert.match(wait.stderr, /a proposed architecture waits for a person/);
 });
 
 test("once a person ratifies them, the brief is drafted without a groups section and may cite a stated group", () => {
-  assert.equal(cli(["brief", "codebase", "ratify", "groups", proj]).status, 0);
-  // 2026-10-20 (live setup run): ratified through the Brief = RATIFIED — the
-  // stamp every "are the groups settled?" asks, and the baseline drift reads
+  assert.equal(cli(["architecture", "--ratify", proj]).status, 0);
+  // ratified = the stamp every "are the groups settled?" asks, and the
+  // baseline drift reads
   const arch = JSON.parse(readFileSync(join(proj, ".vibegraph/architecture.json"), "utf-8"));
   assert.match(arch.ratified?.at ?? "", /^\d{4}-\d\d-\d\dT/);
   assert.ok(arch.baseline?.clusters?.includes("cluster:scripts:decider"), "drift is measured from the map as it was ratified");
@@ -79,6 +89,11 @@ test("--skip-groups keeps the one-call draft; a PROPOSED group is not citable", 
   assert.deepEqual([p.groups.length, p.spec.function.length], [1, 1]);
   assert.deepEqual(p.spec.function[0].cites, ["topology:sm:order-phase"], "group:g-orders was only proposed: not evidence yet");
   assert.ok(existsSync(join(p2, ".vibegraph/brief.json")));
+  // a Brief's own groups section is still decided through the Brief, and that
+  // ratification is RATIFIED (2026-10-20, live setup run: the stamp every
+  // "are the groups settled?" asks)
+  assert.equal(cli(["brief", "codebase", "ratify", "groups", p2]).status, 0);
+  assert.match(JSON.parse(readFileSync(join(p2, ".vibegraph/architecture.json"), "utf-8")).ratified?.at ?? "", /^\d{4}-\d\d-\d\dT/);
 });
 
 test("a tool box carries what the tool IS, from the vendor's docs", () => {
