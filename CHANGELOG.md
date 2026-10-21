@@ -3,6 +3,48 @@
 `vibegraph-knowledge` and the VibeGraph app. Newest first. Each entry says what
 changed and, where an existing user would notice, how behaviour differs.
 
+## 0.39.0 (2026-10-21): the setup runs from the app
+
+### The setup runs from the app: "Run the next step" and "Run all"
+
+The setup guide's "Go to the next step" opened the Plan panel for the
+software step, where nothing could classify a package or draft a spec: those
+were the map's Tools lens and the command line. A step Claude takes is now
+RUN from the guide; only a person's decision opens a panel.
+
+- **Run the next step** runs the setup's next step when it is Claude's.
+  **Run all (N)** runs every step Claude can take now, in the setup's order:
+  classify the packages no table knows, a spec for each software candidate
+  from the docs link the setup found, propose the groups, write the Brief
+  (once the groups are ratified), propose rules, and read the direction (no
+  model call). Both list every model call first and run only on "Run them".
+- **The run reads the setup again after each step** (`src/server/setup_run.ts`),
+  so a classification that makes a package a candidate brings its spec into
+  the same run. No action runs twice in one run, and none of a person's
+  steps is ever taken: it ends saying what ran, what failed and why, and what
+  waits for you and where.
+- **One task the app follows** ("setup", tasks/guiTasks.ts): the working card
+  in the guide, the bubble over the chat button, and it carries on with the
+  guide closed.
+- **A spec from its docs, in the app.** `software add`'s read, gate and save
+  moved to `src/server/software_add.ts`, which the CLI now calls too, so the
+  two cannot disagree about what a draft keeps. The app reads only the
+  http(s) docs link the setup found on the server; a client never names a
+  URL or a path.
+- **"Go to the next step" goes to the setup's own step.** It followed the
+  app's overall Next, which is the Inbox whenever a decision waits there (a
+  groups proposal is one), so a groups proposal opened the Inbox, not the
+  Brief card.
+- The sidebar's Next for a software step Claude runs opens the setup guide.
+
+Tests: test:setup-run (4, new: what can run now and what waits, a run that
+reads the state after each action and never repeats one, one step only and
+nothing to run, a spec read only from an http(s) link), test:e2e-setup-welcome
+(Run all through a stub model that answers nothing: the census runs, the
+model steps fail with their reason, the result lists what waits; the first
+step offered as a run, cancelled without spending; a groups proposal opens
+the Brief card), test:software (the CLI's add through the shared gate).
+
 ## 0.38.0 (2026-10-21): the plan comes after the setup
 
 ### The plan comes after the setup

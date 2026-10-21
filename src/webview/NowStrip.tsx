@@ -8,7 +8,7 @@
 
 import React from "react";
 import { Target, Inbox, FileWarning, CircleHelp, Scale, Compass, ArrowRight, ListChecks } from "lucide-react";
-import type { NowPanel, NowState } from "../shared/now_wire";
+import type { NowPanel, NowState, SheetPanel } from "../shared/now_wire";
 import { openSetupGuide } from "./setup/SetupGuide";
 
 const chip = (accent: string | null): React.CSSProperties => ({
@@ -19,7 +19,9 @@ const chip = (accent: string | null): React.CSSProperties => ({
 });
 const ico = { size: 16, strokeWidth: 1.5 } as const;
 
-export function NowStrip({ now, onOpen }: { now: NowState; onOpen: (p: NowPanel) => void }) {
+export function NowStrip({ now, onOpen: onSheet }: { now: NowState; onOpen: (p: SheetPanel) => void }) {
+  // "setup": a step Claude runs is run from the setup guide, not a sheet
+  const onOpen = (p: NowPanel) => (p === "setup" ? openSetupGuide() : onSheet(p));
   const item = (key: string, show: boolean, accent: string | null, icon: React.ReactNode, text: string, panel: NowPanel | null) => show ? (
     <button key={key} data-now-item={key} style={chip(accent)} onClick={() => panel && onOpen(panel)} disabled={!panel} title={panel ? `Open the ${panel} panel` : "On the map: the Brief card"}>
       {icon}{text}

@@ -125,7 +125,7 @@ export function setupState(root: string, opts: { stack?: Pick<StackIndexRecord, 
       const shown = software.unclassified.slice(0, 10).map((u) => u.name);
       facts.push(`${software.unclassified.length} package(s) the code calls that no table knows and nobody has classified: ${shown.join(", ")}${software.unclassified.length > shown.length ? ", …" : ""} — what each IS decides whether it needs a spec`);
       commands.push(cmd("classify --apply", "claude", "one model call files every unknown package under a role (a platform, a database… or a UI or utility library), each labelled a model's", true));
-      if (!drafts.length) now = { text: `Classify the ${software.unclassified.length} package${software.unclassified.length === 1 ? "" : "s"} no table knows`, panel: "plan" };
+      if (!drafts.length) now = { text: `Classify the ${software.unclassified.length} package${software.unclassified.length === 1 ? "" : "s"} no table knows`, panel: "setup" };
     }
     if (software.candidates.length) {
       if (status === "done") status = "todo";
@@ -137,7 +137,7 @@ export function setupState(root: string, opts: { stack?: Pick<StackIndexRecord, 
       }
       if (software.more) facts.push(`and ${software.more} more candidate(s) — set aside or specified, they appear here in turn`);
       commands.push(cmd(`setup skip software <name> --why "<why it needs no spec>"`, "either", "a package the project uses in an ordinary way"));
-      if (status === "todo" && !software.unclassified.length) now = { text: `Write a spec for ${software.candidates[0].name} — software the code builds on`, panel: "plan" };
+      if (status === "todo" && !software.unclassified.length) now = { text: `Write a spec for ${software.candidates[0].name} — software the code builds on`, panel: "setup" };
     }
     if (status === "done") facts.push(ratified.length ? `${ratified.length} spec(s) ratified: ${ratified.map((s) => s.tool).join(", ")}` : "no bespoke software found: every package the code calls is one the tables or a classification already describe");
     if (software.skipped.length) facts.push(`set aside: ${software.skipped.map((s) => `${s.name} (${s.why})`).join(", ")}`);

@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import { bridge, type ExtensionMessage } from "./types";
 import type { NowState } from "../shared/now_wire";
 
-const MOVES = new Set(["project-update", "plan-state", "inbox-state", "project-direction", "brief-state", "rules-state"]);
+const MOVES = new Set(["project-update", "plan-state", "inbox-state", "project-direction", "brief-state", "rules-state", "software-state"]);
 
 export function useNowState(enabled: boolean): NowState | null {
   const [now, setNow] = useState<NowState | null>(null);

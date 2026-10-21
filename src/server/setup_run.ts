@@ -1,0 +1,138 @@
+// "Run all" for the setup (2026-10-21, Ben: "go to the next step button in gui
+// still just takes to the plan page - please fix and add a run all button").
+// The setup's steps Claude can take are run from the app, in the setup's order
+// (setup_state.ts), one model call at a time, through the functions each panel
+// already uses: classify (classify_server.ts), a spec from its docs
+// (software_add.ts), the groups and the Brief (brief_server.ts), rules
+// (rule_draft_server.ts), and the direction census, which spends nothing.
+//
+// It never takes a person's step. A proposal it makes waits for a person, and
+// a step that needs a decision first (the Brief after the groups are ratified)
+// is left for the next run: the run ends saying what waits and where. The state
+// is read again after every action, so a classification that turns a package
+// into a candidate brings its spec into the same run.
+
+import type { SetupState, SetupStepId } from "./setup_state.ts";
+
+export type SetupActionKind = "classify" | "software" | "groups" | "brief" | "rules" | "census";
+
+export interface SetupAction {
+  key: string;
+  kind: SetupActionKind;
+  step: SetupStepId;
+  label: string;
+  /** a model call (a token cost); the census spends nothing */
+  spends: boolean;
+  /** software: the spec's name and the docs it is drawn from */
+  tool?: string;
+  urls?: string[];
+}
+
+export interface SetupPreview {
+  actions: SetupAction[];
+  /** what waits for a person, and where it is decided */
+  waits: string[];
+}
+
+const MAX_ACTIONS = 16;
+
+/** What Claude can run now, in the setup's order, and what waits for a person. */
+export function setupActions(state: SetupState): SetupPreview {
+  const actions: SetupAction[] = [];
+  const waits: string[] = [];
+  const step = (id: SetupStepId) => state.steps.find((s) => s.id === id);
+
+  const software = step("software");
+  if (software && state.software) {
+    if (software.status === "waiting") waits.push("Ratify the drafted software spec(s) in the Plan panel");
+    if (state.software.unclassified.length) {
+      const n = state.software.unclassified.length;
+      actions.push({ key: "classify", kind: "classify", step: "software", spends: true, label: `Classify the ${n} package${n === 1 ? "" : "s"} no table knows` });
+    }
+    for (const c of state.software.candidates) {
+      const url = c.docs.find((d) => /^https?:\/\//i.test(d.url))?.url;
+      if (url) actions.push({ key: `software:${c.name}`, kind: "software", step: "software", spends: true, tool: c.name, urls: [url], label: `Write a spec for ${c.name} from ${url}` });
+      else waits.push(`${c.name}: no docs link found; give one with \`vibegraph-knowledge software add ${c.name} --from <docs url>\`, or set it aside`);
+    }
+  }
+
+  const groups = step("groups"), brief = step("brief");
+  if (groups?.status === "todo") actions.push({ key: "groups", kind: "groups", step: "groups", spends: true, label: "Propose the architecture groups" });
+  else if (groups?.status === "waiting") waits.push("Decide the proposed groups on the Brief card (the map)");
+  if (brief?.status === "todo" && groups?.status === "done") actions.push({ key: "brief", kind: "brief", step: "brief", spends: true, label: "Write the Brief" });
+  else if (brief?.status === "todo") waits.push("The Brief is written once the groups are ratified: run again after deciding them");
+  else if (brief?.status === "waiting") waits.push("Decide the drafted Brief on the Brief card (the map)");
+
+  const rules = step("rules");
+  if (rules?.status === "todo") actions.push({ key: "rules", kind: "rules", step: "rules", spends: true, label: "Propose rules from the architecture" });
+  else if (rules?.status === "waiting") waits.push("Decide the proposed rules in the Rules panel");
+
+  const direction = step("direction");
+  if (direction?.status === "optional") actions.push({ key: "census", kind: "census", step: "direction", spends: false, label: "Read the direction the code already takes (no model call)" });
+  else if (direction?.status === "waiting") waits.push("Agree or drop the direction read from the code (Direction panel)");
+
+  const hooks = step("hooks");
+  if (hooks?.status === "todo") waits.push("Install the hooks from a terminal in the project: vibegraph-knowledge init --hooks");
+  else if (hooks?.status === "waiting") waits.push("Start a Claude Code session in the project to see the hooks fire");
+
+  return { actions: actions.slice(0, MAX_ACTIONS), waits };
+}
+
+type Outcome = { ok: boolean; error?: string; detail?: string };
+
+export interface SetupRunCtx {
+  state: () => SetupState;
+  classify: () => Promise<Outcome>;
+  software: (tool: string, urls: string[]) => Promise<Outcome>;
+  groups: () => Promise<Outcome>;
+  brief: () => Promise<Outcome>;
+  rules: () => Promise<Outcome>;
+  census: () => Outcome;
+  /** after an action: the derived facts (the stack, the map) catch up */
+  settle: () => Promise<void>;
+  step: (text: string) => void;
+}
+
+export interface SetupRunResult {
+  ok: boolean;
+  error?: string;
+  ran: Array<{ label: string; detail: string }>;
+  failed: Array<{ label: string; error: string }>;
+  waits: string[];
+}
+
+/** Run every action Claude can take now (or only one step's), one at a time. */
+export async function runSetup(ctx: SetupRunCtx, opts: { only?: SetupStepId } = {}): Promise<SetupRunResult> {
+  const attempted = new Set<string>();
+  const ran: SetupRunResult["ran"] = [];
+  const failed: SetupRunResult["failed"] = [];
+  for (let i = 0; i < MAX_ACTIONS; i++) {
+    const a = setupActions(ctx.state()).actions.find((x) => !attempted.has(x.key) && (!opts.only || x.step === opts.only));
+    if (!a) break;
+    attempted.add(a.key);
+    ctx.step(`${attempted.size}. ${a.label}`);
+    let r: Outcome;
+    try {
+      r = a.kind === "classify" ? await ctx.classify()
+        : a.kind === "software" ? await ctx.software(a.tool!, a.urls!)
+          : a.kind === "groups" ? await ctx.groups()
+            : a.kind === "brief" ? await ctx.brief()
+              : a.kind === "rules" ? await ctx.rules()
+                : ctx.census();
+    } catch (e) { r = { ok: false, error: String((e as Error)?.message ?? e) }; }
+    if (r.ok) ran.push({ label: a.label, detail: r.detail ?? "done" });
+    else failed.push({ label: a.label, error: r.error ?? "failed" });
+    await ctx.settle();
+  }
+  const waits = setupActions(ctx.state()).waits;
+  if (!ran.length && !failed.length) return { ok: false, error: waits.length ? `nothing for Claude to run now: ${waits[0]}` : "nothing for Claude to run: the setup is done", ran, failed, waits };
+  return { ok: true, ran, failed, waits };
+}
+
+/** The run's one-line ending, for the bubble and the guide. */
+export function setupRunSummary(r: SetupRunResult): string {
+  const parts = [`${r.ran.length} step${r.ran.length === 1 ? "" : "s"} run`];
+  if (r.failed.length) parts.push(`${r.failed.length} failed`);
+  if (r.waits.length) parts.push(`${r.waits.length} wait${r.waits.length === 1 ? "s" : ""} for you`);
+  return parts.join(", ");
+}

@@ -8,13 +8,13 @@
 // nothing; `--reply <file>` uses a saved model reply instead of spawning.
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
-import { cacheDirFor } from "../cache_dir.mjs";
 import { parseArgs } from "node:util";
 import { spawnClassifier } from "./classify.mjs";
 import { loadEnvelope } from "../quality_check.mjs";
 import { pipelineHere } from "./pipeline.mjs";
-import { listSpecs, loadSpec, saveSpec, removeSpec, saveSource, isSafeTool } from "../../src/server/software_store.ts";
-import { buildSpecPrompt, parseSpecReply, gateSpec, htmlToText, specCoverage, thinSpecNote } from "../../src/server/software_draft.ts";
+import { listSpecs, loadSpec, removeSpec, isSafeTool } from "../../src/server/software_store.ts";
+import { buildSpecPrompt, htmlToText, specCoverage, thinSpecNote } from "../../src/server/software_draft.ts";
+import { fetchDocs, gateAndSaveSpec, keptReplyPath } from "../../src/server/software_add.ts";
 import { ratifySpec, specIntoPlan } from "../../src/server/software_server.ts";
 import { formatSpecMd, specUsage } from "../../src/server/software_apply.ts";
 import { runSoftwareEdit, SOFTWARE_EDIT_HELP } from "./software_edit.mjs";
@@ -43,19 +43,7 @@ ${SOFTWARE_EDIT_HELP}
 const MAX_BYTES = 5 * 1024 * 1024;
 
 export async function readFrom(ref) {
-  if (/^https?:\/\//i.test(ref)) {
-    const ctl = new AbortController();
-    const timer = setTimeout(() => ctl.abort(), 30_000);
-    try {
-      const res = await fetch(ref, { signal: ctl.signal, redirect: "follow", headers: { "user-agent": "vibegraph-knowledge (software spec)" } });
-      if (!res.ok) return { error: `${ref}: HTTP ${res.status}` };
-      const body = await res.text();
-      if (body.length > MAX_BYTES) return { error: `${ref}: over ${MAX_BYTES / 1024 / 1024} MB` };
-      const html = /html/i.test(res.headers.get("content-type") ?? "") || /^\s*<(!doctype|html)/i.test(body);
-      return { text: html ? htmlToText(body) : body };
-    } catch (e) { return { error: `${ref}: ${e.name === "AbortError" ? "timed out" : e.message}` }; }
-    finally { clearTimeout(timer); }
-  }
+  if (/^https?:\/\//i.test(ref)) return fetchDocs(ref);
   const file = resolve(ref);
   if (!existsSync(file)) return { error: `${ref}: no such file` };
   const body = readFileSync(file, "utf-8");
@@ -117,17 +105,13 @@ export async function runSoftware(args) {
     // draft twice when a parse refusal threw the reply away.
     const keep = (why) => {
       if (parsed.values.reply) return done(`refused: ${why}`, 1);
-      const file = join(cacheDirFor(root), "software-replies", `${tool}.txt`);
+      const file = keptReplyPath(root, tool);
       try { mkdirSync(dirname(file), { recursive: true }); writeFileSync(file, reply); } catch { return done(`refused: ${why}`, 1); }
       return done(`refused: ${why}\nthe reply is kept: ${file}\nre-run without spending: vibegraph-knowledge software add ${tool} ${refs.map((r) => `--from ${r}`).join(" ")} --reply ${file}`, 1);
     };
-    const p = parseSpecReply(reply);
-    if (p.error) return keep(p.error);
-    const sources = texts.map((t) => saveSource(root, tool, t.ref, t.text));
-    const g = gateSpec(p.value, tool, sources, texts.map((t) => t.text), by);
+    // parsed, gated and saved by the function the app's setup run uses (software_add.ts)
+    const g = gateAndSaveSpec(root, tool, texts, reply, by);
     if (g.error) return keep(g.error);
-    const saved = saveSpec(root, g.spec);
-    if (saved.error) return keep(saved.error);
     const cov = specCoverage(g.spec);
     return done([
       `drafted .vibegraph/software/ ${tool}: ${g.spec.operations.length} operations, ${g.spec.states.length} states, ${g.spec.permissions.length} permissions, ${g.spec.rules.length} rules — a DRAFT, used nowhere until ratified`,

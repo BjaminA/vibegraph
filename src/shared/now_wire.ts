@@ -1,6 +1,8 @@
 // The "now" summary's wire shape (src/server/now_state.ts), webview-safe.
 
-export type NowPanel = "inbox" | "plan" | "rules" | "direction" | "agents";
+/** a sheet panel, or "setup": the setup guide, where a step Claude runs is run (2026-10-21) */
+export type NowPanel = "inbox" | "plan" | "rules" | "direction" | "agents" | "setup";
+export type SheetPanel = Exclude<NowPanel, "setup">;
 
 export interface NowState {
   objective: string | null;

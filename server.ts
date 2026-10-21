@@ -207,6 +207,9 @@ import { createGuiTasks, type GuiTaskHandle, type GuiTaskKind } from "./src/serv
 import { newStreamState, streamResult, streamStep } from "./src/server/llm_stream";
 import { withBriefGroupPreview } from "./src/server/brief_group_preview";
 import { dismissWelcome } from "./src/server/setup_welcome";
+import { setupState } from "./src/server/setup_state";
+import { runSetup, setupActions, setupRunSummary, type SetupRunCtx } from "./src/server/setup_run";
+import { softwareAddRun } from "./src/server/software_add";
 import { isKnownChatModel } from "./src/shared/chat_models";
 import { sanitiseTiers, resolveTierRoute, routeLabel, DEFAULT_LOCAL, type ModelTier } from "./src/shared/model_tiers";
 import { setModelTiers } from "./src/server/run/synth_args";
@@ -487,6 +490,35 @@ function runGuiTask<R extends { ok: boolean; error?: string }>(
     (r) => { if (r.ok) task.done(summarise(r), r); else task.fail(r.error ?? "failed"); reply(r); },
     (e) => { const error = String(e?.message ?? e); task.fail(error); reply({ ok: false, error }); },
   );
+}
+
+// 2026-10-21 — the setup's "Run all" (src/server/setup_run.ts): each action
+// through the function its own panel uses, inside one task the app follows
+function setupRunCtx(task: GuiTaskHandle): SetupRunCtx {
+  const root = analyzedRoot();
+  const run = taskRun(task);
+  const noClaude = { ok: false, error: "the claude CLI is unavailable: this step needs one model call" };
+  return {
+    state: () => setupState(root, { stack: latestStack }),
+    classify: () => classifyRun({ ...classifyCtx, run }),
+    software: async (tool, urls) => {
+      if (!claudeCliAvailable) return noClaude;
+      const r = await softwareAddRun(root, tool, urls, run, tierLabel("thinking"), (t) => task.step(t));
+      if (r.ok) broadcastProjectUpdate();
+      return r;
+    },
+    groups: () => briefDraft({ ...briefCtx, run }),
+    brief: () => briefDraft({ ...briefCtx, run }),
+    rules: async () => { const r = await ruleDraftRun({ ...ruleDraftCtx, run }); const n = (r as { stored?: string[] }).stored?.length ?? 0; return { ...r, detail: `${n} rule${n === 1 ? "" : "s"} proposed` }; },
+    census: () => {
+      const p = handleProjectDirection(root, { type: "project-direction-census" } as never, { stack: latestStack as never, model: latestArchDerived ?? { nodes: [], edges: [] } as never, files: relativeProjectFiles() as never });
+      const m = JSON.stringify({ type: "project-direction", payload: p });
+      for (const c of clients) c.send(m);
+      return p.error ? { ok: false, error: p.error } : { ok: true, detail: p.note ?? "read" };
+    },
+    settle: () => settleDerived(),
+    step: (t) => task.step(t),
+  };
 }
 
 // 2026-10-12 — "Classify N unclassified tools" (src/server/classify_server.ts)
@@ -8597,6 +8629,18 @@ function setupWebSocket() {
           else runGuiTask("rules", "Proposing rules from the architecture", "rules",
             (task) => ruleDraftRun({ ...ruleDraftCtx, run: taskRun(task) }),
             (r) => { const n = (r as { stored?: string[] }).stored?.length ?? 0; return `${n} rule${n === 1 ? "" : "s"} proposed: decide them in the Rules panel`; }, reply);
+        } else if (msg.type === "setup-run-preview" || msg.type === "setup-run") {
+          // 2026-10-21 — the setup's "Run all" and "Run the next step"
+          // (src/server/setup_run.ts): the preview spends nothing; the run is
+          // one task of model calls, and stops where a decision is a person's
+          const reply = (payload: unknown) => ws.send(JSON.stringify({ type: "setup-run-result", payload: { action: msg.type === "setup-run" ? "run" : "preview", ...(payload as object) } }));
+          const only = ["software", "groups", "brief", "rules", "direction"].includes(msg.payload?.only) ? msg.payload.only : undefined;
+          if (!isDirectory) reply({ ok: false, error: "the setup needs a project directory" });
+          else if (msg.type === "setup-run-preview") {
+            const p = setupActions(setupState(analyzedRoot(), { stack: latestStack }));
+            reply({ ok: true, ...p, actions: only ? p.actions.filter((a) => a.step === only) : p.actions });
+          } else runGuiTask("setup", only ? "Running the next setup step" : "Running the setup", "setup",
+            (task) => runSetup(setupRunCtx(task), { only }), setupRunSummary, reply);
         } else if (msg.type === "gui-tasks-get") {
           ws.send(JSON.stringify({ type: "gui-tasks", payload: { tasks: guiTasks.list() } }));
         } else if (msg.type === "gui-task-dismiss") {

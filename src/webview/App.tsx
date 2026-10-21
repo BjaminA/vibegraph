@@ -55,7 +55,7 @@ import { CodeView } from "./CodeView";
 import { FloatingToggles } from "./FloatingToggle";
 import { TaskBubble } from "./tasks/TaskBubble";
 import { requestMapOpen } from "./tasks/guiTasks";
-import { SetupGuideHost } from "./setup/SetupGuide";
+import { SetupGuideHost, openSetupGuide } from "./setup/SetupGuide";
 import { KeyBanner } from "./KeyBanner";
 import { DepsBanner } from "./DepsBanner";
 import {
@@ -2040,6 +2040,7 @@ function Graph() {
       {/* 2026-10-21 — Claude's tasks, running or finished, from anywhere (tasks/TaskBubble.tsx) */}
       <TaskBubble lifted={!regionOpen && chatOpen} onScreen={[...(sheet ? [sheet] : []), ...(viewMode === "system" ? ["map"] : [])]} onOpen={(t) => {
         if (t.open === "rules") { setSheet("rules"); return; }
+        if (t.open === "setup") { openSetupGuide(); return; }
         setSheet(null);
         setViewMode("system");
         requestMapOpen(t.kind);

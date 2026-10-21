@@ -6,7 +6,7 @@
 import { useSyncExternalStore } from "react";
 import { bridge, type ExtensionMessage } from "../types";
 
-export type GuiTaskKind = "brief" | "groups" | "rules";
+export type GuiTaskKind = "brief" | "groups" | "rules" | "setup";
 export interface GuiTaskStep { at: string; text: string; live?: boolean }
 export interface GuiTask {
   id: string;

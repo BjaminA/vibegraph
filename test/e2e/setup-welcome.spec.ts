@@ -72,35 +72,75 @@ test.describe("setup welcome", () => {
     await expect(guide).toHaveCount(0);
   });
 
-  test("Start the setup goes to where the next step is decided", async ({ page }) => {
+  test("the first step, Claude's, is offered as a run that lists its call first; cancelling spends nothing", async ({ page }) => {
+    // 2026-10-21 — it used to "go to" the Plan panel, where nothing could
+    // classify a package or draft a spec. The run is not confirmed here: it
+    // would read the package's docs page from the network.
     await page.goto("/");
     const guide = page.locator("[data-setup-guide='welcome']");
     await expect(guide).toBeVisible({ timeout: 30_000 });
-    const next = await guide.locator("[data-setup-status='todo'], [data-setup-status='waiting']").first().getAttribute("data-setup-step");
-    await guide.locator("[data-setup-start]").click();
+    await expect(guide.locator("[data-setup-start]")).toHaveCount(0);
+    await guide.locator("[data-setup-run-next]").click();
+    const confirm = guide.locator("[data-setup-confirm='software']");
+    await expect(confirm.locator("[data-setup-action='software:openai']")).toContainText("Write a spec for openai from https://");
+    await expect(confirm).toContainText("1 model call");
+    await confirm.getByRole("button", { name: "Cancel" }).click();
+    await expect(confirm).toHaveCount(0);
+    await expect(guide.locator("[data-setup-run-result]")).toHaveCount(0);
+    // closed = set aside: not offered again
+    await page.keyboard.press("Escape");
     await expect(page.locator("[data-setup-guide]")).toHaveCount(0);
-    if (next === "groups" || next === "brief") {
-      // decided on the map: the view switches and the Brief card opens, though
-      // the map was not mounted when it was asked for (tasks/guiTasks.ts requestMapOpen)
-      await expect(page.locator("[data-brief-toggle]")).toHaveAttribute("aria-expanded", "true", { timeout: 30_000 });
-    } else {
-      await expect(page.locator("[data-panel-sheet]")).toBeVisible();
-    }
-    // started = set aside: not offered again
     await page.reload();
     await expect(page.locator("[data-now-setup]")).toBeVisible({ timeout: 30_000 });
     await page.waitForTimeout(500);
     await expect(page.locator("[data-setup-guide]")).toHaveCount(0);
   });
 
+  test("a step Claude takes is run from the guide; Run all lists every call first and ends saying what waits", async ({ page }) => {
+    // the software step set aside, so the next step is the groups (a model
+    // call); the stub model answers nothing (fake_claude_silent.mjs): the model
+    // steps fail with their reason, the census (no model call) runs for real
+    const vg = join(process.cwd(), FIXTURE, ".vibegraph");
+    const hadDir = existsSync(vg);
+    mkdirSync(vg, { recursive: true });
+    writeFileSync(join(vg, "setup.json"), JSON.stringify({ version: "1", software: { openai: { why: "used in the ordinary way", at: "2026-10-21T10:00:00.000Z" } }, steps: {} }) + "\n");
+    try {
+      await page.goto("/");
+      await page.waitForSelector("[data-thread-index]", { timeout: 30_000 });
+      await page.locator("[data-now-setup]").click();
+      const guide = page.locator("[data-setup-guide='progress']");
+      // the next step is Claude's: it is RUN here, never sent to a panel with nothing to press
+      await expect(guide.locator("[data-setup-run-next]")).toBeVisible();
+      await expect(guide.locator("[data-setup-start]")).toHaveCount(0);
+      await guide.locator("[data-setup-run-all]").click();
+      const confirm = guide.locator("[data-setup-confirm='all']");
+      expect(await confirm.locator("[data-setup-action]").evaluateAll((els) => els.map((e) => e.getAttribute("data-setup-action"))))
+        .toEqual(["groups", "rules", "census"]);
+      await expect(confirm).toContainText("2 model calls");
+      await confirm.locator("[data-setup-run-confirm]").click();
+      const result = guide.locator("[data-setup-run-result='done']");
+      await expect(result).toBeVisible({ timeout: 60_000 });
+      await expect(result).toContainText("Read the direction the code already takes");
+      await expect(result).toContainText("Propose the architecture groups");
+      await expect(result).toContainText("init --hooks");
+      await expect(guide.locator("[data-setup-step='direction']")).not.toHaveAttribute("data-setup-status", "optional");
+    } finally {
+      for (const f of ["setup.json", "direction.json"]) rmSync(join(vg, f), { force: true });
+      if (!hadDir) rmSync(vg, { recursive: true, force: true });
+    }
+  });
+
   test("a step decided on the map opens the map and its Brief card from another view", async ({ page }) => {
-    // the software step set aside (as `setup skip software` writes it), so the
-    // next step is the groups, decided on the Brief card; the app opens on the
-    // thread index, where the map is not mounted when the step is asked for
+    // the software step set aside (as `setup skip software` writes it) and a
+    // groups proposal pending, so the next step is a person's decision on the
+    // Brief card; the app opens on the thread index, where the map is not
+    // mounted when the step is asked for
     const skips = join(process.cwd(), FIXTURE, ".vibegraph", "setup.json");
+    const arch = join(dirname(skips), "architecture.json");
     const hadDir = existsSync(dirname(skips));
     mkdirSync(dirname(skips), { recursive: true });
     writeFileSync(skips, JSON.stringify({ version: "1", software: { openai: { why: "used in the ordinary way", at: "2026-10-21T10:00:00.000Z" } }, steps: {} }) + "\n");
+    writeFileSync(arch, JSON.stringify({ version: "1", groups: [], names: {}, proposal: { at: "2026-10-21T10:00:00.000Z", model: "test", groups: [] } }) + "\n");
     try {
       await page.goto("/");
       await page.waitForSelector("[data-thread-index]", { timeout: 30_000 });
@@ -109,11 +149,13 @@ test.describe("setup welcome", () => {
       await page.locator("[data-now-setup]").click();
       const guide = page.locator("[data-setup-guide='progress']");
       await expect(guide.locator("[data-setup-step='software']")).toHaveAttribute("data-setup-status", "done");
+      await expect(guide.locator("[data-setup-step='groups']")).toHaveAttribute("data-setup-status", "waiting");
       await expect(guide.locator("[data-setup-start]")).toContainText("Go to the next step");
       await guide.locator("[data-setup-start]").click();
       await expect(page.locator("[data-brief-toggle]")).toHaveAttribute("aria-expanded", "true", { timeout: 30_000 });
     } finally {
-      rmSync(hadDir ? skips : dirname(skips), { recursive: true, force: true });
+      if (hadDir) for (const f of [skips, arch]) rmSync(f, { force: true });
+      else rmSync(dirname(skips), { recursive: true, force: true });
     }
   });
 });

@@ -10,7 +10,8 @@
 // anywhere. One task of a kind at a time: a second start is refused with the
 // running one named, never queued behind it.
 
-export type GuiTaskKind = "brief" | "groups" | "rules";
+/** "setup": the setup's "Run all" (setup_run.ts), opened in the setup guide */
+export type GuiTaskKind = "brief" | "groups" | "rules" | "setup";
 
 export interface GuiTaskStep { at: string; text: string; live?: boolean }
 
