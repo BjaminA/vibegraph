@@ -44,8 +44,16 @@ test.describe("the Brief card", () => {
     await card.locator("[data-brief-run]").click();
     await expect(card).toHaveAttribute("data-brief-state", "proposed", { timeout: 20_000 });
     await expect(card.locator("[data-brief-groups-first]")).toBeVisible();
+    // 2026-10-21 — the proposed groups are ON the map before they are decided:
+    // dashed, said in the proposal bar, their boxes lit and the rest dimmed
+    await expect(page.locator('[data-arch-group="g-orders"]')).toHaveAttribute("data-arch-group-source", "proposed", { timeout: 15_000 });
+    await expect(page.locator("[data-arch-brief-groups]")).toContainText("The Brief proposes 1 group change");
+    await expect(page.locator('[data-arch-id="cluster:scripts:decider"]')).not.toHaveAttribute("data-arch-dim", "true");
+    await expect(page.locator('[data-arch-dim="true"]').first()).toBeVisible();
     await card.locator('[data-brief-ratify="groups"]').click();
     await expect(card).toHaveAttribute("data-brief-state", "none", { timeout: 15_000 });
+    await expect(page.locator('[data-arch-group="g-orders"]')).toHaveAttribute("data-arch-group-source", "stated", { timeout: 15_000 });
+    await expect(page.locator("[data-arch-brief-groups]")).toHaveCount(0);
     // the groups are settled: the brief itself
     await card.locator("[data-brief-ask]").click();
     await expect(card.locator("[data-brief-run]")).toHaveText("Draft it");
@@ -59,6 +67,9 @@ test.describe("the Brief card", () => {
     await expect(proposal).toContainText("3 item(s) refused");
     // the review sheet (B13): what the checks see, before Ratify; Ratify names what it accepts
     await expect(proposal.locator("[data-brief-review-summary]")).toContainText(/Review: 3 lines, \d with warnings/);
+    // 2026-10-21 — and what its claims were checked against, so a thin map shows
+    await expect(proposal.locator("[data-brief-review-basis]")).toContainText(/checked against \d+ store operations? on the map: \d+ read from the code/);
+    await expect(proposal.locator("[data-brief-review-basis]")).not.toHaveAttribute("data-incomplete", "true");
     await expect(proposal.locator('[data-brief-line="feature"]').locator("xpath=..").locator("[data-brief-warning]")).toContainText("INFERRED");
     await expect(card.locator('[data-brief-ratify="spec"]')).toContainText(/Ratify 3 lines, \d with warnings/);
     // a line lights the boxes it names, and dims the rest

@@ -45,6 +45,9 @@ const opsBy = (facts: Pick<BriefFacts, "data">, box: string, zones: string[], op
 
 /** What the facts say about one claim. */
 const FEED_DECLARES = "the project's topology";
+/** Who says an operation happens, by where it came from. */
+const SAID_BY: Record<BoxOp["source"], string> = { derived: "the code shows", observed: "a recorded run shows", inferred: "a ratified claim says", declared: "the plan declares" };
+const saidBy = (o: BoxOp) => (o.source === "declared" && o.feed ? `${FEED_DECLARES} declares` : SAID_BY[o.source]);
 export function checkClaim(c: BriefClaim, facts: Pick<BriefFacts, "data" | "boxes" | "labels">): BriefClaim {
   const say = (verdict: NonNullable<BriefClaim["verdict"]>, why: string): BriefClaim => ({ ...c, verdict, why });
   const name = (b: string) => facts.labels.get(b) ?? b;
@@ -56,7 +59,7 @@ export function checkClaim(c: BriefClaim, facts: Pick<BriefFacts, "data" | "boxe
   if (c.not) {
     const hit = mine[0];
     return hit
-      ? say("contradicted", `${hit.source === "declared" ? "the plan declares" : "the code shows"} ${name(c.subject)} ${hit.op} ${short(hit.zone)} (${hit.cite})`)
+      ? say("contradicted", `${saidBy(hit)} ${name(c.subject)} ${hit.op} ${short(hit.zone)} (${hit.cite})`)
       : say("supported", `no ${c.verb === "reads" ? "read" : ops[0]} by ${name(c.subject)} on ${c.object === "*" ? "any zone" : c.object} in the code or the plan, across every thread it reaches`);
   }
   for (const z of zones) {
@@ -76,8 +79,13 @@ export function checkClaim(c: BriefClaim, facts: Pick<BriefFacts, "data" | "boxe
   if (observed) return say("supported", `observed in a recorded run (${observed.cite}) — a run proves the path it took`);
   const inferred = mine.find((o) => o.source === "inferred");
   if (inferred) return say("inferred", `a person ratified ${inferred.cite.replace("claim:", "claim ")}, citing the lines it rests on; the code alone does not show it`);
+  // 2026-10-21 (a field report) — the project's own topology outranks the
+  // plan: the plan's steps are read first, so taking the first declaration
+  // reported a watch the topology declares as resting "on the plan only"
+  const feed = mine.find((o) => o.source === "declared" && o.feed);
+  if (feed) return say("declared", `${FEED_DECLARES} declares it (${feed.cite}): a feed chosen at run time, which the static reading cannot follow`);
   const declared = mine.find((o) => o.source === "declared");
-  if (declared) return say("declared", `${declared.feed ? FEED_DECLARES : "the plan"} declares it (${declared.cite}); the code shows no such call — a feed or router the static reading cannot follow`);
+  if (declared) return say("declared", `the plan declares it (${declared.cite}); the code shows no such call — a feed or router the static reading cannot follow`);
   return say("unverifiable", `neither the code nor the plan shows ${name(c.subject)} ${ops[0]} ${zones.map(short).join(" / ")}`);
 }
 
@@ -173,7 +181,7 @@ export function checkLine(part: BriefPart, line: BriefLine, facts: BriefFacts, o
     for (const box of new Set(claims.filter((c) => !c.not).map((c) => c.subject))) {
       const missing = cov.primary.get(box);
       if (!missing) continue;
-      const prim = missing.map((o) => `${o.op} ${short(o.zone)}${o.source === "declared" ? " (declared by the plan)" : ""}`).join(", ");
+      const prim = missing.map((o) => `${o.op} ${short(o.zone)}${o.source === "declared" ? (o.feed ? " (declared by the project's topology)" : " (declared by the plan)") : ""}`).join(", ");
       warnings.push(`presents a secondary operation of ${facts.labels.get(box) ?? box} as its main job — its primary is ${prim}, stated by no line`);
     }
   }

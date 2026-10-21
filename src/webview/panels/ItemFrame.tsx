@@ -6,8 +6,9 @@
 //   4. the actions the item allows
 // The conciseness is enforced HERE, not left to whoever writes the item:
 // bullets past three move into the fold, a chip list past three shows three
-// and "+N", a bullet clamps at two lines with its full text on hover, and
-// there is no italic prose above the fold.
+// and "+N", and there is no italic prose above the fold. A bullet's TEXT is
+// never cut (2026-10-21, Ben: "do not truncate text for rules and like
+// things"): a rule cut mid-sentence said less than the rule.
 
 import React from "react";
 import type { ChipRef, ItemFact } from "../../shared/kinds";

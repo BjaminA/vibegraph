@@ -203,6 +203,10 @@ import {
 import { buildThreadAgentPrompt, isEscalation, renderAgentProjection, type ThreadAgentResult } from "./src/server/thread_agent";
 import { deriveThreadCalls, threadAdjacency } from "./src/webview/system/threadInteraction";
 import { refreshExportedArchitecture } from "./src/server/arch_refresh";
+import { createGuiTasks, type GuiTaskHandle, type GuiTaskKind } from "./src/server/gui_tasks";
+import { newStreamState, streamResult, streamStep } from "./src/server/llm_stream";
+import { withBriefGroupPreview } from "./src/server/brief_group_preview";
+import { dismissWelcome } from "./src/server/setup_welcome";
 import { isKnownChatModel } from "./src/shared/chat_models";
 import { sanitiseTiers, resolveTierRoute, routeLabel, DEFAULT_LOCAL, type ModelTier } from "./src/shared/model_tiers";
 import { setModelTiers } from "./src/server/run/synth_args";
@@ -321,6 +325,7 @@ function rebuildCrossings(relFiles: typeof projectParse): void {
     });
   } catch (e: any) {
     console.warn(`  [Crossings] index failed: ${e?.message ?? e}`);
+    passFailures.push(`crossing index failed (${e?.message ?? e})`);
     latestCrossings = { all: [], byThread: {} };
   }
 }
@@ -338,8 +343,9 @@ function rebuildArch(relFiles: typeof projectParse): void {
   try {
     latestArchDerived = archModelForEnvelope(
       { files: relFiles as any, entryPoints: latestEntryPoints as any, threads: latestThreads as any },
-      latestStack, latestCrossings, isDirectory ? inputPath : null, undefined, { applyStore: false },
+      latestStack, latestCrossings, isDirectory ? inputPath : null, undefined, { applyStore: false, incomplete: passFailures },
     );
+    if (latestArchDerived.incomplete) console.warn(`  [Architecture] the map is incomplete: ${latestArchDerived.incomplete.join("; ")}`);
     reapplyArchStore();
   } catch (e: any) {
     console.warn(`  [Architecture] model failed: ${e?.message ?? e}`);
@@ -386,7 +392,7 @@ function reapplyArchStore(): void {
 // may propose groups / names / a primary path / a narrative; the reply is
 // grounded against what it was shown and stored PENDING. Nothing it says
 // becomes stated until a human ratifies (arch-ratify, GUI only).
-async function archProposeCore(guidance?: string, opts: { update?: boolean } = {}): Promise<{ ok: boolean; error?: string; refused?: number; groups?: number; names?: number }> {
+async function archProposeCore(guidance?: string, opts: { update?: boolean; run?: (prompt: string) => Promise<string | null> } = {}): Promise<{ ok: boolean; error?: string; refused?: number; groups?: number; names?: number }> {
   if (!isDirectory) return { ok: false, error: "the architecture layer needs a project directory" };
   if (!latestArchDerived || !latestArchDerived.nodes.length) return { ok: false, error: "no derived architecture yet — the project has not finished parsing" };
   if (!claudeCliAvailable) return { ok: false, error: "the claude CLI is unavailable — can't propose an architecture" };
@@ -407,7 +413,7 @@ async function archProposeCore(guidance?: string, opts: { update?: boolean } = {
   if (!gate.allowed) return { ok: false, error: gate.reason };
   const update = opts.update && drift ? { groups: current.groups, drift } : undefined;
   const prompt = buildProposePrompt(latestArchDerived, facts, docs, g && pending ? { previous: pending, guidance: g } : undefined, { plan, update });
-  const text = await _runReadmeLlm(prompt, "thinking", "gen");
+  const text = await (opts.run ?? ((p: string) => _runReadmeLlm(p, "thinking", "gen")))(prompt);
   if (text === null) return { ok: false, error: `the model returned nothing${genFailureSuffix()}` };
   const parsed = parseProposal(text, latestArchDerived, facts, docs, { model: tierLabel("thinking"), plan, ...(update ? { update } : {}) });
   if (!parsed.proposal) return { ok: false, error: parsed.error ?? "the reply was not a usable proposal" };
@@ -431,6 +437,7 @@ function refreshArchDocs(): void {
       threadGraph: deriveThreadCalls(latestThreads as any, latestEntryPoints as any, latestCrossings),
       tool: "VibeGraph (live server)",
     });
+    if (r.skipped) console.warn(`  [Architecture] exported documents not refreshed: ${r.skipped}`);
     if (r.written.length) console.log(`  [Architecture] refreshed ${r.written.join(", ")}`);
     if (r.stale.length) console.log(`  [Architecture] not refreshed (needs the CLI's git provenance): ${r.stale.join(", ")}`);
   } catch (e: any) {
@@ -453,6 +460,34 @@ const briefCtx: BriefCtx = {
   changed: () => { reapplyArchStore(); broadcastProjectUpdate(); refreshArchDocs(); const s = JSON.stringify({ type: "brief-state", payload: briefState(briefCtx) }); for (const c of clients) c.send(s); },
   archBaseline: (store) => (latestArchDerived ? archBaseline(applyArchStore(latestArchDerived, store), readInfraManifests(inputPath).facts, loadPlan(inputPath)) : undefined),
 };
+
+// 2026-10-21 — the app's model tasks (src/server/gui_tasks.ts): the server owns
+// each to its end, and every client hears its steps, whichever panel is open.
+const guiTasks = createGuiTasks((tasks) => { const s = JSON.stringify({ type: "gui-tasks", payload: { tasks } }); for (const c of clients) c.send(s); });
+
+/** A context's `run`, reporting each model call's steps to the task. */
+function taskRun(task: GuiTaskHandle, tier: ModelTier = "thinking"): (prompt: string) => Promise<string | null> {
+  return async (prompt) => {
+    task.step(`asking the model (${tierLabel(tier)}) with ~${Math.max(1, Math.round(prompt.length / 4000))}k tokens of facts`);
+    const out = await _runReadmeLlm(prompt, tier, "gen", (text, live) => task.step(text, live));
+    task.step(out === null ? `the model returned nothing${genFailureSuffix()}` : "checking the reply against the facts");
+    return out;
+  };
+}
+
+/** Start a task, run it to its end whatever its panel does, say how it ended. */
+function runGuiTask<R extends { ok: boolean; error?: string }>(
+  kind: GuiTaskKind, label: string, open: string,
+  work: (task: GuiTaskHandle) => Promise<R>, summarise: (r: R) => string, reply: (payload: unknown) => void,
+): void {
+  const task = guiTasks.start(kind, label, open);
+  if ("refused" in task) { reply({ ok: false, error: task.refused }); return; }
+  task.step("reading the code's facts");
+  work(task).then(
+    (r) => { if (r.ok) task.done(summarise(r), r); else task.fail(r.error ?? "failed"); reply(r); },
+    (e) => { const error = String(e?.message ?? e); task.fail(error); reply({ ok: false, error }); },
+  );
+}
 
 // 2026-10-12 — "Classify N unclassified tools" (src/server/classify_server.ts)
 const classifyCtx: ClassifyCtx = {
@@ -514,6 +549,7 @@ function rebuildStack(relFiles: typeof projectParse): void {
     );
   } catch (e: any) {
     console.warn(`  [Stack] index failed: ${e?.message ?? e}`);
+    passFailures.push(`stack index failed (${e?.message ?? e})`);
     latestStack = { tools: [], byFile: {}, byThread: {} };
   }
   // 2026-09-28 - the configuration surface rides the same pass: it reads the
@@ -888,13 +924,16 @@ function runCheckProjectDeps(files: typeof projectParse): Promise<{ module: stri
 
 // M8.3.1 — batch-extract one thread per entry point. Single subprocess
 // invocation pays libcst-free Python startup once per project parse
-// (vs. once per entry point). On any extraction failure, that thread
-// is silently dropped — the others still ship; the index just shows
-// fewer rows.
+// (vs. once per entry point). A failed batch resolves null (2026-10-21):
+// its callers keep the previous threads and say so (passFailures), where
+// `[]` used to erase every thread and leave a map with no store call
+// charged to any process.
+let passFailures: string[] = [];
+const extractFailed = (why: string) => passFailures.push(`thread extraction failed (${why || "no output"}); ${latestThreads.length ? "the threads are from the previous pass" : "no threads"}`);
 function runExtractAllThreads(
   files: typeof projectParse,
   entryPoints: any[],
-): Promise<any[]> {
+): Promise<any[] | null> {
   if (entryPoints.length === 0) return Promise.resolve([]);
   return new Promise((resolve) => {
     const child = spawn(pythonBin(), [EXTRACT_THREAD_SCRIPT, "--batch-seeds"], {
@@ -909,8 +948,10 @@ function runExtractAllThreads(
       try {
         resolve(JSON.parse(stdout).threads ?? []);
       } catch {
-        if (stderr) console.warn(`  [Project] thread batch-extract failed — ${stderr.split("\n")[0]}`);
-        resolve([]);
+        const why = stderr.split("\n").find((l) => l.trim()) ?? "";
+        console.warn(`  [Project] thread batch-extract failed — ${why || "no output"}`);
+        extractFailed(why);
+        resolve(null);
       }
     });
     const seeds = entryPoints.map((e) => ({
@@ -1138,12 +1179,14 @@ async function parseAllFilesInner(): Promise<void> {
   const relFiles = relativeProjectFiles();
   broadcastGraphRefresh("started");
   try {
+    passFailures = [];
     latestEntryPoints = await timed("discover", () => runDiscoverEntryPoints(relFiles));
     latestThreads = await timed("threads", async () => {
       const seeds = latestEntryPoints.map((e: any) => ({ id: e.id, file: e.file, irNodeId: e.irNodeId }));
       const sel = cache.selectThreads(relFiles as any, seeds);
       threadsReason = sel.reason;
       const fresh = await runExtractAllThreads(relFiles, latestEntryPoints.filter((e: any) => sel.toExtract.some((s) => s.id === e.id)));
+      if (fresh === null) return latestThreads.length ? latestThreads : cache.mergeThreads(seeds, sel.cached as any, []);
       return cache.mergeThreads(seeds, sel.cached as any, fresh);
     });
     cache.save();
@@ -1186,8 +1229,9 @@ async function refreshDerived(): Promise<void> {
   try {
     await relinkProjectParse();
     const relFiles = relativeProjectFiles();
+    passFailures = [];
     latestEntryPoints = await runDiscoverEntryPoints(relFiles);
-    latestThreads = await runExtractAllThreads(relFiles, latestEntryPoints);
+    latestThreads = (await runExtractAllThreads(relFiles, latestEntryPoints)) ?? latestThreads;
     latestSystem = await runBuildSystemTier(relFiles, latestEntryPoints, latestThreads);
     rebuildStack(relFiles);
     rebuildCrossings(relFiles);
@@ -1338,7 +1382,7 @@ function buildProjectEnvelope(): {
     // M-XLANG.1 - the cross-language crossings, when any were found.
     ...(latestCrossings.all.length || latestCrossings.navigation?.length ? { crossings: latestCrossings } : {}),
     // M-ARCH.1 - the derived architecture, when it has anything to draw.
-    ...(archFresh() && latestArch && latestArch.nodes.length ? { architecture: withProjectWords(latestArch, isDirectory ? inputPath : null) } : {}),
+    ...(archFresh() && latestArch && latestArch.nodes.length ? { architecture: withProjectWords(withBriefGroupPreview(latestArch, latestArchDerived, isDirectory ? inputPath : null), isDirectory ? inputPath : null) } : {}),
     // 2026-09-28 - reachability, env surface, freshness (src/server/insight.ts).
     ...(latestInsight ? { insight: latestInsight } : {}),
     // PLAN-M-RUNTIME phase 3 - the TRACE OVERLAY, when a run has produced
@@ -6779,7 +6823,11 @@ function genFailureSuffix(): string {
   return lastGenFailure ? ` — ${lastGenFailure}` : "";
 }
 
-function _runReadmeLlm(prompt: string, tier: ModelTier = "thinking", kind: SpendKind = "gen"): Promise<string | null> {
+// 2026-10-21 — `onStep`: a caller that shows the work (a GUI task) gets what the
+// model is doing as it answers (src/server/llm_stream.ts). Only the claude CLI
+// streams; every other caller, and every other provider, is unchanged.
+let partialMessagesOk = true;
+function _runReadmeLlm(prompt: string, tier: ModelTier = "thinking", kind: SpendKind = "gen", onStep?: (text: string, live: boolean) => void): Promise<string | null> {
   return new Promise((resolve) => {
     // gen-cwd-fix: the shared gen runner (README / thread-skill / explain /
     // thread-agent) must read the USER's project. Fail honestly if it's gone —
@@ -6800,6 +6848,10 @@ function _runReadmeLlm(prompt: string, tier: ModelTier = "thinking", kind: Spend
     // so the per-spawn floor lands once per entry point. This is the single
     // biggest beneficiary of the split.
     const { cmd, args: pre } = spawnTarget;
+    const streaming = !!onStep && spawnTarget.provider === "claude";
+    const format = streaming
+      ? ["--output-format", "stream-json", "--verbose", ...(partialMessagesOk ? ["--include-partial-messages"] : [])]
+      : ["--output-format", "json"];
     // M-ORCH drill finding (2026-09-06): --strict-mcp-config removes MCP
     // servers only — the spawned claude STILL has Claude Code's native
     // Read/Bash/Write tools, and the orchestrator's reviewer used them
@@ -6810,7 +6862,7 @@ function _runReadmeLlm(prompt: string, tier: ModelTier = "thinking", kind: Spend
     // raw write tools STRUCTURALLY, the same posture as chat and workers.
     const child = spawn(
       cmd,
-      [...pre, "-p", "--output-format", "json", "--strict-mcp-config",
+      [...pre, "-p", ...format, "--strict-mcp-config",
         "--mcp-config", '{"mcpServers":{}}',
         "--dangerously-skip-permissions",
         // the orchestrated run's reviewer alone may run checks (it executes a
@@ -6823,11 +6875,28 @@ function _runReadmeLlm(prompt: string, tier: ModelTier = "thinking", kind: Spend
     child.stdin?.end(promptStdin(prompt));
     let out = "";
     let errOut = "";
-    child.stdout.on("data", (b: Buffer) => { out += b.toString(); });
+    let pending = "";
+    const stream = newStreamState();
+    child.stdout.on("data", (b: Buffer) => {
+      const s = b.toString();
+      out += s;
+      if (!streaming) return;
+      pending += s;
+      const lines = pending.split("\n");
+      pending = lines.pop() ?? "";
+      for (const line of lines) { const st = streamStep(line, stream); if (st) onStep!(st.text, st.live); }
+    });
     child.stderr?.on("data", (b: Buffer) => { errOut += b.toString(); });
     child.on("close", (code) => {
+      // an older CLI without the partial-messages flag: once more without it
+      if (streaming && partialMessagesOk && code !== 0 && /include-partial-messages/.test(errOut)) {
+        partialMessagesOk = false;
+        resolve(_runReadmeLlm(prompt, tier, kind, onStep));
+        return;
+      }
       let parsed: { result?: unknown; is_error?: unknown } | null = null;
-      try { parsed = JSON.parse(out); } catch { parsed = null; }
+      if (streaming) parsed = streamResult(out);
+      else { try { parsed = JSON.parse(out); } catch { parsed = null; } }
       // Charged whatever the outcome: a spawn that failed still ran, and a
       // ledger that counts only successes understates what a run cost.
       chargeRun(kind, parsed);
@@ -8122,7 +8191,7 @@ async function handleAddManualSeed(filePath: string, irNodeId: string, ws: WebSo
   // project-update payload. Both consume the relative-keyed view.
   const relFiles = relativeProjectFiles();
   latestEntryPoints = await runDiscoverEntryPoints(relFiles);
-  latestThreads = await runExtractAllThreads(relFiles, latestEntryPoints);
+  latestThreads = (await runExtractAllThreads(relFiles, latestEntryPoints)) ?? latestThreads;
   latestSystem = await runBuildSystemTier(relFiles, latestEntryPoints, latestThreads);
   broadcastProjectUpdate();
   // Sitting-2 — the pin used to be SILENT: discovery seeds manual pins LAST
@@ -8205,6 +8274,8 @@ function setupWebSocket() {
     clients.add(ws);
     // 2026-10-07 — mid-pass, the boot screen hears what the pass is doing now
     if (fullPassRunning && passProgress) ws.send(JSON.stringify({ type: "pass-progress", payload: { text: passProgress } }));
+    // 2026-10-21 — a page that reloads hears the model tasks still running
+    ws.send(JSON.stringify({ type: "gui-tasks", payload: { tasks: guiTasks.list() } }));
     // M6 wave 1 — surface runtime feature flags so the webview can show
     // a banner when Analyze/Intent are silently disabled. M7 wave 2:
     // the flag now reflects whether the Claude Code CLI is on PATH, not
@@ -8338,8 +8409,10 @@ function setupWebSocket() {
           const echo = JSON.stringify({ type: "model-tiers", payload: tiers });
           for (const c of clients) c.send(echo);
           console.log(`[models] ${(["thinking", "routine", "worker"] as ModelTier[]).map((t) => `${t}=${routeLabel(resolveTierRoute(t, tiers))}`).join(" ")}`);
-        } else if (msg.type === "now-get") {
-          // 2026-10-16 — the project's state and one next step (src/server/now_state.ts)
+        } else if (msg.type === "now-get" || msg.type === "setup-welcome-dismiss") {
+          // 2026-10-16 — the project's state and one next step (src/server/now_state.ts);
+          // 2026-10-21 — "Not now" on the new-project welcome, kept per person (setup_welcome.ts)
+          if (msg.type === "setup-welcome-dismiss" && isDirectory) dismissWelcome(analyzedRoot());
           ws.send(JSON.stringify({ type: "now-state", payload: isDirectory ? nowState(analyzedRoot(), { briefStale: latestArch ? staleBriefLines(analyzedRoot(), latestArch) : [], stack: latestStack }) : null }));
         } else if (msg.type === "project-direction-get" || msg.type === "project-direction-census" || msg.type === "project-direction-decide" || msg.type === "project-direction-deliver") {
           // 2026-10-16 — the project's own direction (src/server/project_direction.ts); the panel is a person
@@ -8482,8 +8555,13 @@ function setupWebSocket() {
           // ratify / reject are the human's. Reply: arch-proposal.
           const t = msg.type;
           const reply = (payload: unknown) => ws.send(JSON.stringify({ type: "arch-proposal", payload: { action: t.slice(5), ...(payload as object) } }));
-          if (t === "arch-propose") archProposeCore(typeof msg.payload?.guidance === "string" ? msg.payload.guidance : undefined, { update: msg.payload?.update === true }).then(reply, (e) => reply({ ok: false, error: String(e?.message ?? e) }));
-          else reply(archDecide(t === "arch-ratify" ? "ratify" : "reject"));
+          if (t === "arch-propose") {
+            const guidance = typeof msg.payload?.guidance === "string" ? msg.payload.guidance : undefined;
+            const update = msg.payload?.update === true;
+            runGuiTask("groups", update ? "Updating the groups" : guidance ? "Revising the proposal" : "Proposing groups", "map",
+              (task) => archProposeCore(guidance, { update, run: taskRun(task) }),
+              (r) => `${r.groups ?? 0} group${r.groups === 1 ? "" : "s"} and ${r.names ?? 0} name${r.names === 1 ? "" : "s"} proposed${r.refused ? `, ${r.refused} refused by the gate` : ""}: decide them on the map`, reply);
+          } else reply(archDecide(t === "arch-ratify" ? "ratify" : "reject"));
         } else if (msg.type === "brief-explain-gap") {
           // 2026-10-08 — "Explain this gap": the estimate, then (a person's click) the one call
           const n = Number(msg.payload?.n);
@@ -8503,8 +8581,10 @@ function setupWebSocket() {
           else if (t === "brief-run") {
             const only = ["spec", "groups", "scopes", "path"].includes(msg.payload?.only) ? msg.payload.only : undefined;
             const notes = Array.isArray(msg.payload?.notes) ? msg.payload.notes.filter((n: unknown): n is string => typeof n === "string") : undefined;
-            briefDraft(briefCtx, { only, stale: msg.payload?.stale === true, skipGroups: msg.payload?.skipGroups === true, guidance: typeof msg.payload?.guidance === "string" ? msg.payload.guidance : undefined, notes })
-              .then(result, (e) => result({ ok: false, error: String(e?.message ?? e) }));
+            const stale = msg.payload?.stale === true;
+            runGuiTask("brief", stale ? "Re-briefing the stale lines" : notes?.length ? "Briefing again with your notes" : "Drafting the Brief", "map",
+              (task) => briefDraft({ ...briefCtx, run: taskRun(task) }, { only, stale, skipGroups: msg.payload?.skipGroups === true, guidance: typeof msg.payload?.guidance === "string" ? msg.payload.guidance : undefined, notes }),
+              (r) => (r as { detail?: string }).detail ?? "Brief drafted: decide it in the Brief card", result);
           } else {
             const decision = msg.payload?.decision === "reject" ? "reject" : "ratify";
             result(briefDecide(briefCtx, typeof msg.payload?.section === "string" ? msg.payload.section : "all", decision));
@@ -8514,7 +8594,13 @@ function setupWebSocket() {
           // survivors stored agent-stated for a person in "Awaiting you"
           const reply = (payload: unknown) => ws.send(JSON.stringify({ type: "rule-draft-result", payload: { action: msg.type === "rule-draft-run" ? "run" : "estimate", ...(payload as object) } }));
           if (msg.type === "rule-draft-estimate") reply(ruleDraftEstimate(ruleDraftCtx));
-          else ruleDraftRun(ruleDraftCtx).then(reply, (e) => reply({ ok: false, error: String(e?.message ?? e) }));
+          else runGuiTask("rules", "Proposing rules from the architecture", "rules",
+            (task) => ruleDraftRun({ ...ruleDraftCtx, run: taskRun(task) }),
+            (r) => { const n = (r as { stored?: string[] }).stored?.length ?? 0; return `${n} rule${n === 1 ? "" : "s"} proposed: decide them in the Rules panel`; }, reply);
+        } else if (msg.type === "gui-tasks-get") {
+          ws.send(JSON.stringify({ type: "gui-tasks", payload: { tasks: guiTasks.list() } }));
+        } else if (msg.type === "gui-task-dismiss") {
+          if (typeof msg.payload?.id === "string") guiTasks.dismiss(msg.payload.id);
         } else if (msg.type === "classify-estimate" || msg.type === "classify-run") {
           // the estimate spends nothing; the run is the one model call, its
           // answers stored agent-stated for a person to ratify in the inbox

@@ -32,7 +32,7 @@ test("the next step follows the setup's fixed order, each pointing at the panel 
   let n = nowState(root);
   assert.equal(n.objective, null);
   assert.deepEqual(n.next, { text: "Propose the architecture groups (the Brief)", panel: null });
-  assert.deepEqual(n.setup, { done: 0, of: 5 });
+  assert.deepEqual({ done: n.setup.done, of: n.setup.of, next: n.setup.next }, { done: 0, of: 5, next: "groups" });
   assert.equal(n.waiting, 0);
 
   saveArchStore(root, { ...loadArchStore(root), ratified: { at: "2026-10-20T10:00:00.000Z", model: "test" } });

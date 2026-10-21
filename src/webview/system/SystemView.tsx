@@ -8,7 +8,7 @@
 // answer the same questions better, and a zoom in the thread view dropped the
 // reader here unasked. Two modes: subsystems and the map.
 
-import React, { useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { ReactFlow, Background, Controls, type Node, type Edge } from "@xyflow/react";
 import { Network, Boxes, Map as MapIcon } from "lucide-react";
 import type { SystemTier, SystemPlan, EntryPoint, ProjectThread } from "../types";
@@ -35,6 +35,7 @@ import type { LitPath } from "./NodeIOCard";
 import { PlanViewToggle } from "./PlanViewToggle";
 import { usePlanState } from "../usePlanState";
 import { ArchProposingCard } from "./ArchProposingCard";
+import { pendingMapOpen, useGuiTask } from "../tasks/guiTasks";
 import { useDeferredLayout } from "./useDeferredLayout";
 import { LayoutSpinner } from "./LayoutSpinner";
 import { useMapFocus } from "./useMapFocus";
@@ -133,6 +134,14 @@ export function SystemView({
   };
   const showSubsystems = () => setMode(persistMode("subsystems"));
   const toggleMap = () => setMode((m) => persistMode(m === "map" ? "subsystems" : "map"));
+  // 2026-10-21 — a finished task opened from the bubble over the chat button
+  // (tasks/TaskBubble.tsx): the Brief and the groups are decided on the map
+  useEffect(() => {
+    const h = () => setMode(persistMode("map"));
+    if (pendingMapOpen()) h(); // asked for before this view mounted
+    document.addEventListener("vg-open-task", h);
+    return () => document.removeEventListener("vg-open-task", h);
+  }, []);
   const [lens, setLensState] = useState<MapLens>(() => {
     try {
       const l = localStorage.getItem("vg-arch-lens") as MapLens | null;
@@ -172,6 +181,21 @@ export function SystemView({
     on: mode === "map", architecture, lens, planView, planState, planOpen, topology: topo.model?.topology ?? null, threads, inventory: topo.inventory ?? null,
   });
   const [flowOn, setFlowOn] = useState<string | LitPath | null>(null); // a flow's id, or an In / Out row's path
+  // 2026-10-21 — the groups task is the server's (tasks/guiTasks.ts): its working
+  // state outlives a reload or a closed panel; proposed groups are SHOWN the
+  // moment they arrive (an architecture proposal, or the Brief's groups-first
+  // step): their boxes lit, the rest dimmed, so a person ratifies what they see
+  const groupsTask = useGuiTask("groups");
+  const proposing = archPropose?.working ?? (groupsTask?.state === "running" ? "propose" : null);
+  const proposed = (architecture?.groups ?? []).filter((g) => g.source === "proposed");
+  const proposedKey = proposed.map((g) => `${g.id}:${g.wraps.join(",")}`).join("|");
+  const shownProposal = useRef("");
+  useEffect(() => {
+    if (proposedKey === shownProposal.current) return;
+    shownProposal.current = proposedKey;
+    const boxes = [...new Set(proposed.flatMap((g) => g.wraps))];
+    if (boxes.length) { setMode(persistMode("map")); setFlowOn({ nodes: boxes, edges: [] }); }
+  }, [proposedKey]); // eslint-disable-line react-hooks/exhaustive-deps
   // What is on screen. The canvas remounts when it changes, so fitView re-runs
   // for the new graph's coordinates (fitView only fits on mount, and the
   // subsystem vs thread layouts occupy different coordinate spaces). PLAN-v7
@@ -309,7 +333,7 @@ export function SystemView({
       }}
       // While a model drafts groups, the processes it is grouping breathe
       // (motion.css, vg-arch-proposing); the attribute goes with the reply.
-      data-arch-proposing={mode === "map" && archPropose?.working ? archPropose.working : undefined}
+      data-arch-proposing={mode === "map" && proposing ? proposing : undefined}
       style={{ width: "100%", height: "100%", position: "relative" }}>
       {/* Mode toggle — top-left of the canvas (mirrors the thread-view
           orientation toggle), clear of the breadcrumb. */}
@@ -382,11 +406,11 @@ export function SystemView({
       )}
       {mode === "map" && <ArchTraceBar mode={trace.mode} beats={trace.beats} labelOf={labelOf} actions={trace.actions} />}
       {mode === "map" && architecture && (
-        <ArchProposalBar model={architecture} state={archPropose ?? { busy: false, error: null }} onAction={onArchAction} classify={lens === "tools"} grid={lens === "resources" ? topo.model?.topology ?? null : null} />
+        <ArchProposalBar model={architecture} state={{ ...(archPropose ?? { busy: false, error: null }), busy: !!archPropose?.busy || groupsTask?.state === "running" }} onAction={onArchAction} classify={lens === "tools"} grid={lens === "resources" ? topo.model?.topology ?? null : null} />
       )}
       {/* 2026-10-08 — the Brief: what the system is for and how, each line lighting its boxes */}
       {mode === "map" && architecture && !topoMapModel && <BriefCard onLight={(boxes) => setFlowOn(boxes ? { nodes: boxes, edges: [] } : null)} />}
-      {mode === "map" && archPropose?.working && <ArchProposingCard working={archPropose.working} model={architecture} />}
+      {mode === "map" && proposing && <ArchProposingCard working={proposing} model={architecture} task={groupsTask?.state === "running" ? groupsTask : null} />}
       {mode === "map" && architecture && (
         <ArchInspector selected={archSelected} model={architecture} ioModel={planMapModel ?? realMap ?? undefined} vocab={vocab} onLight={setFlowOn} onClose={() => { setArchSelected(null); setFlowOn(null); }} onOpenThread={onOpenThread}
           onReach={(id, dir) => trace.actions.reach(id, dir)} onRouteFrom={(id) => { trace.actions.routeFrom(id); setArchSelected(null); }} />

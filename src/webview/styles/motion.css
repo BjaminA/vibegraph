@@ -609,6 +609,24 @@ body[data-add-component-dragging="true"] .vg-thread-node[data-add-component-drop
   .vg-drafting-card { animation: none; box-shadow: 0 0 14px var(--proposed-glow); }
   .vg-skeleton-pulse { animation: none; opacity: 0.5; }
 }
+/* 2026-10-21 — a model at work, anywhere in the app (WorkingCard.tsx): the
+   title shimmers in the chat accent, so the words themselves say "working".
+   Mounted only while a task runs, like every drafting carrier above. */
+@keyframes vg-working-text-kf {
+  from { background-position: 100% 0; }
+  to   { background-position: -100% 0; }
+}
+.vg-working-text {
+  background: linear-gradient(90deg, var(--text-primary) 0%, var(--text-primary) 35%, var(--accent-chat) 50%, var(--text-primary) 65%, var(--text-primary) 100%);
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: vg-working-text-kf 2400ms linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .vg-working-text { animation: none; background: none; color: var(--text-primary); }
+}
 
 /* ── Sitting-2 — gate-button press cue ──────────────────────────────────
    The immediate half of click feedback (the pending spinner is the

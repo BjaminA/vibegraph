@@ -195,6 +195,13 @@ export function ArchProposalBar({ model, state, onAction, classify = false, grid
   return (
     <div data-arch-proposal-bar data-arch-proposal-state={state.busy ? "busy" : p ? "pending" : model.ratified ? "ratified" : "none"}
       style={{ ...panel, position: "absolute", top: "calc(var(--vg-lens-bar-bottom, 120px) + 8px)", left: 250, zIndex: 30, display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8, padding: 4, maxWidth: "max(240px, min(640px, calc(100% - 650px)))" }}>
+      {/* 2026-10-21 — the Brief's groups-first step, drawn dashed on the map
+          (brief_group_preview.ts): decided in the Brief card, said here */}
+      {!p && model.briefGroups && (
+        <span data-arch-brief-groups style={{ padding: "4px 8px", color: "var(--proposed-border)" }}>
+          {`The Brief proposes ${model.briefGroups.changes} group change${model.briefGroups.changes === 1 ? "" : "s"}${model.briefGroups.names ? ` and ${model.briefGroups.names} name${model.briefGroups.names === 1 ? "" : "s"}` : ""}, drawn dashed: ratify or reject them in the Brief card`}
+        </span>
+      )}
       {/* Ratified groups are settled: no button spawns another proposal
           (the server's proposalGate refuses it too). Re-proposing is a
           deliberate act — the CLI's --force, or editing the file. */}

@@ -58,6 +58,9 @@ export default defineConfig({
       VG_AGENT_ENGINE: process.env.VG_AGENT_ENGINE ?? "orchestrated",
       // the suites were written against the centred sheet; docked is the product default
       VG_SHEET_DOCK: process.env.VG_SHEET_DOCK ?? "centre",
+      // 2026-10-21 — the bare fixtures are all "new projects": the setup welcome
+      // (setup_welcome.ts) would open over every suite; its own spec switches it on
+      VG_WELCOME: process.env.VG_WELCOME ?? "off",
       PATH: process.env.PATH ?? "",
       HOME: process.env.HOME ?? "",
       // M-RUN e2e (test:e2e-run) drives the SM2 arg synthesizer through a

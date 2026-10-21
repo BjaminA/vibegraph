@@ -132,7 +132,9 @@ test.describe("the GUI brief: kinds, one panel sheet, concise plan, rules", () =
     expect(new Set(bgs).size).toBe(1);
   });
 
-  test("4. a plan item has at most three bullets above its fold, none wraps past two lines, the prose is folded", async ({ page }) => {
+  // 2026-10-21 (Ben: "do not truncate text for rules and like things") — the
+  // brief's two-line clamp is gone: a bullet's text shows whole, never cut
+  test("4. a plan item has at most three bullets above its fold, no bullet's text is cut, the prose is folded", async ({ page }) => {
     await page.setViewportSize({ width: 1100, height: 900 });
     await openApp(page);
     await page.locator("[data-plan-toggle]").click();
@@ -143,8 +145,8 @@ test.describe("the GUI brief: kinds, one panel sheet, concise plan, rules", () =
     for (let i = 0; i < n; i++) {
       const it = items.nth(i);
       expect(await it.locator(":scope > ul > li").count()).toBeLessThanOrEqual(3);
-      for (const h of await it.locator(":scope > ul > li > span").evaluateAll((els) => els.map((e) => [e.getBoundingClientRect().height, parseFloat(getComputedStyle(e).lineHeight)]))) {
-        expect(h[0]).toBeLessThanOrEqual(2 * h[1] + 2);
+      for (const [shown, whole] of await it.locator(":scope > ul > li > span").evaluateAll((els) => els.map((e) => [e.clientHeight, e.scrollHeight]))) {
+        expect(whole, "a bullet's text is not cut").toBeLessThanOrEqual(shown + 1);
       }
       const prose = it.locator("[data-plan-detail]");
       if (await prose.count()) {

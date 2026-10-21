@@ -891,6 +891,14 @@ export interface ArchModelRecord {
     unattributedBoundaries: number;
   };
   notes: string[];
+  /** 2026-10-21 — what the derivation could not do this time (a failed thread
+   *  extraction, stack index or zone pass): such a model is thinner than the
+   *  code, so the Brief review says so and the exported map is not rewritten
+   *  from it. Absent when the derivation was whole. */
+  incomplete?: string[];
+  /** 2026-10-21 — TRANSPORT ONLY: the Brief's pending group changes, drawn on
+   *  the map as proposed groups (brief_group_preview.ts); decided in the Brief card. */
+  briefGroups?: { changes: number; names: number; model: string };
   /** 2026-10-06 — TRANSPORT ONLY (server.ts puts it on the envelope's copy,
    *  never on an export): the project's own operation words
    *  (.vibegraph/operations.json), merged after VibeGraph's. */

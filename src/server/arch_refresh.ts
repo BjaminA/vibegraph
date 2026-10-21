@@ -25,7 +25,8 @@ import { staleLabelMap } from "./arch_label_drift.ts";
 
 export const ARCH_EXPORT_DIRS = [join(".vibegraph", "knowledge"), join(".vibegraph", "architecture-map")];
 
-export interface ArchRefreshResult { written: string[]; stale: string[] }
+/** `skipped`: why nothing was written although an export exists. */
+export interface ArchRefreshResult { written: string[]; stale: string[]; skipped?: string }
 
 export function refreshExportedArchitecture(
   root: string,
@@ -34,6 +35,13 @@ export function refreshExportedArchitecture(
 ): ArchRefreshResult {
   const written: string[] = [];
   const stale: string[] = [];
+  // 2026-10-21 (a field report): a live model built while a pass had failed
+  // held 5 store links where the export held 55, all from the code, and this
+  // wrote it over the export. The documents keep the last whole map.
+  if (model.incomplete?.length) {
+    const exported = ARCH_EXPORT_DIRS.some((rel) => existsSync(join(root, rel, "architecture.md")) || existsSync(join(root, rel, "architecture.vibegraph.json")));
+    return exported ? { written, stale, skipped: `the live map is incomplete (${model.incomplete.join("; ")}): the exported map was left as it was` } : { written, stale };
+  }
   const title = basename(root);
   let map: ReturnType<typeof buildSystemMap> | null = null;
   const json = (v: unknown) => JSON.stringify(v, null, 2) + "\n";

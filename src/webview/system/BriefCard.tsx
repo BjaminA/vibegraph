@@ -13,10 +13,12 @@ import React, { useEffect, useState } from "react";
 import { ScrollText, Sparkles, Check, X, ChevronDown, ChevronRight, AlertTriangle, MessageSquarePlus, RefreshCw } from "lucide-react";
 import { bridge, type ExtensionMessage } from "../types";
 import type { BriefLine } from "../../shared/brief_types";
+import { takeMapOpen, useGuiTask } from "../tasks/guiTasks";
+import { WorkingCard } from "../tasks/WorkingCard";
 
 type Spec = { function: BriefLine[]; method: BriefLine[]; feature: BriefLine[] };
 interface ReviewLine { part: keyof Spec; index: number; warnings: string[]; byRole: Record<string, string[]> }
-interface Review { lines: ReviewLine[]; summary: string; ratifyLabel: string; uncovered: { rules: string[]; salient: string[]; primary: string[]; notes: string[] }; gaps: string[]; explainable?: number }
+interface Review { lines: ReviewLine[]; summary: string; ratifyLabel: string; uncovered: { rules: string[]; salient: string[]; primary: string[]; notes: string[] }; gaps: string[]; explainable?: number; basis?: string }
 /** "Explain this gap": which gap, its estimate once asked, and how it went */
 interface GapAsk { n: number; estimate?: string; busy?: boolean; result?: string; error?: string }
 interface Section { section: string; summary: string }
@@ -84,6 +86,8 @@ function Sheet({ review, ask, onExplain, canSpend }: { review: Review; ask?: Gap
   return (
     <div data-brief-review style={{ marginTop: 8, padding: 8, border: "1px solid var(--border-edge)", borderRadius: 6 }}>
       <div data-brief-review-summary style={{ fontFamily: "var(--font-ui)", fontSize: "var(--fs-12)", color: "var(--text-primary)" }}>{`Review: ${review.summary}`}</div>
+      {/* 2026-10-21 — what the claims were checked against, so a thin map shows */}
+      {review.basis && <div data-brief-review-basis data-incomplete={review.basis.includes("INCOMPLETE") ? "true" : undefined} style={{ ...quiet, marginTop: 4, color: review.basis.includes("INCOMPLETE") ? "var(--accent-warning)" : "var(--text-muted)" }}>{review.basis}</div>}
       {total > 0 && (
         <details style={{ marginTop: 4 }}>
           <summary style={{ ...quiet, cursor: "pointer" }}>{`${total} thing${total === 1 ? "" : "s"} to look at`}</summary>
@@ -111,7 +115,17 @@ function Sheet({ review, ask, onExplain, canSpend }: { review: Review; ask?: Gap
 export function BriefCard({ onLight }: { onLight: (boxes: string[] | null) => void }) {
   const [state, setState] = useState<BriefStatePayload | null>(null);
   const [open, setOpen] = useState(false);
-  const [busy, setBusy] = useState<string | null>(null);
+  const [busyHere, setBusy] = useState<string | null>(null);
+  // 2026-10-21 — a draft is the server's task (tasks/guiTasks.ts): it runs on
+  // with the card closed, and the card reads it back when it reopens
+  const task = useGuiTask("brief");
+  const busy = busyHere ?? (task?.state === "running" ? "brief-run" : null);
+  useEffect(() => {
+    if (takeMapOpen("brief")) setOpen(true); // asked for before the map mounted
+    const h = (e: Event) => { if ((e as CustomEvent).detail?.kind === "brief") { takeMapOpen("brief"); setOpen(true); } };
+    document.addEventListener("vg-open-task", h);
+    return () => document.removeEventListener("vg-open-task", h);
+  }, []);
   const [error, setError] = useState<string | null>(null);
   const [estimate, setEstimate] = useState<{ calls: number; tokens: number; silent: number } | null>(null);
   const [notes, setNotes] = useState<string | null>(null);
@@ -174,7 +188,7 @@ export function BriefCard({ onLight }: { onLight: (boxes: string[] | null) => vo
               <div style={{ ...quiet, color: "var(--proposed-border)", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase" }}>{`Proposed · ${p.model}`}</div>
               {p.notes.length > 0 && <div style={{ ...quiet, marginTop: 4 }}>{`asked to answer ${p.notes.length} note${p.notes.length === 1 ? "" : "s"}: ${p.notes.map((n, i) => `note:${i + 1} ${n}`).join(" · ")}`}</div>}
               {!p.spec.function.length && !p.spec.method.length && !p.spec.feature.length && p.sections.some((s) => s.section === "groups") && (
-                <div data-brief-groups-first style={{ ...quiet, marginTop: 4 }}>Groups first: decide these groups, then draft the brief — it reads the codebase through the groups you agree.</div>
+                <div data-brief-groups-first style={{ ...quiet, marginTop: 4 }}>Groups first: decide these groups, then draft the brief — it reads the codebase through the groups you agree. The proposed groups are drawn dashed on the map, their boxes lit.</div>
               )}
               <Lines spec={p.spec} review={p.review} ghost onLight={onLight} />
               {p.review && <Sheet review={p.review} ask={ask} onExplain={explain} canSpend={!!state.claude} />}
@@ -204,8 +218,16 @@ export function BriefCard({ onLight }: { onLight: (boxes: string[] | null) => vo
                 style={{ width: "100%", boxSizing: "border-box", marginTop: 4, fontFamily: "var(--font-ui)", fontSize: "var(--fs-12)", background: "var(--bg-canvas)", color: "var(--text-primary)", border: "1px solid var(--border-edge)", borderRadius: 4, padding: 8 }} />
             </div>
           )}
-          <div style={{ display: "flex", gap: 4, marginTop: 12, flexWrap: "wrap" }}>
-            {staleCount > 0 && !p && <button data-brief-reaffirm-all disabled={!!busy} onClick={() => send("brief-reaffirm")} title="Every stale line still holds: stamp them against the code as it is now (no tokens)" style={btn}><Check size={16} strokeWidth={1.5} />{`All ${staleCount} still true`}</button>}
+          {/* 2026-10-21 (a field report) — a model call takes minutes on a large
+              project: say what is running and for how long, in place of the
+              disabled buttons, one of which read like a status */}
+          {busy === "brief-run" && (
+            <WorkingCard data-brief-run-progress title={task?.state === "running" ? task.label : "Drafting the Brief"} startedAt={task?.state === "running" ? task.startedAt : undefined}
+              steps={task?.state === "running" ? task.steps : []} style={{ marginTop: 12 }}
+              note="It can take a few minutes on a large project, and carries on if you close this card; the ratified Brief stays as it is until you ratify the draft." />
+          )}
+          <div style={{ display: busy === "brief-run" ? "none" : "flex", gap: 4, marginTop: 12, flexWrap: "wrap" }}>
+            {staleCount > 0 && !p && <button data-brief-reaffirm-all disabled={!!busy} onClick={() => send("brief-reaffirm")} title="Every stale line still holds: stamp them against the code as it is now (no tokens)" style={btn}><Check size={16} strokeWidth={1.5} />{`Mark the ${staleCount} stale line${staleCount === 1 ? "" : "s"} still true`}</button>}
             {staleCount > 0 && !p && <button data-brief-restate disabled={!!busy || !state.claude} onClick={() => send("brief-run", { stale: true })} style={btn}><Sparkles size={16} strokeWidth={1.5} />{busy === "brief-run" ? "Re-briefing…" : `Re-brief ${staleCount} stale line${staleCount === 1 ? "" : "s"}`}</button>}
             {(r?.spec || p) && notes === null && <button data-brief-again disabled={!!busy || !state.claude} onClick={() => setNotes("")} style={btn}><MessageSquarePlus size={16} strokeWidth={1.5} />Brief again with notes</button>}
             {notes !== null && (

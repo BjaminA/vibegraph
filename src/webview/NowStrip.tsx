@@ -7,8 +7,9 @@
 // bottom edge (the map's "start here" story, the topology trace, the zoom).
 
 import React from "react";
-import { Target, Inbox, FileWarning, CircleHelp, Scale, Compass, ArrowRight } from "lucide-react";
+import { Target, Inbox, FileWarning, CircleHelp, Scale, Compass, ArrowRight, ListChecks } from "lucide-react";
 import type { NowPanel, NowState } from "../shared/now_wire";
+import { openSetupGuide } from "./setup/SetupGuide";
 
 const chip = (accent: string | null): React.CSSProperties => ({
   display: "inline-flex", alignItems: "center", gap: 4, padding: "4px 8px", borderRadius: 999, cursor: "pointer", whiteSpace: "nowrap",
@@ -40,11 +41,12 @@ export function NowStrip({ now, onOpen }: { now: NowState; onOpen: (p: NowPanel)
         {item("rules", true, null, <Scale {...ico} />, `${now.rules} rule${now.rules === 1 ? "" : "s"}`, "rules")}
         {item("direction", true, null, <Compass {...ico} />, now.direction.agreed || now.direction.proposed ? `direction ${now.direction.agreed}${now.direction.proposed ? ` · ${now.direction.proposed} proposed` : ""}` : "no direction yet", "direction")}
       </div>
-      {/* 2026-10-20 — the setup's progress; `vibegraph-knowledge setup` lists every step */}
+      {/* 2026-10-20 — the setup's progress; 2026-10-21: it opens the setup guide (setup/SetupGuide.tsx) */}
       {now.setup && now.setup.done < now.setup.of && (
-        <span data-now-setup title="vibegraph-knowledge setup lists every step and its commands" style={{ fontSize: "var(--fs-11)", color: "var(--text-muted)" }}>
-          setup: {now.setup.done} of {now.setup.of} steps done
-        </span>
+        <button type="button" data-now-setup onClick={openSetupGuide} title="Every setup step, in order, and where each is decided"
+          style={{ alignSelf: "flex-start", display: "inline-flex", alignItems: "center", gap: 4, background: "transparent", border: "none", padding: 0, cursor: "pointer", fontFamily: "var(--font-ui)", fontSize: "var(--fs-11)", color: "var(--text-muted)", textDecoration: "underline", textDecorationColor: "var(--border-edge)", textUnderlineOffset: 4 }}>
+          <ListChecks {...ico} />setup: {now.setup.done} of {now.setup.of} steps done
+        </button>
       )}
       <button data-now-next onClick={() => now.next.panel && onOpen(now.next.panel)} disabled={!now.next.panel}
         style={{ ...chip("var(--accent-thread)"), borderRadius: 8, justifyContent: "space-between", whiteSpace: "normal", textAlign: "left", fontWeight: 600, padding: "8px 12px", cursor: now.next.panel ? "pointer" : "default" }}>

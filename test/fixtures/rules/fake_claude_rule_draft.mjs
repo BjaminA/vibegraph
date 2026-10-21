@@ -74,4 +74,25 @@ const REPLY = {
   ],
   withoutEvidence: ["The C++ codec should never allocate on the decode path."],
 };
-process.stdout.write(JSON.stringify({ type: "result", result: JSON.stringify(REPLY), is_error: false }));
+const final = JSON.stringify({ type: "result", result: JSON.stringify(REPLY), is_error: false });
+if (!process.argv.includes("stream-json")) {
+  process.stdout.write(final);
+} else {
+  // 2026-10-21 — as the CLI streams when the app shows the work (src/server/
+  // llm_stream.ts): init, thinking, the reply in pieces, then the result,
+  // over about three seconds so a test can close the panel mid-run
+  const text = JSON.stringify(REPLY);
+  const chunks = [0, 1, 2, 3].map((i) => text.slice((i * text.length) / 4, ((i + 1) * text.length) / 4));
+  const events = [
+    { type: "system", subtype: "init", model: "stub-rules" },
+    { type: "stream_event", event: { type: "content_block_start", index: 0, content_block: { type: "thinking" } } },
+    { type: "stream_event", event: { type: "content_block_delta", index: 0, delta: { type: "thinking_delta", thinking: "Reading the facts…" } } },
+    { type: "stream_event", event: { type: "content_block_start", index: 1, content_block: { type: "text" } } },
+    ...chunks.map((c) => ({ type: "stream_event", event: { type: "content_block_delta", index: 1, delta: { type: "text_delta", text: c } } })),
+  ];
+  for (const e of events) {
+    process.stdout.write(JSON.stringify(e) + "\n");
+    await new Promise((r) => setTimeout(r, 400));
+  }
+  process.stdout.write(final + "\n");
+}

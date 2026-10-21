@@ -32,6 +32,27 @@ export interface BriefReview {
   summary: string;
   /** what the Ratify button says */
   ratifyLabel: string;
+  /** 2026-10-21 — what the claims were checked against, so a thin map shows:
+   *  "checked against 56 store operations on the map: 53 read from the code, 3 declared by the project's topology" */
+  basis: string;
+}
+
+/** What the data claims were checked against, by where each operation came from. */
+export function reviewBasis(facts: Pick<BriefFacts, "data" | "incomplete">): string {
+  const ops = facts.data.ops;
+  const n = (pred: (o: (typeof ops)[number]) => boolean) => ops.filter(pred).length;
+  const parts: Array<[number, string]> = [
+    [n((o) => o.source === "derived"), "read from the code"],
+    [n((o) => o.source === "observed"), "seen in a recorded run"],
+    [n((o) => o.source === "inferred"), "from ratified claims"],
+    [n((o) => o.source === "declared" && !!o.feed), "declared by the project's topology"],
+    [n((o) => o.source === "declared" && !o.feed), "declared by the plan only"],
+  ];
+  const said = parts.filter(([k]) => k > 0).map(([k, what]) => `${k} ${what}`);
+  const base = `checked against ${ops.length} store operation${ops.length === 1 ? "" : "s"} on the map${said.length ? `: ${said.join(", ")}` : ""}`;
+  return facts.incomplete?.length
+    ? `${base}. The map is INCOMPLETE (${facts.incomplete.join("; ")}): a claim it cannot see may read as resting on the plan only`
+    : base;
 }
 
 export function reviewBrief(spec: BriefBody["spec"], facts: BriefFacts, opts: { omitted?: string[]; absolutes?: string[]; /** the draft's scheme: 2+ was asked for claims */ scheme?: number } = {}): BriefReview {
@@ -80,12 +101,13 @@ export function reviewBrief(spec: BriefBody["spec"], facts: BriefFacts, opts: { 
   return {
     lines, counts, uncovered, gaps: coverage.gaps, explainable: coverage.explainable, summary: bits.join("; "),
     ratifyLabel: `Ratify ${counts.lines} line${counts.lines === 1 ? "" : "s"}${counts.withWarnings ? `, ${counts.withWarnings} with warnings` : ""}`,
+    basis: reviewBasis(facts),
   };
 }
 
 /** The sheet as text (the CLI's `show`, the inbox's detail lines). */
 export function reviewText(r: BriefReview, max = 40): string[] {
-  const out = [`review: ${r.summary}`];
+  const out = [`review: ${r.summary}`, ...(r.basis ? [`  ${r.basis}`] : [])];
   for (const l of r.lines) for (const w of l.warnings) out.push(`  ${l.part}[${l.index}] ${w}`);
   for (const id of r.uncovered.rules) out.push(`  stated rule ${id} — no line covers it`);
   for (const f of r.uncovered.salient) out.push(`  core mechanism ${f} — no line covers it`);

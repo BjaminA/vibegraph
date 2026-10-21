@@ -52,7 +52,8 @@ function Row({ r, side, byId, nodeId, lit, onLight }: { r: IoRow; side: "in" | "
       {keys.map((k) => <Chip key={k} kind="json" id={k} focusable={false} />)}
       {r.keys.length > KEY_CAP && <span style={quiet}>{`+${r.keys.length - KEY_CAP}`}</span>}
       {r.keysFrom === "plan" && <span style={quiet}>(planned keys)</span>}
-      {r.rules.map((x) => <Chip key={x} kind="rule" id={x} label={x.length > 40 ? `${x.slice(0, 39)}…` : x} focusable={false} />)}
+      {/* 2026-10-21 — a rule's text whole (it was a chip cut at 40 characters) */}
+      {r.rules.map((x) => <span key={x} data-io-rule style={{ ...quiet, color: "var(--text-secondary)", overflowWrap: "anywhere" }}>{`rule: ${x}`}</span>)}
       {r.path?.length ? (
         <span data-io-path style={{ display: "inline-flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
           <ArrowRight size={16} strokeWidth={1.5} style={{ color: "var(--text-muted)" }} />

@@ -34,7 +34,8 @@ export function checkParts(check: CheckShape | undefined, described?: string): A
   return described ? [described] : [check.rule];
 }
 
-const firstSentence = (t: string) => { const m = /^(.{1,90}?[.;:])(\s|$)/.exec(t); return m ? m[1] : t.length > 90 ? `${t.slice(0, 87)}…` : t; };
+// the rule's first sentence, whole (2026-10-21: it was cut at 90 characters)
+const firstSentence = (t: string) => { const m = /^(.+?[.;:])(\s|$)/s.exec(t); return m ? m[1] : t; };
 
 function scopeParts(c: RuleRowView["constraint"], threads: string[]): Array<ChipRef | string> {
   const s = c.scope as { all?: boolean; files?: string[]; entryPointIds?: string[]; stack?: string[] };
@@ -70,7 +71,7 @@ export function RuleItem({ row, review }: { row: RuleRowView; review?: boolean }
   const facts: ItemFact[] = [
     parts ? { label: "rule", parts } : c.policy ? { label: "rule", text: `${c.policy.rule} ${c.policy.tool}${c.policy.with ? ` → ${c.policy.with}` : ""}` } : { label: "rule", text: c.text },
     // 2026-10-19 — a rule read from the prose (harvest, or proposed from the architecture) says which sentence
-    { label: "why", text: [c.note ?? (parts || c.policy ? c.text : undefined), c.cite ? `from ${c.cite.file}:${c.cite.line} — "${c.cite.quote.slice(0, 120)}"` : undefined].filter(Boolean).join(" · ") || undefined },
+    { label: "why", text: [c.note ?? (parts || c.policy ? c.text : undefined), c.cite ? `from ${c.cite.file}:${c.cite.line} — "${c.cite.quote}"` : undefined].filter(Boolean).join(" · ") || undefined },
     { label: "scope", parts: scopeParts(c, row.threads) },
   ];
   const offenders = row.checks.flatMap((r) => r.offenders);

@@ -3,7 +3,112 @@
 `vibegraph-knowledge` and the VibeGraph app. Newest first. Each entry says what
 changed and, where an existing user would notice, how behaviour differs.
 
-## Unreleased
+## 0.37.0 (2026-10-21): the setup offered to a new project, Claude's work seen while it runs, the Brief review fixed
+
+### A new project is offered the setup
+
+- **The app spots a project nobody has set up.** Pointed at a project with
+  no groups, Brief, plan, setup or direction file, no software spec, no
+  stated rule and no hooks (`src/server/setup_welcome.ts`), it opens a guide
+  (`src/webview/setup/SetupGuide.tsx`) listing the setup's steps in the
+  order `vibegraph-knowledge setup` and `/vibegraph-setup` use, each with its
+  state, whether it asks Claude and whether you decide it. **Start the
+  setup** goes where the next step is decided (a panel, or the Brief card on
+  the map). **Set up from Claude Code** shows `npx vibegraph-knowledge init
+  --skill`, `/vibegraph-setup` and the hooks command, each copyable. **Not
+  now** sets the offer aside for this project, kept per person under
+  `~/.cache` and never in the project; starting the setup sets it aside too.
+  `VG_WELCOME=off` switches the offer off.
+- **The sidebar's setup line opens the guide** at any time: "setup: N of M
+  steps done" is now a button.
+- **Opening the map from another view lost its request.** The task bubble's
+  Open, for a Brief or groups task that finished while you were on another
+  view, switched to the map and sent its request in the same moment, before
+  the map existed to hear it: the map opened on whatever it showed last and
+  the Brief card stayed shut. The request now waits until the map and its
+  card mount (`requestMapOpen`, `src/webview/tasks/guiTasks.ts`).
+
+Tests: test:setup-welcome (3, new: what counts as a new project, the offer
+set aside per person and never in the project, the steps on the now-state),
+test:e2e-setup-welcome (3, new: the offer, Not now across a reload, the
+sidebar line, Start to a panel, and Start to the map from the thread list,
+verified red without the kept request); test:now-state updated for the new
+fields. The browser suites run with the offer off (`VG_WELCOME=off` in
+playwright.config.ts), since every bare fixture is a new project.
+
+### Claude's work in the app: seen while it runs, kept when a panel closes
+
+- **One working state everywhere.** Drafting the Brief, proposing groups and
+  proposing rules show the same card while the model works: the drafting
+  glow and marching border, a shimmer on the title, the time it has run,
+  and what it is doing now. The server streams the model's reply
+  (`stream-json`, `src/server/llm_stream.ts`) into steps such as "the model
+  is …", "thinking", "writing the reply: 2,400 characters" and "checking
+  the reply against the facts". Only these app tasks stream; every other
+  model call is unchanged. Reduced motion holds the card still.
+- **A task runs to its end whatever its panel does.** The server owns each
+  one (`src/server/gui_tasks.ts`, one of a kind at a time) and every client
+  hears it. A panel that closes and reopens shows the task still running,
+  or its result; the Rules panel's "Propose rules" no longer looks lost
+  after the panel is closed.
+- **A bubble over the chat button** shows a running task and, when it ends,
+  what it found. Open takes you to where it is decided; ✕ dismisses it.
+- **Proposed groups are shown as they arrive.** The Brief's groups-first
+  step stored its group changes with the Brief, and the map drew none of
+  them. They are now drawn dashed as they would be once ratified (the
+  ratification's own function, on the copy the app is sent, never on an
+  export), the proposal bar says so, and the boxes they hold are lit. An
+  architecture proposal's groups are lit the same way.
+- **Rules are not cut.** The panels clamped every bullet at two lines and a
+  rule's header at 90 characters; the inspector cut a rule at 40 and the
+  inbox at 140. Each now shows its whole text.
+
+Tests: test:gui-tasks (4, new: the task registry, the stream read into
+steps, the Brief's groups drawn before they are decided), test:e2e-rule-draft
+(the panel closed mid-run, the bubble from running to done, the result in the
+reopened panel, the rule's text uncut), test:e2e-brief (the groups dashed and
+lit before ratifying), test:e2e-gui-design (its two-line clamp check is now a
+no-cut check). One real call fed through the stream reader found that a
+model's thinking can arrive without text; it now stays "thinking".
+
+### The Brief review: judged against the whole map, and the topology before the plan
+
+From a field report: after a re-brief in the app, nine claims read "rests on
+the plan only … the code shows no such call", seven of them false, while
+`brief codebase show` on the same Brief flagged three.
+
+- **A thin map no longer passes for the map.** The app's model is derived
+  after each pass from the threads, the stack index and the crossings. When
+  thread extraction failed, the threads became an empty list. A failed
+  stack index or zone pass was likewise swallowed. The model then held the
+  store links the plan and topology declare, but none from the code. The
+  Brief review was judged against that, and it was written over the
+  exported `architecture.vibegraph.json` (5 links where the export held 55).
+  - A failed extraction now keeps the previous threads.
+  - Every failed pass is stamped on the model as `incomplete`, with the
+    reason; so is a model with entry points and no threads.
+  - An incomplete model is never written over the exported map (the server
+    logs why).
+  - The review says what it checked against: "checked against 60 store
+    operations on the map: 60 read from the code". When the map is
+    incomplete it says so, in amber, with the reason.
+- **The project's topology outranks the plan.** A claim the topology
+  declares as a feed was reported as resting on the plan only whenever the
+  plan declared it too, because the plan's steps are read first and the
+  first declaration won. A feed is now preferred, and is worded as evidence:
+  "a feed chosen at run time, which the static reading cannot follow". A
+  negative claim, and a main job left unstated, now name the source that
+  declares them (the code, a recorded run, a ratified claim, the topology or
+  the plan).
+- **The card while a model call runs.** Drafting or re-briefing now shows
+  what is running and for how long, in place of the disabled buttons. "All
+  11 still true" read like a status of the draft; it now says what it does:
+  "Mark the 11 stale lines still true".
+
+Tests: test:brief-checks (+2: a topology-declared watch the plan also
+declares is not "plan only"; the review's basis), test:system-map (+1: a
+model with a failed pass says so and is not written over the export), all
+three red on the prior commit; test:e2e-brief checks the basis line.
 
 ### The map fits the plan when you switch to it
 

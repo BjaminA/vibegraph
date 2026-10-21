@@ -71,6 +71,13 @@
         "type": "string"
       }
     },
+    "incomplete": {
+      "description": "What the derivation could not do this time (a failed thread extraction, stack index or zone pass). Absent when the derivation was whole.",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
     "primaryPath": {
       "type": "object",
       "required": [

@@ -89,6 +89,10 @@ export interface BriefFacts {
   anchorAt?: (cite: string) => BriefAnchor | null;
   anchorNow?: (a: BriefAnchor) => string | null;
   reread?: (cite: string) => string | null;
+  /** 2026-10-21 — what the map's derivation could not do (ArchModelRecord
+   *  `incomplete`): the review says it, since a claim the map cannot see then
+   *  reads as plan-only */
+  incomplete?: string[];
 }
 
 export const hash16 = (s: string) => createHash("sha256").update(s).digest("hex").slice(0, 16);
@@ -412,6 +416,7 @@ export function buildBriefFacts(model: ArchModelRecord, opts: {
     boxes: new Set(model.nodes.map((n) => n.id)), entries: new Set(model.nodes.flatMap((n) => n.entryPoints ?? [])),
     boxEntries: new Map(model.nodes.filter((n) => n.entryPoints?.length).map((n) => [n.id, n.entryPoints!])),
     groups, silent, silentRest, estimate: Math.ceil(text.length / 4), leftOut,
+    ...(model.incomplete?.length ? { incomplete: [...model.incomplete] } : {}),
     anchorAt: (c) => anchorOf(c, opts.source?.files as never, opts.readLines),
     anchorNow: (a) => anchorChange(a, opts.source?.files as never, opts.readLines),
     reread: (c) => { const m = /^(.+):(\d+)$/.exec(c); return m && opts.readLines(m[1]) ? window(m[1], Number(m[2]), "") || null : null; },

@@ -161,3 +161,34 @@ test("a current draft with no data claims is not told it is old (the live setup 
   assert.match(reviewBrief(spec, facts, { scheme: 2 }).summary, /no line states a data claim \(who reads or writes what\)/);
   assert.match(reviewBrief(spec, facts, {}).summary, /written before claims were checked/, "a draft with no scheme is from before claims");
 });
+
+test("a watch the topology declares is the topology's, not 'the plan only', even when the plan declares it too (a field report)", async () => {
+  const { checkClaim, checkLine } = await import("../src/server/brief_checks.ts");
+  const { reviewBasis } = await import("../src/server/brief_review.ts");
+  const Z = "zone:store/items", B = "cluster:viewer";
+  const op = (extra) => ({ box: B, zone: Z, op: "watch", source: "declared", count: 1, ...extra });
+  // the plan's steps are read before the topology's feeds: the plan's op comes first
+  const data = { zones: new Map([[Z, { id: Z, label: "items", store: "store", holds: ["item"], holes: [], grantedWrite: [] }]]), ops: [op({ cite: "plan:flows:browse" }), op({ cite: "topology:feeds:2", feed: true })], processes: [], ambiguous: [] };
+  const synth = { data, boxes: new Set([B]), labels: new Map([[B, "viewer"]]), roles: new Map(), rules: [] };
+  const claim = { subject: B, verb: "watches", object: Z };
+  const c = checkClaim(claim, synth);
+  assert.equal(c.verdict, "declared");
+  assert.match(c.why, /^the project's topology declares it \(topology:feeds:2\): a feed chosen at run time/);
+  assert.doesNotMatch(c.why, /the code shows no such call/, "a declared feed is evidence, not a complaint");
+  const line = { text: "Shows each item as it changes.", words: [], cites: ["topology:feeds:2"], claims: [claim] };
+  assert.deepEqual(checkLine("function", line, synth).warnings.filter((w) => /plan only/.test(w)), [], "no 'rests on the plan only' warning");
+  // a plan-only watch still warns, and a negative claim names who declares it
+  const planOnly = { ...synth, data: { ...data, ops: [op({ cite: "plan:flows:browse" })] } };
+  assert.match(checkLine("function", line, planOnly).warnings.join("\n"), /rests on the plan only: the plan declares it \(plan:flows:browse\)/);
+  assert.match(checkClaim({ ...claim, not: true }, synth).why, /^the plan declares viewer watch/, "the first declaration found, said by its own source");
+  assert.match(checkClaim({ ...claim, not: true }, { ...synth, data: { ...data, ops: [data.ops[1]] } }).why, /^the project's topology declares viewer watch/);
+  // what the claims were checked against, so a thin map shows
+  assert.equal(reviewBasis({ data }), "checked against 2 store operations on the map: 1 declared by the project's topology, 1 declared by the plan only");
+  assert.match(reviewBasis({ data, incomplete: ["thread extraction failed (boom); no threads"] }), /The map is INCOMPLETE \(thread extraction failed \(boom\); no threads\): a claim it cannot see may read as resting on the plan only$/);
+});
+
+test("the review says what it checked against: the fixture's store operations, read from the code", () => {
+  const r = reviewBrief({ function: [], method: [], feature: [] }, facts);
+  assert.match(r.basis, /^checked against \d+ store operations on the map: \d+ read from the code/);
+  assert.doesNotMatch(r.basis, /INCOMPLETE/);
+});

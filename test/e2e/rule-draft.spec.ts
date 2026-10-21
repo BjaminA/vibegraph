@@ -34,6 +34,23 @@ test.describe("rules proposed from the architecture", () => {
     expect(JSON.parse(readFileSync(FILE, "utf-8")).constraints.length, "the estimate writes nothing").toBe(6);
 
     await sheet.locator("[data-rule-draft-run]").click();
+    // 2026-10-21 — the call is the server's task: the panel shows it working,
+    // with what the model is doing as it streams…
+    const working = sheet.locator("[data-rule-draft-working]");
+    await expect(working.locator("[data-working-title]")).toContainText("Proposing rules from the architecture", { timeout: 10_000 });
+    await expect(working).toContainText("the model is stub-rules", { timeout: 10_000 });
+    await expect(working).toContainText(/writing the reply/, { timeout: 10_000 });
+    // …closing the panel does not stop it: the bubble over the chat button carries it to its end…
+    await sheet.locator("[data-sheet-close]").click();
+    await expect(sheet).toBeHidden();
+    await expect(page.locator('[data-task-bubble] [data-task-running="rules"]')).toBeVisible();
+    const done = page.locator('[data-task-bubble] [data-task-finished="rules"]');
+    await expect(done).toContainText("2 rules proposed", { timeout: 60_000 });
+    await expect(done).toHaveAttribute("data-task-state", "done");
+    // …and opening it there shows the result in the panel, reopened
+    await done.locator('[data-task-open="rules"]').click();
+    await expect(sheet).toBeVisible();
+    await expect(done).toHaveCount(0);
     await expect(sheet.locator("[data-rule-draft-stored]")).toHaveAttribute("data-rule-draft-stored", "2", { timeout: 60_000 });
     await expect(sheet.locator("[data-rule-draft-refused] summary")).toContainText("3 refused by the gate");
     await sheet.locator("[data-rule-draft-refused] summary").click();
@@ -49,6 +66,11 @@ test.describe("rules proposed from the architecture", () => {
     await expect(card).toHaveAttribute("data-item-proposed", "true");
     await expect(card).toContainText("rests on funnel:telemetry.storage");
     await expect(card).toContainText("from README.md:14");
+    // 2026-10-21 — a rule's text is never cut: the header's first sentence whole, every bullet whole
+    await expect(card.locator(".vg-item-name")).not.toContainText("…");
+    for (const [shown, whole] of await card.locator(":scope > ul > li > span").evaluateAll((els) => els.map((e) => [e.clientHeight, e.scrollHeight]))) {
+      expect(whole, "a rule's text is not cut").toBeLessThanOrEqual(shown + 1);
+    }
 
     await card.locator('[data-rule-ratify="c7"]').click();
     await expect.poll(() => JSON.parse(readFileSync(FILE, "utf-8")).constraints.find((c: { id: string }) => c.id === "c7")?.source, { timeout: 10_000 }).toBe("human");

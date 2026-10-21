@@ -14,6 +14,7 @@ import { framingFacts } from "./hooked_framing.ts";
 import { buildInbox } from "./inbox.ts";
 import { loadDirection } from "./project_direction.ts";
 import { setupState } from "./setup_state.ts";
+import { offerWelcome } from "./setup_welcome.ts";
 import type { StackIndexRecord } from "../shared/protocol.ts";
 import type { NowState } from "../shared/now_wire.ts";
 
@@ -36,6 +37,10 @@ export function nowState(root: string, opts: { briefStale?: string[]; stack?: Pi
     objective: f.objective, waiting: waiting.length, openQuestions: f.openQuestions.length, briefStale, rules: f.rules, direction,
     badges: { inbox: waiting.length, plan: byKind("plan") + byKind("objective"), direction: direction.proposed },
     next,
-    ...(setup ? { setup: { done: setup.done, of: setup.of } } : {}),
+    ...(setup ? { setup: {
+      done: setup.done, of: setup.of, ...(setup.next ? { next: setup.next.id } : {}),
+      steps: setup.steps.map((s) => ({ id: s.id, title: s.title, status: s.status, core: s.core, spends: s.commands.some((c) => !!c.spends), decides: s.commands.some((c) => c.who === "you"), now: s.now })),
+      welcome: (() => { try { return offerWelcome(root); } catch { return false; } })(),
+    } } : {}),
   };
 }

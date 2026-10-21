@@ -53,6 +53,9 @@ import { NodeExpandedOverlay } from "./NodeExpandedOverlay";
 import { DiagramCanvas } from "./DiagramCanvas";
 import { CodeView } from "./CodeView";
 import { FloatingToggles } from "./FloatingToggle";
+import { TaskBubble } from "./tasks/TaskBubble";
+import { requestMapOpen } from "./tasks/guiTasks";
+import { SetupGuideHost } from "./setup/SetupGuide";
 import { KeyBanner } from "./KeyBanner";
 import { DepsBanner } from "./DepsBanner";
 import {
@@ -2034,6 +2037,16 @@ function Graph() {
           rightInset={20}
         />
       )}
+      {/* 2026-10-21 — Claude's tasks, running or finished, from anywhere (tasks/TaskBubble.tsx) */}
+      <TaskBubble lifted={!regionOpen && chatOpen} onScreen={[...(sheet ? [sheet] : []), ...(viewMode === "system" ? ["map"] : [])]} onOpen={(t) => {
+        if (t.open === "rules") { setSheet("rules"); return; }
+        setSheet(null);
+        setViewMode("system");
+        requestMapOpen(t.kind);
+      }} />
+      {/* 2026-10-21 — a new project is offered the setup; the sidebar's setup line reopens it */}
+      <SetupGuideHost now={now} onPanel={setSheet}
+        onMap={() => { setSheet(null); setViewMode("system"); requestMapOpen("brief"); }} />
 
       {/* MonacoOverlay is NOT wrapped in ViewTransition: ViewTransition's
           wrapper div carries a `transform` animation, which establishes

@@ -60,9 +60,18 @@ export interface ArchEnvelopeLike {
 export function archModelForEnvelope(
   env: ArchEnvelopeLike, stack: StackIndex, crossings: CrossingIndexRecord | null, root: string | null,
   contractFor?: (ep: string) => ThreadContract | null,
-  opts2: { applyStore?: boolean } = {},
+  /** `incomplete`: what the caller's own pass could not do (server.ts: a
+   *  failed thread extraction or stack index), stamped beside this one's own */
+  opts2: { applyStore?: boolean; incomplete?: string[] } = {},
 ): ArchModelRecord {
-  const derived = recordModelSource(derivedArchModel(env, stack, crossings, root, contractFor), { files: env.files, stack, threads: env.threads });
+  // 2026-10-21 — every pass below that fails is said, never swallowed: a
+  // model built without the code's store calls read every claim as plan-only
+  // in the Brief review and was written over the exported map
+  const failed = [...(opts2.incomplete ?? [])];
+  if (env.entryPoints.length && !env.threads.length) failed.push(`no threads: ${env.entryPoints.length} entry point(s) and none traced, so no call is charged to a process`);
+  const built = derivedArchModel(env, stack, crossings, root, contractFor, failed);
+  if (failed.length) built.incomplete = failed;
+  const derived = recordModelSource(built, { files: env.files, stack, threads: env.threads });
   // M-ARCH.4 — the stated half and any pending proposal, each element
   // keeping its source. The server holds the derived model apart so a
   // ratify/reject re-applies without re-deriving.
@@ -72,7 +81,9 @@ export function archModelForEnvelope(
 function derivedArchModel(
   env: ArchEnvelopeLike, stack: StackIndex, crossings: CrossingIndexRecord | null, root: string | null,
   contractFor?: (ep: string) => ThreadContract | null,
+  failed: string[] = [],
 ): ArchModelRecord {
+  const why = (what: string, e: unknown) => failed.push(`${what}: ${(e as Error)?.message ?? e}`);
   const opts = contractOptsFor(env as never, stack);
   const threadByEp = new Map(env.threads.filter((t) => t.entryPointId).map((t) => [t.entryPointId as string, t]));
   const memo = new Map<string, ThreadContract | null>();
@@ -120,18 +131,18 @@ function derivedArchModel(
   let zones: ReturnType<typeof deriveDataZones> = { nodes: [], edges: [], notes: [] };
   let specs: ReturnType<typeof listSpecs> = [];
   try { specs = listSpecs(root); } catch { specs = []; }
-  try { zones = deriveDataZones({ files: env.files, threads: env.threads, stack, model, plan: loadPlan(root), negative: negativeGlobs(root), registered: registeredAccess(root), declared: declaredTopology(root).topology, specs }); } catch { /* best effort */ }
+  try { zones = deriveDataZones({ files: env.files, threads: env.threads, stack, model, plan: loadPlan(root), negative: negativeGlobs(root), registered: registeredAccess(root), declared: declaredTopology(root).topology, specs }); } catch (e) { why("data zones not derived", e); }
   const extra = { nodes: [...stores.nodes, ...zones.nodes], edges: [...stores.edges, ...zones.edges], notes: [...stores.notes, ...zones.notes] };
   if (!extra.nodes.length) return stampHierarchy(model);
   const withZones = { ...model, nodes: [...model.nodes, ...extra.nodes], edges: [...model.edges, ...extra.edges], notes: [...model.notes, ...extra.notes] };
   // 2026-10-08 — what a person agreed the code does at run time (claim_store.ts)
   let claimed: ArchModelRecord["edges"] = [];
-  try { claimed = claimEdges(root, withZones, linesReader(root)); } catch { claimed = []; }
+  try { claimed = claimEdges(root, withZones, linesReader(root)); } catch (e) { claimed = []; why("ratified claims not read", e); }
   // and what the project's topology declares it reaches at run time (topology_feeds.ts)
-  try { claimed = [...claimed, ...feedEdges(declaredFeeds(declaredTopology(root).topology, withZones, loadPlan(root), env.files), withZones)]; } catch { /* best effort */ }
+  try { claimed = [...claimed, ...feedEdges(declaredFeeds(declaredTopology(root).topology, withZones, loadPlan(root), env.files), withZones)]; } catch (e) { why("declared feeds not read", e); }
   const known = claimed.length ? { ...withZones, edges: [...withZones.edges, ...claimed] } : withZones;
   // and what recorded runs saw (trace_runs.ts): confirmed, or observed
   let runs: ReturnType<typeof observedOps> = [];
-  try { runs = observedOps(root, known); } catch { runs = []; }
+  try { runs = observedOps(root, known); } catch (e) { runs = []; why("recorded runs not read", e); }
   return stampHierarchy(withObserved(known, runs));
 }

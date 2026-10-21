@@ -166,3 +166,25 @@ test("byte-stable: the same model renders the same bytes", () => {
   assert.equal(JSON.stringify(again.map), JSON.stringify(fleet.map));
   assert.equal(renderSystemMapMd(again.map), renderSystemMapMd(fleet.map));
 });
+
+test("a model built while a pass failed says so, and is never written over the exported map (a field report)", () => {
+  const root = join(ROOT, "examples/fleet-telemetry");
+  const stack = buildStackIndex(fleet.env, root), crossings = buildCrossingIndex(fleet.env);
+  // the GUI's failed thread extraction: entry points, no threads
+  const thin = archModelForEnvelope({ ...fleet.env, threads: [] }, stack, crossings, root, undefined, { applyStore: false, incomplete: ["thread extraction failed (boom); no threads"] });
+  assert.equal(thin.incomplete[0], "thread extraction failed (boom); no threads", "the caller's failure is kept");
+  assert.match(thin.incomplete.join("\n"), /no threads: \d+ entry point\(s\) and none traced/);
+  assert.equal(fleet.model.incomplete, undefined, "a whole derivation carries no flag");
+  const tmp = mkdtempSync(join(tmpdir(), "vg-arch-incomplete-"));
+  try {
+    const knowledge = join(tmp, ".vibegraph", "knowledge");
+    mkdirSync(knowledge, { recursive: true });
+    writeFileSync(join(knowledge, "architecture.vibegraph.json"), "{\"whole\":true}\n");
+    const ctx = { entryPoints: fleet.env.entryPoints, system: null, threadGraph: null, tool: "test" };
+    const r = refreshExportedArchitecture(tmp, thin, ctx);
+    assert.deepEqual(r.written, []);
+    assert.match(r.skipped, /^the live map is incomplete \(thread extraction failed \(boom\); no threads; no threads: /);
+    assert.equal(readFileSync(join(knowledge, "architecture.vibegraph.json"), "utf-8"), "{\"whole\":true}\n", "the last whole map is kept");
+    assert.deepEqual(refreshExportedArchitecture(tmp, fleet.model, ctx).written, [join(".vibegraph", "knowledge", "architecture.vibegraph.json")]);
+  } finally { rmSync(tmp, { recursive: true, force: true }); }
+});

@@ -47,7 +47,8 @@ export interface InboxItem {
 
 const ONE: Record<string, string> = { processes: "process", modules: "module", stores: "store", principals: "principal", stack: "tool", boundaries: "boundary", threads: "thread", flows: "flow", policies: "policy" };
 // JSON.stringify(undefined) is undefined: a field a change ADDS has no "from"
-const short = (v: unknown) => { const s = JSON.stringify(v) ?? "(none)"; return s.length > 140 ? `${s.slice(0, 139)}…` : s; };
+// whole (2026-10-21: cut at 140 characters, a proposed rule said less than itself)
+const short = (v: unknown) => JSON.stringify(v) ?? "(none)";
 
 /** `model` (the derived map) turns on the sensors that read it — new
  *  processes and identities, placement, groups and scope drift. */
@@ -109,7 +110,7 @@ export function buildInbox(root: string, opts: { rec?: PlanReconcile | null; mod
   for (const s of listStoredThreadSkills(root)) if (s.status === "draft") out.push({ id: `skill:${s.entryPointId}`, kind: "skill", decidable: true, title: `a skill draft for ${s.entryPointId}`, detail: [`drafted ${s.generatedAt.slice(0, 10)}`] });
   let specs: ReturnType<typeof listSpecs> = [];
   try { specs = listSpecs(root); } catch { specs = []; }
-  for (const s of specs) if (s.status !== "ratified") out.push({ id: `spec:${s.tool}`, kind: "spec", decidable: true, title: `a software spec draft for ${s.tool}`, detail: [s.definition.slice(0, 140), `${s.operations.length} operations · ${s.rules.length} rules`] });
+  for (const s of specs) if (s.status !== "ratified") out.push({ id: `spec:${s.tool}`, kind: "spec", decidable: true, title: `a software spec draft for ${s.tool}`, detail: [s.definition, `${s.operations.length} operations · ${s.rules.length} rules`] });
   // 2026-10-08 — the Brief, one item per pending section (brief_store.ts)
   const brief = loadBrief(root);
   if (brief.proposed) {
