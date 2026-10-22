@@ -72,14 +72,17 @@ test("a run takes each action once, reads the state after each, and ends saying 
   assert.match(setupRunSummary(r), /^\d+ steps run, 1 failed, \d+ wait for you$/);
 });
 
-test("one step only, and a run with nothing to take says what waits", async () => {
+test("only the selected steps, in the setup's order; none selected, and nothing to take, say so", async () => {
+  // 2026-10-22 — the guide's chips: every runnable step starts selected, the person takes some out
   const calls = [];
   const fake = { state: () => setupState(root, { stack }), classify: async () => ({ ok: true }), software: async () => ({ ok: true }),
     groups: async () => { calls.push("groups"); return { ok: true }; }, brief: async () => ({ ok: true }), rules: async () => { calls.push("rules"); return { ok: true }; },
-    census: () => ({ ok: true }), settle: async () => {}, step: () => {} };
-  const r = await runSetup(fake, { only: "groups" });
-  assert.deepEqual(calls, ["groups"]);
-  assert.equal(r.ran.length, 1);
+    census: () => { calls.push("census"); return { ok: true }; }, settle: async () => {}, step: () => {} };
+  const r = await runSetup(fake, { steps: ["direction", "groups"] });
+  assert.deepEqual(calls, ["groups", "census"], "the selection's order is the setup's, not the list's");
+  assert.equal(r.ran.length, 2);
+  const unselected = await runSetup(fake, { steps: [] });
+  assert.deepEqual([unselected.ok, unselected.error], [false, "no step is selected"]);
   const none = await runSetup({ ...fake, state: () => ({ steps: [{ id: "hooks", title: "Hooks", status: "todo", core: true, facts: [], commands: [], now: { text: "", panel: null } }], next: null, after: null, done: 0, of: 1, software: null }) });
   assert.equal(none.ok, false);
   assert.match(none.error, /^nothing for Claude to run now: Install the hooks from a terminal/);

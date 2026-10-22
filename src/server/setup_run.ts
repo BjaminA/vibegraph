@@ -13,6 +13,8 @@
 // into a candidate brings its spec into the same run.
 
 import type { SetupState, SetupStepId } from "./setup_state.ts";
+import { githubRef } from "./github_docs.ts";
+import { isInstalledReadme } from "./software_candidates.ts";
 
 export type SetupActionKind = "classify" | "software" | "groups" | "brief" | "rules" | "census";
 
@@ -26,6 +28,8 @@ export interface SetupAction {
   /** software: the spec's name and the docs it is drawn from */
   tool?: string;
   urls?: string[];
+  /** software: the docs are a GitHub repository of this owner (github_docs.ts) */
+  github?: string;
 }
 
 export interface SetupPreview {
@@ -50,8 +54,10 @@ export function setupActions(state: SetupState): SetupPreview {
       actions.push({ key: "classify", kind: "classify", step: "software", spends: true, label: `Classify the ${n} package${n === 1 ? "" : "s"} no table knows` });
     }
     for (const c of state.software.candidates) {
-      const url = c.docs.find((d) => /^https?:\/\//i.test(d.url))?.url;
-      if (url) actions.push({ key: `software:${c.name}`, kind: "software", step: "software", spends: true, tool: c.name, urls: [url], label: `Write a spec for ${c.name} from ${url}` });
+      // a link, or the README installed with the package (read from disk)
+      const url = c.docs.find((d) => /^https?:\/\//i.test(d.url) || isInstalledReadme(d.url))?.url;
+      const owner = url ? githubRef(url)?.owner : undefined;
+      if (url) actions.push({ key: `software:${c.name}`, kind: "software", step: "software", spends: true, tool: c.name, urls: [url], ...(owner ? { github: owner } : {}), label: `Write a spec for ${c.name} from ${url}` });
       else waits.push(`${c.name}: no docs link found; give one with \`vibegraph-knowledge software add ${c.name} --from <docs url>\`, or set it aside`);
     }
   }
@@ -78,7 +84,8 @@ export function setupActions(state: SetupState): SetupPreview {
   return { actions: actions.slice(0, MAX_ACTIONS), waits };
 }
 
-type Outcome = { ok: boolean; error?: string; detail?: string };
+/** `needs`: a grant that would let a failed step succeed (a private repository) */
+type Outcome = { ok: boolean; error?: string; detail?: string; needs?: { github: string } };
 
 export interface SetupRunCtx {
   state: () => SetupState;
@@ -97,17 +104,19 @@ export interface SetupRunResult {
   ok: boolean;
   error?: string;
   ran: Array<{ label: string; detail: string }>;
-  failed: Array<{ label: string; error: string }>;
+  failed: Array<{ label: string; error: string; needs?: { github: string } }>;
   waits: string[];
 }
 
-/** Run every action Claude can take now (or only one step's), one at a time. */
-export async function runSetup(ctx: SetupRunCtx, opts: { only?: SetupStepId } = {}): Promise<SetupRunResult> {
+/** Run every action Claude can take now, or only the selected steps' (the
+ *  guide's chips, 2026-10-22), one at a time, in the setup's order. */
+export async function runSetup(ctx: SetupRunCtx, opts: { steps?: readonly SetupStepId[] } = {}): Promise<SetupRunResult> {
+  if (opts.steps && !opts.steps.length) return { ok: false, error: "no step is selected", ran: [], failed: [], waits: setupActions(ctx.state()).waits };
   const attempted = new Set<string>();
   const ran: SetupRunResult["ran"] = [];
   const failed: SetupRunResult["failed"] = [];
   for (let i = 0; i < MAX_ACTIONS; i++) {
-    const a = setupActions(ctx.state()).actions.find((x) => !attempted.has(x.key) && (!opts.only || x.step === opts.only));
+    const a = setupActions(ctx.state()).actions.find((x) => !attempted.has(x.key) && (!opts.steps || opts.steps.includes(x.step)));
     if (!a) break;
     attempted.add(a.key);
     ctx.step(`${attempted.size}. ${a.label}`);
@@ -121,7 +130,7 @@ export async function runSetup(ctx: SetupRunCtx, opts: { only?: SetupStepId } = 
                 : ctx.census();
     } catch (e) { r = { ok: false, error: String((e as Error)?.message ?? e) }; }
     if (r.ok) ran.push({ label: a.label, detail: r.detail ?? "done" });
-    else failed.push({ label: a.label, error: r.error ?? "failed" });
+    else failed.push({ label: a.label, error: r.error ?? "failed", ...(r.needs ? { needs: r.needs } : {}) });
     await ctx.settle();
   }
   const waits = setupActions(ctx.state()).waits;

@@ -115,7 +115,9 @@ export function softwareCandidates(root: string, stack: Pick<StackIndexRecord, "
   return { candidates: candidates.slice(0, MAX_CANDIDATES), more: Math.max(0, candidates.length - MAX_CANDIDATES), unclassified, commands: commands.slice(0, 8), skipped: set };
 }
 
-/** A repository field as a browsable URL, or null. */
+/** A repository field as a browsable URL, or null. A monorepo package names
+ *  its folder (`repository.directory`, 2026-10-22: the repository root had no
+ *  README while the package's folder did); on GitHub the link goes there. */
 export function repoUrl(raw: unknown): string | null {
   const v = typeof raw === "string" ? raw : raw && typeof raw === "object" ? (raw as { url?: unknown }).url : null;
   if (typeof v !== "string" || !v.trim()) return null;
@@ -123,7 +125,25 @@ export function repoUrl(raw: unknown): string | null {
   const short = /^(github|gitlab|bitbucket):(.+)$/.exec(u);
   if (short) u = `https://${short[1]}.${short[1] === "bitbucket" ? "org" : "com"}/${short[2]}`;
   else if (/^[\w.-]+\/[\w.-]+$/.test(u)) u = `https://github.com/${u}`;
-  return /^https?:\/\//.test(u) ? u : null;
+  if (!/^https?:\/\//.test(u)) return null;
+  const dir = raw && typeof raw === "object" ? (raw as { directory?: unknown }).directory : null;
+  if (typeof dir === "string" && /^[\w./-]+$/.test(dir) && !dir.split("/").includes("..") && /^https:\/\/github\.com\/[^/]+\/[^/]+$/.test(u)) {
+    u = `${u}/tree/HEAD/${dir.replace(/^\.?\/+|\/+$/g, "")}`;
+  }
+  return u;
+}
+
+/** The README a package was installed with (node_modules), as a path relative
+ *  to the project: the docs for the very version the project uses, read from
+ *  disk, so a private package needs no network and no login. */
+export const isInstalledReadme = (ref: string): boolean => /^node_modules\/(@[\w.-]+\/)?[\w.-]+\/README(\.md|\.markdown)?$/i.test(ref) && !ref.split("/").includes("..");
+
+export function installedReadme(root: string, pkg: string): string | null {
+  for (const name of ["README.md", "readme.md", "Readme.md", "README.markdown", "README"]) {
+    const rel = `node_modules/${pkg}/${name}`;
+    try { if (statSync(join(root, rel)).isFile()) return rel; } catch { /* not this name */ }
+  }
+  return null;
 }
 
 /** A package's published README: a real page for `software add` when nothing better is found. */
@@ -143,6 +163,9 @@ function findDocs(root: string, name: string, tools: StackToolRecord[]): Softwar
   const packages = tools.map((t) => t.tool);
   const out: SoftwareCandidate["docs"] = [];
   const add = (url: string, from: string) => { if (!out.some((d) => d.url === url) && out.length < 3) out.push({ url, from }); };
+  // 2026-10-22 — first, the README installed with the package: the version the
+  // project uses, on disk, a private package's included
+  for (const p of packages) { const r = installedReadme(root, p); if (r) add(r, `${p}'s README, installed with the package`); }
   for (const p of packages) {
     try {
       const pj = JSON.parse(readFileSync(join(root, "node_modules", p, "package.json"), "utf-8"));

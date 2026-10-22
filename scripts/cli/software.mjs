@@ -42,9 +42,10 @@ ${SOFTWARE_EDIT_HELP}
 
 const MAX_BYTES = 5 * 1024 * 1024;
 
-export async function readFrom(ref) {
-  if (/^https?:\/\//i.test(ref)) return fetchDocs(ref);
-  const file = resolve(ref);
+export async function readFrom(ref, root) {
+  if (/^https?:\/\//i.test(ref)) return fetchDocs(ref, { root });
+  // a path `setup` printed (an installed README) is the project's: found from its root too
+  const file = existsSync(resolve(ref)) || !root ? resolve(ref) : resolve(root, ref);
   if (!existsSync(file)) return { error: `${ref}: no such file` };
   const body = readFileSync(file, "utf-8");
   if (body.length > MAX_BYTES) return { error: `${ref}: over ${MAX_BYTES / 1024 / 1024} MB` };
@@ -87,7 +88,7 @@ export async function runSoftware(args) {
     if (!refs.length) return done("add needs --from <url or file> (one or more): the documents the spec is drawn from", 2);
     const texts = [];
     for (const ref of refs) {
-      const r = await readFrom(ref);
+      const r = await readFrom(ref, root);
       if (r.error) return done(`could not read ${r.error}`, 1);
       if (!r.text.trim()) return done(`${ref} has no text`, 1);
       texts.push({ ref, text: r.text });

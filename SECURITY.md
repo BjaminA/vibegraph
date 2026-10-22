@@ -135,7 +135,20 @@ Stated explicitly so you can make your own call:
   `plan draft --from https://…` download the page you name (30 s timeout,
   5 MB cap) to draft from it; nothing else in VibeGraph makes a network call
   of its own, and neither fetches anything you did not name. The text is kept
-  under `.vibegraph/software/sources/` so its quotes can be re-checked.
+  under `.vibegraph/software/sources/` so its quotes can be re-checked. The
+  setup guide's "Run all" fetches the docs link the setup shows you before
+  it runs. A package's README installed in `node_modules` is read from disk
+  instead (nothing else on disk is read this way).
+- **A GitHub link is read through GitHub's API, and your GitHub login is used
+  only where you grant it.** A private repository needs your login; VibeGraph
+  never uses it unasked. You grant it per owner and per project (the setup
+  guide's "Use my GitHub login", or `vibegraph-knowledge setup grant github
+  <owner>`, which Claude Code is refused); the grant is kept under
+  `~/.cache/vibegraph-knowledge`, never in the project, and `setup revoke
+  github <owner>` takes it back. The token is read from `GITHUB_TOKEN` /
+  `GH_TOKEN` or `gh auth token` at the moment a granted owner's repository is
+  read, is sent only to `api.github.com`, and is never stored, logged or
+  given to a model.
 - **A software spec is only as right as its documents.** The citation gate
   proves each item quotes the docs, not that the model read them correctly;
   items marked INFERRED are not in the docs at all. Ratify a spec only after

@@ -9,7 +9,7 @@ import { staleBriefLines, pendingBriefReview } from "./src/server/brief_inputs";
 import { historicalAdvice, historicalFolders } from "./src/server/historical_copies";
 import { DEFAULT_PHASE_TEXT, phaseTexter } from "./src/server/pass_progress";
 import { probeOtherServer, servedUrl, ABOUT_PATH, aboutPayload } from "./src/server/serve_address";
-import { findClaude, isMissing, describeClaude } from "./src/server/find_claude";
+import { findClaude, isMissing, describeClaude, loginHint } from "./src/server/find_claude";
 import * as http from "http";
 import * as fs from "fs";
 import * as path from "path";
@@ -212,6 +212,7 @@ import { groupsStep } from "./src/server/brief_groups_first";
 import { loadBrief } from "./src/server/brief_store";
 import { runSetup, setupActions, setupRunSummary, type SetupRunCtx } from "./src/server/setup_run";
 import { softwareAddRun } from "./src/server/software_add";
+import { githubGranted, githubLogin, grantGithub, validGithubOwner } from "./src/server/github_docs";
 import { isKnownChatModel } from "./src/shared/chat_models";
 import { sanitiseTiers, resolveTierRoute, routeLabel, DEFAULT_LOCAL, type ModelTier } from "./src/shared/model_tiers";
 import { setModelTiers } from "./src/server/run/synth_args";
@@ -6874,7 +6875,9 @@ function _readmePrompt(scope: "thread" | "file", id: string, ir: any): string {
 // JSON, or an empty result. Cleared by a successful call.
 let lastGenFailure: string | null = null;
 function genFailureSuffix(): string {
-  return lastGenFailure ? ` — ${lastGenFailure}` : "";
+  if (!lastGenFailure) return "";
+  const hint = loginHint(lastGenFailure, (() => { const f = findClaude(); return isMissing(f) ? undefined : f.cmd; })());
+  return ` — ${lastGenFailure}${hint ? `. To fix: ${hint}` : ""}`;
 }
 
 // 2026-10-21 — `onStep`: a caller that shows the work (a GUI task) gets what the
@@ -8655,17 +8658,28 @@ function setupWebSocket() {
             (task) => ruleDraftRun({ ...ruleDraftCtx, run: taskRun(task) }),
             (r) => { const n = (r as { stored?: string[] }).stored?.length ?? 0; return `${n} rule${n === 1 ? "" : "s"} proposed: decide them in the Rules panel`; }, reply);
         } else if (msg.type === "setup-run-preview" || msg.type === "setup-run") {
-          // 2026-10-21 — the setup's "Run all" and "Run the next step"
-          // (src/server/setup_run.ts): the preview spends nothing; the run is
-          // one task of model calls, and stops where a decision is a person's
+          // 2026-10-21 — the setup guide's run (src/server/setup_run.ts): the
+          // preview spends nothing; the run is one task of model calls over the
+          // steps the person left selected (2026-10-22), and stops where a
+          // decision is a person's
           const reply = (payload: unknown) => ws.send(JSON.stringify({ type: "setup-run-result", payload: { action: msg.type === "setup-run" ? "run" : "preview", ...(payload as object) } }));
-          const only = ["software", "groups", "brief", "rules", "direction"].includes(msg.payload?.only) ? msg.payload.only : undefined;
+          const RUNNABLE = ["software", "groups", "brief", "rules", "direction"];
+          const steps = Array.isArray(msg.payload?.steps) ? msg.payload.steps.filter((s: unknown): s is "software" => typeof s === "string" && RUNNABLE.includes(s)) : undefined;
           if (!isDirectory) reply({ ok: false, error: "the setup needs a project directory" });
           else if (msg.type === "setup-run-preview") {
             const p = setupActions(setupState(analyzedRoot(), { stack: latestStack }));
-            reply({ ok: true, ...p, actions: only ? p.actions.filter((a) => a.step === only) : p.actions });
-          } else runGuiTask("setup", only ? "Running the next setup step" : "Running the setup", "setup",
-            (task) => runSetup(setupRunCtx(task), { only }), setupRunSummary, reply);
+            const actions = p.actions;
+            // 2026-10-22 — a spec read from a GitHub repository: whether this
+            // machine has a GitHub login, and which owners the person granted
+            const owners = [...new Set(actions.map((a) => a.github).filter((o): o is string => !!o))];
+            const github = owners.length ? { login: githubLogin()?.via ?? null, granted: owners.filter((o) => githubGranted(analyzedRoot(), o)) } : undefined;
+            reply({ ok: true, ...p, actions, ...(github ? { github } : {}) });
+          } else {
+            // the person's GitHub grant, ticked in the guide (github_docs.ts): recorded first
+            for (const o of Array.isArray(msg.payload?.grantGithub) ? msg.payload.grantGithub.slice(0, 10) : []) if (validGithubOwner(o)) grantGithub(analyzedRoot(), o);
+            runGuiTask("setup", steps?.length === 1 ? `Running the setup's ${steps[0]} step` : `Running ${steps ? steps.length : "every"} setup step${steps?.length === 1 ? "" : "s"}`, "setup",
+              (task) => runSetup(setupRunCtx(task), { steps }), setupRunSummary, reply);
+          }
         } else if (msg.type === "gui-tasks-get") {
           ws.send(JSON.stringify({ type: "gui-tasks", payload: { tasks: guiTasks.list() } }));
         } else if (msg.type === "gui-task-dismiss") {

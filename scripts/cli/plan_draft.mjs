@@ -32,7 +32,7 @@ export async function runPlanDraft(args) {
   if (!plan) return done(`no plan yet, and starting one is a person's step: \`vibegraph-knowledge plan observe\` (from the code, zero tokens — the objective is left for ${parsed.values.direction ? "this draft" : "a draft"}) or \`vibegraph-knowledge plan init "<objective>"\`; then run this again — nothing was spent`, 1);
   const docs = [];
   for (const ref of parsed.values.from ?? []) {
-    const r = await readFrom(ref);
+    const r = await readFrom(ref, root);
     if (r.error) return done(`could not read ${r.error}`, 1);
     docs.push({ ref, text: r.text });
   }

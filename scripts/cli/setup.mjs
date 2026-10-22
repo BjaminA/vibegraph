@@ -21,13 +21,16 @@ import { pipelineHere } from "./pipeline.mjs";
 import { cliPath } from "./winpath.mjs";
 import { buildStackIndex } from "../../src/server/stack.ts";
 import { setupState, loadSkips, saveSkips, SKIPPABLE_STEPS } from "../../src/server/setup_state.ts";
+import { githubLogin, grantGithub, revokeGithub } from "../../src/server/github_docs.ts";
 import { loadDirection } from "../../src/server/project_direction.ts";
 import { censusNow } from "./project_direction_context.mjs";
 
 export const SETUP_USAGE = `setup [<root>] [--json]                 the project's setup, in order: software specs, architecture groups, the Brief,
                                   rules, the hooks, then a plan for what you build next — where it stands and the
                                   exact next commands (who may run each, which spend tokens); zero tokens
-  setup skip software <name> --why "…" | skip direction --why "…" | unskip software <name> | unskip direction`;
+  setup skip software <name> --why "…" | skip direction --why "…" | unskip software <name> | unskip direction
+  setup grant github <owner> | revoke github <owner>   a person: read that owner's repositories (a private one's docs)
+                                  with your GitHub login (gh, GITHUB_TOKEN), for this project`;
 
 const LABEL = { done: "done", waiting: "waiting for you", todo: "to do", optional: "optional", skipped: "set aside" };
 const WHO = { you: "you:", claude: "Claude may:", either: "either:" };
@@ -67,6 +70,17 @@ export function runSetup(args, { cli = null, home = homedir() } = {}) {
     parsed = parseArgs({ args, allowPositionals: true, options: { json: { type: "boolean" }, why: { type: "string" }, root: { type: "string" } } });
   } catch (e) { return { exitCode: 2, text: `${e.message}\n\nusage: vibegraph-knowledge ${SETUP_USAGE}\n` }; }
   const [sub, a, b] = parsed.positionals;
+  if (sub === "grant" || sub === "revoke") {
+    // 2026-10-22 — a person lets VibeGraph read an owner's GitHub repositories
+    // with their GitHub login (gh / GITHUB_TOKEN), for this project (github_docs.ts)
+    if (a !== "github" || !b) return { exitCode: 2, text: `usage: vibegraph-knowledge setup grant|revoke github <owner> [<root>]\n` };
+    const root = resolve(cliPath(parsed.values.root ?? parsed.positionals[3] ?? "."));
+    if (sub === "revoke") return revokeGithub(root, b) ? { exitCode: 0, text: `revoked: your GitHub login is no longer used for github.com/${b}\n` } : { exitCode: 1, text: `${b} was not granted\n` };
+    const r = grantGithub(root, b);
+    if (!r.ok) return { exitCode: 2, text: `${r.error}\n` };
+    const login = githubLogin();
+    return { exitCode: 0, text: `granted: a docs link to github.com/${b}/… is read through GitHub's API with your GitHub login, for this project (kept under ~/.cache, never in the project)\n${login ? `login found: ${login.via}` : "no GitHub login found here yet: run `gh auth login`, or set GITHUB_TOKEN"}\n` };
+  }
   if (sub === "skip" || sub === "unskip") {
     const isSoftware = a === "software";
     const name = isSoftware ? b : a;

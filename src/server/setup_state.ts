@@ -42,6 +42,7 @@ import { loadPlan } from "./plan_store.ts";
 import { OBSERVED_OBJECTIVE } from "./plan_observe.ts";
 import { loadDirection, staleRules, type Candidate } from "./project_direction.ts";
 import { cacheDirFor } from "../../scripts/cache_dir.mjs";
+import { githubGranted, githubRef } from "./github_docs.ts";
 
 /** init.mjs's HOOK_MARKER, the word every installed hook command carries.
  *  Not imported: init.mjs → paths.mjs reads import.meta.url at load, which the
@@ -134,6 +135,10 @@ export function setupState(root: string, opts: { stack?: Pick<StackIndexRecord, 
         const docs = c.docs.length ? `docs: ${c.docs[0].url} (from ${c.docs[0].from})` : "no docs source found — the person supplies one";
         facts.push(`${c.name} (${c.packages.join(", ")}) — ${c.kind === "table" ? `${c.role}; ${what.table}` : `${what[c.kind]}${c.kind === "platform" ? "" : ` as ${c.role}`}`}, called on ${c.calledOn} thread(s); ${docs}`);
         commands.push(cmd(`software add ${c.name} --from ${c.docs[0]?.url ?? "<its docs page or a file>"}`, "claude", "one model call; keeps only what the docs say, quoted", true));
+      }
+      // 2026-10-22 — docs in a GitHub repository: a private one needs the person's login (github_docs.ts)
+      for (const owner of [...new Set(software.candidates.map((c) => (c.docs[0] ? githubRef(c.docs[0].url)?.owner : undefined)).filter((o): o is string => !!o))].filter((o) => !githubGranted(root, o))) {
+        commands.push(cmd(`setup grant github ${owner}`, "you", `if a github.com/${owner} repository is private: read it with your GitHub login (gh, GITHUB_TOKEN)`));
       }
       if (software.more) facts.push(`and ${software.more} more candidate(s) — set aside or specified, they appear here in turn`);
       commands.push(cmd(`setup skip software <name> --why "<why it needs no spec>"`, "either", "a package the project uses in an ordinary way"));

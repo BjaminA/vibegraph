@@ -5,16 +5,18 @@
 // from the sidebar's "setup" line. It lists the setup's steps in their one
 // order (src/server/setup_state.ts: the same order as `vibegraph-knowledge
 // setup` and /vibegraph-setup), each with its state, whether it asks a model
-// and whether a person decides it. A step Claude can take is run from here
-// ("Run the next step", "Run all": SetupRun.tsx, after a confirmation that
-// lists every model call); a person's decision opens the panel it is made in.
+// and whether a person decides it. Every step Claude can take now starts
+// selected, its chip highlighted; one Run takes the selected steps in order,
+// one at a time (SetupRun.tsx, SetupStepRow.tsx); what each will do is listed
+// under it. A step that waits for a person opens from its status chip.
 
 import React, { useEffect, useRef, useState } from "react";
-import { Check, Clock, Circle, ArrowRight, Terminal, X, Copy, Sparkles, UserCheck } from "lucide-react";
-import type { NowPanel, NowState, SetupStepSummary, SheetPanel } from "../../shared/now_wire";
+import { Check, Play, Terminal, X, Copy, Sparkles } from "lucide-react";
+import type { NowPanel, NowState, SheetPanel } from "../../shared/now_wire";
 import { bridge } from "../types";
 import { SetupRunPanel, useSetupRun } from "./SetupRun";
-import { btn, ico, quiet, tag } from "./styles";
+import { SetupStepRow } from "./SetupStepRow";
+import { btn, ico, quiet } from "./styles";
 
 /** the sidebar's setup line (NowStrip) opens the guide from anywhere */
 export function openSetupGuide(): void {
@@ -53,14 +55,6 @@ export function SetupGuideHost({ now, onPanel, onMap }: {
     onStart={(t) => { if (t.panel === "setup") return; close(); if (t.panel) onPanel(t.panel); else onMap(); }} />;
 }
 
-const STATE: Record<SetupStepSummary["status"], { label: string; accent: string; icon: React.ReactNode }> = {
-  done: { label: "done", accent: "var(--accent-thread)", icon: <Check {...ico} /> },
-  waiting: { label: "waiting for you", accent: "var(--accent-warning)", icon: <Clock {...ico} /> },
-  todo: { label: "to do", accent: "var(--text-secondary)", icon: <Circle {...ico} /> },
-  optional: { label: "optional", accent: "var(--text-muted)", icon: <Circle {...ico} /> },
-  skipped: { label: "set aside", accent: "var(--text-muted)", icon: <Circle {...ico} /> },
-};
-
 const COMMANDS = [
   { run: "npx vibegraph-knowledge init --skill", why: "in your terminal, in the project: installs the /vibegraph-setup skill for Claude Code" },
   { run: "/vibegraph-setup", why: "in Claude Code: it walks the same steps, runs the proposing ones after your yes, and stops at every decision that is yours" },
@@ -83,19 +77,11 @@ export function SetupGuide({ now, welcome, onStart, onClose }: {
     return () => window.removeEventListener("keydown", h);
   }, [onClose]);
   const steps = now.setup?.steps ?? [];
-  // the hooks are installed from a terminal, never from here: the next step's
-  // button shows the command instead of opening a panel
-  const hooksNext = now.setup?.next === "hooks";
-  // a step Claude can take is RUN from here (setup_run.ts), never sent to a
-  // panel with nothing to press (the Plan panel cannot classify or draft a spec)
+  // 2026-10-22 — every step Claude can run starts selected (its chip); one Run
+  // takes the selected steps in order (SetupRun.tsx, setup_run.ts). A step that
+  // waits for the person opens where it is decided from its status chip.
   const run = useSetupRun();
-  const nextId = now.setup?.next;
-  const runnable = run.preview?.actions ?? [];
-  const runNext = !!nextId && runnable.some((a) => a.step === nextId);
-  // the setup's own next step, decided where its panel says; the app's overall
-  // Next can be the inbox, which also lists (say) a groups proposal
-  const target = steps.find((s) => s.id === nextId && s.status !== "done")?.now ?? now.next;
-  const busy = run.running || !!run.confirm;
+  const calls = (run.preview?.actions ?? []).filter((a) => run.selected.includes(a.step) && a.spends).length;
   const copy = (s: string) => { void navigator.clipboard?.writeText(s).then(() => setCopied(s), () => setCopied(null)); };
   return (
     <div data-setup-guide-scrim onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 1100, background: "color-mix(in oklab, var(--bg-canvas) 55%, transparent)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
@@ -119,29 +105,15 @@ export function SetupGuide({ now, welcome, onStart, onClose }: {
         </div>
 
         <ol data-setup-steps style={{ margin: 0, padding: 0, listStyle: "none", display: "flex", flexDirection: "column", gap: 8 }}>
-          {steps.map((s, i) => {
-            const st = STATE[s.status];
-            return (
-              <React.Fragment key={s.id}>
+          {steps.map((s, i) => (
+            <React.Fragment key={s.id}>
               {/* 2026-10-21 — the plan follows the setup and is not counted in it (setup_state.ts) */}
               {s.after && !steps[i - 1]?.after && <li data-setup-after style={{ ...quiet, marginTop: 8 }}>After the setup, when you have something to build next:</li>}
-              <li data-setup-step={s.id} data-setup-status={s.status} style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "8px 12px", borderRadius: 8, border: `1px ${s.after ? "dashed" : "solid"} var(--border-edge)` }}>
-                <span style={{ ...quiet, fontFamily: "var(--font-mono)", minWidth: 16 }}>{i + 1}</span>
-                <div style={{ flex: "1 1 auto", display: "flex", flexDirection: "column", gap: 4 }}>
-                  <span style={{ fontFamily: "var(--font-ui)", fontSize: "var(--fs-13)", color: "var(--text-primary)" }}>{s.title}</span>
-                  {s.now.text && s.status !== "done" && <span style={quiet}>{s.now.text}</span>}
-                </div>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 4, justifyContent: "flex-end", flex: "0 0 auto", maxWidth: 220 }}>
-                  <span style={tag(st.accent)}>{st.icon}{st.label}</span>
-                  {s.spends && s.status !== "done" && <span data-setup-spends style={tag("var(--accent-chat)")}><Sparkles {...ico} />asks Claude</span>}
-                  {s.decides && s.status !== "done" && <span style={tag("var(--text-secondary)")}><UserCheck {...ico} />you decide</span>}
-                </div>
-              </li>
-              </React.Fragment>
-            );
-          })}
+              <SetupStepRow step={s} index={i} run={run} onGo={onStart} onHooks={() => setClaudeCode(true)} />
+            </React.Fragment>
+          ))}
         </ol>
-        <p style={{ ...quiet, margin: 0 }}>A step that asks Claude says what it will spend before it does; nothing a model proposes applies until you ratify it. The sidebar keeps your place: its Next line is the next step.</p>
+        <p style={{ ...quiet, margin: 0 }}>The highlighted steps run in order when you press Run, one at a time; click a step's chip to leave it out or put it back. Nothing a model proposes applies until you ratify it, and a step that waits for you opens from its status chip.</p>
 
         {claudeCode && (
           <div data-setup-claude-code style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -159,16 +131,9 @@ export function SetupGuide({ now, welcome, onStart, onClose }: {
 
         <SetupRunPanel run={run} />
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-          {!busy && (runNext
-            ? <button type="button" data-setup-run-next onClick={() => run.ask(nextId!)} style={btn(true)}>
-                <Sparkles {...ico} />{welcome && !now.setup?.done ? "Run the first step" : "Run the next step"}
-              </button>
-            : <button type="button" data-setup-start onClick={() => hooksNext ? setClaudeCode(true) : onStart(target)} style={btn(true)}>
-                {hooksNext ? "Show the hooks command" : now.setup && now.setup.done > 0 && !welcome ? "Go to the next step" : "Start the setup"}<ArrowRight {...ico} />
-              </button>)}
-          {!busy && runnable.length > 0 && (
-            <button type="button" data-setup-run-all onClick={() => run.ask("all")} style={btn()}>
-              <Sparkles {...ico} />Run all ({runnable.length})
+          {!run.running && (
+            <button type="button" data-setup-run disabled={!run.selected.length} onClick={run.start} style={{ ...btn(true), ...(run.selected.length ? {} : { opacity: 0.5, cursor: "default" }) }}>
+              <Play {...ico} />{run.selected.length ? `Run ${run.selected.length} step${run.selected.length === 1 ? "" : "s"}${calls ? ` · ${calls} model call${calls === 1 ? "" : "s"}` : ""}` : "Run"}
             </button>
           )}
           <button type="button" data-setup-claude-code-toggle aria-pressed={claudeCode} onClick={() => setClaudeCode((v) => !v)} style={btn()}>

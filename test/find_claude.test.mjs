@@ -16,7 +16,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync, rmSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { findClaude, isMissing, parseArgv, pinnedModel } from "../src/server/find_claude.ts";
+import { findClaude, isMissing, loginHint, parseArgv, pinnedModel } from "../src/server/find_claude.ts";
 import { spawnClassifier } from "../scripts/cli/classify.mjs";
 import { runConfig } from "../scripts/cli/config.mjs";
 
@@ -128,4 +128,10 @@ test("one resolver: no other file reads VG_CLAUDE_BIN or spawns \"claude\"", () 
   walk("scripts");
   scan("server.ts");
   assert.deepEqual(offenders, []);
+});
+
+test("an expired login says what to do, and names the CLI that needs it (2026-10-22)", () => {
+  const h = loginHint("claude exited 1: Failed to authenticate: OAuth session expired and could not be refreshed", "/mnt/c/npm/claude");
+  assert.match(h, /run `claude` in a terminal and type \/login \(VibeGraph runs \/mnt\/c\/npm\/claude\)/);
+  assert.equal(loginHint("claude exited 1: rate limited"), null, "only a login failure gets the login hint");
 });

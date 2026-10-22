@@ -284,5 +284,14 @@ export function describeClaude(env: NodeJS.ProcessEnv = process.env): string {
   return v.ok ? `Claude: ${shown} (${v.version}) — found via ${f.via}` : `Claude: ${shown} — found via ${f.via}, but \`--version\` failed: ${v.error}`;
 }
 
+/** What to do when a call failed because the CLI's login lapsed (2026-10-22:
+ *  "OAuth session expired and could not be refreshed" reached the app with no
+ *  next step). The login belongs to the CLI the app found, which may be another
+ *  install than the editor's (a Windows Claude Code run from WSL). */
+export function loginHint(failure: string, cmd?: string): string | null {
+  if (!/oauth|authenticat|not logged in|log ?in again|\/login|invalid api key|401/i.test(failure)) return null;
+  return `log Claude Code in again: run \`claude\` in a terminal and type /login${cmd ? ` (VibeGraph runs ${cmd})` : ""}, then try again`;
+}
+
 /** Whether the environment carries a Claude setting (it outranks the saved one). */
 export const envOverridesClaude = (env: NodeJS.ProcessEnv = process.env) => !!env.VG_CLAUDE_BIN?.trim();

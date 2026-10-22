@@ -3,6 +3,66 @@
 `vibegraph-knowledge` and the VibeGraph app. Newest first. Each entry says what
 changed and, where an existing user would notice, how behaviour differs.
 
+## 0.40.0 (2026-10-22): pick the setup's steps and run them; specs from private packages
+
+### The setup guide: pick the steps, then one Run
+
+"Run the next step", "Run all" and their confirmation are gone. Every step
+Claude can take now starts selected, its chip highlighted; clicking the chip
+takes the step out or puts it back (the plan, and the hooks, which are
+installed from a terminal, are never in the run). What each selected step
+will do is listed under it, including the docs link a spec is read from, and
+the GitHub login tick box sits under the software step. One **Run** button
+says how many steps and model calls it is, and takes them in the setup's
+order, one at a time, streaming each in the working card. A step that waits
+for you ("waiting for you") opens where it is decided from its status chip;
+the hooks' chip shows the command. The run takes the selected steps
+(`setup-run` `steps`; `runSetup({ steps })`), and none selected is refused.
+
+Tests: test:setup-run (the selection run in the setup's order; none
+selected), test:e2e-setup-welcome (every runnable step selected, the plan and
+the hooks never; a chip out and back in, Run's count following it; Run with
+the rules left out runs the rest and never the rules; a waiting step's chip
+opens the Brief card).
+
+### Specs from private packages: the installed README, and your GitHub login when you grant it
+
+On a real project the setup's spec step failed with "could not read
+https://github.com/<org>/<repo>: HTTP 404". The package was private, its
+`repository` named a folder of a monorepo whose root has no README, and the
+README it was installed with sat in `node_modules` the whole time.
+
+- **The README installed with the package comes first** as a spec's docs:
+  the version the project uses, read from disk (no network, no login).
+  Only a `node_modules/<package>/README*` path the setup found is read this
+  way; nothing else on disk.
+- **A repository link names the package's folder** (`repository.directory`),
+  and GitHub links are read through GitHub's API as raw text: a repository's
+  README, a folder's README, or the file a link names.
+- **Your GitHub login, only where you grant it.** A private repository answers
+  404 without it. Claude Code reads one because it runs `gh` or `git` as you;
+  VibeGraph never uses your login unasked. Grant it per owner, per project:
+  the tick box in Run all's confirmation, the "Use my GitHub login … and try
+  again" button on the step that needed it, or `vibegraph-knowledge setup
+  grant github <owner>` (a person's step: refused from Claude Code; `setup
+  revoke github <owner>` takes it back). The grant is kept under
+  `~/.cache/vibegraph-knowledge`, never in the project. The token is read from
+  `GITHUB_TOKEN` / `GH_TOKEN` or `gh auth token` when a granted owner's
+  repository is read, goes only to `api.github.com`, and is never stored,
+  logged or given to a model. `setup` lists the grant command beside a
+  candidate whose docs are on GitHub.
+- **An expired Claude login says what to do**: "log Claude Code in again:
+  run `claude` in a terminal and type /login", naming the CLI VibeGraph runs
+  (it can be another install than your editor's).
+
+Tests: test:github-docs (6, new: links, a public read with no login asked
+for, a private one naming the grant it needs and then read with it, the
+token sent only to api.github.com, a monorepo package's installed README
+read from disk and nothing else, the grant refused from Claude Code),
+test:find-claude (+1). Checked on the reporting project: its package's
+installed README is found and read (10 KB), its repository link now names
+the folder, and with a grant your `gh` login reaches the private repository.
+
 ## 0.39.1 (2026-10-21): groups are proposed one way
 
 ### Groups are proposed one way, wherever you ask

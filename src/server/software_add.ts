@@ -5,18 +5,34 @@
 // The app passes only the docs link the setup found (software_candidates.ts),
 // computed on the server: a client never names a URL or a path here.
 
-import { mkdirSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, join, resolve, sep } from "node:path";
+import { isInstalledReadme } from "./software_candidates.ts";
 import { cacheDirFor } from "../../scripts/cache_dir.mjs";
 import type { SoftwareSpec } from "../shared/software_types.ts";
 import { buildSpecPrompt, gateSpec, htmlToText, parseSpecReply, specCoverage, thinSpecNote } from "./software_draft.ts";
 import { isSafeTool, saveSource, saveSpec } from "./software_store.ts";
+import { githubRef, readGithubDocs, type DocsRead } from "./github_docs.ts";
 
 const MAX_BYTES = 5 * 1024 * 1024;
 
-/** One docs page over http(s), as readable text. */
-export async function fetchDocs(url: string): Promise<{ text?: string; error?: string }> {
+/** One docs page over http(s), as readable text. A GitHub repository link is
+ *  read through GitHub's API, with the person's login only where they granted
+ *  it for that owner (github_docs.ts); `needs` says which grant would help. */
+export async function fetchDocs(url: string, opts: { root?: string } = {}): Promise<DocsRead> {
+  // 2026-10-22 — the README installed with the package, which the setup found
+  // (software_candidates.ts): read from the project's node_modules, nothing else on disk
+  if (opts.root && isInstalledReadme(url)) {
+    const file = resolve(opts.root, url);
+    if (!file.startsWith(resolve(opts.root, "node_modules") + sep)) return { error: `${url}: outside the project's node_modules` };
+    try {
+      const text = readFileSync(file, "utf-8");
+      return text.length > MAX_BYTES ? { error: `${url}: over ${MAX_BYTES / 1024 / 1024} MB` } : { text };
+    } catch { return { error: `${url}: not found` }; }
+  }
   if (!/^https?:\/\//i.test(url)) return { error: `${url}: not an http(s) link` };
+  const gh = githubRef(url);
+  if (gh) return readGithubDocs(gh, { root: opts.root });
   const ctl = new AbortController();
   const timer = setTimeout(() => ctl.abort(), 30_000);
   try {
@@ -52,13 +68,13 @@ export function keptReplyPath(root: string, tool: string): string {
 
 /** The app's `software add`: read the docs, one model call, gate, save a draft. */
 export async function softwareAddRun(root: string, tool: string, urls: string[], run: (prompt: string) => Promise<string | null>, by: string,
-  step: (text: string) => void = () => {}): Promise<{ ok: boolean; error?: string; detail?: string }> {
+  step: (text: string) => void = () => {}): Promise<{ ok: boolean; error?: string; detail?: string; needs?: { github: string } }> {
   if (!isSafeTool(tool)) return { ok: false, error: `${tool}: not a tool name` };
   const texts: Array<{ ref: string; text: string }> = [];
   for (const url of urls) {
     step(`reading ${url}`);
-    const r = await fetchDocs(url);
-    if (r.error) return { ok: false, error: `could not read ${r.error}` };
+    const r = await fetchDocs(url, { root });
+    if (r.error) return { ok: false, error: `could not read ${r.error}`, ...(r.needs ? { needs: r.needs } : {}) };
     if (!r.text?.trim()) return { ok: false, error: `${url} has no text` };
     texts.push({ ref: url, text: r.text });
   }

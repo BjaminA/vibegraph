@@ -36,12 +36,13 @@ On a project where nothing of the setup has started (no groups, Brief, plan,
 rules or software spec; installed hooks do not count), it first offers the
 **setup**: a guide listing
 its steps in order, which ones ask Claude and which are yours to decide.
-A step Claude takes is run from the guide: **Run the next step**, or **Run
-all**, which runs every step Claude can take now in order (classify unknown
-packages, specs from their docs, the groups, the Brief once the groups are
-ratified, rules, the direction) and stops where a decision is yours. Each
-lists its model calls before it runs, and carries on if you close the guide.
-A step that is your decision opens the panel it is made in. **Set up from
+Every step Claude can take now starts **selected**, its chip highlighted
+(classify unknown packages, specs from their docs, the groups, the Brief once
+the groups are ratified, rules, the direction); click a chip to leave a step
+out or put it back, and what each selected step will do is listed under it.
+**Run** takes the selected steps in order, one at a time, says how many model
+calls that is, carries on if you close the guide, and stops where a decision
+is yours. A step that waits for you opens from its status chip. **Set up from
 Claude Code** gives the commands that walk the same steps from a terminal;
 **Not now** sets the offer aside for this project (kept under `~/.cache`,
 never in the project). The side panel's "Setup guide · N of M steps done" button

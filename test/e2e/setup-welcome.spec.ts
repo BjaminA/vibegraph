@@ -72,20 +72,27 @@ test.describe("setup welcome", () => {
     await expect(guide).toHaveCount(0);
   });
 
-  test("the first step, Claude's, is offered as a run that lists its call first; cancelling spends nothing", async ({ page }) => {
-    // 2026-10-21 — it used to "go to" the Plan panel, where nothing could
-    // classify a package or draft a spec. The run is not confirmed here: it
-    // would read the package's docs page from the network.
+  test("every step Claude can run starts selected; a chip takes one out and puts it back; Run says what it will run", async ({ page }) => {
+    // 2026-10-22 (Ben: "select all tasks aside from the plan … deselect or
+    // reselect by clicking the highlighted chip … one simple run button").
+    // Nothing is run here: the software step would read its docs from the network.
     await page.goto("/");
     const guide = page.locator("[data-setup-guide='welcome']");
     await expect(guide).toBeVisible({ timeout: 30_000 });
-    await expect(guide.locator("[data-setup-start]")).toHaveCount(0);
-    await guide.locator("[data-setup-run-next]").click();
-    const confirm = guide.locator("[data-setup-confirm='software']");
-    await expect(confirm.locator("[data-setup-action='software:openai']")).toContainText("Write a spec for openai from https://");
-    await expect(confirm).toContainText("1 model call");
-    await confirm.getByRole("button", { name: "Cancel" }).click();
-    await expect(confirm).toHaveCount(0);
+    const sw = guide.locator("[data-setup-step='software']");
+    await expect(sw.locator("[data-setup-select='software']")).toHaveAttribute("aria-pressed", "true");
+    await expect(sw.locator("[data-setup-action='software:openai']")).toContainText("Write a spec for openai from https://");
+    await expect(guide.locator("[data-setup-step='plan'] [data-setup-select]")).toHaveCount(0); // the plan is not in the run
+    await expect(guide.locator("[data-setup-step='hooks'] [data-setup-select]")).toHaveCount(0); // a person's step, from a terminal
+    const runBtn = guide.locator("[data-setup-run]");
+    const before = await runBtn.textContent();
+    await sw.locator("[data-setup-select='software']").click();
+    await expect(sw.locator("[data-setup-select='software']")).toHaveAttribute("aria-pressed", "false");
+    await expect(sw.locator("[data-setup-step-actions]")).toHaveCount(0);
+    await expect(runBtn).not.toHaveText(before ?? "");
+    await sw.locator("[data-setup-select='software']").click();
+    await expect(sw.locator("[data-setup-select='software']")).toHaveAttribute("aria-pressed", "true");
+    await expect(runBtn).toHaveText(before ?? "");
     await expect(guide.locator("[data-setup-run-result]")).toHaveCount(0);
     // closed = set aside: not offered again
     await page.keyboard.press("Escape");
@@ -96,10 +103,10 @@ test.describe("setup welcome", () => {
     await expect(page.locator("[data-setup-guide]")).toHaveCount(0);
   });
 
-  test("a step Claude takes is run from the guide; Run all lists every call first and ends saying what waits", async ({ page }) => {
-    // the software step set aside, so the next step is the groups (a model
-    // call); the stub model answers nothing (fake_claude_silent.mjs): the model
-    // steps fail with their reason, the census (no model call) runs for real
+  test("Run takes the selected steps one at a time, in order, and ends saying what waits", async ({ page }) => {
+    // the software step set aside; the stub model answers nothing
+    // (fake_claude_silent.mjs): the groups fail with their reason, the
+    // census (no model call) runs for real, and the rules, left out, never run
     const vg = join(process.cwd(), FIXTURE, ".vibegraph");
     const hadDir = existsSync(vg);
     mkdirSync(vg, { recursive: true });
@@ -109,19 +116,16 @@ test.describe("setup welcome", () => {
       await page.waitForSelector("[data-thread-index]", { timeout: 30_000 });
       await page.locator("[data-now-setup]").click();
       const guide = page.locator("[data-setup-guide='progress']");
-      // the next step is Claude's: it is RUN here, never sent to a panel with nothing to press
-      await expect(guide.locator("[data-setup-run-next]")).toBeVisible();
-      await expect(guide.locator("[data-setup-start]")).toHaveCount(0);
-      await guide.locator("[data-setup-run-all]").click();
-      const confirm = guide.locator("[data-setup-confirm='all']");
-      expect(await confirm.locator("[data-setup-action]").evaluateAll((els) => els.map((e) => e.getAttribute("data-setup-action"))))
-        .toEqual(["groups", "rules", "census"]);
-      await expect(confirm).toContainText("2 model calls");
-      await confirm.locator("[data-setup-run-confirm]").click();
+      for (const s of ["groups", "rules", "direction"]) await expect(guide.locator(`[data-setup-select='${s}']`)).toHaveAttribute("aria-pressed", "true");
+      await expect(guide.locator("[data-setup-run]")).toHaveText("Run 3 steps · 2 model calls");
+      await guide.locator("[data-setup-select='rules']").click();
+      await expect(guide.locator("[data-setup-run]")).toHaveText("Run 2 steps · 1 model call");
+      await guide.locator("[data-setup-run]").click();
       const result = guide.locator("[data-setup-run-result='done']");
       await expect(result).toBeVisible({ timeout: 60_000 });
       await expect(result).toContainText("Read the direction the code already takes");
       await expect(result).toContainText("Propose the architecture groups");
+      await expect(result).not.toContainText("Propose rules from the architecture");
       await expect(result).toContainText("init --hooks");
       await expect(guide.locator("[data-setup-step='direction']")).not.toHaveAttribute("data-setup-status", "optional");
     } finally {
@@ -150,8 +154,8 @@ test.describe("setup welcome", () => {
       const guide = page.locator("[data-setup-guide='progress']");
       await expect(guide.locator("[data-setup-step='software']")).toHaveAttribute("data-setup-status", "done");
       await expect(guide.locator("[data-setup-step='groups']")).toHaveAttribute("data-setup-status", "waiting");
-      await expect(guide.locator("[data-setup-start]")).toContainText("Go to the next step");
-      await guide.locator("[data-setup-start]").click();
+      // a step that waits for the person opens from its status chip
+      await guide.locator("[data-setup-go='groups']").click();
       await expect(page.locator("[data-brief-toggle]")).toHaveAttribute("aria-expanded", "true", { timeout: 30_000 });
     } finally {
       if (hadDir) for (const f of [skips, arch]) rmSync(f, { force: true });

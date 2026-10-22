@@ -96,6 +96,8 @@ export function personOnlyStep(command, rest) {
     // Taking the hooks or skills out is how a session would stop being checked.
     case "hook": return sub === "install" && has("--remove") ? "hook install --remove" : null;
     case "init": return has("--remove-hooks") || has("--remove-skill") ? `init ${has("--remove-hooks") ? "--remove-hooks" : "--remove-skill"}` : null;
+    // 2026-10-22 — letting VibeGraph use the person's GitHub login (github_docs.ts)
+    case "setup": return sub === "grant" ? "setup grant" : null;
     default: return null;
   }
 }

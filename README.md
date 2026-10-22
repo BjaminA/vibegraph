@@ -380,6 +380,7 @@ CLI) and says so; everything else is deterministic.
 | `doctor` | Are the hooks installed, runnable from this side, and have they fired since installed? exit 0 / 1 | nothing | — |
 | `init --skill [--user]` / `--skills plan,…` / `--remove-skill` | Installs (removes) `/vibegraph` and the six task skills | `.claude/skills/`, or `~/.claude/skills/` with `--user` | — |
 | `setup [--json]` / `setup skip software <name> --why "…"` / `skip direction` | The setup in order (software specs, architecture groups, the Brief, rules, hooks; then, not counted, a plan for what you build next): where the project stands and the exact next commands, who may run each and which spend tokens | `.vibegraph/setup.json` (only `skip`) | — |
+| `setup grant github <owner>` / `setup revoke github <owner>` | A person lets VibeGraph read that owner's GitHub repositories (a private one's docs, for a spec) with their GitHub login (`gh`, `GITHUB_TOKEN`), for this project; refused from Claude Code | `~/.cache/vibegraph-knowledge` (never the project) | — |
 | `view [<path>] [--port n] [--open]` | Starts the visualisation until Ctrl-C | `.vibegraph/` state, as you use the app | only the app's Claude features |
 
 **Know the code**
