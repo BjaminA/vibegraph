@@ -368,6 +368,12 @@ export const BASH_TOOLS: Record<string, StackRole> = {
   ollama: "model-api", claude: "model-api",
   // M-CMD.3 — platform CLIs: a deploy or a query against the platform.
   firebase: "platform", supabase: "platform",
+  // RC3 (2026-10-22) — met through Python and TypeScript launches as well as
+  // shell scripts (process_launches.ts): `git` reaches a remote repository as
+  // `ssh` does; each platform's own CLI is its client (service_tables.ts names
+  // the platform behind it).
+  git: "remote", gh: "platform", glab: "platform", wrangler: "platform", vercel: "platform",
+  netlify: "platform", flyctl: "platform", heroku: "platform", doctl: "platform",
   // M-CMD.3 — `jq` transforms JSON on stdin: data work, not plumbing.
   jq: "data",
   // 2026-10-12 — `sudo` runs another program as another user; `piTest` reads

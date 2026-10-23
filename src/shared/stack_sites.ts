@@ -10,6 +10,18 @@
 import type { StackToolLike } from "./stack_attribution.ts";
 
 const SITES = new WeakMap<ReadonlyArray<StackToolLike>, Map<string, StackToolLike>>();
+const LAUNCHES = new WeakMap<ReadonlyArray<StackToolLike>, Map<string, StackToolLike>>();
+
+/** RC3 — the program a launching call runs (evidence kind "exec"), or null. */
+export function toolLaunchedAt(tools: ReadonlyArray<StackToolLike>, file: string, nodeId: string): StackToolLike | null {
+  let sites = LAUNCHES.get(tools);
+  if (!sites) {
+    sites = new Map();
+    for (const t of tools) for (const e of t.evidence ?? []) if (e.kind === "exec" && e.nodeId) sites.set(`${e.file}\u0000${e.nodeId}`, t);
+    LAUNCHES.set(tools, sites);
+  }
+  return sites.get(`${file}\u0000${nodeId}`) ?? null;
+}
 
 /** The first non-project tool whose evidence names this call, or null. */
 export function toolAtCallSite(tools: ReadonlyArray<StackToolLike>, file: string, nodeId: string): StackToolLike | null {

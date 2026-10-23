@@ -27,6 +27,8 @@ import * as fs from "node:fs";
 import * as nodePath from "node:path";
 import * as os from "node:os";
 import { spawnSync } from "node:child_process";
+import { classifyModelFailure } from "../shared/model_failure.ts";
+import { resolvePaths } from "../../scripts/cache_dir.mjs";
 
 export interface ClaudeTarget { cmd: string; args: string[]; via: string; version?: string }
 export interface ClaudeMissing { error: string; tried: string[] }
@@ -260,7 +262,8 @@ export function pinnedModel(t: Pick<ClaudeTarget, "args">): string | null {
 
 /** `--version`, once per binary and mtime (cached under the user cache). */
 export function checkClaude(t: ClaudeTarget, opts: { cacheFile?: string; timeoutMs?: number } = {}): { ok: boolean; version?: string; error?: string } {
-  const cacheFile = opts.cacheFile ?? nodePath.join(os.homedir(), ".cache", "vibegraph-knowledge", "claude-version.json");
+  // RC7 — under the one cache root (scripts/cache_dir.mjs resolvePaths), never a hard-coded ~/.cache
+  const cacheFile = opts.cacheFile ?? resolvePaths(null).claudeVersion;
   const file = t.cmd === process.execPath ? (t.args[0] ?? t.cmd) : t.cmd;
   let mtime = 0;
   try { mtime = fs.statSync(file).mtimeMs; } catch { /* not a file we can stat */ }
@@ -289,8 +292,9 @@ export function describeClaude(env: NodeJS.ProcessEnv = process.env): string {
  *  next step). The login belongs to the CLI the app found, which may be another
  *  install than the editor's (a Windows Claude Code run from WSL). */
 export function loginHint(failure: string, cmd?: string): string | null {
-  if (!/oauth|authenticat|not logged in|log ?in again|\/login|invalid api key|401/i.test(failure)) return null;
-  return `log Claude Code in again: run \`claude\` in a terminal and type /login${cmd ? ` (VibeGraph runs ${cmd})` : ""}, then try again`;
+  // RC6 — the one failure table (src/shared/model_failure.ts) decides it
+  const f = classifyModelFailure(failure, { cmd });
+  return f.kind === "auth" ? f.remedy : null;
 }
 
 /** Whether the environment carries a Claude setting (it outranks the saved one). */

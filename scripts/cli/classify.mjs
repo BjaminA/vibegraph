@@ -19,6 +19,7 @@
 // --reply <file> uses a saved model reply instead of spawning.
 import { findClaude, isMissing, pinnedModel } from "../../src/server/find_claude.ts";
 import { spawnSync } from "node:child_process";
+import { classifyModelFailure, modelFailureText } from "../../src/shared/model_failure.ts";
 import { readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { loadEnvelope } from "../quality_check.mjs";
@@ -67,15 +68,17 @@ export function spawnClassifier({ prompt, model, cwd, timeoutMs = 10 * 60 * 1000
     ...(prompt.length > STDIN_ABOVE ? [] : ["--", prompt]),
   ];
   const r = spawnSync(target.cmd, args, { cwd, encoding: "utf-8", timeout: timeoutMs, maxBuffer: 64 * 1024 * 1024, env, shell: false, ...(prompt.length > STDIN_ABOVE ? { input: prompt } : {}) });
-  if (r.error) return { ok: false, error: `could not spawn ${target.label}: ${r.error.message}`, label: target.label };
+  // RC6 — every failure through the one table: its kind and what fixes it (src/shared/model_failure.ts)
+  const fail = (detail) => { const failure = classifyModelFailure(detail, { cmd: target.cmd }); return { ok: false, error: modelFailureText(failure), failure, label: target.label }; };
+  if (r.error) return fail(`could not spawn ${target.label}: ${r.error.message}`);
   let parsed = null;
   try { parsed = JSON.parse(r.stdout); } catch { parsed = null; }
   if (r.status !== 0 || parsed?.is_error) {
     const said = parsed?.is_error && typeof parsed.result === "string" ? parsed.result.trim() : (r.stderr || r.stdout || "").trim().slice(0, 400);
-    return { ok: false, error: `${target.label} exited ${r.status}${said ? `: ${said}` : ""}`, label: target.label };
+    return fail(`${target.label} exited ${r.status}${said ? `: ${said}` : ""}`);
   }
   const text = typeof parsed?.result === "string" ? parsed.result : typeof parsed?.result === "object" && parsed?.result ? JSON.stringify(parsed.result) : "";
-  if (!text) return { ok: false, error: `${target.label} returned no result text`, label: target.label };
+  if (!text) return fail(`${target.label} returned no result text`);
   const modelLabel = model ?? (target.pinned ?? (typeof parsed?.model === "string" ? parsed.model : target.label));
   return { ok: true, text, label: target.label, model: modelLabel };
 }

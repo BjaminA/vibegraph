@@ -34,6 +34,8 @@ import { describeRule, resolveMembers, validateRule, type GroupRule } from "../s
 import { factCitation, type InfraFact } from "./infra_manifests.ts";
 import { docFiles } from "./stack_classify.ts";
 import { jsonObjectInReply } from "./json_reply.ts";
+import { servicesNamedWithout } from "./service_inventory.ts";
+import type { ServiceInventory } from "../shared/services.ts";
 
 export interface DocExcerpt { file: string; line: number; text: string }
 
@@ -101,7 +103,7 @@ export function planCitations(plan: Plan | null | undefined): Map<string, string
   return out;
 }
 
-export function buildProposePrompt(model: ArchModelRecord, facts: InfraFact[], docs: DocExcerpt[], revise?: ReviseInput, opts: { plan?: Plan | null; update?: UpdateInput } = {}): string {
+export function buildProposePrompt(model: ArchModelRecord, facts: InfraFact[], docs: DocExcerpt[], revise?: ReviseInput, opts: { plan?: Plan | null; update?: UpdateInput; services?: ServiceInventory | null } = {}): string {
   const L: string[] = [];
   L.push(
     "You are proposing the DEPLOYMENT and TRUST grouping of a software architecture that was derived from code.",
@@ -124,6 +126,13 @@ export function buildProposePrompt(model: ArchModelRecord, facts: InfraFact[], d
   L.push("", "## Deployment facts (read line by line from compose / Dockerfile / k8s / terraform / pm2 / Procfile / systemd / .env.example)");
   if (!facts.length) L.push("(none found — say so through INFERRED items rather than inventing hosts)");
   for (const f of facts) L.push(`- ${factCitation(f)}: ${f.kind} ${f.name}${f.detail ? ` = ${f.detail}` : ""}`);
+  // RC3 — the services the evidence names, and what each is reached through
+  if (opts.services && (opts.services.services.length || opts.services.programs.length)) {
+    L.push("", "## External services, from evidence (service_inventory.ts)",
+      "A display name may name a service or a program only on a node that reaches it: a tool node by what the service is reached through, a box of code by where the evidence sits. A name that claims any other service is refused, so name what the evidence shows, not what the docs suggest.");
+    for (const s of opts.services.services) L.push(`- ${s.name}: through ${s.via.join(", ")} (${s.evidence.slice(0, 3).map((e) => `${e.file}${e.line ? `:${e.line}` : ""}`).join(", ")})`);
+    for (const p of opts.services.programs) L.push(`- program ${p.name}${p.service ? ` (${p.service})` : ""}: run at ${p.sites.slice(0, 3).map((x) => `${x.file}${x.line ? `:${x.line}` : ""}`).join(", ")}`);
+  }
   L.push("", "## The project's own documentation (lines about where things run)");
   if (!docs.length) L.push("(none)");
   for (const d of docs) L.push(`- ${d.file}:${d.line}: ${d.text}`);
@@ -169,7 +178,7 @@ const jsonOf = (text: string): Record<string, unknown> | null => jsonObjectInRep
  *  an unknown id is refused and named; an unsupported citation is dropped. */
 export function parseProposal(
   text: string, model: ArchModelRecord, facts: InfraFact[], docs: DocExcerpt[],
-  meta: { model: string; now?: () => Date; plan?: Plan | null; update?: { groups: readonly StatedGroup[] } },
+  meta: { model: string; now?: () => Date; plan?: Plan | null; update?: { groups: readonly StatedGroup[] }; services?: ServiceInventory | null },
 ): { proposal: ArchProposal | null; error?: string } {
   const obj = jsonOf(text);
   if (!obj) return { proposal: null, error: "the reply contained no JSON object" };
@@ -239,6 +248,10 @@ export function parseProposal(
     const r = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
     const label = typeof r.label === "string" ? boundLabel(r.label) : typeof raw === "string" ? boundLabel(raw as string) : "";
     if (!label) continue;
+    // RC3 — a name may claim a service only where the evidence reaches it
+    const node = model.nodes.find((n) => n.id === id)!;
+    const claimed = meta.services ? servicesNamedWithout(label, node, meta.services) : [];
+    if (claimed.length) { refused.push({ item: `name ${id}`, reason: `"${label}" names ${claimed.join(", ")}, which no evidence reaches through ${node.label}` }); continue; }
     names[id] = { label, evidence: keepEvidence(r.evidence, `name ${id}`, new Set([id])) };
   }
 

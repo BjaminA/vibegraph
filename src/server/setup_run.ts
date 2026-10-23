@@ -71,7 +71,7 @@ export function setupActions(state: SetupState): SetupPreview {
 
   const rules = step("rules");
   if (rules?.status === "todo") actions.push({ key: "rules", kind: "rules", step: "rules", spends: true, label: "Propose rules from the architecture" });
-  else if (rules?.status === "waiting") waits.push("Decide the proposed rules in the Rules panel");
+  else if (rules?.status === "waiting") waits.push(rules.now.text || "Decide the proposed rules in the Rules panel");
 
   const direction = step("direction");
   if (direction?.status === "optional") actions.push({ key: "census", kind: "census", step: "direction", spends: false, label: "Read the direction the code already takes (no model call)" });
@@ -98,6 +98,10 @@ export interface SetupRunCtx {
   /** after an action: the derived facts (the stack, the map) catch up */
   settle: () => Promise<void>;
   step: (text: string) => void;
+  /** RC6 — one cheap model call before a run that spends: on a failure (an
+   *  expired login) the steps that need the model are not run, said once with
+   *  the remedy, instead of each failing; the others still run */
+  preflight?: () => Promise<{ ok: boolean; error?: string }>;
 }
 
 export interface SetupRunResult {
@@ -106,6 +110,8 @@ export interface SetupRunResult {
   ran: Array<{ label: string; detail: string }>;
   failed: Array<{ label: string; error: string; needs?: { github: string } }>;
   waits: string[];
+  /** RC6 — the model call failed before the run: why, and the steps held back */
+  held?: { error: string; labels: string[] };
 }
 
 /** Run every action Claude can take now, or only the selected steps' (the
@@ -115,10 +121,18 @@ export async function runSetup(ctx: SetupRunCtx, opts: { steps?: readonly SetupS
   const attempted = new Set<string>();
   const ran: SetupRunResult["ran"] = [];
   const failed: SetupRunResult["failed"] = [];
+  const first = setupActions(ctx.state()).actions.filter((x) => !opts.steps || opts.steps.includes(x.step));
+  let held: SetupRunResult["held"];
+  if (ctx.preflight && first.some((x) => x.spends)) {
+    ctx.step("checking the model call works");
+    const p = await ctx.preflight();
+    if (!p.ok) held = { error: p.error ?? "the model call failed", labels: [] };
+  }
   for (let i = 0; i < MAX_ACTIONS; i++) {
     const a = setupActions(ctx.state()).actions.find((x) => !attempted.has(x.key) && (!opts.steps || opts.steps.includes(x.step)));
     if (!a) break;
     attempted.add(a.key);
+    if (held && a.spends) { held.labels.push(a.label); continue; }
     ctx.step(`${attempted.size}. ${a.label}`);
     let r: Outcome;
     try {
@@ -134,14 +148,16 @@ export async function runSetup(ctx: SetupRunCtx, opts: { steps?: readonly SetupS
     await ctx.settle();
   }
   const waits = setupActions(ctx.state()).waits;
+  if (held && !ran.length && !failed.length) return { ok: false, error: `not run: ${held.error}`, ran, failed, waits, held };
   if (!ran.length && !failed.length) return { ok: false, error: waits.length ? `nothing for Claude to run now: ${waits[0]}` : "nothing for Claude to run: the setup is done", ran, failed, waits };
-  return { ok: true, ran, failed, waits };
+  return { ok: true, ran, failed, waits, ...(held ? { held } : {}) };
 }
 
 /** The run's one-line ending, for the bubble and the guide. */
 export function setupRunSummary(r: SetupRunResult): string {
   const parts = [`${r.ran.length} step${r.ran.length === 1 ? "" : "s"} run`];
   if (r.failed.length) parts.push(`${r.failed.length} failed`);
+  if (r.held?.labels.length) parts.push(`${r.held.labels.length} not run (the model call failed)`);
   if (r.waits.length) parts.push(`${r.waits.length} wait${r.waits.length === 1 ? "s" : ""} for you`);
   return parts.join(", ");
 }

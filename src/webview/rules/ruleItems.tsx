@@ -10,6 +10,8 @@ import { kindOfPath } from "../../shared/kinds";
 import { ItemFrame } from "../panels/ItemFrame";
 import { Verdict } from "../panels/Chip";
 import { sendRulesOp, type RuleRowView } from "../useRulesState";
+import { proposalWhyInWords, readableRule } from "../../shared/rule_readable";
+import { claimCorrectionInWords, claimInWords, isClaimCheck } from "../../shared/rule_claim_types";
 
 type CheckShape = Record<string, unknown> & { rule?: string };
 const fn = (id: string): ChipRef => ({ kind: "function", id });
@@ -30,6 +32,8 @@ export function checkParts(check: CheckShape | undefined, described?: string): A
       return ["only", ...strs(check.files).map(path), "import", { kind: "module", id: String(check.tool) }, ...tests];
     case "calls-through":
       return ["every caller of", fn(String(check.target)), "also calls", fn(String(check.through))];
+    case "claim":
+      if (isClaimCheck(check)) return [claimInWords(check)];
   }
   return described ? [described] : [check.rule];
 }
@@ -68,11 +72,25 @@ export function RuleItem({ row, review }: { row: RuleRowView; review?: boolean }
   const check = (c.checks?.[0] ?? c.check) as CheckShape | undefined;
   const lead = row.checks[0];
   const parts = checkParts(check, lead?.described);
+  // 2026-10-22 (Ben: "not very user readable friendly - seems more like meta
+  // data"): the reason, whether it is checked and the sentence it came from,
+  // in plain words (src/shared/rule_readable.ts); who proposed it, its scope
+  // and the facts it rests on in the fold. The stored rule is unchanged.
+  const r = readableRule({ text: c.text, note: c.note, source: c.source, cite: c.cite, checked: !!check || !!c.policy });
+  const title = firstSentence(r.statement);
+  // RC1 — a claim the code corrected, or narrowed, says what Claude had said
+  const corrections = [...(c.checks ?? []), ...(c.check ? [c.check] : [])].flatMap((k) => (isClaimCheck(k) ? [claimCorrectionInWords(k)] : [])).filter(Boolean);
   const facts: ItemFact[] = [
-    parts ? { label: "rule", parts } : c.policy ? { label: "rule", text: `${c.policy.rule} ${c.policy.tool}${c.policy.with ? ` → ${c.policy.with}` : ""}` } : { label: "rule", text: c.text },
-    // 2026-10-19 — a rule read from the prose (harvest, or proposed from the architecture) says which sentence
-    { label: "why", text: [c.note ?? (parts || c.policy ? c.text : undefined), c.cite ? `from ${c.cite.file}:${c.cite.line} — "${c.cite.quote}"` : undefined].filter(Boolean).join(" · ") || undefined },
+    parts ? { label: "rule", parts } : c.policy ? { label: "rule", text: `${c.policy.rule} ${c.policy.tool}${c.policy.with ? ` → ${c.policy.with}` : ""}` }
+      : { label: "rule", text: r.statement !== title ? r.statement : undefined },
+    { label: "why", text: r.why ?? undefined },
+    // RC4 — a check that passes whatever bypasses its funnel is said, not counted as enforcement
+    { label: "checked", text: row.checks.find((x) => x.trivial)?.trivial ? `Checked, but this check cannot catch a bypass: ${row.checks.find((x) => x.trivial)!.trivial}.` : r.check ?? undefined },
+    { label: "corrected", text: corrections.length ? corrections.join(" ") : undefined },
+    { label: "from", text: r.quote ? `"${r.quote.text}" (${r.quote.where})` : undefined },
+    { label: "source", text: [r.source, ...r.notes].filter(Boolean).join(" ") || undefined },
     { label: "scope", parts: scopeParts(c, row.threads) },
+    { label: "based on", text: r.basedOn.length ? `${r.basedOn.join(", ")}${r.model ? ` (drafted by ${r.model})` : ""}` : undefined },
   ];
   const offenders = row.checks.flatMap((r) => r.offenders);
   const extraClauses = row.checks.length > 1 ? ` · ${row.checks.length} clauses` : "";
@@ -81,14 +99,15 @@ export function RuleItem({ row, review }: { row: RuleRowView; review?: boolean }
       data-rule-row={c.id} data-constraint-source={c.source} data-rule-verdict={row.verdict ?? "prose"}
       proposed={c.source === "agent"}
       chip={{ kind: "rule", id: c.id }}
-      name={firstSentence(c.text)}
+      name={title}
       badges={<>
         <Verdict v={c.source} label={c.source === "human" ? "human" : undefined} />
         {row.verdict ? <span data-rule-live={row.verdict}><Verdict v={row.verdict} /></span> : <Verdict v="prose" />}
       </>}
       facts={facts}
       details={{
-        summary: `History · ${(c.changes?.length ?? 0)} change${c.changes?.length === 1 ? "" : "s"}${extraClauses}${offenders.length ? ` · ${offenders.length} offender${offenders.length === 1 ? "" : "s"}` : ""}`,
+        // 2026-10-22 — the fold holds who proposed it, its scope and what it rests on, too
+        summary: `Source, scope and history · ${(c.changes?.length ?? 0)} change${c.changes?.length === 1 ? "" : "s"}${extraClauses}${offenders.length ? ` · ${offenders.length} offender${offenders.length === 1 ? "" : "s"}` : ""}`,
         body: <>
           {row.checks.map((r, i) => <p key={i} data-rule-reason>{r.described} → {r.verdict}: {r.reason}{r.offenders.length ? ` (${r.offenders.slice(0, 5).join(", ")}${r.offenders.length > 5 ? ` +${r.offenders.length - 5}` : ""})` : ""}</p>)}
           <History c={c} />
@@ -122,7 +141,7 @@ export function ProposalItem({ row, p }: { row: RuleRowView; p: NonNullable<Rule
       chip={{ kind: "rule", id: c.id }}
       name={`Change proposed by ${p.by === "agent" ? "an agent" : p.by}`}
       badges={<Verdict v="proposed" label={`proposal ${p.id}`} />}
-      facts={[{ label: "why", text: p.why }]}
+      facts={[{ label: "why", text: proposalWhyInWords(p.why) }]}
       actions={<>
         <button className="vg-btn" data-tone="go" data-rule-accept={`${c.id}:${p.id}`} onClick={() => sendRulesOp("accept", c.id, p.id)}
           title={`Apply it (constraint accept ${c.id} ${p.id})`}>

@@ -3,6 +3,287 @@
 `vibegraph-knowledge` and the VibeGraph app. Newest first. Each entry says what
 changed and, where an existing user would notice, how behaviour differs.
 
+## 0.41.0 (2026-10-23): rules checked against the code, what was not read, services from evidence
+
+### Every written rule accounted for, and ratified rules that survive a re-init
+
+Rules a person wrote down were dropped by ranking, caps and filters, and
+nobody was told: a "Rules" section of CLAUDE.md weighed what a docstring
+weighed, a draft round always showed the same top 25 sentences, re-running
+the setup forgot ratified rules, and `loadConstraints` dropped an entry it
+could not read in silence.
+
+- **Tiers** (`src/server/rule_sources.ts`): a rule section of CLAUDE.md or
+  AGENTS.md is read first and never cut by the score threshold; then the rest
+  of the prose; then module headers and docstrings.
+- **The rule-coverage ledger** (`src/server/rule_ledger.ts`,
+  `constraints ledger`): every rule sentence of a tier-one section gets an
+  outcome: ratified as cN, proposed as cN, merged into cM, shown to the next
+  draft, queued behind a round's cap, or out of reach (it names nothing
+  parsed; such sentences were dropped before anyone saw them). A sentence a
+  docstring repeats is named once, with where else it is written. The setup's
+  rules step says it in one line.
+- **Caps queue instead of discarding**: a draft round is shown the 25
+  sentences no rule covers yet, so the next round reaches the next ones.
+- **Folders and packages qualify**: a dotted package (`app.net`) is its folder,
+  and a folder is an allow-list in a suggested check ("only `lib/db/` imports
+  `sqlite3`" gets `import-only` on that folder); the dossier now shows the
+  model the check a harvested sentence fits.
+- **Re-initialisation**: each save keeps the ratified rules in the project's
+  cache folder (`src/server/rule_backup.ts`; a hand-kept copy beside
+  constraints.json is read too), and `constraints restore` offers back the
+  ones constraints.json no longer holds (`--all` / `--take` to put them back;
+  a person's step). With no rules and some to restore, the setup asks for that
+  first.
+- **What could not be read is named**: `droppedConstraints` lists each entry
+  this version could not read, with why; `check`, the ledger and the setup
+  say so (the file keeps them, as before).
+
+Tests: test:rule-ledger (6, `test/fixtures/rules/written_demo` in Python and
+TypeScript: five written rules, one folder-level, one naming nothing parsed,
+one repeating a docstring).
+
+### One place for everything kept outside the project, and hooks that carry it
+
+The envelope cache, the server's cache and the Python dependencies each had
+their own precedence, and the Claude version check wrote to a hard-coded
+`~/.cache`; hooks pinned only the Python, so keeping the cache inside a
+project meant editing every hook command by hand, and re-running the setup
+undid the edits. One resolver now (`resolvePaths` in `scripts/cache_dir.mjs`),
+with one precedence: the project's `.vibegraph/config.json` `cacheDir`, then
+`VG_CACHE_DIR`, then `$XDG_CACHE_HOME/vibegraph-knowledge`, then
+`~/.cache/vibegraph-knowledge`. It returns the envelopes, the server cache,
+the Python dependencies (`VIBEGRAPH_KNOWLEDGE_HOME` still wins) and the Claude
+version file, and every caller uses it. A directory `VG_CACHE_DIR` names keeps
+the layout it always had, so no cache, hook record or lesson moves. Installed
+hooks pin every one of these variables that is set, and a re-install keeps
+what an earlier one pinned; `doctor` prints the effective paths and where the
+cache root came from. Tests: test:resolve-paths (4: with `VG_CACHE_DIR` set,
+setup, hook install and the Claude check write nothing under `~/.cache`, and a
+re-install from a shell without it keeps it in every hook).
+
+### A failed model call says why, and what fixes it
+
+An expired Claude login made several setup steps fail one after another with
+"the model returned nothing — claude exited 1: Failed to authenticate…", and
+the fix was offered on some paths only. One table
+(`src/shared/model_failure.ts`) classifies a failure from what the CLI said,
+on stderr or in its JSON `is_error` result, into a kind with its remedy:
+**auth** (log in again with `/login`, or set `CLAUDE_CODE_OAUTH_TOKEN`),
+**not-installed**, **rate-limit**, **timeout**, **bad-output** and **exit**.
+The server's runner records it once (`src/server/model_failure_state.ts`),
+and every caller that reported "the model returned nothing" (classify, the
+software spec, the groups, the Brief, rules, node scope) now says the kind
+and the fix; the command line's spawn uses the same table. Before a setup run
+that spends, one short model call checks the model works: if it fails, the
+steps that need the model are held back and listed once with the reason,
+instead of each failing, and the steps that need none (the direction census)
+still run. Tests: test:model-failure (5, with a stub `claude` whose login has
+expired).
+
+### Variables a platform sets are not undeclared configuration
+
+The environment census listed `GITHUB_ACTIONS`, set by GitHub's runner,
+beside genuinely undeclared project variables, so a rule that every variable
+read is declared could never pass. A data table of platform-provided names
+(`src/shared/platform_env.ts`: GitHub Actions, any CI runner's `CI`, GitLab,
+CircleCI, Travis, Buildkite, Cloudflare Pages, Vercel, Netlify, Fly.io,
+Render, Railway, Cloud Run, Kubernetes, Claude Code; each row from the
+platform's own list, and it can grow) marks a variable "provided by
+<platform>" and keeps it out of `undeclared` everywhere the census is read:
+`configuration.md`, each contract's "Configured by" line, the GUI's insight
+chips and the Configuration lens. A credential (`_TOKEN`, `_KEY`, `_SECRET`,
+`_PASSWORD`) is never platform-provided, whatever its prefix. Tests:
+test:platform-env (3, `test/fixtures/env/platform_demo` in Python and
+TypeScript: only `MY_API_KEY` is undeclared).
+
+### A funnel rule is checked by what the funnel calls
+
+A funnel's `wraps` listed every wrappable tool its file imported, cut to the
+top-level package, so a module importing `http` for a cookie jar and making
+its requests with `urllib.request.urlopen` read "wrapping http, urllib", and a
+model checking "all HTTP goes through the funnel" could pick `import-only
+http`: a check that passes whatever bypasses the funnel.
+
+- **What the funnel calls** (`src/server/funnel_calls.ts`): `wraps` now holds
+  the tools the funnel makes calls through that leave the project (a call the
+  parser stamps with an effect; constructing an object is not one), and a new
+  `calls` field holds each by full dotted name, read through the file's
+  imports (`src/shared/call_names.ts`: `urlopen` after `from urllib.request
+  import urlopen` is `urllib.request.urlopen`). A funnel whose calls no rule
+  reads keeps what it imports, as before.
+- **The default check, derived** (`src/server/funnel_checks.ts`): for a
+  standard-library namespace, `callers-only` on each function that leaves
+  (`urllib.parse` elsewhere is not a bypass); for any other package,
+  `import-only` (a funnel often constructs a client and calls the instance, so
+  importing the package anywhere else is the bypass). The funnel and any
+  stated exception are allowed. The drafting gate gives a rule resting on a
+  funnel this check when it has none, and replaces a trivial one; the prose
+  harvest suggests it.
+- **A trivial check is said**: a check on a tool the funnel imports but makes
+  no call through is flagged on every `check` (`trivial` on the row) and on
+  the rule's card, "Checked, but this check cannot catch a bypass", never
+  counted as enforcement.
+- External call facts carry the full name, so `callers-only` on
+  `urllib.request.urlopen` matches however the import was spelled.
+
+Tests: test:funnel-checks (6, `test/fixtures/funnel/funnel_demo` in Python and
+TypeScript: each funnel imports two libraries and calls one function of one;
+the derived check passes, then fails once a second module calls it);
+test:rule-draft's dossier line now names what the funnel calls.
+
+### Services behind programs, constants and deploy files, and names they must support
+
+The boundary model ended at the first library call: `subprocess.run([binary,
+…])` left through `subprocess`, a URL held in a constant was "unknown", and
+deploy configs were not read, so the service behind a command-line client
+vanished and a model filled the gap from the docs, sometimes on the wrong box.
+
+- **The program a launch runs** (`src/server/process_launches.ts`, followed by
+  `src/server/launch_args.ts`): a Python or TypeScript launch's first argument
+  resolved from a literal, a constant, an env default
+  (`os.environ.get("X", "gh")`, `process.env.X ?? "gh"`), a `which()` lookup,
+  a parameter to the calls that fill it (`def sh(args)` called as
+  `sh(["gh", …])`), an attribute to the construction that sets it
+  (`self.binary`), or a factory to what it returns; three hops at most, and
+  anything else is listed as unresolved with its text. The stack index records
+  the program at the launching call (evidence `exec`) and the boundary leaves
+  through it, not through `subprocess`; a helper whose callers run different
+  programs decides nothing at its own launch, and each caller carries its
+  program. An unknown program is still a program ("runs pagemaker"). `git`,
+  `gh` and the platform CLIs gained roles in the shell's table.
+- **Deploy files and workflows read as facts** (`infra_manifests.ts`): wrangler,
+  Vercel, Netlify, Fly (and what each names), every workflow step, `run: |`
+  blocks included. The architecture proposal can cite them. The manifest walk
+  now honours `.vibegraphignore` (an archived copy's deploy files were read as
+  current), and the inventory reads each deploy file and workflow whole, so
+  the prompt's 400-fact cap can no longer drop a platform.
+- **The service inventory** (`src/server/service_inventory.ts`, data in
+  `src/shared/service_tables.ts`): every service with its evidence and what it
+  is reached through, from programs, hosts a request names (directly or
+  through a constant or env default), credentials a vendor's SDK reads, and
+  deploy files and workflows. A host no table knows is listed as the host.
+  `vibegraph-knowledge services`; the export writes `services.md`.
+- **A name must be supported** (`arch_propose.ts`): the proposal prompt lists
+  the services and what each is reached through, and a display name that
+  names a service or program its node has no evidence for is refused with the
+  reason ("names GitHub, which no evidence reaches through urllib").
+
+Tests: test:service-inventory (6, `test/fixtures/services/svc_demo` in Python,
+TypeScript and bash).
+
+### VibeGraph says what it did not read, and reads JavaScript the evidence names
+
+A file type outside the language table disappeared without a word: a page
+whose whole app is one inline script, or the Worker that serves a site, was
+never parsed while the output still read as complete. Three changes:
+
+- **One walk** (`src/server/source_walk.ts`) for the server, the CLI and the
+  envelope cache, which each had their own. It returns the files to parse and
+  a **coverage ledger** (`src/shared/coverage_ledger.ts`) of every file it
+  saw: read (with why, for a `.js` or a page), read and failed, not read with
+  why, code no frontend reads (SQL, notebooks, Dockerfiles, workflows, other
+  languages), folders skipped, and documents, data and assets.
+- **`.js`/`.jsx` read on evidence** (`src/server/source_admission.ts`), never
+  by extension alone: named by a run or deploy config (wrangler, Procfile,
+  Vercel, Netlify, Fly, pm2, a workflow `run:`), by `package.json`
+  (main, module, browser, bin, exports, scripts), imported by a parsed file
+  or loaded by a page, a Worker (`export default { fetch }`), or a `#!` node
+  script. Minified, bundled, vendored and compiled-from-`.ts` files stay out
+  whatever names them. A web frontend nothing names (the system tier's
+  text-scanned case) stays out too.
+- **A page's inline scripts are parsed** (`scripts/frontends/inline_scripts.mjs`)
+  as one module, everything else blanked with line breaks kept, so every
+  node's line is its line in the page; the IR carries `embedded` (schema'd,
+  field-additive). A page is read, never edited. A Worker's handlers
+  (`defaultExportMember`, field-additive) and a page are entry points.
+
+Where it shows: `vibegraph-knowledge coverage` with no files prints the
+ledger; the export writes `coverage.md` and puts "Not analysed: N files, M
+lines" on the README and `architecture.md`; the map legend says it; the setup
+gains an optional first step, "What VibeGraph did not read". A project with
+no admissible `.js` and no page sees the same IR as before. Also:
+`test:lang-audit` had been red since two genuinely Python-only rules arrived
+(Python module resolution, Python package manifests); they are now
+allowlisted with their reason. Tests: test:coverage-ledger (8, a synthetic
+Python and JavaScript site in `test/fixtures/coverage/site_demo`);
+test:languages updated (`languageForPath` names the frontend that reads an
+admitted `.js`; the walk still never reads one by extension).
+
+### A drafted rule's claims about the code are checked before it is stored
+
+A model drafting rules from the architecture wrote what the code does as
+prose, and the gate stored it unread: "the nightly job runs only these two
+scripts" for a script that runs more, "writes only the `codes` field" for a
+function that also writes others, "this folder never touches the
+network" over a folder with one networked module. A rule now carries typed
+**claims** beside its sentence (`src/shared/rule_claim_types.ts`): runs-only,
+writes-only, imports-only, never-calls, reaches. Each is decided against the
+code before the rule is stored (`src/server/rule_claims.ts`, the gate in
+`src/server/rule_draft_claims.ts`):
+
+- **verified**: kept as a check clause `{rule: "claim", …}`, so `check`, the
+  hooks and the Rules panel decide it again after every edit;
+- **contradicted, with what the code shows**: the rule's sentence is
+  rewritten from the code, and the clause keeps what the model said (`was`),
+  shown on the card as "Corrected from the code: Claude said …; the code
+  shows …";
+- **contradicted over a folder**: the scope narrows to the files that keep
+  it, and the files that break it are named;
+- **contradicted, with nothing the code can correct**: the rule is refused;
+- **unverifiable**: the rule stays prose and the card says what could not be
+  decided. It is refused when its own reason names a file its claim leaves
+  out.
+
+A sentence that says what the code does ("only", "never") with no claim and
+no check is labelled "nothing checked it against the code". Rules already
+stored are unchanged; the next draft gets the new prompt.
+
+To read what a function writes, a Python assignment to a subscript
+(`record["sources"] = …`, whose `name` is "?") now carries its target's
+source text as `targetText` (field-additive, no version bump; node ids
+unchanged; four snapshots regenerated, only the new field). Tests:
+test:rule-claims (17, synthetic Python and TypeScript projects in
+`test/fixtures/claims/`).
+
+### A ratified software spec outranks a model's classification
+
+A package's role decides whether it is a box on the architecture map and of
+what kind, so it shapes the groups proposed around it. A ratified spec only
+filled packages nothing else had named, so a `classify` answer (a model's,
+unreviewed, which the setup runs first) kept its role after a person
+ratified a spec saying otherwise. The order is now: a role a person stated
+(a stack policy) > a ratified spec > the orchestrator's > a model's
+classification (`src/server/stack.ts`). Tests: test:software (+2 checks, red
+on the old order).
+
+### A rule in plain words
+
+The Rules panel's WHY showed the drafting gate's note ("proposed from the
+architecture (claude:default); rests on crossing:1, crossing:3, …"), while a
+drafted rule's real reason sat at the end of its text as "(why: …)". Each
+card now reads (`src/shared/rule_readable.ts`; the stored rule is unchanged,
+so a hooked Claude Code session still gets the reason with the rule):
+
+- **why**: the reason, taken from the rule's "(why: …)", which leaves the
+  title and the rule's text.
+- **checked**: whether VibeGraph checks it, in words: "Not checked
+  automatically: VibeGraph's map of the code has no definition of `X` and no
+  call to it, so a check could only ever say it cannot tell. Claude Code is
+  told the rule; no edit is blocked by it."; "Checked, and the code breaks it
+  today: …"; nothing when its check row already says.
+- **from**: the one sentence of the quoted source that the rule is about,
+  without markdown, never the whole line or comment.
+- In the fold ("Source, scope and history"): **source** ("Proposed by Claude
+  from the project's architecture; you ratified it"), the scope, and
+  **based on**, the facts it rests on in words ("3 hops between processes,
+  tools.x, the module the calls go through") with the drafting model.
+- A check proposed for a stated rule gives its reason the same way.
+
+Tests: test:rule-readable (4, new), test:e2e-rule-draft (a drafted rule's
+why, from, source and based-on in words; the undecidable one's "Not checked
+automatically").
+
 ## 0.40.0 (2026-10-22): pick the setup's steps and run them; specs from private packages
 
 ### The setup guide: pick the steps, then one Run

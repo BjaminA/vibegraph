@@ -16,6 +16,7 @@ import { NodeIOCard, type LitPath } from "./NodeIOCard";
 import { ClassifyTools } from "./ClassifyTools";
 import { AccessGrid } from "./AccessGrid";
 import type { Vocabulary } from "../../shared/node_io";
+import { ledgerHeadline, type CoverageLedger } from "../../shared/coverage_ledger";
 
 const LENS_LABEL: Record<ArchLens | "config" | "journeys" | "resources" | "decisions", string> = { birdseye: "Bird's-eye", overview: "Overview", tools: "Tools", flows: "Flows", payloads: "Payloads", trust: "Trust", config: "Configuration", journeys: "Journeys", resources: "Resources", decisions: "Decisions" };
 const GUI_LENS_TITLE: Record<"config" | "journeys" | "resources" | "decisions", string> = {
@@ -88,7 +89,9 @@ export function ArchLensBar({ lens, onLens, onStory, topology = false }: { lens:
   );
 }
 
-export function ArchLegend({ model, hiddenTools = [], hiddenClusters = [], lens, fold }: { model: ArchModelRecord; hiddenTools?: string[]; hiddenClusters?: string[]; lens?: ArchLens; fold?: boolean }) {
+export function ArchLegend({ model, hiddenTools = [], hiddenClusters = [], lens, fold, coverage = null }: { model: ArchModelRecord; hiddenTools?: string[]; hiddenClusters?: string[]; lens?: ArchLens; fold?: boolean; coverage?: CoverageLedger | null }) {
+  // RC2 — what the walk never read is on no map: said here, listed by `vibegraph-knowledge coverage`
+  const unread = coverage ? ledgerHeadline(coverage) : null;
   const present = new Set(model.nodes.map((n) => n.category));
   const cats = ARCH_CATEGORIES.filter((c) => present.has(c));
   const u = model.unplaced;
@@ -158,6 +161,12 @@ export function ArchLegend({ model, hiddenTools = [], hiddenClusters = [], lens,
       {left.length > 0 && (
         <div data-arch-unplaced style={{ marginTop: 4, color: "var(--text-muted)" }} title={model.notes.join("\n")}>
           {`not drawn: ${left.join(" · ")}`}
+        </div>
+      )}
+      {unread && (
+        <div data-arch-unread style={{ marginTop: 4, color: "var(--text-muted)" }}
+          title={[...coverage!.deferred.map((f) => `${f.file}: ${f.reason}`), ...coverage!.notRead.map((g) => `${g.kind}: ${g.examples.join(", ")}`)].slice(0, 20).join("\n")}>
+          {`${unread} (on no map; vibegraph-knowledge coverage lists them)`}
         </div>
       )}
       </div>

@@ -1,0 +1,6 @@
+{
+  "name": "site-demo",
+  "private": true,
+  "type": "module",
+  "scripts": { "serve": "node scripts/serve.js" }
+}

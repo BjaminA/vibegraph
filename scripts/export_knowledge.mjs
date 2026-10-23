@@ -29,6 +29,9 @@ import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { basename, dirname, join, resolve } from "node:path";
 import { loadEnvelope } from "./quality_check.mjs";
+import { ledgerNote, ledgerPage } from "../src/shared/coverage_ledger.ts";
+import { buildServiceInventory } from "../src/server/service_inventory.ts";
+import { servicesPage } from "../src/shared/services.ts";
 import { buildStackIndex } from "../src/server/stack.ts";
 import { formatContractBlock, summarizeContract } from "../src/server/thread_contract.ts";
 import { loadConstraints, routeConstraints, formatConstraintsBlock, formatClassificationsBlock, statedRules } from "../src/server/constraint_store.ts";
@@ -101,7 +104,7 @@ function prepareOutDir(outDir) {
  *   reference on request.
  */
 export function exportKnowledge({ root, out, task, envelope: envelopePath, commit, tool, projectCommit, pipeline, withIr = false, architecture: withArch = false, archify = false }) {
-  const { absRoot, envelope: env, parseErrors, skippedDirs, unresolvedSeeds } = loadEnvelope(root, envelopePath, pipeline ?? {});
+  const { absRoot, envelope: env, parseErrors, skippedDirs, unresolvedSeeds, ledger } = loadEnvelope(root, envelopePath, pipeline ?? {});
   const outDir = resolve(out ?? join(absRoot, ".vibegraph", "knowledge"));
   prepareOutDir(outDir);
   const written = [];
@@ -312,6 +315,10 @@ export function exportKnowledge({ root, out, task, envelope: envelopePath, commi
     try { sources[rel] = sha1(readFileSync(join(absRoot, rel), "utf-8")); } catch { /* unreadable: no hash, reads as changed */ }
   }
   write("sources.json", json(sources));
+  // RC2 — every file the walk saw, accounted for
+  if (ledger) write("coverage.md", ledgerPage(ledger, basename(absRoot)));
+  // RC3 — the external services, each with the evidence that names it
+  write("services.md", servicesPage(buildServiceInventory(env, stack, absRoot), basename(absRoot)));
 
   // 2c. M-ARCH.1 — the derived architecture model, from the contracts just
   //     computed. The JSON rides with the raw forms; M-ARCH.5 adds the prose
@@ -332,7 +339,10 @@ export function exportKnowledge({ root, out, task, envelope: envelopePath, commi
     const mapMd = renderSystemMapMd(systemMapFor(architecture, archArgs), loadVocabulary(absRoot).vocab, scopesNow(absRoot, architecture), staleLabelMap(absRoot, architecture));
     const briefMd = briefMarkdown(briefWithStaleness(loadBrief(absRoot), loadBrief(absRoot).ratified?.spec ? briefInputs(absRoot, architecture).facts : null));
     const at = mapMd.indexOf("\n## ");
-    write("architecture.md", briefMd.length && at > 0 ? `${mapMd.slice(0, at + 1)}${briefMd.join("\n")}\n${mapMd.slice(at + 1)}` : mapMd);
+    const archMd = briefMd.length && at > 0 ? `${mapMd.slice(0, at + 1)}${briefMd.join("\n")}\n${mapMd.slice(at + 1)}` : mapMd;
+    // RC2 — the unread share, said where the architecture is read
+    const unread = ledgerNote(ledger);
+    write("architecture.md", unread ? archMd.replace(/\n/, `\n\n${unread}\n`) : archMd);
   }
 
   // 3. Project-level renderings: the system spec and every stated constraint.
@@ -475,6 +485,7 @@ export function exportKnowledge({ root, out, task, envelope: envelopePath, commi
         ...(named.length ? ["", `**Not read, as the project asks** (\`.vibegraphignore\`): ${list(named)}. Nothing below describes them.`] : []),
       ];
     })(),
+    ...(ledgerNote(ledger) ? ["", ledgerNote(ledger).replace(/^> /, "")] : []),
     // 2026-10-07 — folders of old copies are read with the rest unless ignored
     ...(() => { const a = historicalAdvice(historicalFolders(Object.keys(env.files))); return a ? ["", `**Old copies read as code:** ${a}`] : []; })(),
     ...(degradedFiles.length

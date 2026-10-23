@@ -26,6 +26,7 @@ import { applyArchStore, loadArchStore, ratifyProposal, rejectProposal, saveArch
 import { buildProposePrompt, docExcerpts, parseProposal } from "../../src/server/arch_propose.ts";
 import { archBaseline, archDrift } from "../../src/server/arch_drift.ts";
 import { readInfraManifests } from "../../src/server/infra_manifests.ts";
+import { buildServiceInventory } from "../../src/server/service_inventory.ts";
 import { loadPlan } from "../../src/server/plan_store.ts";
 import { reconcilePlan } from "../../src/server/plan_reconcile.ts";
 import { seedArchFromPlan } from "../../src/server/plan_arch_seed.ts";
@@ -59,8 +60,10 @@ export function runArchitecture({ root, out, envelope, pipeline, commit, tool, a
   }
 
   if (action === "propose" || action === "update") {
-    const facts = readInfraManifests(absRoot).facts;
+    const infra = readInfraManifests(absRoot);
+    const facts = infra.facts;
     const docs = docExcerpts(absRoot, derived);
+    const services = buildServiceInventory(envl, stack, absRoot, infra);
     // The same gate as the live server (arch_store proposalGate): a pending
     // draft is only revised, ratified groups need --force to re-propose, and
     // an update needs ratified groups and a map that moved from them.
@@ -70,7 +73,7 @@ export function runArchitecture({ root, out, envelope, pipeline, commit, tool, a
     const gate = proposalGate(current, action === "update" ? { update: { drifted: !!drift && drift.level !== "none" } } : { modify: !!guidance, force });
     if (!gate.allowed) return { lines, messages: [...messages, gate.reason], exitCode: 1 };
     const update = action === "update" && drift ? { groups: current.groups, drift } : undefined;
-    const prompt = buildProposePrompt(derived, facts, docs, guidance ? { previous: pending, guidance } : undefined, { plan, update });
+    const prompt = buildProposePrompt(derived, facts, docs, guidance ? { previous: pending, guidance } : undefined, { plan, update, services });
     if (dryRun) {
       lines.push(prompt);
       return { lines, messages, exitCode: 0 };
@@ -85,7 +88,7 @@ export function runArchitecture({ root, out, envelope, pipeline, commit, tool, a
       text = r.text;
       label = r.model;
     }
-    const parsed = parseProposal(text, derived, facts, docs, { model: label, plan, ...(update ? { update } : {}) });
+    const parsed = parseProposal(text, derived, facts, docs, { model: label, plan, services, ...(update ? { update } : {}) });
     if (!parsed.proposal) return { lines, messages: [...messages, parsed.error ?? "the reply was not a usable proposal"], exitCode: 3 };
     const store = loadArchStore(absRoot);
     store.proposal = parsed.proposal;

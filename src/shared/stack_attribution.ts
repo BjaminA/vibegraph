@@ -30,7 +30,7 @@ import {
   jstsPackageName, pythonToolName, rustCrateName,
 } from "./stack_taxonomy.ts";
 import { PYTHON_BUILTIN_NAMES } from "./stack_stdlib.generated.ts";
-import { toolAtCallSite } from "./stack_sites.ts";
+import { toolAtCallSite, toolLaunchedAt } from "./stack_sites.ts";
 
 export { JSTS_GLOBAL_TOOLS };
 
@@ -369,6 +369,13 @@ export function attributeBoundary(input: BoundaryInput): Attribution | null {
   if (!effectKind && language === "jsts" && JSTS_BUILTINS.has(head) && label.includes(".")) {
     // `JSON.parse`, `Math.max`, `Object.keys` — a builtin namespace.
     return { tool: head, role: "builtin", origin: "language", how: "builtin" };
+  }
+
+  // 1b. RC3 — a launch whose program the index resolved leaves through that
+  //     program: the launcher (`subprocess`, `child_process`) is only its door.
+  if (stack && file && irNodeId) {
+    const launched = toolLaunchedAt(stack.tools, file, irNodeId);
+    if (launched) return decorate(fromTool(launched, "call-site"));
   }
 
   // 2. The linker resolved the callee (M17.1 viaLocal / §5.5 return type /

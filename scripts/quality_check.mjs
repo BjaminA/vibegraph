@@ -72,7 +72,7 @@ export function loadEnvelope(root, envelopePath, pipeline = {}, opts = {}) {
     : buildPolyglotEnvelope(absRoot, pipeline);
   return {
     absRoot, envelope: built.envelope, parseErrors: built.parseErrors, partialParses: built.partialParses ?? {},
-    skippedDirs: built.skippedDirs ?? {}, unresolvedSeeds: built.unresolvedSeeds ?? [],
+    skippedDirs: built.skippedDirs ?? {}, unresolvedSeeds: built.unresolvedSeeds ?? [], ledger: built.ledger ?? null,
     ...(built.cache ? { cache: built.cache } : {}),
   };
 }

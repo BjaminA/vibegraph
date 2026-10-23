@@ -13,14 +13,15 @@
 // Dev:  node --experimental-strip-types --no-warnings scripts/cli/main.mjs export examples/fleet-telemetry
 // Built: packages/knowledge/dist/cli.mjs (scripts/cli/build.mjs)
 import { appendFileSync, existsSync, readFileSync, statSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { basename, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { PACKAGE_NAME, gitHead, locate, toolLabel } from "./paths.mjs";
 import { resolvePython } from "./pyenv.mjs";
 import { exportKnowledge } from "../export_knowledge.mjs";
 import { formatCheckReport, runConstraintChecks } from "./check.mjs";
 import { hookInputFromWindows, cliPath } from "./winpath.mjs";
-import { applyHooks, applyInit, ALL_SKILLS, applySkills, cliInvocation, hookCommand, windowsHookCommand, pointerFor, skillsFromList } from "./init.mjs";
+import { applyHooks, applyInit, ALL_SKILLS, applySkills, cliInvocation, hookCommand, hookEnv, pinnedFromSettings, windowsHookCommand, pointerFor, skillsFromList } from "./init.mjs";
+import { resolvePaths } from "../cache_dir.mjs";
 import { spawnSync } from "node:child_process";
 import { HOOK_EVENTS, runHook } from "./hooks.mjs";
 import { doctorReport, hookRunPayload, recordFired } from "./hook_tools.mjs";
@@ -32,6 +33,7 @@ import { LESSONS_USAGE, runLessons } from "./lessons.mjs";
 import { DIRECTION_USAGE, runDirection } from "./direction.mjs";
 import { SETUP_USAGE, runSetup } from "./setup.mjs";
 import { DATAFLOW_USAGE, runDataflow } from "./dataflow.mjs";
+import { SERVICES_USAGE, runServices } from "./services.mjs";
 import { PLAN_USAGE, runPlan } from "./plan.mjs";
 import { runPlanDraft } from "./plan_draft.mjs";
 import { personOnlyStep, personRefusal, wslMarkAdvice } from "./actor.mjs";
@@ -52,7 +54,8 @@ import { INBOX_USAGE, runInbox } from "./inbox.mjs";
 import { SKILLS_USAGE, runSkills } from "./skills.mjs";
 import { VIEW_USAGE, runView } from "./view.mjs";
 import { AFFECTED_USAGE, formatAffected, runAffected } from "./affected.mjs";
-import { COVERAGE_USAGE, runCoverage } from "./coverage.mjs";
+import { COVERAGE_USAGE, runCoverage, runLedger } from "./coverage.mjs";
+import { ledgerPage } from "../../src/shared/coverage_ledger.ts";
 import { formatCoverage } from "../../src/server/coverage.ts";
 
 const USAGE = `${PACKAGE_NAME} — what VibeGraph derives from a codebase and what its operators stated, on disk for a plain Claude.
@@ -86,6 +89,7 @@ usage:
   ${PACKAGE_NAME} ${TRACE_USAGE}
   ${PACKAGE_NAME} ${DIRECTION_USAGE}
   ${PACKAGE_NAME} ${DATAFLOW_USAGE}
+  ${PACKAGE_NAME} ${SERVICES_USAGE}
   ${PACKAGE_NAME} ${PLAN_USAGE}
   ${PACKAGE_NAME} ${SOFTWARE_USAGE}
   ${PACKAGE_NAME} ${SETUP_USAGE}
@@ -171,8 +175,12 @@ The files that shape what export writes — each has a command:
   ${PACKAGE_NAME} --help
 
 Python 3 with libcst is required for the parse step; when libcst is missing it is installed
-into a directory this tool owns (VIBEGRAPH_KNOWLEDGE_HOME, default ~/.cache/${PACKAGE_NAME}).
+into a directory this tool owns (VIBEGRAPH_KNOWLEDGE_HOME, else the cache below).
 VG_PYTHON names the interpreter; VIBEGRAPH_PYDEPS names a directory that already holds libcst.
+Everything kept outside the project (caches, the hooks' record, the Claude check) lives in one
+place: the project's .vibegraph/config.json "cacheDir", else VG_CACHE_DIR, else
+$XDG_CACHE_HOME/${PACKAGE_NAME}, else ~/.cache/${PACKAGE_NAME}. \`doctor\` prints it; installed
+hooks carry whichever of these variables is set.
 `;
 
 /** One command's lines of USAGE: its own line(s) and the indented options under them. */
@@ -298,10 +306,15 @@ function cmdCoverage(args) {
   }
   const pos = [...parsed.positionals];
   let absRoot = resolve(".");
-  if (pos.length > 1 && existsSync(resolve(pos[0])) && statSync(resolve(pos[0])).isDirectory()) absRoot = resolve(pos.shift());
-  if (!pos.length) return fail(`name the files to check\n\n${USAGE}`);
+  if (pos.length && existsSync(resolve(pos[0])) && statSync(resolve(pos[0])).isDirectory()) absRoot = resolve(pos.shift());
   let pipeline;
   try { pipeline = pipelineFor(locate(), absRoot); } catch (e) { return fail(e.message, 3); }
+  if (!pos.length) { // RC2 — no files named: the whole ledger
+    const ledger = runLedger({ root: absRoot, envelope: parsed.values.envelope, pipeline, cache: parsed.values["no-cache"] !== true });
+    if (!ledger) return fail("no ledger: an envelope read from a file carries none (drop --envelope)", 2);
+    process.stdout.write(parsed.values.json ? JSON.stringify(ledger, null, 2) + "\n" : ledgerPage(ledger, basename(absRoot)));
+    return 0;
+  }
   const rows = runCoverage({ root: absRoot, files: pos, envelope: parsed.values.envelope, pipeline, cache: parsed.values["no-cache"] !== true });
   process.stdout.write(parsed.values.json ? JSON.stringify(rows, null, 2) + "\n" : formatCoverage(rows));
   return 0;
@@ -321,7 +334,8 @@ function installHooks(loc, absRoot, { remove = false, windows = false } = {}) {
       // `how` is "as installed", "VIBEGRAPH_PYDEPS=<dir>" or the directory itself.
       const deps = py.how === "as installed" ? null
         : py.how.startsWith("VIBEGRAPH_PYDEPS=") ? py.how.slice("VIBEGRAPH_PYDEPS=".length) : py.how;
-      env = { VG_PYTHON: exe, ...(deps ? { VIBEGRAPH_PYDEPS: deps } : {}) };
+      // RC7 — and every path variable set now or pinned before (init.mjs hookEnv)
+      env = hookEnv({ VG_PYTHON: exe, ...(deps ? { VIBEGRAPH_PYDEPS: deps } : {}) }, process.env, pinnedFromSettings(absRoot));
     }
     const version = packageVersion(loc);
     h = applyHooks({ root: absRoot, remove, command: (root, event) => windows
@@ -481,7 +495,7 @@ function report(r) {
 function cmdConstraints(argsIn) {
   // `list --json` is a flag; `add --json '<object>'` takes a value. Read the
   // flag off before parsing, so one option name means one thing to parseArgs.
-  const listJson = (argsIn[0] === "list" || argsIn[0] === "show" || argsIn[0] === "harvest") && argsIn.includes("--json");
+  const listJson = (argsIn[0] === "list" || argsIn[0] === "show" || argsIn[0] === "harvest" || argsIn[0] === "ledger") && argsIn.includes("--json");
   const args = listJson ? argsIn.filter((a) => a !== "--json") : argsIn;
   let parsed;
   try {
@@ -496,12 +510,14 @@ function cmdConstraints(argsIn) {
         min: { type: "string" }, cite: { type: "string" }, quote: { type: "string" },
         // draft (2026-10-19): a saved model reply, the prompt shown, the model
         reply: { type: "string" }, prompt: { type: "boolean" }, model: { type: "string" },
+        // restore (RC5): which of the ratified rules a re-init lost to put back
+        take: { type: "string" },
       },
     });
   } catch (e) { return fail(`${e.message}\n\n${USAGE}`); }
   const { sub, args: rest, root } = subAndRoot(parsed.positionals);
   const values = { ...parsed.values, ...(listJson ? { json: true } : {}), pid: rest[1] };
-  const pipeline = (sub === "add" && (values.check || values.json)) || sub === "harvest" || sub === "draft" ?(() => { try { return pipelineFor(locate(), resolve(cliPath(root ?? "."))); } catch { return {}; } })() : undefined;
+  const pipeline = (sub === "add" && (values.check || values.json)) || sub === "harvest" || sub === "draft" || sub === "ledger" ?(() => { try { return pipelineFor(locate(), resolve(cliPath(root ?? "."))); } catch { return {}; } })() : undefined;
   return report(runConstraints({ root, sub, id: rest[0], values, pipeline }));
 }
 
@@ -624,6 +640,9 @@ function cmdDoctor(args) {
   try { absRoot = projectRoot(args.find((a) => !a.startsWith("-"))); } catch (e) { return fail(e.message); }
   const r = doctorReport(absRoot);
   for (const [level, text] of r.lines) process.stdout.write(`${level === "ok" ? "ok  " : level === "info" ? "--  " : "!!  "}${text}\n`);
+  // RC7 — where everything outside the project lives, and why (scripts/cache_dir.mjs)
+  const paths = resolvePaths(absRoot);
+  process.stdout.write(`--  paths (cache from ${paths.source}): cache ${paths.cacheRoot}; envelopes ${paths.envelopes}; server ${paths.server}; python deps ${paths.pydeps}; Claude version check ${paths.claudeVersion}\n`);
   // which Claude every Claude call uses, and how it was found (find_claude.ts)
   const claude = describeClaude();
   const found = claude.startsWith("Claude: ") && !claude.includes("failed");
@@ -744,6 +763,7 @@ export function main(argv) {
   if (command === "config") { const r = runConfig(rest); (r.exitCode === 2 ? process.stderr : process.stdout).write(r.text); return r.exitCode; }
   if (command === "lessons") return cmdLessons(rest);
   if (command === "brief") return cmdBrief(rest);
+  if (command === "services") { const r = runServices(rest); process.stdout.write(r.text); return r.exitCode; }
   if (command === "dataflow") { const r = runDataflow(rest); process.stdout.write(r.text); return r.exitCode; }
   if (command === "plan" && rest[0] === "draft") return runPlanDraft(rest.slice(1)).then((r) => { (r.exitCode === 0 ? process.stdout : process.stderr).write(r.text); return r.exitCode; });
   if (command === "plan") { const r = runPlan(rest); (r.exitCode === 0 ? process.stdout : process.stderr).write(r.text); return r.exitCode; }

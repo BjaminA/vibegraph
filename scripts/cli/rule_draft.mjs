@@ -14,6 +14,7 @@ import { loadConstraints, statedRules } from "../../src/server/constraint_store.
 import { checkStatedRules } from "../../src/server/constraint_report.ts";
 import { buildRuleDossier, buildRuleDraftPrompt, MAX_DRAFT_RULES, pendingReview, pendingReviewRefusal } from "../../src/server/rule_draft.ts";
 import { applyRuleDraft, formatRuleDraftReport, gateRuleDraft } from "../../src/server/rule_draft_gate.ts";
+import { claimFactsFromEnvelope } from "../../src/server/rule_claims.ts";
 import { spawnClassifier } from "./classify.mjs";
 import { cliPath } from "./winpath.mjs";
 
@@ -30,6 +31,8 @@ export function gateContext(envelope, root, stack, model) {
     entryPoints: new Set((envelope.entryPoints ?? []).map((e) => e.id)),
     tools: new Set(stack.tools.map((t) => t.tool)),
     checkOne: checkerFor(envelope, root, stack),
+    claims: claimFactsFromEnvelope(envelope, stack),
+    funnels: stack.tools.filter((t) => t.origin === "project"), stack,
     model,
   };
 }

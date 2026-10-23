@@ -8,7 +8,9 @@ import { statedRules, loadConstraints } from "./constraint_store.ts";
 import { checkStatedRules } from "./constraint_report.ts";
 import { buildRuleDossier, buildRuleDraftPrompt, MAX_DRAFT_RULES, pendingReview, pendingReviewRefusal } from "./rule_draft.ts";
 import { applyRuleDraft, gateRuleDraft } from "./rule_draft_gate.ts";
+import { claimFactsFromEnvelope } from "./rule_claims.ts";
 import type { StackIndex } from "./stack.ts";
+import { modelNothingText } from "./model_failure_state.ts";
 
 export interface RuleDraftCtx {
   root: () => string | null;
@@ -60,7 +62,7 @@ export async function ruleDraftRun(ctx: RuleDraftCtx): Promise<RuleDraftReply> {
   if (!p.dossier.items.length) return { ok: false, error: "there are no facts to propose rules from yet" };
   if (!ctx.claudeAvailable()) return { ok: false, error: "the claude CLI is unavailable — `vibegraph-knowledge constraints draft --reply <file>` works from the command line" };
   const text = await ctx.run(p.prompt);
-  if (text === null) return { ok: false, error: "the model returned nothing" };
+  if (text === null) return { ok: false, error: modelNothingText() };
   const gated = gateRuleDraft(text, p.dossier, {
     existing: statedRules(loadConstraints(p.root)),
     files: new Set(Object.keys(p.env.files)),
@@ -68,6 +70,8 @@ export async function ruleDraftRun(ctx: RuleDraftCtx): Promise<RuleDraftReply> {
     tools: new Set(p.stack.tools.map((t) => t.tool)),
     checkOne: (input) => checkStatedRules({ envelope: p.env as never, root: p.root, stack: p.stack, constraints: [{ ...input, id: "draft", source: "agent", createdAt: "" }] }).results
       .map((r) => ({ verdict: r.verdict, reason: r.reason, offenders: r.offenders })),
+    claims: claimFactsFromEnvelope(p.env, p.stack),
+    funnels: p.stack.tools.filter((t) => t.origin === "project"), stack: p.stack,
     model: ctx.modelLabel(),
   });
   if (gated.error) return { ok: false, error: gated.error };

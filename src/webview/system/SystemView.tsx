@@ -400,7 +400,7 @@ export function SystemView({
       {mode === "map" && (architecture || planState.plan) && (
         <div data-arch-top-right style={{ position: "absolute", top: "calc(var(--vg-lens-bar-bottom, 120px) + 8px)", right: 16, zIndex: 32, display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8, pointerEvents: "none" }}>
           {planState.plan && <PlanViewToggle view={planView} onView={setPlanView} revision={planState.plan.revision} unplaced={planMapModel?.planUnplaced ?? null} onSeed={architecture && !architecture.proposal && onArchAction ? () => onArchAction("seed-plan") : undefined} />}
-          {architecture && <ArchLegend model={architecture} hiddenTools={base.hiddenTools ?? []} hiddenClusters={base.hiddenClusters ?? []} lens={lens === "config" ? "tools" : lens === "journeys" ? "flows" : lens === "resources" || lens === "decisions" ? "payloads" : lens} fold={!!archSelected} />}
+          {architecture && <ArchLegend model={architecture} hiddenTools={base.hiddenTools ?? []} hiddenClusters={base.hiddenClusters ?? []} lens={lens === "config" ? "tools" : lens === "journeys" ? "flows" : lens === "resources" || lens === "decisions" ? "payloads" : lens} fold={!!archSelected} coverage={insight?.coverage ?? null} />}
           {!archSelected && !topoMapModel && lens !== "config" && lens !== "journeys" && <MapFlows flows={flows} active={typeof flowOn === "string" ? flowOn : null} onActive={setFlowOn} />}
         </div>
       )}

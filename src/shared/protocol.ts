@@ -470,6 +470,8 @@ export interface InsightRecord {
   } | null;
   /** exported = a knowledge export exists to compare with; changed = files whose hash moved since. */
   freshness: { exported: boolean; changed: string[] };
+  /** RC2 — every file the walk saw, accounted for (src/shared/coverage_ledger.ts) */
+  coverage?: import("./coverage_ledger.ts").CoverageLedger;
 }
 
 // ── PLAN-M-RUNTIME phase 3 — trace-overlay wire shapes ───────────────────
@@ -551,7 +553,7 @@ export interface ConstraintRecord {
   // Optional and additive: a constraint without it behaves exactly as
   // before. The shape and its three verdicts live in
   // src/server/constraint_grammar.ts.
-  check?: import("../server/constraint_grammar.ts").ConstraintCheck | import("../server/quality/verbs/index.ts").Run1Check;
+  check?: import("../server/constraint_grammar.ts").ConstraintCheck | import("../server/quality/verbs/index.ts").Run1Check | import("./rule_claim_types.ts").ClaimCheck;
   // M-SWEEP W6 — a constraint may have SEVERAL structural clauses. c3 is
   // the case that forced it: "paged ONLY through alerts.notify, and only
   // after alerts.should_notify has applied its dedup. No other module may
@@ -559,7 +561,7 @@ export interface ConstraintRecord {
   // `check` could only ever carry one of them.
   //
   // `check` is kept and still honoured, so nothing already stored breaks.
-  checks?: Array<import("../server/constraint_grammar.ts").ConstraintCheck | import("../server/quality/verbs/index.ts").Run1Check>;
+  checks?: Array<import("../server/constraint_grammar.ts").ConstraintCheck | import("../server/quality/verbs/index.ts").Run1Check | import("./rule_claim_types.ts").ClaimCheck>;
   // 2026-10-01 — the rule's history (who changed which field, before →
   // after, why) and the changes an agent PROPOSED that a person has not yet
   // decided (src/server/constraint_edit.ts).
@@ -595,7 +597,8 @@ export interface StackEvidenceRef {
   file: string;
   nodeId?: string;
   line?: number;
-  kind: "import" | "call" | "include" | "config";
+  /** "exec": a program a Python or TypeScript launch runs, at the launching call (RC3, process_launches.ts) */
+  kind: "import" | "call" | "include" | "config" | "exec";
 }
 
 export interface StackToolRecord {
@@ -604,8 +607,12 @@ export interface StackToolRecord {
   origin: StackOrigin;
   /** Declared version from a manifest. Absent = no manifest said so. */
   version?: string;
-  /** origin "project": the tools this funnel wraps. */
+  /** origin "project": the tools this funnel wraps (RC4: the ones it calls). */
   wraps?: string[];
+  /** RC4 — origin "project": what the funnel calls in them, by full dotted
+   *  name (`urllib.request.urlopen`); a funnel rule's default check is
+   *  callers-only on each (funnel_checks.ts). */
+  calls?: string[];
   /** M-BOUNDARY.1 — origin "project": the file that IS the funnel. Its
    *  importers are in `files` too and are BESIDE it, not inside it, which
    *  is the difference between "this call goes through the wrapper" and

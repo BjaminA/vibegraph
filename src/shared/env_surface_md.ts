@@ -28,7 +28,7 @@ const where = (v: EnvVar) => {
 const buildNote = (v: EnvVar) => (v.buildTime ? " · build-time: a change needs a rebuild, not a restart" : "");
 const setBy = (v: EnvVar, has: boolean) => (v.declared.length
   ? [...new Set(v.declared.map((d) => `${d.file}:${d.line}${d.from ? ` (${d.from})` : ""}`))].slice(0, 3).join(", ") + (v.declared.length > 3 ? ` +${v.declared.length - 3}` : "")
-  : has ? "**nowhere**" : "—");
+  : v.providedBy ? `provided by ${v.providedBy}` : has ? "**nowhere**" : "—");
 
 export function formatEnvSurfaceMd(s: EnvSurface): string {
   const lines = [

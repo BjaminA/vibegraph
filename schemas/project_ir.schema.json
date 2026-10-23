@@ -226,6 +226,11 @@
         "roleStatedBy": { "description": "M-CMD.2: the id of the constraint that stated the role.", "type": "string" },
         "roleStatedSource": { "description": "M-CMD.3 (additive, OPTIONAL): that constraint's source. \"agent\" = a model's classification from the classify pass, NOT human-reviewed; a human's statement outranks it.", "type": "string", "enum": ["human", "orchestrator", "agent"] },
         "wraps": { "type": "array", "items": { "type": "string" } },
+        "calls": {
+          "description": "2026-10-22 (RC4, additive, OPTIONAL): origin \"project\" only - what the funnel calls in the tools it wraps, by full dotted name (`urllib.request.urlopen`); `wraps` holds the tools it calls, not every tool it imports (src/server/funnel_calls.ts).",
+          "type": "array",
+          "items": { "type": "string" }
+        },
         "home": {
           "description": "M-BOUNDARY.1: origin \"project\" only - the file that IS the funnel. Its importers are listed in `files` too and sit BESIDE it, not inside it, which is the difference between a call that goes THROUGH the wrapper and one that merely lives in a file importing it.",
           "type": "string"

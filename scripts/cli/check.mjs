@@ -21,7 +21,7 @@ import { execFileSync } from "node:child_process";
 import { join } from "node:path";
 import { loadEnvelope, gitDelta } from "../quality_check.mjs";
 import { buildStackIndex } from "../../src/server/stack.ts";
-import { loadConstraints, statedRules } from "../../src/server/constraint_store.ts";
+import { droppedConstraints, loadConstraints, statedRules } from "../../src/server/constraint_store.ts";
 import { checkStatedRules } from "../../src/server/constraint_report.ts";
 import { historicalAdvice, historicalFolders, inHistorical } from "../../src/server/historical_copies.ts";
 
@@ -72,7 +72,9 @@ export function runConstraintChecks({ root, envelope: envelopePath, pipeline, gi
   // 2026-10-07 — folders of old copies (historical_copies.ts): said, and their offenders marked
   const historical = historicalFolders(Object.keys(env.files ?? {}));
   const rules = statedRules(constraints).length;
-  return { root: absRoot, commit, constraints: rules, classifications: constraints.length - rules, unchecked, results, summary, exitCode, parseErrors, deltaNote, historical };
+  // RC5 — an entry this version could not read is never checked: said, not skipped in silence
+  const dropped = droppedConstraints(absRoot);
+  return { root: absRoot, commit, constraints: rules, classifications: constraints.length - rules, unchecked, results, summary, exitCode, parseErrors, deltaNote, historical, dropped };
 }
 
 const NOT_A_GATE = "NOTHING WAS CHECKED — this is not a pass, and `check` is not a gate here until a stated rule has a checkable half (`constraints add --check …`)";
@@ -94,6 +96,7 @@ export function formatCheckReport(r) {
   if (r.deltaNote) lines.push(r.deltaNote);
   if (r.unchecked.length) lines.push(`${r.unchecked.length} constraint${r.unchecked.length === 1 ? " has" : "s have"} no checkable half (prose only, a reader's job): ${r.unchecked.join(", ")}`);
   if (Object.keys(r.parseErrors ?? {}).length) lines.push(`parse errors — those files carry no IR and were not checked: ${Object.keys(r.parseErrors).join(", ")}`);
+  if (r.dropped?.length) lines.push(`constraints.json holds ${r.dropped.length} entr${r.dropped.length === 1 ? "y" : "ies"} this version could not read, so not checked: ${r.dropped.map((d) => `${d.id ?? "(no id)"} (${d.reason})`).join("; ")}`);
   const advice = historicalAdvice(r.historical ?? []);
   if (advice) lines.push(`note: ${advice}`);
   if (!r.summary.checked) lines.push(NOT_A_GATE);

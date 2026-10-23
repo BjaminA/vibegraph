@@ -43,13 +43,17 @@ import { OBSERVED_OBJECTIVE } from "./plan_observe.ts";
 import { loadDirection, staleRules, type Candidate } from "./project_direction.ts";
 import { cacheDirFor } from "../../scripts/cache_dir.mjs";
 import { githubGranted, githubRef } from "./github_docs.ts";
+import { ledgerHeadline, type CoverageLedger } from "../shared/coverage_ledger.ts";
+import { droppedConstraints, findDuplicate } from "./constraint_store.ts";
+import { backedUpRules } from "./rule_backup.ts";
+import { ledgerSummary, type RuleLedger } from "./rule_ledger.ts";
 
 /** init.mjs's HOOK_MARKER, the word every installed hook command carries.
  *  Not imported: init.mjs → paths.mjs reads import.meta.url at load, which the
  *  server's CommonJS bundle does not have. test:setup pins the two equal. */
 export const SETUP_HOOK_MARKER = "--vg-hook";
 
-export type SetupStepId = "software" | "groups" | "brief" | "rules" | "direction" | "hooks" | "plan";
+export type SetupStepId = "coverage" | "software" | "groups" | "brief" | "rules" | "direction" | "hooks" | "plan";
 export type SetupStatus = "done" | "waiting" | "todo" | "optional" | "skipped";
 export interface SetupCommand { run: string; who: "you" | "claude" | "either"; spends?: boolean; why: string }
 export interface SetupStep {
@@ -85,17 +89,31 @@ export function saveSkips(root: string, s: SetupSkips): void {
 }
 /** The steps a person may set aside (the core ones cannot be skipped: each is
  *  done once and says so when there is nothing to do). */
-export const SKIPPABLE_STEPS: SetupStepId[] = ["direction"];
+export const SKIPPABLE_STEPS: SetupStepId[] = ["direction", "coverage"];
 
 const cmd = (run: string, who: SetupCommand["who"], why: string, spends = false): SetupCommand => ({ run: `vibegraph-knowledge ${run}`, who, why, ...(spends ? { spends } : {}) });
 
 /** The setup's state. `stack` absent (a caller without the derived stack):
  *  the software step is left out rather than guessed. `census` (the direction
  *  census of the code now) lets the direction step name stale proposals. */
-export function setupState(root: string, opts: { stack?: Pick<StackIndexRecord, "tools"> | null; census?: Candidate[] | null } = {}): SetupState {
+export function setupState(root: string, opts: { stack?: Pick<StackIndexRecord, "tools"> | null; census?: Candidate[] | null; ledger?: CoverageLedger | null; rules?: RuleLedger | null } = {}): SetupState {
   const skips = loadSkips(root);
   const steps: SetupStep[] = [];
   let software: CandidateReport | null = null;
+
+  // ── what was not read (optional, first: RC2) — everything below rests on what was ──
+  if (opts.ledger) {
+    const head = ledgerHeadline(opts.ledger);
+    const title = "What VibeGraph did not read";
+    const largest = [...opts.ledger.deferred.map((f) => `${f.file} (${f.lines} lines): ${f.reason}`), ...opts.ledger.notRead.map((g) => `${g.kind}: ${g.files} file(s), ${g.lines} lines`)].slice(0, 4);
+    steps.push(skips.steps.coverage
+      ? { id: "coverage", title, status: "skipped", core: false, facts: [`set aside: ${skips.steps.coverage.why}`], commands: [], now: { text: "", panel: "setup" } }
+      : head
+        ? { id: "coverage", title, status: "optional", core: false, facts: [head, ...largest],
+          commands: [cmd("coverage", "either", "zero tokens: every file the walk saw, and why each one was or was not read"), cmd("setup skip coverage --why \"…\"", "either", "seen, and nothing there needs reading")],
+          now: { text: "See what VibeGraph did not read", panel: "setup" } }
+        : { id: "coverage", title, status: "done", core: false, facts: [`every code file the walk saw was read (${opts.ledger.parsed.files} files)`], commands: [], now: { text: "", panel: "setup" } });
+  }
 
   // ── software ──
   if (opts.stack) {
@@ -182,17 +200,34 @@ export function setupState(root: string, opts: { stack?: Pick<StackIndexRecord, 
   const human = stated.filter((c) => c.source === "human");
   const agent = stated.filter((c) => c.source !== "human");
   const changes = stated.reduce((n, c) => n + ((c as { proposals?: unknown[] }).proposals?.length ?? 0), 0);
-  steps.push(agent.length || changes
+  // RC5 — what became of the rules the project writes down, what a re-init lost, what could not be read
+  const back = backedUpRules(root).filter((r) => !findDuplicate(stated, r.text));
+  const dropped = droppedConstraints(root);
+  const unread = (opts.rules?.counts["next-round"] ?? 0) + (opts.rules?.counts.queued ?? 0);
+  const ruleFacts = [
+    ...(opts.rules?.entries.length ? [ledgerSummary(opts.rules)] : []),
+    ...(back.length ? [`${back.length} rule${back.length === 1 ? "" : "s"} ratified before ${back.length === 1 ? "is" : "are"} not in constraints.json`] : []),
+    ...(dropped.length ? [`constraints.json holds ${dropped.length} entr${dropped.length === 1 ? "y" : "ies"} this version could not read: ${dropped.slice(0, 2).map((d) => `${d.id ?? "(no id)"} (${d.reason.slice(0, 80)})`).join("; ")}`] : []),
+  ];
+  const ruleCommands = [
+    ...(back.length ? [cmd("constraints restore", "you", "see them, then --all or --take to put them back")] : []),
+    ...(ruleFacts.length ? [cmd("constraints ledger", "either", "every written rule and what became of it")] : []),
+  ];
+  if (!agent.length && !changes && back.length && !human.length) {
+    steps.push({ id: "rules", title: "Rules the code must keep", status: "waiting", core: true, facts: ruleFacts, commands: ruleCommands,
+      now: { text: `Restore the ${back.length} rule${back.length === 1 ? "" : "s"} you ratified before`, panel: "rules" } });
+  } else steps.push(agent.length || changes
     ? { id: "rules", title: "Rules the code must keep", status: "waiting", core: true,
-      facts: [`${agent.length} rule(s) stated by a model wait for a person${changes ? `; ${changes} proposed change(s) to stated rules` : ""}; ${human.length} ratified`],
-      commands: [cmd("constraints list", "either", "each with its reason and check"), cmd("constraints ratify <id>", "you", "or the Rules panel"), cmd("constraints remove <id>", "you", "a rule that is not one")],
+      facts: [`${agent.length} rule(s) stated by a model wait for a person${changes ? `; ${changes} proposed change(s) to stated rules` : ""}; ${human.length} ratified`, ...ruleFacts],
+      commands: [cmd("constraints list", "either", "each with its reason and check"), cmd("constraints ratify <id>", "you", "or the Rules panel"), cmd("constraints remove <id>", "you", "a rule that is not one"), ...ruleCommands],
       now: { text: `${agent.length + changes} proposed rule${agent.length + changes === 1 ? " waits" : "s wait"} for you`, panel: "rules" } }
     : human.length
-      ? { id: "rules", title: "Rules the code must keep", status: "done", core: true, facts: [`${human.length} ratified rule(s), ${human.filter((c) => c.check || c.checks?.length).length} with a check`], commands: [], now: { text: "", panel: "rules" } }
-      : { id: "rules", title: "Rules the code must keep", status: "todo", core: true, facts: ["no stated rules yet"],
+      ? { id: "rules", title: "Rules the code must keep", status: "done", core: true, facts: [`${human.length} ratified rule(s), ${human.filter((c) => c.check || c.checks?.length).length} with a check`, ...ruleFacts],
+        commands: [...ruleCommands, ...(unread ? [cmd("constraints draft", "claude", `the next round: ${unread} written rule${unread === 1 ? "" : "s"} not proposed yet`, true)] : [])], now: { text: "", panel: "rules" } }
+      : { id: "rules", title: "Rules the code must keep", status: "todo", core: true, facts: ["no stated rules yet", ...ruleFacts],
         commands: [cmd("constraints harvest", "either", "rule-shaped sentences in the project's own prose, zero tokens"),
           { run: "/vibegraph-rules", who: "claude", spends: true, why: "a Claude Code skill: states the real ones, each citing its sentence" },
-          cmd("constraints draft", "claude", "rules from the architecture, each citing the facts it was shown", true)],
+          cmd("constraints draft", "claude", "rules from the architecture, each citing the facts it was shown", true), ...ruleCommands],
         now: { text: "State a rule the code must keep", panel: "rules" } });
 
   // ── direction (optional) ──

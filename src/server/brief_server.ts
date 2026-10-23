@@ -16,6 +16,7 @@ import { groupsStep } from "./brief_groups_first.ts";
 import { reaffirmBrief, setBriefSync, staleBriefLineList, staleFocus, syncDue, markSyncRun } from "./brief_sync.ts";
 import { parseBrief } from "./brief_validate.ts";
 import { loadBrief, saveBrief, proposeBrief, decideBrief, sectionSummary, briefWithStaleness, allLines } from "./brief_store.ts";
+import { modelNothingText } from "./model_failure_state.ts";
 
 export interface BriefCtx {
   root: () => string | null;
@@ -85,7 +86,7 @@ export async function briefDraft(ctx: BriefCtx, opts: { only?: BriefOnly; stale?
   if (only === "scopes" && !inp.facts.silent.length) return { ok: false, error: "every silent box is scoped already" };
   const current = rec.proposed && allLines(rec.proposed.spec).length ? rec.proposed.spec : rec.ratified?.spec ?? null;
   const text = await ctx.run(buildBriefPrompt(inp.facts, inp.vocab, inp.opVocab, { only, skipGroups, guidance: opts.guidance?.slice(0, 400), restate, current, absolutes: inp.absolutes }));
-  if (text === null) return { ok: false, error: "the model returned nothing" };
+  if (text === null) return { ok: false, error: modelNothingText() };
   const parsed = parseBrief(text, inp.facts, inp.vocab, inp.opVocab, { model: ctx.modelLabel(), only, absolutes: inp.absolutes });
   if (!parsed.brief) return { ok: false, error: parsed.error };
   if (restate) parsed.brief.restates = restate;
@@ -110,7 +111,7 @@ export async function briefExplainGap(ctx: BriefCtx, n: number, estimateOnly: bo
   if (estimateOnly) return { ok: true, tokens: d.estimate, detail: `1 call, ~${Math.round(d.estimate / 1000)}k tokens, ${d.shown.size} lines of code shown` };
   if (!ctx.claudeAvailable()) return { ok: false, error: "the claude CLI is unavailable — explaining a gap needs one model call" };
   const text = await ctx.run(gapPrompt(d));
-  if (text === null) return { ok: false, error: "the model returned nothing" };
+  if (text === null) return { ok: false, error: modelNothingText() };
   const parsed = parseGapReply(text, d);
   if (!parsed.ok) return { ok: false, error: parsed.reason };
   const r = proposeClaim(root, model, facts, readLines, { ...parsed.claim, cites: parsed.cites, why: `${parsed.why} (${ctx.modelLabel()})`, by: "agent" });

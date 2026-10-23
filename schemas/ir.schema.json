@@ -63,6 +63,28 @@
         }
       }
     },
+    "embedded": {
+      "description": "2026-10-22 (RC2, field-additive) — present ONLY on a page read as its inline scripts (scripts/frontends/inline_scripts.mjs): the host kind and each script's lines. Everything outside the scripts was blanked before the parse with line breaks kept, so every node's line is its line in the page. A page is read, never edited.",
+      "type": "object",
+      "required": ["host", "scripts"],
+      "additionalProperties": false,
+      "properties": {
+        "host": { "enum": ["html"] },
+        "scripts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["line", "endLine"],
+            "additionalProperties": false,
+            "properties": {
+              "line": { "type": "integer", "minimum": 1 },
+              "endLine": { "type": "integer", "minimum": 1 },
+              "type": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
     "degraded": {
       "description": "M-CMD.1 — present ONLY when the frontend could not read part of this file and dropped it. The IR is still emitted (a partial map beats no map) but it is INCOMPLETE, and a consumer must be able to learn that from the IR itself rather than from a separate error map it may never see. Absence means nothing was dropped. Field-additive; emitted by the four tree-sitter frontends, which count ERROR and MISSING nodes as they walk. libcst either parses a file or raises, so Python emits no IR at all for a file it cannot read and never carries this field.",
       "type": "object",
@@ -425,6 +447,10 @@
         "augmented": {
           "description": "M-ORCH.3 (2026-09-07, field-additive, no version bump): present iff the statement is an AUGMENTED assignment (`x += f()`), carrying the operator source text (\"+=\", \"-=\", …). Before this, libcst's AugAssign emitted nothing, so a call on its right-hand side was invisible to the linker and the thread extractor. Such a node never DEFINES its name (the target already exists) — it carries the call, the effect, the args, and the reference edge like any assignment.",
           "type": "string"
+        },
+        "targetText": {
+          "description": "2026-10-22 (field-additive, no version bump): the target's source text when `name` cannot spell it (a subscript, `record[\"origins\"] = …`, where `name` is \"?\"), so what the statement writes is a fact a claim can be checked against (src/server/rule_claims.ts). Capped at 160 characters; `name`, and so the node id, is unchanged.",
+          "type": "string"
         }
       },
       "required": [
@@ -467,6 +493,10 @@
           }
         },
         "isAsync": {
+          "type": "boolean"
+        },
+        "defaultExportMember": {
+          "description": "2026-10-22 (RC2, field-additive, JS/TS only): a function defined as a member of `export default { … }`, the shape a Cloudflare Worker's `fetch` takes. Absent otherwise.",
           "type": "boolean"
         },
         "returns": {

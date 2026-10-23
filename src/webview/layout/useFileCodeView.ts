@@ -10,7 +10,7 @@ import { bridge, type AstNode } from "../types";
 import { applyFilters } from "./filters";
 import type { NodeFilters } from "../FiltersPanel";
 import { buildCodeLayout, CODE_CHAR_W, type LineMeasure } from "./code_layout";
-import { languageForPath } from "../../shared/languages";
+import { monacoLanguageOf } from "../../shared/languages";
 
 const KEY = "vg-file-view-mode";
 
@@ -84,7 +84,7 @@ export function useFileCodeView(args: {
     const refEdges = edges
       .filter((e) => (e.data as { kind?: string } | undefined)?.kind === "reference")
       .map((e) => ({ source: e.source, target: e.target, targetFile: (e.data as { targetFile?: string } | undefined)?.targetFile }));
-    const language = languageForPath(activeFilePath)?.monacoLanguage ?? "plaintext";
+    const language = monacoLanguageOf(activeFilePath) ?? "plaintext";
     return buildCodeLayout(applyFilters(astNodes, hiddenNodeIds, nodeFilters), refEdges, fileSource, language, measure);
     // cardNodes: the trigger that astNodes (a ref) changed.
     // eslint-disable-next-line react-hooks/exhaustive-deps

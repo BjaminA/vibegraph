@@ -105,8 +105,9 @@ test.describe("setup welcome", () => {
 
   test("Run takes the selected steps one at a time, in order, and ends saying what waits", async ({ page }) => {
     // the software step set aside; the stub model answers nothing
-    // (fake_claude_silent.mjs): the groups fail with their reason, the
-    // census (no model call) runs for real, and the rules, left out, never run
+    // (fake_claude_silent.mjs): the check before the run fails, so the groups
+    // are held back with the reason (RC6), the census (no model call) runs for
+    // real, and the rules, left out, never run
     const vg = join(process.cwd(), FIXTURE, ".vibegraph");
     const hadDir = existsSync(vg);
     mkdirSync(vg, { recursive: true });

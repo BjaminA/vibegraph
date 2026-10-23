@@ -29,6 +29,8 @@
 // project script ASSIGNS is set by that script (a sourced file), not by the
 // environment, and is said apart.
 
+import { platformThatProvides } from "./platform_env.ts";
+
 export interface EnvRead {
   name: string; file: string; line: number; form: string; fnId: string | null;
   /** what an unset value becomes here, when the expression says (ir.schema.json envReads) */
@@ -48,12 +50,14 @@ export interface EnvVar {
   ifUnset: UnsetEffect;
   /** baked into a bundle at build time (NEXT_PUBLIC_, VITE_ …): a change needs a rebuild */
   buildTime: boolean;
+  /** RC8 — set by a platform itself (a CI runner, a host, Claude Code): never undeclared (platform_env.ts) */
+  providedBy?: string;
 }
 /** One kind of deploy target with two or more files, and the variables some set and others do not. */
 export interface TargetGap { family: string; targets: string[]; rows: Array<{ name: string; setIn: string[] }> }
 export interface EnvSurface {
   vars: EnvVar[];
-  /** read by the code, set by no project script, declared nowhere — worst `ifUnset` first. */
+  /** read by the code, set by no project script or platform, declared nowhere — worst `ifUnset` first. */
   undeclared: string[];
   /** declared, and read by nothing the IR sees. */
   unread: EnvDeclaration[];
@@ -191,6 +195,7 @@ export function buildEnvSurface(
   for (const r of reads) {
     const v = byName.get(r.name) ?? byName.set(r.name, {
       name: r.name, readers: [], threads: [], declared: declaredBy.get(r.name) ?? [], setBy: [], ifUnset: "unset", buildTime: BUILD_TIME.test(r.name),
+      ...(platformThatProvides(r.name) ? { providedBy: platformThatProvides(r.name)! } : {}),
     }).get(r.name)!;
     v.readers.push(r);
     // A bash read of a name some project script assigns is SOURCED, not inherited.
@@ -215,7 +220,7 @@ export function buildEnvSurface(
   const rank = (v: EnvVar) => UNSET_ORDER.indexOf(v.ifUnset);
   return {
     vars,
-    undeclared: declarations.length ? vars.filter((v) => !v.declared.length).sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name)).map((v) => v.name) : [],
+    undeclared: declarations.length ? vars.filter((v) => !v.declared.length && !v.providedBy).sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name)).map((v) => v.name) : [],
     unread: declarations.filter((d) => !readNames.has(d.name)),
     byThread,
     hasDeclarations: declarations.length > 0,

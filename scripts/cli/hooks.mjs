@@ -55,7 +55,7 @@ import { directionForPrompt, directionForFindings } from "./direction.mjs";
 import { fitText } from "./hook_text.mjs";
 import { projectDirectionAfterEdit, projectDirectionBaseline } from "./project_direction_context.mjs";
 import { untrustedBaseline, newUntrustedNote } from "../dataflow_cache.mjs";
-import { languageForFile } from "../../src/server/languages.ts";
+import { mayBeSource } from "../../src/server/languages.ts";
 
 export const HOOK_EVENTS = ["session-start", "prompt", "post-edit", "stop"];
 const MIN_PROMPT_CHARS = 12;
@@ -360,7 +360,7 @@ function onPostEdit(input, { absRoot, loaded: load, state, constraints, trace })
   if (typeof target !== "string") return null;
   const abs = isAbsolute(target) ? target : resolve(absRoot, target);
   const rel = relative(absRoot, abs).split("\\").join("/");
-  if (rel.startsWith("..") || rel.startsWith(".vibegraph/") || !languageForFile(basename(abs), abs)) return null;
+  if (rel.startsWith("..") || rel.startsWith(".vibegraph/") || !mayBeSource(basename(abs), abs)) return null;
   state.sourceStamp = sourceStamp(absRoot);
   return afterEdit(rel, input, { absRoot, loaded: load(), state, constraints, trace });
 }
@@ -372,7 +372,7 @@ function afterEdit(rel, input, { absRoot, loaded, state, constraints, trace }) {
   const notes = [];
   let files = rel ? [rel] : [];
   if (!rel) {
-    try { files = workingTreeDelta(absRoot).entries.map((e) => e.file).filter((f) => languageForFile(basename(f), join(absRoot, f))); }
+    try { files = workingTreeDelta(absRoot).entries.map((e) => e.file).filter((f) => mayBeSource(basename(f), join(absRoot, f))); }
     catch { files = []; }
   }
   // Only a file with NO IR blocks: a partly read one is still checked.

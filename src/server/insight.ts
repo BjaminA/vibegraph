@@ -17,6 +17,7 @@ export function buildInsight(
   root: string | null,
   env: { files: Record<string, any>; threads: any[]; entryPoints: any[] },
   envSurface: EnvSurface | null,
+  coverage: InsightRecord["coverage"] | null = null,
 ): InsightRecord {
   const r = computeReachability(env, { root: root ?? undefined });
   let freshness: InsightRecord["freshness"] = { exported: false, changed: [] };
@@ -36,6 +37,7 @@ export function buildInsight(
     } catch { /* an unreadable sources.json reads as no export */ }
   }
   return {
+    ...(coverage ? { coverage } : {}),
     reachability: {
       defs: r.defs, reached: r.reached,
       unreached: r.unreached.map((u) => ({ file: u.file, id: u.id, name: u.name, line: u.line, reason: u.reason })),

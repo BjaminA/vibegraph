@@ -1026,7 +1026,8 @@
         "endCol": 32,
         "name": "?",
         "valueKind": "other",
-        "preview": "value"
+        "preview": "value",
+        "targetText": "self._store[key]"
       },
       {
         "id": "module/cache.assign",

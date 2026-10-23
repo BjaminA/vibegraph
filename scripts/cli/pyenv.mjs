@@ -17,6 +17,7 @@ import { spawnSync } from "node:child_process";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { PACKAGE_NAME } from "./paths.mjs";
+import { resolvePaths } from "../cache_dir.mjs";
 
 // libcst defines no __version__ (the first probe asked for it, so every
 // environment "failed" and the installer ran); the distribution metadata
@@ -38,8 +39,10 @@ function withPath(dir) {
   return { ...process.env, PYTHONPATH: prior ? `${dir}${process.platform === "win32" ? ";" : ":"}${prior}` : dir };
 }
 
+/** RC7 — the one resolver decides it (scripts/cache_dir.mjs resolvePaths):
+ *  VIBEGRAPH_KNOWLEDGE_HOME, else the cache root, which follows VG_CACHE_DIR and XDG_CACHE_HOME. */
 export function cacheDir() {
-  return process.env.VIBEGRAPH_KNOWLEDGE_HOME ?? join(homedir(), ".cache", PACKAGE_NAME);
+  return resolvePaths(null).pydeps;
 }
 
 /** The provisioning directory kept for ONE interpreter version: compiled

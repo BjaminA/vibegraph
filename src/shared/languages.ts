@@ -28,6 +28,18 @@ export interface LanguageInfo {
    * file whose interpreter no language claims stays out of the IR.
    */
   interpreters?: string[];
+  /**
+   * RC2 (2026-10-22) — extensions this frontend reads only when EVIDENCE says
+   * the file is source (src/server/source_admission.ts): a deploy config, a
+   * manifest or a parsed file names it, or it is a Worker or a `#!` script.
+   * Never by extension alone, so bundled and browser-served output stays out.
+   */
+  evidenceExtensions?: string[];
+  /** RC2 — host pages whose inline scripts this frontend reads, read-only
+   *  (scripts/frontends/inline_scripts.mjs; lines map one to one). */
+  embeddedIn?: string[];
+  /** The Monaco language for an extension that is not `monacoLanguage`'s. */
+  monacoByExtension?: Record<string, string>;
   /** Monaco editor language id ("python" | "shell" | "typescript" | "cpp"). */
   monacoLanguage: string;
   /** Markdown fence tag for LLM prompts (```python). */
@@ -114,7 +126,14 @@ export const LANGUAGES: readonly LanguageInfo[] = [
     // `.sh` files existed only to exec a sibling `.mjs` nobody parsed, so
     // every one of those threads stopped at the doorway
     // (an internal field review B1). `.js`/`.jsx` keep their deferral.
+    // RC2 (2026-10-22): ...as a deferral BY EXTENSION. A `.js` the evidence
+    // names as source is read (a Worker, a `#!` script, a manifest's main), and
+    // a page's inline scripts are read; the rest stays out and is listed in the
+    // coverage ledger, never skipped in silence.
     extensions: [".ts", ".tsx", ".mjs", ".cjs"],
+    evidenceExtensions: [".js", ".jsx"],
+    embeddedIn: [".html", ".htm"],
+    monacoByExtension: { ".js": "javascript", ".jsx": "javascript", ".html": "html", ".htm": "html" },
     interpreters: ["node"],
     monacoLanguage: "typescript",
     fenceTag: "typescript",
@@ -166,15 +185,33 @@ export function languageById(id: string | null | undefined): LanguageInfo | null
   return (id && BY_ID.get(id as LanguageId)) || null;
 }
 
-/** Match a file path (or bare filename) to a registered language by extension. */
-export function languageForPath(filePath: string): LanguageInfo | null {
+const extOf = (filePath: string): string => {
   const dot = filePath.lastIndexOf(".");
-  if (dot === -1) return null;
-  const ext = filePath.slice(dot).toLowerCase();
+  return dot === -1 || filePath.lastIndexOf("/") > dot ? "" : filePath.slice(dot).toLowerCase();
+};
+
+/** The language a file's OWN extension registers: what the walk reads unconditionally. */
+export function languageForOwnExtension(filePath: string): LanguageInfo | null {
+  const ext = extOf(filePath);
+  return (ext && LANGUAGES.find((l) => l.extensions.includes(ext))) || null;
+}
+
+/** RC2 — how a file not registered by extension may still be read: by evidence, or as a page. */
+export function admissionFor(filePath: string): { lang: LanguageInfo; by: "evidence" | "embedded" } | null {
+  const ext = extOf(filePath);
+  if (!ext) return null;
   for (const lang of LANGUAGES) {
-    if (lang.extensions.includes(ext)) return lang;
+    if (lang.evidenceExtensions?.includes(ext)) return { lang, by: "evidence" };
+    if (lang.embeddedIn?.includes(ext)) return { lang, by: "embedded" };
   }
   return null;
+}
+
+/** The language that READS a file path (or bare filename): its own extension,
+ *  or the frontend that reads it when evidence admits it (RC2). A lookup for a
+ *  file already in the IR; whether a file is walked is the walk's decision. */
+export function languageForPath(filePath: string): LanguageInfo | null {
+  return languageForOwnExtension(filePath) ?? admissionFor(filePath)?.lang ?? null;
 }
 
 /**
@@ -214,7 +251,13 @@ export function languageForShebang(firstLine: string): LanguageInfo | null {
  * language" (new languages arrive here by registration, never by default).
  */
 export function monacoLanguageForPath(filePath: string | null | undefined): string {
-  return languageForPath(filePath ?? "")?.monacoLanguage ?? "python";
+  return monacoLanguageOf(filePath) ?? "python";
+}
+
+/** The Monaco language for a path, or null when no frontend reads it. */
+export function monacoLanguageOf(filePath: string | null | undefined): string | null {
+  const lang = languageForPath(filePath ?? "");
+  return lang ? lang.monacoByExtension?.[extOf(filePath ?? "")] ?? lang.monacoLanguage : null;
 }
 
 /**
@@ -227,6 +270,9 @@ export function monacoLanguageForPath(filePath: string | null | undefined): stri
 export function capabilitiesForPath(
   filePath: string | null | undefined,
 ): LanguageInfo["capabilities"] {
+  // RC2 — a page's inline scripts are read, never edited: the rewriters
+  // splice whole source files, and a page is not one
+  if (admissionFor(filePath ?? "")?.by === "embedded") return { edit: false, run: false, trace: false, architecture: false };
   return (
     languageForPath(filePath ?? "")?.capabilities
     ?? { edit: true, run: true, trace: true, architecture: true }

@@ -20,7 +20,8 @@ import { computeDataflow } from "./dataflow.ts";
 import { harvestRules } from "./rule_harvest.ts";
 import { census } from "./project_direction.ts";
 import { loadPlan } from "./plan_store.ts";
-import { loadConstraints, statedRules } from "./constraint_store.ts";
+import { loadConstraints, statedRules, type Constraint } from "./constraint_store.ts";
+import { roundCandidates } from "./rule_ledger.ts";
 import type { StackIndex } from "./stack.ts";
 
 export type DossierKind = "process" | "group" | "tool" | "funnel" | "boundary" | "crossing" | "env" | "flow" | "harvest" | "direction" | "plan";
@@ -73,7 +74,8 @@ export function buildRuleDossier(root: string, env: EnvelopeLike, stack: StackIn
     if (called.length) add("boundary", `boundary:${t.tool}`, `threads leaving through ${t.tool}: ${called.slice(0, 8).join(", ")}${called.length > 8 ? `, +${called.length - 8}` : ""}`);
   }
   for (const t of tools.filter((x) => x.origin === "project").slice(0, 30)) {
-    add("funnel", `funnel:${t.tool}`, `${t.home ?? t.tool} is the project's own module${t.wraps?.length ? ` wrapping ${t.wraps.join(", ")}` : ""}; imported in ${t.files.length} file(s), on ${t.threads.length} thread(s)`);
+    // RC4 — what the funnel CALLS, by full name: the doors a rule about it guards
+    add("funnel", `funnel:${t.tool}`, `${t.home ?? t.tool} is the project's own module${t.calls?.length ? ` calling ${t.calls.slice(0, 4).join(", ")}${t.calls.length > 4 ? ` +${t.calls.length - 4}` : ""} (${t.wraps?.join(", ")})` : t.wraps?.length ? ` wrapping ${t.wraps.join(", ")}` : ""}; imported in ${t.files.length} file(s), on ${t.threads.length} thread(s)`);
   }
 
   // hops between processes
@@ -95,9 +97,14 @@ export function buildRuleDossier(root: string, env: EnvelopeLike, stack: StackIn
     add("flow", `flow:${f.sink.file}:${f.sink.line ?? 0}`, `${f.kind} sink \`${cut(f.sink.text, 90)}\` in ${f.sink.fn} from ${f.source.what}`);
   }
 
-  // what the project's own prose and the census already say
-  for (const c of harvestRules(root, env as never, stack).candidates.slice(0, 25)) {
-    add("harvest", `harvest:${c.file}:${c.line}`, `"${c.quote}" (${c.where}${c.under ? ` under "${cut(c.under, 50)}"` : ""})`, { file: c.file, line: c.line, quote: c.quote });
+  // what the project's own prose and the census already say: RC5 — the sentences
+  // no rule covers yet, rule sections of CLAUDE.md / AGENTS.md first, so each
+  // round reaches the next ones instead of re-offering the same 25 (rule_ledger.ts)
+  let known: Constraint[] = [];
+  try { known = loadConstraints(root); } catch { known = []; }
+  for (const c of roundCandidates(harvestRules(root, env as never, stack), known)) {
+    // RC5 — with the check its shape fits, when one does (a folder allow-list too)
+    add("harvest", `harvest:${c.file}:${c.line}`, `"${c.quote}" (${c.where}${c.under ? ` under "${cut(c.under, 50)}"` : ""})${c.suggestedCheck ? `; a check that fits it: ${JSON.stringify(c.suggestedCheck)}` : ""}`, { file: c.file, line: c.line, quote: c.quote });
   }
   const plan = (() => { try { return loadPlan(root); } catch { return null; } })();
   for (const d of census({ stack, model, files: env.files, plan }).slice(0, 15)) {
@@ -174,7 +181,16 @@ export function buildRuleDraftPrompt(d: RuleDossier): string {
     "A `target` is a function as the code calls it (`insert_readings`, `requests.post`, `postIngest`) — never a URL or a route path. Leave out a list you would leave empty.",
     "A check is run against the code before anything is stored: one that cannot be decided is removed and said.",
     "",
+    "## Claims: anything the rule says the code DOES (otherwise omit `claims`)",
+    "A sentence such as \"X runs only A and B\", \"f writes only the `ids` field\" or \"this folder never touches the network\" is a claim about the code, and it is decided against the code before the rule is stored: a claim the code contradicts is corrected from the code or the rule is refused. State each one, in these shapes:",
+    "- {\"predicate\":\"runs-only\",\"subject\":[\"<file or path:function>\"],\"objects\":[\"<script it runs>\"]}: every program or script it runs, ALL of them",
+    "- {\"predicate\":\"writes-only\",\"subject\":[\"<path:function>\"],\"objects\":[\"<field>\"]}: every field of a record it writes",
+    "- {\"predicate\":\"imports-only\",\"subject\":[\"<file or folder/>\"],\"objects\":[\"<project module or folder>\"]}: the project's own modules it may import",
+    "- {\"predicate\":\"never-calls\",\"subject\":[\"<file or folder/>\"],\"objects\":[\"network|fs|db|subprocess|<tool>|<function>\"]}",
+    "- {\"predicate\":\"reaches\",\"subject\":[\"<file or folder/>\"],\"objects\":[\"<tool>\"]}: tools its calls leave through",
+    "Write the subject as the facts above spell it. Claim only what you could list from the facts; a rule whose own why names a file its claim leaves out is refused.",
+    "",
     `## Reply with JSON only, at most ${MAX_DRAFT_RULES} rules, the strongest first:`,
-    "{\"rules\":[{\"kind\":\"invariant|proxy|payload-schema|backend-call|perf-lever|objective\",\"text\":\"<the rule, one sentence>\",\"why\":\"<why it exists, from the facts>\",\"scope\":{\"entryPointIds\":[],\"files\":[],\"stack\":[]},\"cites\":[\"<fact id>\"],\"check\":{}}],\"checks\":[{\"for\":\"<a stated rule id marked (no check yet)>\",\"check\":{},\"cites\":[\"<fact id>\"]}],\"withoutEvidence\":[\"<a rule you suspect but no fact above supports>\"]}",
+    "{\"rules\":[{\"kind\":\"invariant|proxy|payload-schema|backend-call|perf-lever|objective\",\"text\":\"<the rule, one sentence>\",\"why\":\"<why it exists, from the facts>\",\"scope\":{\"entryPointIds\":[],\"files\":[],\"stack\":[]},\"cites\":[\"<fact id>\"],\"check\":{},\"claims\":[]}],\"checks\":[{\"for\":\"<a stated rule id marked (no check yet)>\",\"check\":{},\"cites\":[\"<fact id>\"]}],\"withoutEvidence\":[\"<a rule you suspect but no fact above supports>\"]}",
   ].join("\n");
 }

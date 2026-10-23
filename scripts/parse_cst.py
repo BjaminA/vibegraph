@@ -212,6 +212,14 @@ class GraphBuilder(cst.CSTVisitor):
             return f"{obj}.{t.attr.value}"
         return "?"
 
+    def _stamp_target_text(self, extras: dict, target: cst.BaseExpression) -> None:
+        """A target `name` cannot spell (`record["origins"] = …` reads "?"):
+        its source text, so what the statement WRITES is a fact (rule_claims.ts:
+        "writes only the codes field" was undecidable). Field-additive;
+        `name`, and with it every node id, is unchanged."""
+        if extras.get("name") == "?" and not isinstance(target, (cst.Tuple, cst.List)):
+            extras["targetText"] = self._code(target).strip()[:160]
+
     def _func_name(self, f: cst.BaseExpression) -> str:
         if isinstance(f, cst.Name):
             return f.value
@@ -602,6 +610,7 @@ class GraphBuilder(cst.CSTVisitor):
         # inside list/tuple/dict literals are NOT exposed here — that's a parser
         # enhancement out of M4a scope.
         extras: dict = {"name": name, "valueKind": vkind, "preview": preview}
+        self._stamp_target_text(extras, first_target)
         # 2026-10-07 — what an unpacking assignment binds (`a, b = f()`): the
         # names a call's result flows into. `name` stays "?" (ids unchanged);
         # field-additive, no version bump (the elseLine/args precedent).
@@ -674,6 +683,7 @@ class GraphBuilder(cst.CSTVisitor):
         safe = name.replace(".", "_")
         node_id = self._make_id("assign", safe)
         extras: dict = {"name": name, "annotation": annotation}
+        self._stamp_target_text(extras, node.target)
         if node.value is not None:
             extras["valueKind"] = self._value_kind(node.value)
             extras["preview"] = self._code(node.value)[:PREVIEW_MAX]
@@ -721,6 +731,7 @@ class GraphBuilder(cst.CSTVisitor):
         except Exception:  # an operator libcst cannot render in isolation
             operator = "?="
         extras: dict = {"name": name, "valueKind": vkind, "preview": preview, "augmented": operator}
+        self._stamp_target_text(extras, node.target)
         if isinstance(node.value, cst.Call):
             self._claim(node.value)
             call_target = self._func_name(node.value.func)

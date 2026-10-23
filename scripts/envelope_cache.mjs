@@ -37,16 +37,20 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync } fr
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildPolyglotEnvelope } from "./regen_polyglot.mjs";
-import { shouldSkipDir, languageForFile } from "../src/server/languages.ts";
+import { shouldSkipDir, mayBeSource } from "../src/server/languages.ts";
 import { getBlob, pruneBlobs, putBlob, sha1, writeAtomic } from "./envelope_store.mjs";
 
 // 2: one blob per parsed IR, linked IR and thread (envelope_store.mjs); a
 // version-1 cache is rebuilt and its two whole-map files removed
-const CACHE_VERSION = "2";
+// 3 (2026-10-22, RC2): the result carries the coverage ledger, and a `.js` or
+// a page the walk admits by evidence is hashed like any source
+const CACHE_VERSION = "3";
 const LEGACY_FILES = ["envelope.json", "parsed.json"];
 const HERE = fileURLToPath(import.meta.url);
 // package.json too (2026-10-01): its `bin` and `scripts` make entry points.
-const CONTEXT_FILE = /^(tsconfig.*\.json|jsconfig.*\.json|Cargo\.toml|package\.json)$/;
+// RC2 — and the run and deploy configs whose naming of a `.js` admits it
+// (src/server/source_admission.ts RUN_CONFIGS); workflows are read below
+const CONTEXT_FILE = /^(tsconfig.*\.json|jsconfig.*\.json|Cargo\.toml|package\.json|wrangler\.(toml|jsonc?)|Procfile|vercel\.json|netlify\.toml|fly\.toml|ecosystem\.config\.(c?js|json))$/;
 const METHOD_ID = /^module\/[^/]+\.class\/[^/]+\.fn$/;
 
 // cacheDirFor moved to cache_dir.mjs (the server's CommonJS bundle reads it
@@ -146,8 +150,10 @@ export function buildEnvelopeCached(root, opts = {}) {
   const ctxParts = [];
   for (const f of all) {
     if (CONTEXT_FILE.test(f.name)) ctxParts.push(`${f.rel}\n${readFileSync(f.full, "utf-8")}`);
-    if (languageForFile(f.name, f.full)) sources[f.rel] = sha1(readFileSync(f.full));
+    if (mayBeSource(f.name, f.full)) sources[f.rel] = sha1(readFileSync(f.full));
   }
+  const workflows = join(absRoot, ".github", "workflows");
+  if (existsSync(workflows)) for (const w of readdirSync(workflows).sort()) ctxParts.push(`workflow ${w}\n${readFileSync(join(workflows, w), "utf-8")}`);
   const seedsPath = join(absRoot, ".vibegraph", "manual_seeds.json");
   if (existsSync(seedsPath)) ctxParts.push(`seeds\n${readFileSync(seedsPath, "utf-8")}`);
   const key = {
@@ -239,7 +245,7 @@ export function buildEnvelopeCached(root, opts = {}) {
   const built = buildPolyglotEnvelope(absRoot, { ...(opts.pipeline ?? {}), parseCache, threadCache, skipSystem: true, timings: opts.timings });
   tMark = Date.now();
   const result = {
-    envelope: built.envelope, parseErrors: built.parseErrors, partialParses: built.partialParses ?? {}, skippedDirs: built.skippedDirs,
+    envelope: built.envelope, parseErrors: built.parseErrors, partialParses: built.partialParses ?? {}, skippedDirs: built.skippedDirs, ledger: built.ledger,
     unresolvedSeeds: built.unresolvedSeeds, languages: built.languages,
   };
   try {

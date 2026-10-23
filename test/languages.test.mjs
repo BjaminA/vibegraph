@@ -44,6 +44,7 @@ test("extension routing: registered languages only", () => {
       monacoFallback: monacoLanguageForPath(null),
       isSrcPy: isSourceFile("m.py"),
       isSrcSh: isSourceFile("m.sh"),
+      isSrcJs: isSourceFile("web/src/api.js"),
     };
     console.log(JSON.stringify(out));
   `);
@@ -56,7 +57,13 @@ test("extension routing: registered languages only", () => {
   // M-LANG5a (.h routes to cpp).
   assert.equal(out.sh, "bash");
   assert.equal(out.ts, "jsts");
-  assert.equal(out.js, null, ".js is deliberately unregistered (M19 system-tier collision)");
+  // RC2 (2026-10-22): languageForPath says what READS a file once it is in
+  // the IR, and a `.js` the evidence admits is read by jsts. Whether a `.js`
+  // is walked at all stays the walk's decision (source_admission.ts): never
+  // by its extension, so the M19 system-tier frontends stay out (isSrcJs, and
+  // test:coverage-ledger walks system_demo to pin it).
+  assert.equal(out.js, "jsts");
+  assert.equal(out.isSrcJs, false, ".js is never walked by extension alone");
   assert.equal(out.cpp, "cpp");
   assert.equal(out.h, "cpp");
   // M-RUST — .rs only; the frontend is read-only (rustfmt is the named

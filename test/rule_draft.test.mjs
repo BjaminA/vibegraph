@@ -50,7 +50,7 @@ test("the dossier: facts with ids, the stated rules not to restate, the scope vo
   assert.ok(dossier.vocab.tools.includes("sqlite3") && dossier.vocab.tools.includes("telemetry.storage"));
   assert.ok(!dossier.vocab.tools.includes("json"), "the standard library that leaves nothing is not scope vocabulary");
   const prompt = buildRuleDraftPrompt(dossier);
-  assert.match(prompt, /\[funnel:telemetry\.storage\] telemetry\/storage\.py is the project's own module wrapping sqlite3/);
+  assert.match(prompt, /\[funnel:telemetry\.storage\] telemetry\/storage\.py is the project's own module calling sqlite3\.[^;]*\(sqlite3\)/, "RC4: what the funnel calls, by full name, and the tool");
   assert.match(prompt, /do NOT restate or reword these\n- c1: /);
   assert.match(prompt, /"rule":"import-only"/);
   assert.ok(prompt.length < 40_000, `prompt ${prompt.length} chars`);

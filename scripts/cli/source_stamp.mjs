@@ -2,7 +2,7 @@
 // it under 500 lines, 2026-10-07, when the walk learned .vibegraphignore).
 import { readdirSync, statSync } from "node:fs";
 import { join, relative, sep } from "node:path";
-import { languageForFile, shouldSkipDir } from "../../src/server/languages.ts";
+import { mayBeSource, shouldSkipDir } from "../../src/server/languages.ts";
 import { projectIgnore } from "../../src/server/project_ignore.ts";
 
 /** A cheap stamp of every source file (path, size, mtime): whether a Bash
@@ -17,7 +17,8 @@ export function sourceStamp(absRoot) {
       const full = join(dir, e.name);
       const rel = relative(absRoot, full).split(sep).join("/");
       if (e.isDirectory()) { if (!shouldSkipDir(e.name) && !ig.skipDir(rel)) walk(full); continue; }
-      if (!e.isFile() || ig.skipFile(rel) || !languageForFile(e.name, full)) continue;
+      // a `.js` or a page the walk may admit by evidence counts too (RC2)
+      if (!e.isFile() || ig.skipFile(rel) || !mayBeSource(e.name, full)) continue;
       const s = statSync(full);
       parts.push(`${relative(absRoot, full)}:${s.size}:${s.mtimeMs}`);
     }

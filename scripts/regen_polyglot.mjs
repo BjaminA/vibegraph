@@ -14,13 +14,13 @@
 // Run:  node --experimental-strip-types --no-warnings scripts/regen_polyglot.mjs
 // Test: npm run test:polyglot (imports buildPolyglotEnvelope from here).
 
-import { projectIgnore, IGNORE_FILE } from "../src/server/project_ignore.ts";
-import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { IGNORE_FILE } from "../src/server/project_ignore.ts";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { basename, dirname, join, relative, sep } from "node:path";
 import {
-  LANGUAGES, languageById, languageForPath, languageForFile, shouldSkipDir, COMPILED_OUTPUT_DIRS,
+  LANGUAGES, languageById, languageForPath,
   batchParseCommand, linkCommand, discoverCommand, discoverProjectCommand, moduleIdentity,
 } from "../src/server/languages.ts";
 import { readManualSeeds } from "../src/server/manual_seeds.ts";
@@ -34,6 +34,7 @@ import { discover as discoverCpp } from "./frontends/cpp/discover_cpp.mjs";
 import { discover as discoverRust } from "./frontends/rust/discover_rust.mjs";
 import { discoverProject } from "./discover_project.mjs";
 import { readPackageManifests } from "./package_entries.mjs";
+import { walkSources, settleLedger } from "../src/server/source_walk.ts";
 
 /** The Node frontends' link and discover steps, called directly. */
 const IN_PROCESS = {
@@ -63,36 +64,9 @@ const PYENV = { ...process.env, PYTHONPATH: join(ROOT, ".pydeps") };
 export const POLYGLOT_DIR = join(ROOT, "test", "fixtures", "polyglot", "shop_demo");
 export const POLYGLOT_PROJECT = join(POLYGLOT_DIR, "shop_demo.project.json");
 
-/**
- * Every source file under `root`, with the language each one resolved to.
- *
- * M-CMD.1 changed two things. The language is resolved ONCE here, with the
- * full path, so an extensionless `#!` executable can be identified (a later
- * `languageForPath` on its name alone would return null). And compiled-output
- * directories are recorded as they are skipped, because skipping in silence
- * is how a project's real source disappears without anyone noticing.
- *
- * @returns {{ files: Array<{rel: string, langId: string}>, skipped: Record<string, number> }}
- */
-function walk(dir, root, skipped = {}, ig = projectIgnore(root)) {
-  const out = [];
-  for (const entry of readdirSync(dir, { withFileTypes: true })) {
-    const full = join(dir, entry.name);
-    const rel = relative(root, full).split(sep).join("/");
-    if (entry.isDirectory()) {
-      // 2026-10-07 — what the project's .vibegraphignore names is skipped and reported
-      if (ig.skipDir(rel)) { skipped[rel] = countFiles(full); continue; }
-      if (!shouldSkipDir(entry.name)) { out.push(...walk(full, root, skipped, ig).files); continue; }
-      if (COMPILED_OUTPUT_DIRS.includes(entry.name)) skipped[rel] = countFiles(full);
-      continue;
-    }
-    if (!entry.isFile() || ig.skipFile(rel)) continue;
-    const lang = languageForFile(entry.name, full);
-    if (lang) out.push({ rel, langId: lang.id });
-  }
-  out.sort((a, b) => (a.rel < b.rel ? -1 : a.rel > b.rel ? 1 : 0));
-  return { files: out, skipped };
-}
+// The walk (which files are read, which are admitted by evidence, and the
+// coverage ledger of everything else) is src/server/source_walk.ts, shared
+// with the server and the envelope cache (RC2, 2026-10-22).
 
 /**
  * M-CMD.1 — `.vibegraph/manual_seeds.json`, for EVERY language.
@@ -113,16 +87,6 @@ function walk(dir, root, skipped = {}, ig = projectIgnore(root)) {
 /** The parse step's output limit: a large project's IR is big, and a string
  *  much past this is past what Node can hold. */
 const PARSE_BUFFER = 384 * 1024 * 1024;
-
-/** How much a skipped directory held, so the report can be specific. */
-function countFiles(dir) {
-  let n = 0;
-  for (const e of readdirSync(dir, { withFileTypes: true })) {
-    if (e.isDirectory()) n += countFiles(join(dir, e.name));
-    else if (e.isFile()) n += 1;
-  }
-  return n;
-}
 
 function run(cmd, { input, cwd, pipeline }) {
   // M-CRYSTAL.1 — a packaged CLI has no VibeGraph checkout: the scripts
@@ -175,7 +139,7 @@ export function buildPolyglotEnvelope(root = POLYGLOT_DIR, opts = {}) {
   const timings = opts.timings ?? null;
   let tMark = Date.now();
   const lap = (name) => { if (timings) { const now = Date.now(); timings[name] = now - tMark; tMark = now; } };
-  const { files: walked, skipped: skippedDirs } = walk(root, root);
+  const { sources: walked, skippedDirs, ledger: walkLedger } = walkSources(root);
   const perLang = new Map();
   for (const { rel: f, langId } of walked) {
     const lang = languageById(langId);
@@ -312,6 +276,8 @@ export function buildPolyglotEnvelope(root = POLYGLOT_DIR, opts = {}) {
     parseErrors,
     /** Files read PARTLY (they carry an IR with `degraded`), by message. */
     partialParses: Object.fromEntries(Object.entries(files).filter(([, ir]) => ir.degraded).map(([f, ir]) => [f, typeof ir.degraded === "string" ? ir.degraded : JSON.stringify(ir.degraded)])),
+    /** RC2 — every file the walk saw, accounted for (src/shared/coverage_ledger.ts). */
+    ledger: settleLedger(walkLedger, parseErrors, walked),
     /** Compiled-output directories NOT walked, with what each held (M-CMD.1). */
     skippedDirs,
     /** Manual seeds a person named that did NOT resolve, with why (M-CMD.1). */

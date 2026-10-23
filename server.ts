@@ -65,6 +65,11 @@ import { threadFacts } from "./src/shared/thread_rank_facts";
 import { buildInsight } from "./src/server/insight";
 import { computeReachability } from "./src/server/reachability";
 import { buildProposePrompt, docExcerpts, parseProposal } from "./src/server/arch_propose";
+import { buildServiceInventory } from "./src/server/service_inventory";
+import { buildRuleLedger } from "./src/server/rule_ledger";
+import { harvestRules } from "./src/server/rule_harvest";
+import { lastModelFailure, modelNothingText, recordModelFailure } from "./src/server/model_failure_state";
+import { modelFailureText } from "./src/shared/model_failure";
 import { readInfraManifests } from "./src/server/infra_manifests";
 import { readEnvDeclarations } from "./src/server/env_declarations";
 import { readManualSeeds } from "./src/server/manual_seeds";
@@ -154,7 +159,7 @@ import { diffIR, type IrDelta } from "./src/server/ir_delta";
 // discovery, watching, and parse spawns dispatch through it; python is
 // the only registered frontend until M-LANG2.
 import {
-  languageForPath, languageForFile, isSourceFile, shouldSkipDir,
+  languageForPath, languageForFile, isSourceFile, shouldSkipDir, mayBeSource,
   parseCommand, batchParseCommand, moduleIdentity,
   linkCommand, discoverCommand, discoverProjectCommand, rewriteCommand,
   type LanguageInfo,
@@ -163,6 +168,8 @@ import {
 // reads the same one), and the run gate has to be the same fact on both
 // sides or an affordance and its operation drift apart.
 import { capabilitiesForPath } from "./src/shared/languages";
+import { walkSources, settleLedger, type SourceWalk } from "./src/server/source_walk";
+import type { CoverageLedger } from "./src/shared/coverage_ledger";
 import { assessBashTrace, BASH_TRACE_LIMITS } from "./src/server/bash_floor";
 import { BASH_KEYWORDS, BASH_SHELL_BUILTINS } from "./src/shared/stack_taxonomy";
 // M-AGENT1 (PLAN-M-AGENT.md) — the Agent Manager spine (pure, tested).
@@ -314,6 +321,8 @@ let latestStack: StackIndex = { tools: [], byFile: {}, byThread: {} };
 let latestEnvSurface: EnvSurface | null = null;
 let latestNearClones: Map<string, NearClone[]> | null = null;
 let latestInsight: import("./src/shared/protocol").InsightRecord | null = null;
+let latestHarvest: import("./src/server/rule_harvest").HarvestReport | null = null;
+const currentRuleLedger = () => (latestHarvest && isDirectory ? buildRuleLedger(latestHarvest, loadConstraints(inputPath)) : null);
 
 // M-XLANG.1 (PLAN-M-V5FORKS.md) - CROSSINGS: where a thread leaves its own
 // language over HTTP and which route serves it. Pure derivation over the
@@ -402,8 +411,11 @@ async function archProposeCore(guidance?: string, opts: { update?: boolean; run?
   if (!isDirectory) return { ok: false, error: "the architecture layer needs a project directory" };
   if (!latestArchDerived || !latestArchDerived.nodes.length) return { ok: false, error: "no derived architecture yet — the project has not finished parsing" };
   if (!claudeCliAvailable) return { ok: false, error: "the claude CLI is unavailable — can't propose an architecture" };
-  const facts = readInfraManifests(inputPath).facts;
+  const infra = readInfraManifests(inputPath);
+  const facts = infra.facts;
   const docs = docExcerpts(inputPath, latestArchDerived);
+  // RC3 — the services the evidence names: shown to the model, and a name claiming another is refused
+  const services = latestStack ? buildServiceInventory({ files: relativeProjectFiles() as any }, latestStack, inputPath, infra) : null;
   // Modify (the M-GF3 gate): a revision re-drafts the PENDING proposal with
   // the person's words; the same grounding floor applies to what comes back.
   // One gate for every caller (arch_store proposalGate): a pending draft is
@@ -418,10 +430,10 @@ async function archProposeCore(guidance?: string, opts: { update?: boolean; run?
   const gate = proposalGate(current, opts.update ? { update: { drifted: !!drift && drift.level !== "none" } } : { modify: !!g });
   if (!gate.allowed) return { ok: false, error: gate.reason };
   const update = opts.update && drift ? { groups: current.groups, drift } : undefined;
-  const prompt = buildProposePrompt(latestArchDerived, facts, docs, g && pending ? { previous: pending, guidance: g } : undefined, { plan, update });
+  const prompt = buildProposePrompt(latestArchDerived, facts, docs, g && pending ? { previous: pending, guidance: g } : undefined, { plan, update, services });
   const text = await (opts.run ?? ((p: string) => _runReadmeLlm(p, "thinking", "gen")))(prompt);
   if (text === null) return { ok: false, error: `the model returned nothing${genFailureSuffix()}` };
-  const parsed = parseProposal(text, latestArchDerived, facts, docs, { model: tierLabel("thinking"), plan, ...(update ? { update } : {}) });
+  const parsed = parseProposal(text, latestArchDerived, facts, docs, { model: tierLabel("thinking"), plan, services, ...(update ? { update } : {}) });
   if (!parsed.proposal) return { ok: false, error: parsed.error ?? "the reply was not a usable proposal" };
   const store = loadArchStore(inputPath);
   store.proposal = parsed.proposal;
@@ -514,7 +526,7 @@ function setupRunCtx(task: GuiTaskHandle): SetupRunCtx {
   const run = taskRun(task);
   const noClaude = { ok: false, error: "the claude CLI is unavailable: this step needs one model call" };
   return {
-    state: () => setupState(root, { stack: latestStack }),
+    state: () => setupState(root, { stack: latestStack, ledger: currentLedger(), rules: currentRuleLedger() }),
     classify: () => classifyRun({ ...classifyCtx, run }),
     software: async (tool, urls) => {
       if (!claudeCliAvailable) return noClaude;
@@ -533,6 +545,12 @@ function setupRunCtx(task: GuiTaskHandle): SetupRunCtx {
     },
     settle: () => settleDerived(),
     step: (t) => task.step(t),
+    // RC6 — before spending: one short call, so an expired login stops the run once
+    preflight: async () => {
+      if (!claudeCliAvailable) return noClaude;
+      const text = await _runReadmeLlm("Reply with the single word OK.", "routine", "gen");
+      return text === null ? { ok: false, error: modelNothingText("the model call failed") } : { ok: true };
+    },
   };
 }
 
@@ -625,10 +643,14 @@ function rebuildStack(relFiles: typeof projectParse): void {
     console.warn(`  [NearClones] failed: ${e?.message ?? e}`);
     latestNearClones = null;
   }
+  // RC5 — the harvest, once per derived pass: the setup's rule ledger reads it
+  // with the constraints as they are when asked (rule_ledger.ts)
+  try { latestHarvest = isDirectory ? harvestRules(inputPath, { files: relFiles as any, entryPoints: latestEntryPoints as any }, latestStack as any) : null; }
+  catch (e: any) { console.warn(`  [Harvest] failed: ${e?.message ?? e}`); latestHarvest = null; }
   // 2026-09-28 - reachability, the env surface and export freshness for the GUI.
   try {
     latestInsight = isDirectory
-      ? buildInsight(inputPath, { files: relFiles as any, threads: latestThreads as any, entryPoints: latestEntryPoints as any }, latestEnvSurface)
+      ? buildInsight(inputPath, { files: relFiles as any, threads: latestThreads as any, entryPoints: latestEntryPoints as any }, latestEnvSurface, currentLedger())
       : null;
   } catch (e: any) {
     console.warn(`  [Insight] failed: ${e?.message ?? e}`);
@@ -1062,20 +1084,23 @@ function runBuildSystemTier(
 // M-LANG1 — walks for every REGISTERED language's extensions (just .py
 // until M-LANG2 registers bash), so discovery cannot change before a
 // frontend exists. Skip rules live in the registry alongside the table.
-function findSourceFiles(dir: string, root: string = dir, ig: ProjectIgnore = projectIgnore(root)): string[] {
-  const results: string[] = [];
-  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-    const full = path.join(dir, entry.name);
-    const rel = path.relative(root, full).split(path.sep).join("/");
-    // 2026-10-07 — the project's .vibegraphignore (src/server/project_ignore.ts)
-    if (entry.isDirectory() && !shouldSkipDir(entry.name) && !ig.skipDir(rel)) {
-      results.push(...findSourceFiles(full, root, ig));
-    } else if (entry.isFile() && !ig.skipFile(rel) && isSourceFile(entry.name, full)) {
-      results.push(full);
-      noteExtensionless(full);
-    }
-  }
-  return results;
+// RC2 (2026-10-22) — the walk is src/server/source_walk.ts, shared with the
+// CLI and the envelope cache: registered files, the `.js` files and pages that
+// evidence admits, and the coverage ledger of everything else (kept for the
+// GUI). The project's .vibegraphignore is read there.
+let latestWalk: SourceWalk | null = null;
+function findSourceFiles(dir: string): string[] {
+  const walk = walkSources(dir);
+  if (path.resolve(dir) === path.resolve(inputPath)) latestWalk = walk;
+  for (const s of walk.sources) noteExtensionless(s.full);
+  return walk.sources.map((s) => s.full);
+}
+/** The last walk's ledger, a walked file the parse left without an IR moved to failed. */
+function currentLedger(): CoverageLedger | null {
+  if (!latestWalk || !isDirectory) return null;
+  const failed: Record<string, string> = {};
+  for (const s of latestWalk.sources) if (!projectParse[s.full] && !projectParse[s.rel]) failed[s.rel] = "the parser produced nothing for it";
+  return settleLedger(latestWalk.ledger, failed, latestWalk.sources);
 }
 
 // M-ARCH.2 — an extensionless `#!` script (`bin/orders-cli`) has a language
@@ -2993,6 +3018,10 @@ function rewriteCmdFor(targetFile: string):
   const lang = langOf(targetFile);
   if (!lang) {
     return { refusal: `No language frontend is registered for '${targetFile}' — nothing can edit it.` };
+  }
+  // RC2 — a page's inline scripts are read, never edited (the rewriter splices whole source files)
+  if (!capabilitiesForPath(targetFile).edit) {
+    return { refusal: `'${targetFile}' is read as the inline scripts of a page; VibeGraph does not edit pages. The file was not touched.` };
   }
   const cmd = rewriteCommand(lang, path.join(PROJECT_ROOT, "scripts"));
   if (!cmd) {
@@ -6873,11 +6902,13 @@ function _readmePrompt(scope: "thread" | "file", id: string, ir: any): string {
 // "… returned nothing": a spawn that exits non-zero, a result the CLI itself
 // marks is_error (an expired login answers that way), output that is not
 // JSON, or an empty result. Cleared by a successful call.
+// RC6 (2026-10-22) — recorded typed, once (src/server/model_failure_state.ts):
+// every caller reports the same kind and remedy (src/shared/model_failure.ts).
 let lastGenFailure: string | null = null;
+const setGenFailure = (s: string | null) => { lastGenFailure = s; recordModelFailure(s, (() => { const f = findClaude(); return isMissing(f) ? undefined : f.cmd; })()); };
 function genFailureSuffix(): string {
-  if (!lastGenFailure) return "";
-  const hint = loginHint(lastGenFailure, (() => { const f = findClaude(); return isMissing(f) ? undefined : f.cmd; })());
-  return ` — ${lastGenFailure}${hint ? `. To fix: ${hint}` : ""}`;
+  const f = lastModelFailure();
+  return f ? ` — ${modelFailureText(f)}` : "";
 }
 
 // 2026-10-21 — `onStep`: a caller that shows the work (a GUI task) gets what the
@@ -6893,7 +6924,7 @@ function _runReadmeLlm(prompt: string, tier: ModelTier = "thinking", kind: Spend
     const opts = genSpawnOptions(spawnTarget);
     if (!opts) {
       console.warn("  [gen] analyzed project root unreachable — skipping LLM");
-      lastGenFailure = "analyzed project root unreachable";
+      setGenFailure("analyzed project root unreachable");
       resolve(null);
       return;
     }
@@ -6960,17 +6991,17 @@ function _runReadmeLlm(prompt: string, tier: ModelTier = "thinking", kind: Spend
       const reported = parsed?.is_error && typeof parsed.result === "string" ? parsed.result.trim() : "";
       if (code !== 0 || parsed?.is_error) {
         const detail = reported || errOut.trim().split("\n").filter(Boolean).slice(-1)[0] || "";
-        lastGenFailure = `claude exited ${code ?? "?"}${detail ? `: ${detail.slice(0, 300)}` : ""}`;
+        setGenFailure(`claude exited ${code ?? "?"}${detail ? `: ${detail.slice(0, 300)}` : ""}`);
         console.warn(`  [gen] ${lastGenFailure}`);
         resolve(null);
         return;
       }
-      if (!parsed) { lastGenFailure = "claude output was not JSON"; resolve(null); return; }
+      if (!parsed) { setGenFailure("claude output was not JSON"); resolve(null); return; }
       const text = typeof parsed.result === "string" ? parsed.result.trim() : "";
-      lastGenFailure = text ? null : "claude returned an empty result";
+      setGenFailure(text ? null : "claude returned an empty result");
       resolve(text || null);
     });
-    child.on("error", (e) => { lastGenFailure = `could not spawn claude: ${e.message}`; resolve(null); });
+    child.on("error", (e) => { setGenFailure(`could not spawn claude: ${e.message}`); resolve(null); });
   });
 }
 
@@ -8667,7 +8698,7 @@ function setupWebSocket() {
           const steps = Array.isArray(msg.payload?.steps) ? msg.payload.steps.filter((s: unknown): s is "software" => typeof s === "string" && RUNNABLE.includes(s)) : undefined;
           if (!isDirectory) reply({ ok: false, error: "the setup needs a project directory" });
           else if (msg.type === "setup-run-preview") {
-            const p = setupActions(setupState(analyzedRoot(), { stack: latestStack }));
+            const p = setupActions(setupState(analyzedRoot(), { stack: latestStack, ledger: currentLedger(), rules: currentRuleLedger() }));
             const actions = p.actions;
             // 2026-10-22 — a spec read from a GitHub repository: whether this
             // machine has a GitHub login, and which owners the person granted
@@ -8926,7 +8957,8 @@ if (isDirectory) {
       // a change to the ignore file itself re-walks the project
       if (rel === IGNORE_FILE) { watchIgnore = projectIgnore(inputPath); debounceReparse(); return; }
       if (watchIgnore.skipFile(rel)) return;
-      if (!isSourceFile(filename, path.join(inputPath, filename))) {
+      // RC2 — a `.js` or a page may be admitted by evidence: a change re-walks
+      if (!mayBeSource(filename, path.join(inputPath, filename))) {
         // Not source in any REGISTERED language (M-LANG1) — but an artifact
         // write still changes what the chip must say (see
         // refreshArtifactIndex). Everything else is ignored as before.

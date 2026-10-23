@@ -22,8 +22,8 @@
 
 import { createHash } from "node:crypto";
 import * as fs from "node:fs";
-import * as os from "node:os";
 import * as path from "node:path";
+import { resolvePaths } from "../../scripts/cache_dir.mjs";
 
 const VERSION = 1;
 const CONTEXT_FILE = /^(tsconfig.*\.json|jsconfig.*\.json|Cargo\.toml|package\.json)$/;
@@ -36,10 +36,9 @@ type Seed = { id: string; file: string; irNodeId: string };
 
 interface Meta { version: number; root: string; key: { tool: string; paths: string; ctx: string }; sources: Record<string, string>; linkedHash?: Record<string, string>; globalSig?: Record<string, string> }
 
+/** RC7 — the one resolver decides it (scripts/cache_dir.mjs resolvePaths). */
 export function serverCacheDir(root: string, env: NodeJS.ProcessEnv = process.env): string {
-  const base = env.VG_CACHE_DIR ? path.join(env.VG_CACHE_DIR, "server")
-    : path.join(env.XDG_CACHE_HOME ?? path.join(os.homedir(), ".cache"), "vibegraph-knowledge", "server");
-  return path.join(base, sha1(path.resolve(root)).slice(0, 16));
+  return resolvePaths(path.resolve(root), env).server!;
 }
 
 const globalSignature = (ir: IR | undefined) =>

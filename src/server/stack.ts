@@ -33,6 +33,8 @@ import {
 // the constraint_store precedent.
 import type { StackEvidenceRef, StackToolRecord, StackIndexRecord } from "../shared/protocol.ts";
 import { boundName, funnelUsers, wrappingBindings, type FunnelIrNode } from "./funnel_users.ts";
+import { processLaunches } from "./process_launches.ts";
+import { funnelCalls } from "./funnel_calls.ts";
 import { importBindings, localBindings, attributeBoundary, isOwnCrateSpec, type ImportBinding, type LocalBinding } from "../shared/stack_attribution.ts";
 
 export type { StackRole, StackOrigin };
@@ -473,6 +475,12 @@ function sortTools(a: StackTool, b: StackTool): number {
 
 export function buildStackIndex(env: StackEnvelopeLike, projectRoot?: string): StackIndex {
   const { observations, imports, projectSpecs, takes } = collect(env);
+  // RC3 — the program a Python or TypeScript launch runs is a tool, keyed at
+  // the launching call (process_launches.ts), classified by the shell's own
+  // table: a program is a word on PATH whichever language runs it.
+  for (const l of processLaunches(env as never)) {
+    if (l.executable) observations.push({ tool: l.executable, file: l.file, nodeId: l.nodeId, line: l.line, kind: "exec", language: "bash" });
+  }
   const manifests = readManifests(projectRoot);
   const tools = new Map<string, StackTool>();
 
@@ -526,9 +534,15 @@ export function buildStackIndex(env: StackEnvelopeLike, projectRoot?: string): S
     // 2026-09-30 — a RATIFIED software spec (.vibegraph/software/) names the
     // packages that mean its tool and the role its docs give it: a person
     // ratified it, so it states the role as a person would — after any stack
-    // policy that already names the package.
+    // policy a PERSON stated for the package. 2026-10-22: it also outranks
+    // the orchestrator's and a model's classification; it had only filled
+    // packages nothing named, so the setup's `classify` (which runs first)
+    // kept its unreviewed role after a person ratified a spec saying otherwise.
     for (const spec of ratifiedSpecs(projectRoot)) {
-      for (const pkg of spec.identity.packages) if (!statedRoles.has(pkg)) statedRoles.set(pkg, { role: spec.role, id: `software:${spec.tool}`, source: "human" });
+      for (const pkg of spec.identity.packages) {
+        if (statedRoles.get(pkg)?.source === "human") continue;
+        statedRoles.set(pkg, { role: spec.role, id: `software:${spec.tool}`, source: "human" });
+      }
     }
   }
   const withStated = (tool: string, role: StackRole): { role: StackRole; statedBy?: string; statedSource?: ConstraintSource } => {
@@ -577,8 +591,12 @@ export function buildStackIndex(env: StackEnvelopeLike, projectRoot?: string): S
   for (const [file, ir] of Object.entries(env.files)) {
     const importers = [...new Set(importedBy.get(file) ?? [])].sort();
     if (importers.length < WRAPPER_MIN_IMPORTERS) continue;
-    const wrapped = (byFileTools.get(file) ?? []).filter((t) => t.origin !== "project" && WRAPPABLE.has(t.role));
-    if (wrapped.length === 0) continue;
+    const imported = (byFileTools.get(file) ?? []).filter((t) => t.origin !== "project" && WRAPPABLE.has(t.role));
+    if (imported.length === 0) continue;
+    // RC4 — what the funnel CALLS decides what it wraps (funnel_calls.ts); a
+    // funnel whose calls no rule can read keeps what it imports, as before
+    const calls = funnelCalls(file, ir.nodes ?? [], ir.language ?? languageForPath(file)?.id ?? "", imported);
+    const wrapped = calls.size ? imported.filter((t) => calls.has(t.tool)) : imported;
     // M-LANG1 lets a frontend use the project-relative PATH as its module
     // identity, so a non-Python funnel would be named `gateway/api_client.ts`
     // beside Python's `telemetry.storage`. Give every funnel the same dotted
@@ -607,6 +625,7 @@ export function buildStackIndex(env: StackEnvelopeLike, projectRoot?: string): S
       projectTools.push({
         tool: name, role, origin: "project",
         wraps: [...new Set(list.map((w) => w.tool))].sort(),
+        ...(calls.size ? { calls: [...new Set(list.flatMap((w) => calls.get(w.tool) ?? []))].sort() } : {}),
         // M-BOUNDARY.1 — `home` is the funnel itself; `files` also lists the
         // importers that reach it.
         home: file,

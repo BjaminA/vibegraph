@@ -499,7 +499,8 @@
         "endCol": 39,
         "name": "?",
         "valueKind": "other",
-        "preview": "config"
+        "preview": "config",
+        "targetText": "_CONFIG_CACHE[aircraft_id]"
       },
       {
         "id": "module/load_aircraft_config.fn/return@0",

@@ -1,0 +1,7 @@
+{
+  "name": "ts-demo",
+  "private": true,
+  "type": "module",
+  "scripts": { "nightly": "tsx scripts/nightly.ts" },
+  "dependencies": { "axios": "1.7.0" }
+}

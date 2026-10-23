@@ -87,6 +87,8 @@ export interface ExternalCallFact {
   file: string;
   label: string;
   nodeId: string;
+  /** RC4 — the call's full dotted name through its file's imports, when it differs from `label` */
+  full?: string;
 }
 
 export interface CheckFacts extends ArchCheckFacts, TargetFacts {
@@ -123,7 +125,8 @@ export function isExternalTarget(target: string): boolean {
   return target.startsWith("*.") || (target.includes(".") && !target.includes("/"));
 }
 
-function externalMatches(target: string, label: string): boolean {
+function externalMatches(target: string, label: string, full?: string): boolean {
+  if (full && full !== label && externalMatches(target, full)) return true;
   if (target.startsWith("*.")) {
     const m = target.slice(2);
     return label === m || label.endsWith(`.${m}`);
@@ -136,7 +139,7 @@ function callersOf(facts: CheckFacts, target: string): Array<{ fn: string; file:
   const t = resolveTarget(facts, target);
   if (t.kind === "external") {
     for (const c of facts.externalCalls ?? []) {
-      if (!externalMatches(target, c.label)) continue;
+      if (!externalMatches(target, c.label, c.full)) continue;
       const fn = enclosingFunction(c.nodeId);
       if (fn) out.push({ fn, file: c.file, nodeId: c.nodeId });
     }
@@ -273,7 +276,7 @@ function checkCallersOnly(
     ...facts.references.filter((r) => callReaches(r, def)),
     // An external API target (`lib.fn`, `*.fn`) counts its own call sites.
     ...(t.kind === "external"
-      ? (facts.externalCalls ?? []).filter((c) => externalMatches(target, c.label))
+      ? (facts.externalCalls ?? []).filter((c) => externalMatches(target, c.label, c.full))
         .map((c) => ({ fromFile: c.file, fromNodeId: c.nodeId, toFile: null, toName: target }))
       : []),
   ];

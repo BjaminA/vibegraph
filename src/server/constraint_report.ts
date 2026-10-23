@@ -7,7 +7,8 @@
 // three M-GRAMMAR verbs run once over the whole project; a Run 1 verb runs
 // per thread the rule routes to and the verdicts are joined (violated on any
 // thread is violated); a `files`-scoped verb reads the files the rule is
-// stated for; a stack policy's own forbid / replace-with is derived.
+// stated for; a stack policy's own forbid / replace-with is derived; a claim
+// (RC1, rule_claims.ts) is decided again over the code as it is now.
 
 import { buildStackIndex } from "./stack.ts";
 import { buildQualityFacts } from "./quality/facts.ts";
@@ -15,6 +16,9 @@ import { newRegistry, isRun1Check, describeRun1Check } from "./quality/verbs/ind
 import { checkConstraint, describeCheck, isConstraintCheck } from "./constraint_grammar.ts";
 import { isClassification, routeConstraints, statedScopeFiles, type Constraint } from "./constraint_store.ts";
 import { derivedPolicyClauses, checkPolicyClause, describePolicyClause } from "./policy_check.ts";
+import { isClaimCheck, claimInWords } from "../shared/rule_claim_types.ts";
+import { checkClaim, claimFactsFromEnvelope, type ClaimFacts } from "./rule_claims.ts";
+import { trivialCheck } from "./funnel_checks.ts";
 
 export type RuleVerdict = "pass" | "violated" | "unverifiable";
 const VERDICT_RANK: Record<RuleVerdict, number> = { violated: 2, unverifiable: 1, pass: 0 };
@@ -25,6 +29,8 @@ export interface RuleCheckRow {
   /** a Run 1 verb: each routed thread's own verdict */
   threads: Array<{ entryPointId: string | null; verdict: RuleVerdict; reason: string; offenders: string[]; notFollowed: string[] }>;
   gates?: boolean;
+  /** RC4 — the check passes whatever bypasses the funnel it is about: said, never counted as enforcement */
+  trivial?: string;
 }
 
 export interface RuleCheckReport {
@@ -36,7 +42,11 @@ export interface RuleCheckReport {
   routed: Record<string, string[]>;
 }
 
-interface EnvelopeLike { files: Record<string, unknown>; threads: Array<{ entryPointId?: string | null; filesReached?: string[]; seed: { file: string } }> }
+interface EnvelopeLike {
+  files: Record<string, unknown>; threads: Array<{ entryPointId?: string | null; filesReached?: string[]; seed: { file: string } }>;
+  entryPoints?: unknown[];
+}
+const CLAIM_VERDICT: Record<string, RuleVerdict> = { verified: "pass", contradicted: "violated", unverifiable: "unverifiable" };
 
 function joinVerdicts(per: RuleCheckRow["threads"]): Pick<RuleCheckRow, "verdict" | "reason" | "offenders" | "notFollowed"> {
   const worst = per.reduce<RuleVerdict>((w, p) => (VERDICT_RANK[p.verdict] > VERDICT_RANK[w] ? p.verdict : w), "pass");
@@ -71,6 +81,10 @@ export function checkStatedRules(opts: {
     stack: (stack.byThread[t.entryPointId as string] ?? []) as never,
   }));
 
+  // claim facts (the crossing index included) are built once, and only when a rule carries a claim
+  let claimFacts: ClaimFacts | null = null;
+  const claimFactsNow = () => (claimFacts ??= claimFactsFromEnvelope(env, stack as never));
+
   const clausesOf = (c: Constraint) => [...(c.checks ?? []), ...(c.check ? [c.check] : [])] as unknown[];
   const results: RuleCheckRow[] = [];
   const unchecked: string[] = [];
@@ -95,7 +109,8 @@ export function checkStatedRules(opts: {
       const row = { id: c.id, kind: c.kind, source: c.source, rule: String((clause as { rule?: string })?.rule ?? "?"), threads: [] as RuleCheckRow["threads"] };
       if (isConstraintCheck(clause)) {
         const r = checkConstraint(projectFacts, clause);
-        results.push({ ...row, described: describeCheck(clause), verdict: r.verdict, reason: r.reason, offenders: r.offenders.map(offenderText), notFollowed: [] });
+        const trivial = trivialCheck(clause, stack as never);
+        results.push({ ...row, described: describeCheck(clause), verdict: r.verdict, reason: r.reason, offenders: r.offenders.map(offenderText), notFollowed: [], ...(trivial ? { trivial } : {}) });
       } else if (isRun1Check(clause) && (clause as { scope?: string }).scope === "files") {
         const scopeFiles = statedScopeFiles(c, Object.keys(env.files));
         const r = registry.run(scopeFiles.length ? buildQualityFacts({ ...base, scopeFiles }) : projectFacts, clause);
@@ -107,6 +122,11 @@ export function checkStatedRules(opts: {
           return { entryPointId: ep, verdict: r.verdict as RuleVerdict, reason: r.reason, offenders: (r.offenders ?? []).map(offenderText), notFollowed: [...((r as { notFollowed?: string[] }).notFollowed ?? [])] };
         });
         results.push({ ...row, described: describeRun1Check(clause), ...joinVerdicts(per), threads: per });
+      } else if (isClaimCheck(clause)) {
+        const r = checkClaim(clause, claimFactsNow());
+        const offenders = r.counterexamples?.map((x) => `${x.file}${x.line ? `:${x.line}` : ""} ${x.what}`)
+          ?? (r.verdict === "contradicted" ? (r.observed ?? []).filter((o) => !clause.objects.includes(o)) : []);
+        results.push({ ...row, described: claimInWords(clause), verdict: CLAIM_VERDICT[r.verdict], reason: r.reason, offenders, notFollowed: [] });
       } else {
         results.push({ ...row, described: "malformed check", verdict: "unverifiable", reason: "the check's shape matches no verb; refused at the boundary, never coerced", offenders: [], notFollowed: [] });
       }

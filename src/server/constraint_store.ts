@@ -26,7 +26,10 @@ import { isRun1Check, type Run1Check } from "./quality/verbs/index.ts";
 import { demoteOrphanedPromotions } from "./plan_store.ts";
 import { stampWriter } from "./writer_stamp.ts";
 import { scopeReaches, type RoutableThread } from "../shared/scope_route.ts";
-export type AnyConstraintCheck = ConstraintCheck | Run1Check;
+// RC1 — a model's claim about the code, decided against the IR (rule_claims.ts).
+import { isClaimCheck, type ClaimCheck } from "../shared/rule_claim_types.ts";
+import { backupRatified } from "./rule_backup.ts";
+export type AnyConstraintCheck = ConstraintCheck | Run1Check | ClaimCheck;
 
 export type Constraint = ConstraintRecord;
 export type { ConstraintKind, ConstraintScope, ConstraintSource, StackPolicy };
@@ -123,13 +126,14 @@ export function validateConstraintInput(x: unknown): { ok: true; value: Constrai
   // parse would leave a rule that LOOKS enforced and is not, which is the
   // exact failure this grammar exists to end.
   if (r.check !== undefined) {
-    if (!isConstraintCheck(r.check) && !isRun1Check(r.check)) {
+    if (!isConstraintCheck(r.check) && !isRun1Check(r.check) && !isClaimCheck(r.check)) {
       return {
         ok: false,
         error: "check must be one of: {rule:\"callers-only\", target, files?/functions?}, "
           + "{rule:\"import-only\", tool, files}, {rule:\"calls-through\", target, through}, {rule:\"payload-keys\", target, require?/forbid?}, "
           + "{rule:\"guards\", target, guard}, {rule:\"not-in-loop\", target?/role?, except?}, "
-          + "{rule:\"handles-failure\", scope}, {rule:\"annotated\", at}, {rule:\"co-changes\", when, require}",
+          + "{rule:\"handles-failure\", scope}, {rule:\"annotated\", at}, {rule:\"co-changes\", when, require}, "
+          + "{rule:\"claim\", predicate, subject, objects}",
       };
     }
     value.check = r.check;
@@ -141,7 +145,7 @@ export function validateConstraintInput(x: unknown): { ok: true; value: Constrai
     if (!Array.isArray(r.checks) || !r.checks.length) {
       return { ok: false, error: "checks must be a non-empty array of check objects" };
     }
-    const bad = r.checks.findIndex((c) => !isConstraintCheck(c) && !isRun1Check(c));
+    const bad = r.checks.findIndex((c) => !isConstraintCheck(c) && !isRun1Check(c) && !isClaimCheck(c));
     if (bad >= 0) {
       return { ok: false, error: `checks[${bad}] is not a valid check (see the check field's shapes)` };
     }
@@ -221,6 +225,26 @@ export function loadConstraints(root: string): Constraint[] {
   }
 }
 
+/** RC5 — the entries loadConstraints could not read, each with why: they are
+ *  never used and never silently forgotten (`check` and the setup say so). */
+export function droppedConstraints(root: string): Array<{ id: string | null; text: string | null; reason: string }> {
+  const file = fileFor(root);
+  if (!fs.existsSync(file)) return [];
+  let raw: { version?: unknown; constraints?: unknown };
+  try { raw = JSON.parse(fs.readFileSync(file, "utf-8")); } catch (e) { return [{ id: null, text: null, reason: `${CONSTRAINTS_FILE} is not valid JSON (${(e as Error).message})` }]; }
+  if (raw.version !== "1") return [{ id: null, text: null, reason: `${CONSTRAINTS_FILE} is version ${JSON.stringify(raw.version)}; this version reads "1"` }];
+  const out: Array<{ id: string | null; text: string | null; reason: string }> = [];
+  for (const c of Array.isArray(raw.constraints) ? raw.constraints as Record<string, unknown>[] : []) {
+    const id = c && typeof c.id === "string" ? c.id : null;
+    const text = c && typeof c.text === "string" ? c.text.slice(0, 120) : null;
+    if (!c || typeof c !== "object") { out.push({ id, text, reason: "not an object" }); continue; }
+    const v = validateConstraintInput(c);
+    if (!v.ok) out.push({ id, text, reason: v.error });
+    else if (!id) out.push({ id, text, reason: "it has no id" });
+  }
+  return out;
+}
+
 /** The fields this version understands on a stored constraint. */
 const KNOWN_FIELDS = new Set(["id", "kind", "text", "scope", "note", "policy", "check", "checks", "source", "createdAt", "changes", "proposals"]);
 
@@ -257,6 +281,8 @@ export function saveConstraints(root: string, list: Constraint[]): void {
   fs.writeFileSync(`${file}.tmp`, JSON.stringify({ version: "1", constraints: out }, null, 2) + "\n", "utf-8");
   fs.renameSync(`${file}.tmp`, file);
   stampWriter(root, "constraints.json");
+  // RC5 — the ratified rules, kept outside the project so a re-init can offer them back
+  backupRatified(root, list);
 }
 
 function nextId(list: Constraint[]): string {

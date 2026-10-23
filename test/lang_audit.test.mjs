@@ -67,6 +67,13 @@ test("src/server: .py extension checks only where the floor is genuinely python-
     // The greenfield changeset floor is python-only BY DESIGN (create_file
     // exists only in cst_rewrite.py); its .py gate is the honest message.
     "src/server/changeset.ts",
+    // Python's own module rule: a dotted import resolves to `x.py` or
+    // `x/__init__.py`, which no other language shares (the import graph's
+    // Python branch; its other languages go through their own resolvers).
+    "src/server/import_graph.ts",
+    // Whether the project has Python package manifests to read
+    // (requirements*.txt, pyproject.toml): a fact about Python packaging.
+    "src/server/software_candidates.ts",
   ]);
   assert.deepEqual(hits, [], "either route via the registry or add an explicit design-note allowlist entry here");
 });

@@ -19,14 +19,16 @@ import * as path from "path";
 import * as fs from "fs";
 import {
   LANGUAGES,
+  admissionFor,
   languageById,
+  languageForOwnExtension,
   languageForPath,
   languageForShebang,
   type LanguageId,
   type LanguageInfo,
 } from "../shared/languages.ts";
 
-export { LANGUAGES, languageById, languageForPath, languageForShebang };
+export { LANGUAGES, admissionFor, languageById, languageForOwnExtension, languageForPath, languageForShebang };
 export type { LanguageId, LanguageInfo };
 
 /**
@@ -77,7 +79,9 @@ export function isDeclarationFile(fileName: string): boolean {
  */
 export function languageForFile(fileName: string, fullPath?: string): LanguageInfo | null {
   if (isDeclarationFile(fileName)) return null;
-  const byExt = languageForPath(fileName);
+  // own extensions only: a `.js` or a page is read when the walk's evidence
+  // admits it (source_admission.ts), never here by its name
+  const byExt = languageForOwnExtension(fileName);
   if (byExt) return byExt;
   if (!fullPath || fileName.includes(".")) return null;
   let fd: number | null = null;
@@ -93,6 +97,16 @@ export function languageForFile(fileName: string, fullPath?: string): LanguageIn
   } finally {
     if (fd !== null) { try { fs.closeSync(fd); } catch { /* already gone */ } }
   }
+}
+
+/**
+ * RC2 — a file that MAY be read: registered, or one the walk can admit by
+ * evidence (a `.js`, a page). For "did code change" checks (the hooks' source
+ * stamp, the envelope cache), where reading one file too many costs a parse
+ * and missing one costs a stale answer.
+ */
+export function mayBeSource(fileName: string, fullPath?: string): boolean {
+  return languageForFile(fileName, fullPath) !== null || (!isDeclarationFile(fileName) && admissionFor(fileName) !== null);
 }
 
 /**

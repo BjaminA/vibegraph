@@ -172,6 +172,35 @@ function seededEntry(rel, ir, nodes, topLevelFns, interp, why) {
   };
 }
 
+// RC2 (2026-10-22) — a WORKER: `export default { fetch(request, env) {…} }`
+// is the module syntax the Cloudflare Workers runtime (and Bun, Deno Deploy)
+// calls, so each handler member is an entry. Data: the handler names a
+// Workers module may export and what calls each
+// (developers.cloudflare.com/workers/runtime-apis/handlers/).
+const WORKER_HANDLERS = { fetch: "every request it receives", scheduled: "each cron trigger", queue: "each batch from a queue", email: "each email routed to it" };
+function workerEntryPoints(rel, ir, topLevel) {
+  return topLevel.filter((n) => n.defaultExportMember && WORKER_HANDLERS[n.name]).map((n) => ({
+    id: `${rel}:${n.name}`, kind: "route", file: rel, irNodeId: n.id,
+    qualifiedName: `${ir.modulePath ?? rel}:${n.name}`, label: `${rel.split("/").pop()} ${n.name}`,
+    summary: firstLine(n.docstring) ?? `a Worker's ${n.name} handler: runs on ${WORKER_HANDLERS[n.name]}`,
+    framework: "worker", metadata: { handler: n.name },
+  }));
+}
+
+// RC2 — a PAGE read as its inline scripts (the parser stamps `embedded`):
+// the scripts run when the page loads, so the page is seeded on its module,
+// as a `#!` script with no main is.
+function pageEntryPoint(rel, ir, nodes) {
+  if (ir.embedded?.host !== "html") return null;
+  const executes = nodes.some((n) => n.parentId === null && n.type !== "function_def" && n.type !== "class_def" && n.type !== "import_from" && n.type !== "import");
+  if (!executes) return null;
+  return {
+    id: `${rel}:module`, kind: "cli", file: rel, irNodeId: "module",
+    qualifiedName: `${ir.modulePath ?? rel}:module`, label: rel.split("/").pop(),
+    summary: "a page's inline scripts: they run when the page loads", framework: "page", metadata: { seed: "module", page: true },
+  };
+}
+
 export function discover(files) {
   const entryPoints = [];
   for (const [rel, ir] of Object.entries(files)) {
@@ -190,6 +219,9 @@ export function discover(files) {
     entryPoints.push(...nextEntryPoints(rel, ir, topLevel));
     const script = scriptEntryPoint(rel, ir, nodes, topLevel);
     if (script) entryPoints.push(script);
+    entryPoints.push(...workerEntryPoints(rel, ir, topLevel));
+    const page = pageEntryPoint(rel, ir, nodes);
+    if (page) entryPoints.push(page);
 
     for (const n of nodes) {
       if (n.type !== "call" || !n.funcName) continue;

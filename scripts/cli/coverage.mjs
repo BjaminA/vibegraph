@@ -13,7 +13,14 @@ import { envDeclarations } from "../thread_context.mjs";
 import { cliPath } from "./winpath.mjs";
 
 export const COVERAGE_USAGE = `coverage [<root>] <file>… [--json]   per file: parsed fully?, the threads and tests that reach it, the env vars
-                                               it reads, changed since the export?, and what to do before trusting it`;
+                                               it reads, changed since the export?, and what to do before trusting it
+coverage [<root>] [--json]              every file the walk saw: read (and why, for a .js or a page), or not and why`;
+
+/** RC2 — the coverage ledger of the whole project (src/shared/coverage_ledger.ts). */
+export function runLedger({ root, envelope, pipeline, cache = false }) {
+  const absRoot = resolve(cliPath(root));
+  return loadEnvelope(absRoot, envelope, pipeline ?? {}, { cache }).ledger ?? null;
+}
 
 export function runCoverage({ root, files, envelope, pipeline, cache = false }) {
   const absRoot = resolve(cliPath(root));

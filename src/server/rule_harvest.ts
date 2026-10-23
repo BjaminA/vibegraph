@@ -25,6 +25,8 @@
 import * as fs from "fs";
 import * as path from "path";
 import { isTestFile } from "../shared/path_match.ts";
+import { funnelChecks } from "./funnel_checks.ts";
+import { sourceTier, type SourceTier } from "./rule_sources.ts";
 
 /** path: a file-shaped token under a directory the IR knows, where no such file exists (yet) · route: a route literal an
  *  entry point serves · key: a payload key some call site sends (the IR's argKeys) — a rule about what must never be sent */
@@ -39,6 +41,8 @@ export interface RuleCandidate {
   under?: string;
   /** verbatim, whitespace-normalised */
   quote: string;
+  /** RC5 — where it was written: 1 a rule section of CLAUDE.md / AGENTS.md, 2 other prose, 3 code (rule_sources.ts) */
+  tier: SourceTier;
   anchors: HarvestAnchor[];
   markers: string[];
   /** a grammar clause the sentence's shape maps to — a suggestion to check, never stored here */
@@ -51,6 +55,8 @@ export interface RuleCandidate {
 }
 export interface HarvestReport {
   candidates: RuleCandidate[];
+  /** RC5 — rule-shaped sentences of a tier-one section that name nothing VibeGraph parsed */
+  unanchored: Array<{ file: string; line: number; quote: string; under?: string }>;
   /** sentences read, prose files read, source headers read */
   read: { sentences: number; proseFiles: number; headers: number; docstrings: number };
   limits: string[];
@@ -58,7 +64,7 @@ export interface HarvestReport {
 
 interface IrNodeLike { type?: string; name?: string; docstring?: string; line?: number; id?: string; argKeys?: unknown[] }
 interface IrLike { language?: string; nodes?: IrNodeLike[]; envReads?: Array<{ name?: unknown }> }
-interface StackLike { tools?: Array<{ tool: string; origin?: string; home?: string; wraps?: string[] }> }
+interface StackLike { tools?: Array<{ tool: string; origin?: string; home?: string; wraps?: string[]; calls?: string[] }> }
 
 export const HARVEST_LIMITS = [
   "a candidate is a rule-shaped sentence, not a rule: a person (or the /vibegraph-rules skill with a person ratifying) decides which are the operators' rules",
@@ -210,7 +216,8 @@ export function markersIn(text: string): Array<{ name: string; strength: number 
 interface Known {
   files: Set<string>; byBase: Map<string, string[]>; dirs: Set<string>; functions: Set<string>; tools: Set<string>; envs: Set<string>; routes: Set<string>; keys: Set<string>;
   /** funnel home file → the funnel's tool name and what it wraps */
-  funnels: Map<string, { tool: string; wraps: string[] }>;
+  funnels: Map<string, { tool: string; wraps: string[]; calls: string[] }>;
+  stack: StackLike | null;
   fnFiles: Map<string, Set<string>>;
   /** every entry point serving the route (a gateway and the service behind it can both serve `/ingest`) */
   routeEntry: Map<string, string[]>;
@@ -219,14 +226,14 @@ interface Known {
 interface EntryLike { id?: string; file?: string; metadata?: { route?: unknown } }
 
 function knownOf(files: Record<string, IrLike>, stack: StackLike | null, entryPoints: ReadonlyArray<EntryLike>): Known {
-  const k: Known = { files: new Set(Object.keys(files)), byBase: new Map(), dirs: new Set(), functions: new Set(), tools: new Set(), envs: new Set(), routes: new Set(), keys: new Set(), funnels: new Map(), fnFiles: new Map(), routeEntry: new Map(), entryFile: new Map() };
+  const k: Known = { files: new Set(Object.keys(files)), byBase: new Map(), dirs: new Set(), functions: new Set(), tools: new Set(), envs: new Set(), routes: new Set(), keys: new Set(), funnels: new Map(), stack: stack as StackLike | null, fnFiles: new Map(), routeEntry: new Map(), entryFile: new Map() };
   for (const e of entryPoints) {
     if (e.id && e.file) k.entryFile.set(e.id, e.file);
     if (typeof e.metadata?.route !== "string") continue;
     k.routes.add(e.metadata.route);
     if (e.id) (k.routeEntry.get(e.metadata.route) ?? k.routeEntry.set(e.metadata.route, []).get(e.metadata.route)!).push(e.id);
   }
-  for (const t of stack?.tools ?? []) if (t.origin === "project" && t.home) k.funnels.set(t.home, { tool: t.tool, wraps: t.wraps ?? [] });
+  for (const t of stack?.tools ?? []) if (t.origin === "project" && t.home) k.funnels.set(t.home, { tool: t.tool, wraps: t.wraps ?? [], calls: t.calls ?? [] });
   for (const [f, ir] of Object.entries(files)) for (const n of ir.nodes ?? []) if (n.type === "function_def" && n.name) (k.fnFiles.get(n.name) ?? k.fnFiles.set(n.name, new Set()).get(n.name)!).add(f);
   for (const f of k.files) {
     const base = path.posix.basename(f);
@@ -270,6 +277,8 @@ export function anchorsIn(text: string, k: Known): HarvestAnchor[] {
     if (k.functions.has(last) && (m[1] || m[3] || m[5])) { add("function", t); continue; }
     // a payload key the code sends somewhere, named in backticks (a bare word would match too much)
     if (m[1] && k.keys.has(t)) { add("key", t); continue; }
+    // RC5 — a dotted PACKAGE (`app.net`) is its folder, so a boundary rule about it qualifies
+    if (t.includes(".") && k.dirs.has(t.split(".").join("/"))) { add("file", `${t.split(".").join("/")}/`); continue; }
     // `module.function` where the module is a file: telemetry.storage → telemetry/storage.py
     const dotted = t.split(".");
     if (dotted.length >= 2) {
@@ -286,14 +295,22 @@ const DOOR = (markers: string[]) => markers.some((m) => m === "through" || m ===
 function suggest(text: string, anchors: HarvestAnchor[], markers: string[], k: Known): Record<string, unknown> | undefined {
   const tools = anchors.filter((a) => a.kind === "tool").map((a) => a.id);
   const files = anchors.filter((a) => a.kind === "file" && !a.id.endsWith("/")).map((a) => a.id);
+  // RC5 — a folder is an allow-list too ("only `lib/db/` opens sqlite3")
+  const folders = anchors.filter((a) => a.kind === "file" && a.id.endsWith("/")).map((a) => a.id);
   if (tools.length === 1) {
     if (files.length === 1 && DOOR(markers)) return { rule: "import-only", tool: tools[0], files };
+    if (!files.length && folders.length === 1 && DOOR(markers)) return { rule: "import-only", tool: tools[0], files: folders };
     if (!files.length && markers.some((m) => m === "never" || m === "forbidden" || m === "must not")) return { policy: { tool: tools[0], rule: "forbid" } };
     return undefined;
   }
-  // "every call leaves through <funnel file>": the funnel's one wrapped tool is imported only there
+  // "every call leaves through <funnel file>": RC4 — the check derived from what
+  // the funnel calls (funnel_checks.ts), when it is one check
   const funnel = files.length === 1 && !tools.length ? k.funnels.get(files[0]) : undefined;
-  if (funnel?.wraps.length === 1 && DOOR(markers)) return { rule: "import-only", tool: funnel.wraps[0], files };
+  if (funnel && DOOR(markers)) {
+    const derived = funnelChecks({ ...funnel, home: files[0] }, [], k.stack as never);
+    if (derived.length === 1) return derived[0] as unknown as Record<string, unknown>;
+    if (!derived.length && funnel.wraps.length === 1) return { rule: "import-only", tool: funnel.wraps[0], files };
+  }
   return undefined;
 }
 
@@ -385,16 +402,18 @@ export function harvestRules(
   const k = knownOf(env.files, stack, env.entryPoints ?? []);
   const read = { sentences: 0, proseFiles: 0, headers: 0, docstrings: 0 };
   const out: RuleCandidate[] = [];
+  const unanchored: HarvestReport["unanchored"] = [];
   const consider = (file: string, s: { text: string; line: number; under?: string; table?: boolean }, where: RuleCandidate["where"], self: HarvestAnchor[] = []) => {
     read.sentences++;
     const ms = markersIn(s.text);
     if (!ms.length) return;
     const found = anchorsIn(s.text, k);
     const anchors = [...found, ...self.filter((a) => !found.some((f) => f.kind === a.kind && f.id === a.id))];
-    if (!anchors.length) return;
+    const tier = sourceTier({ file, where, under: s.under }, RULE_HEADING);
+    if (!anchors.length) { if (tier === 1) unanchored.push({ file, line: s.line, quote: s.text.slice(0, 400), ...(s.under ? { under: s.under } : {}) }); return; }
     const names = ms.map((m) => m.name);
     const c: Omit<RuleCandidate, "score"> = {
-      file, line: s.line, where, ...(s.under ? { under: s.under } : {}), quote: s.text.slice(0, 400), anchors, markers: names,
+      file, line: s.line, where, ...(s.under ? { under: s.under } : {}), quote: s.text.slice(0, 400), tier, anchors, markers: names,
       narrative: NARRATIVE.test(s.text) || RECORD_PATH.test(file) || (!!s.under && RECORD_HEADING.test(s.under)),
     };
     const suggestedCheck = suggest(s.text, anchors, names, k);
@@ -426,8 +445,9 @@ export function harvestRules(
   const byQuote = new Map<string, RuleCandidate>();
   for (const c of out.sort((a, b) => b.score - a.score)) { const key = `${c.file}|${c.quote}`; if (!byQuote.has(key)) byQuote.set(key, c); }
   const min = opts.min ?? DEFAULT_MIN;
-  const candidates = [...byQuote.values()].filter((c) => c.score >= min).sort((a, b) => b.score - a.score || a.file.localeCompare(b.file) || a.line - b.line);
-  return { candidates, read, limits: HARVEST_LIMITS };
+  // RC5 — a person's own rule section is read first and never cut by the threshold
+  const candidates = [...byQuote.values()].filter((c) => c.score >= min || c.tier === 1).sort((a, b) => a.tier - b.tier || b.score - a.score || a.file.localeCompare(b.file) || a.line - b.line);
+  return { candidates, unanchored, read, limits: HARVEST_LIMITS };
 }
 
 export function formatHarvest(r: HarvestReport, opts: { min?: number; all?: boolean } = {}): string {

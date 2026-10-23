@@ -20,7 +20,7 @@ import { btn, ico, quiet } from "./styles";
 export interface SetupActionWire { key: string; kind: string; step: string; label: string; spends: boolean; urls?: string[]; github?: string }
 /** github: whether this machine has a GitHub login, and the owners already granted (github_docs.ts) */
 export interface PreviewWire { actions: SetupActionWire[]; waits: string[]; github?: { login: string | null; granted: string[] } }
-interface RunResult { ran?: Array<{ label: string; detail: string }>; failed?: Array<{ label: string; error: string; needs?: { github: string } }>; waits?: string[] }
+interface RunResult { ran?: Array<{ label: string; detail: string }>; failed?: Array<{ label: string; error: string; needs?: { github: string } }>; waits?: string[]; held?: { error: string; labels: string[] } }
 
 export function useSetupRun() {
   const [preview, setPreview] = useState<PreviewWire | null>(null);
@@ -90,6 +90,12 @@ export function SetupRunPanel({ run }: { run: SetupRun }) {
             )}
           </span>
         ))}
+        {/* RC6 — the model call failed once, before the run: the steps that need it, and why */}
+        {result?.held?.labels.length ? (
+          <span data-setup-run-held style={{ ...quiet, display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <AlertTriangle {...ico} color="var(--accent-warning)" style={{ flexShrink: 0 }} />Not run, as the model call failed: {result.held.labels.join("; ")}. {result.held.error}
+          </span>
+        ) : null}
         {(result?.waits ?? []).map((w) => <span key={w} style={{ ...quiet, display: "flex", gap: 8 }}><Hand {...ico} style={{ flexShrink: 0 }} />{w}</span>)}
         <button type="button" data-setup-run-clear onClick={() => dismissGuiTask(task.id)} style={{ ...btn(), alignSelf: "flex-start", marginTop: 4 }}>Clear</button>
       </div>

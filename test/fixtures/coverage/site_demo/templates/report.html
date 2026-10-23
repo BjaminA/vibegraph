@@ -1,0 +1,14 @@
+<!doctype html>
+<html>
+  <head><title>Report</title></head>
+  <body>
+    <div id="out"></div>
+    <script>
+      async function loadReport() {
+        const res = await fetch("/api/report");
+        document.getElementById("out").textContent = await res.text();
+      }
+      loadReport();
+    </script>
+  </body>
+</html>

@@ -8,6 +8,7 @@ import { loadArchStore, saveArchStore } from "./arch_store.ts";
 import { listSpecs } from "./software_store.ts";
 import { loadVocabulary } from "./operation_vocab.ts";
 import { buildScopePrompt, decideScope, parseScope, scopeDossier, linesReader } from "./node_scope.ts";
+import { modelNothingText } from "./model_failure_state.ts";
 export { linesReader };
 
 export interface ScopeCtx {
@@ -32,7 +33,7 @@ export async function scopeNode(ctx: ScopeCtx, nodeId: string, guidance?: string
   const dossier = scopeDossier(model, nodeId, { readLines: linesReader(root), specs, vocab })!;
   const g = typeof guidance === "string" ? guidance.trim().slice(0, 400) : "";
   const text = await ctx.run(buildScopePrompt(model, nodeId, dossier, vocab, g || undefined));
-  if (text === null) return { ok: false, error: "the model returned nothing" };
+  if (text === null) return { ok: false, error: modelNothingText() };
   const parsed = parseScope(text, model, nodeId, dossier, { model: ctx.modelLabel(), vocab });
   if (!parsed.scope) return { ok: false, error: parsed.error };
   const store = loadArchStore(root);

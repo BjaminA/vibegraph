@@ -15,6 +15,7 @@ import { hasNestedCall, directCallArgs } from "../nests.mjs";
 import { collectEnvReads } from "./env_reads.mjs";
 import { literalTable, objectProps, satisfiedType } from "./literal_table.mjs";
 import { namePattern } from "./name_pattern.mjs";
+import { inlineScripts, isHtmlPath, pageScriptSource } from "../inline_scripts.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 // TWO dialects, and the file's extension picks one. tree-sitter ships
@@ -79,9 +80,13 @@ export async function getParser(dialect = "ts") {
   return parsers.get(key);
 }
 
-/** The dialect a path is written in. Only `.tsx` carries JSX. */
+/** The dialect a path is written in. `.tsx` carries JSX, and so may the
+ *  JavaScript the walk admits by evidence (`.js`, `.jsx`) and a page's inline
+ *  scripts (RC2): JavaScript has no `<T>x` assertion, so the JSX grammar
+ *  reads all of it. `.ts`/`.mjs`/`.cjs` keep the TypeScript grammar. */
+const JSX_DIALECT = /\.(tsx|jsx|js|html?)$/;
 export function dialectForPath(filePath) {
-  return String(filePath ?? "").toLowerCase().endsWith(".tsx") ? "tsx" : "ts";
+  return JSX_DIALECT.test(String(filePath ?? "").toLowerCase()) ? "tsx" : "ts";
 }
 
 export class JstsGraphBuilder {
@@ -878,6 +883,21 @@ export class JstsGraphBuilder {
    * called, not here, so walkFunctionBody parents them deliberately
    * rather than this walk hoisting them into the wrong frame.
    */
+  /** RC2 — a function defined as a member of `export default { … }` (a
+   *  Worker's `fetch`, a module's API object) is stamped `defaultExportMember`:
+   *  the object is the module's export, so the member is how it is called. */
+  markDefaultMember(member, visit) {
+    const before = this.nodes.length;
+    const out = visit();
+    let holder = member.parent?.parent;
+    while (holder && ["satisfies_expression", "as_expression", "parenthesized_expression"].includes(holder.type)) holder = holder.parent;
+    if (member.parent?.type === "object" && holder?.type === "export_statement" && holder.children.some((c) => c.type === "default")) {
+      const fn = this.nodes.slice(before).find((n) => n.type === "function_def");
+      if (fn) fn.defaultExportMember = true;
+    }
+    return out;
+  }
+
   walkExpressionCalls(node, parentId) {
     if (!node) return;
     // An OBJECT-literal method (`{ preconditions(facts) { … } }`) is a
@@ -885,7 +905,7 @@ export class JstsGraphBuilder {
     // only a function_def can be a thread seed or a link target.
     if (node.type === "method_definition") {
       const mName = node.childForFieldName("name");
-      return this.visitFunction(node, parentId, mName ? this.text(mName) : "_method");
+      return this.markDefaultMember(node, () => this.visitFunction(node, parentId, mName ? this.text(mName) : "_method"));
     }
     // A function EXPRESSION bound to nothing nameable flattens into the
     // enclosing scope (the stated inline-callback limit).
@@ -905,7 +925,7 @@ export class JstsGraphBuilder {
       const key = node.childForFieldName("key");
       const val = this.unwrap(node.childForFieldName("value"));
       if (val && FUNCTION_EXPR_TYPES.has(val.type)) {
-        return this.visitFunction(val, parentId, key ? this.text(key) : "_prop", node);
+        return this.markDefaultMember(node, () => this.visitFunction(val, parentId, key ? this.text(key) : "_prop", node));
       }
     }
     if (CALL_TYPES.has(node.type)) { this.visitCall(node, parentId, node); return; }
@@ -1333,7 +1353,10 @@ export function programSignals(root, text) {
 
 export async function parseFile(filePath, moduleId) {
   const source = readFileSync(filePath, "utf-8");
-  const { ir, dropped } = await buildFromSource(source, moduleId, dialectForPath(filePath));
+  // RC2 — a page is read as its inline scripts, lines kept (inline_scripts.mjs)
+  const scripts = isHtmlPath(filePath) ? inlineScripts(source) : null;
+  const { ir, dropped } = await buildFromSource(scripts ? pageScriptSource(source, scripts) : source, moduleId, dialectForPath(filePath));
+  if (scripts) ir.embedded = { host: "html", scripts: scripts.map((x) => ({ line: x.line, endLine: x.endLine, type: x.type })) };
   return { ir, dropped };
 }
 

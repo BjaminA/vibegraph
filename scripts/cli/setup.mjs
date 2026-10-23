@@ -24,6 +24,9 @@ import { setupState, loadSkips, saveSkips, SKIPPABLE_STEPS } from "../../src/ser
 import { githubLogin, grantGithub, revokeGithub } from "../../src/server/github_docs.ts";
 import { loadDirection } from "../../src/server/project_direction.ts";
 import { censusNow } from "./project_direction_context.mjs";
+import { harvestRules } from "../../src/server/rule_harvest.ts";
+import { buildRuleLedger } from "../../src/server/rule_ledger.ts";
+import { loadConstraints } from "../../src/server/constraint_store.ts";
 
 export const SETUP_USAGE = `setup [<root>] [--json]                 the project's setup, in order: software specs, architecture groups, the Brief,
                                   rules, the hooks, then a plan for what you build next — where it stands and the
@@ -100,7 +103,9 @@ export function runSetup(args, { cli = null, home = homedir() } = {}) {
   const root = resolve(cliPath(parsed.values.root ?? sub ?? "."));
   const { envelope } = loadEnvelope(root, null, pipelineHere(root), { cache: true });
   const stack = buildStackIndex(envelope, root);
-  const state = setupState(root, { stack, census: loadDirection(root).rules.some((r) => r.status === "proposed") ? censusNow(root, { envelope, stack }) : null });
+  // RC5 — the written rules and what became of each (rule_ledger.ts)
+  const rules = buildRuleLedger(harvestRules(root, envelope, stack), loadConstraints(root));
+  const state = setupState(root, { stack, rules, census: loadDirection(root).rules.some((r) => r.status === "proposed") ? censusNow(root, { envelope, stack }) : null });
   const head = `${Object.keys(envelope.files ?? {}).length} parsed source files, ${envelope.threads?.length ?? 0} threads`;
   let stale = [];
   try { stale = outdatedSkills({ root, loc: locate(), home }); } catch { stale = []; }

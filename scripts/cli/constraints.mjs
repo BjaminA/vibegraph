@@ -32,13 +32,21 @@ import { resolve } from "node:path";
 import { buildStackIndex } from "../../src/server/stack.ts";
 import { harvestRules, formatHarvest } from "../../src/server/rule_harvest.ts";
 import { runRuleDraft } from "./rule_draft.mjs";
+import { runRuleLedgerCli } from "./rule_ledger_cli.mjs";
 
-export const CONSTRAINTS_USAGE = `constraint(s) list|add|harvest|draft|remove|ratify|show|edit|propose|accept|reject [...]   the stated rules (.vibegraph/constraints.json); zero tokens except draft
+export const CONSTRAINTS_USAGE = `constraint(s) list|add|harvest|ledger|restore|draft|remove|ratify|show|edit|propose|accept|reject [...]   the stated rules (.vibegraph/constraints.json); zero tokens except draft
       list [<root>] [--json]
       harvest [<root>] [--min <score>] [--all] [--json]
           rule-shaped sentences in the project's own prose (CLAUDE.md, READMEs, docs, module headers,
           docstrings) that name code the IR knows, ranked; a place to read, never a rule — state the
           operators' real ones with add --cite, or let /vibegraph-rules do it for you to ratify
+      ledger [<root>] [--json]
+          every rule sentence of a CLAUDE.md / AGENTS.md rule section and what became of it
+          (ratified, proposed, merged, next draft, queued behind a round's cap, out of reach),
+          and any entry of constraints.json this version could not read
+      restore [<root>] [--all | --take 1,3]
+          the rules a person ratified before that constraints.json no longer holds; listed,
+          or put back with --all / --take (a person's step)
       draft [<root>] [--dry-run] [--reply <file>] [--prompt] [--model <m>] [--force]
           SPENDS TOKENS (one model call): rules proposed from the architecture — the processes, the
           tools by role, the funnels, the hops, silent-fail settings, unguarded flows, the harvest
@@ -162,6 +170,10 @@ export function runConstraints({ root, sub, id, values, pipeline }) {
   }
   if (sub === "draft") {
     try { return runRuleDraft({ root, values, pipeline }); } catch (e) { return { lines, messages: [`draft: ${e.message}`], exitCode: 2 }; }
+  }
+  // RC5 — what became of each written rule; the ratified rules a re-init lost
+  if (sub === "ledger" || sub === "restore") {
+    try { return runRuleLedgerCli({ root, sub, values, pipeline }); } catch (e) { return { lines, messages: [`${sub}: ${e.message}`], exitCode: 2 }; }
   }
   if (sub === "add") {
     let raw;

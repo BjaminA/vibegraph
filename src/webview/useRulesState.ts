@@ -12,6 +12,8 @@ export interface RuleCheckRowView {
   id: string; rule: string; described: string; verdict: RuleVerdict; reason: string;
   offenders: string[]; notFollowed: string[];
   threads: Array<{ entryPointId: string | null; verdict: RuleVerdict; reason: string }>;
+  /** RC4 — the check cannot catch a bypass of its funnel (src/server/funnel_checks.ts) */
+  trivial?: string;
 }
 export interface RuleRowView {
   /** with its history (`changes`, each naming `who`) and open `proposals` */

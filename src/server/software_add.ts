@@ -13,6 +13,7 @@ import type { SoftwareSpec } from "../shared/software_types.ts";
 import { buildSpecPrompt, gateSpec, htmlToText, parseSpecReply, specCoverage, thinSpecNote } from "./software_draft.ts";
 import { isSafeTool, saveSource, saveSpec } from "./software_store.ts";
 import { githubRef, readGithubDocs, type DocsRead } from "./github_docs.ts";
+import { modelNothingText } from "./model_failure_state.ts";
 
 const MAX_BYTES = 5 * 1024 * 1024;
 
@@ -79,7 +80,7 @@ export async function softwareAddRun(root: string, tool: string, urls: string[],
     texts.push({ ref: url, text: r.text });
   }
   const reply = await run(buildSpecPrompt(tool, texts));
-  if (reply === null) return { ok: false, error: "the model returned nothing" };
+  if (reply === null) return { ok: false, error: modelNothingText() };
   const r = gateAndSaveSpec(root, tool, texts, reply, by);
   if ("error" in r) {
     const file = keptReplyPath(root, tool);

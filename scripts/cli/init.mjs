@@ -13,6 +13,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { PACKAGE_NAME } from "./paths.mjs";
+import { PATH_VARS } from "../cache_dir.mjs";
 
 export const BEGIN = "<!-- vibegraph-knowledge:begin -->";
 export const END = "<!-- vibegraph-knowledge:end -->";
@@ -287,6 +288,35 @@ export function applySkill({ root, loc, user = false, remove = false, home = hom
 const isOurs = (h) => typeof h?.command === "string" && h.command.includes(HOOK_MARKER);
 
 /** @returns {{ path, state: "installed"|"updated"|"removed"|"unchanged" }} */
+/** RC7 — the variables an installed hook pins: the Python verified now, every
+ *  path variable this shell has set (cache_dir.mjs PATH_VARS), and any of
+ *  those the hooks already pinned that this shell does not set, so a
+ *  re-install keeps what an earlier one was told. A hook runs with no login
+ *  shell (Claude Code's environment, or `wsl.exe -e env`), so what is not
+ *  pinned is not there. */
+export function hookEnv(verified, env = process.env, previous = {}) {
+  const out = {};
+  for (const k of PATH_VARS) { const v = env[k] ?? previous[k]; if (v) out[k] = v; }
+  return { ...out, ...verified };
+}
+
+/** The variables the installed hooks pin now, read back from settings.local.json. */
+export function pinnedFromSettings(root) {
+  const path = join(root, ".claude", "settings.local.json");
+  let settings;
+  try { settings = JSON.parse(readFileSync(path, "utf-8")); } catch { return {}; }
+  const out = {};
+  const keys = [...PATH_VARS, "VG_PYTHON", "VIBEGRAPH_PYDEPS"];
+  for (const groups of Object.values(settings?.hooks ?? {})) for (const g of groups ?? []) for (const h of g?.hooks ?? []) {
+    if (!isOurs(h)) continue;
+    for (const k of keys) {
+      const m = new RegExp(`(?:^|\\s|')${k}=("((?:[^"\\\\]|\\\\.)*)"|'([^']*)'|(\\S+))`).exec(String(h.command ?? ""));
+      if (m && !out[k]) out[k] = (m[2] !== undefined ? m[2].replace(/\\(.)/g, "$1") : m[3] ?? m[4]).replace(/^\/\//, "/");
+    }
+  }
+  return out;
+}
+
 export function applyHooks({ root, remove = false, command = hookCommand }) {
   const dir = join(root, ".claude");
   const path = join(dir, "settings.local.json");

@@ -21,6 +21,7 @@ import { runConstraintChecks } from "../scripts/cli/check.mjs";
 import { exportKnowledge } from "../scripts/export_knowledge.mjs";
 import { buildPolyglotEnvelope } from "../scripts/regen_polyglot.mjs";
 import { buildStackIndex } from "../src/server/stack.ts";
+import { addConstraint } from "../src/server/constraint_store.ts";
 import { loadSpec, specFile } from "../src/server/software_store.ts";
 import { specUsage } from "../src/server/software_apply.ts";
 import { loadPlan } from "../src/server/plan_store.ts";
@@ -76,6 +77,17 @@ test("a draft is used nowhere; ratifying re-checks every quote, and refuses one 
   const tool = buildStackIndex(env, root).tools.find((t) => t.tool === "ledgerbox");
   assert.equal(tool.role, "db");
   assert.equal(tool.roleStatedBy, "software:ledgerbox", "the role carries where it came from");
+  // 2026-10-22 — who outranks whom: a person's stack policy > a ratified spec
+  // > a model's classification. The setup classifies first, so a classification
+  // that outranked the spec kept its unreviewed role after the spec was ratified.
+  const policy = (role, source) => addConstraint(root, { kind: "stack-policy", text: `ledgerbox is ${role}`, scope: { stack: ["ledgerbox"] }, policy: { tool: "ledgerbox", role, rule: "describe" } }, source);
+  const classified = policy("utility", "agent");
+  const afterModel = buildStackIndex(env, root).tools.find((t) => t.tool === "ledgerbox");
+  assert.deepEqual([afterModel.role, afterModel.roleStatedBy], ["db", "software:ledgerbox"], "the ratified spec outranks a model's classification");
+  const own = policy("cache", "human");
+  const afterPerson = buildStackIndex(env, root).tools.find((t) => t.tool === "ledgerbox");
+  assert.deepEqual([afterPerson.role, afterPerson.roleStatedBy], ["cache", own.id], "a person's own statement outranks the spec");
+  assert.ok(classified.id !== own.id);
 });
 
 test("where the code uses it: the import, and every call that is one of its operations", async () => {

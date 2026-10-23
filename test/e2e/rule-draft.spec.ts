@@ -64,8 +64,17 @@ test.describe("rules proposed from the architecture", () => {
     await expect(sheet.locator('[data-rules-queue] [data-rule-row="c7"]')).toBeVisible({ timeout: 10_000 });
     const card = sheet.locator('[data-rules-queue] [data-rule-row="c7"]');
     await expect(card).toHaveAttribute("data-item-proposed", "true");
-    await expect(card).toContainText("rests on funnel:telemetry.storage");
-    await expect(card).toContainText("from README.md:14");
+    // 2026-10-22 — in plain words (src/shared/rule_readable.ts): the reason as
+    // WHY, never "(why: …)" in the title; the sentence it came from; who
+    // proposed it; the facts it rests on, in words, in the fold
+    await expect(card.locator('[data-item-bullet="why"]')).toContainText("storage.py is the funnel for sqlite3");
+    await expect(card.locator(".vg-item-name")).not.toContainText("(why:");
+    await expect(card.locator('[data-item-bullet="from"]')).toContainText("(README.md:14)");
+    await expect(card).toContainText("Proposed by Claude from the project's architecture; it waits for you to ratify it.");
+    await expect(card).toContainText("telemetry.storage, the module the calls go through");
+    await expect(card).not.toContainText("proposed from the architecture (");
+    // the rule whose check could not be decided says so, plainly
+    await expect(sheet.locator('[data-rules-queue] [data-rule-row="c8"] [data-item-bullet="checked"]')).toContainText("Not checked automatically:");
     // 2026-10-21 — a rule's text is never cut: the header's first sentence whole, every bullet whole
     await expect(card.locator(".vg-item-name")).not.toContainText("…");
     for (const [shown, whole] of await card.locator(":scope > ul > li > span").evaluateAll((els) => els.map((e) => [e.clientHeight, e.scrollHeight]))) {

@@ -19,6 +19,7 @@ import { sourceHashOf } from "./readme_store.ts";
 import { statedRules, type Constraint } from "./constraint_store.ts";
 import { describeCheck, isConstraintCheck } from "./constraint_grammar.ts";
 import { describeRun1Check, isRun1Check } from "./quality/verbs/index.ts";
+import { claimInWords, isClaimCheck } from "../shared/rule_claim_types.ts";
 
 /** The routed rules as the skill's drafting input AND the rules half of
  *  the stamp. Deliberately the FULL sentence, not the structured half: the
@@ -38,7 +39,7 @@ export function skillRulesBlock(all: readonly Constraint[]): string {
     "STATED RULES that govern this thread (human/orchestrator decisions, NOT read from the code —",
     "the code cannot say why they exist, which is exactly why they must survive in this skill):",
     ...routed.map((c) => `- [${c.id}, ${c.source}-stated, ${c.kind}] ${c.text}`
-      + (c.check ? `\n  (machine-checkable: ${isConstraintCheck(c.check) ? describeCheck(c.check) : isRun1Check(c.check) ? describeRun1Check(c.check) : "unknown check shape"})` : "")),
+      + (c.check ? `\n  (machine-checkable: ${isConstraintCheck(c.check) ? describeCheck(c.check) : isRun1Check(c.check) ? describeRun1Check(c.check) : isClaimCheck(c.check) ? claimInWords(c.check) : "unknown check shape"})` : "")),
   ].join("\n");
 }
 

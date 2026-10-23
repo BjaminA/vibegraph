@@ -8,6 +8,7 @@
 
 import type { StackIndex } from "./stack.ts";
 import { applyClassifications, buildClassifyPrompt, collectUnknownTools, parseClassifyResponse, type ToolDossier } from "./stack_classify.ts";
+import { modelNothingText } from "./model_failure_state.ts";
 
 export interface ClassifyCtx {
   root: () => string | null;
@@ -40,7 +41,7 @@ export async function classifyRun(ctx: ClassifyCtx): Promise<{ ok: boolean; erro
   if (!d.dossiers.length) return { ok: false, error: "every tool already has a role" };
   if (!ctx.claudeAvailable()) return { ok: false, error: "the claude CLI is unavailable — `vibegraph-knowledge classify` with a saved reply works from the command line" };
   const text = await ctx.run(d.prompt);
-  if (text === null) return { ok: false, error: "the model returned nothing" };
+  if (text === null) return { ok: false, error: modelNothingText() };
   const parsed = parseClassifyResponse(text, d.dossiers);
   if (parsed.error) return { ok: false, error: parsed.error };
   const applied = applyClassifications(d.root, parsed.accepted, d.dossiers, { model: ctx.modelLabel() });

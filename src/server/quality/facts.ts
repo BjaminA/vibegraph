@@ -19,6 +19,7 @@ import type { TopologyModel } from "../../shared/topology_types.ts";
 import { buildCrossingIndex } from "../crossings.ts";
 import type { FactNode, QualityFacts, RunDelta } from "./check_registry.ts";
 import { languageForPath } from "../../shared/languages.ts";
+import { fullCallName } from "../../shared/call_names.ts";
 
 interface IrNodeLike {
   id: string; type: string; parentId?: string | null; line?: number; col?: number;
@@ -173,7 +174,11 @@ export function buildQualityFacts(input: FactsInput): QualityFacts {
       // reads. A separate list, so the verbs that read `unresolved` see
       // exactly what they saw before.
       const ext = n.type === "call" ? n.funcName : n.callTarget;
-      if (typeof ext === "string" && ext && !resolved.has(n.id)) externalCalls.push({ file, label: ext, nodeId: n.id });
+      if (typeof ext === "string" && ext && !resolved.has(n.id)) {
+        // RC4 — and its full name through the file's imports, so `urllib.request.urlopen` matches a bare `urlopen(…)`
+        const full = fullCallName(ext, ir.nodes ?? []);
+        externalCalls.push({ file, label: ext, nodeId: n.id, ...(full && full !== ext ? { full } : {}) });
+      }
       if (n.type !== "call" || resolved.has(n.id)) continue;
       const label = typeof n.funcName === "string" ? n.funcName : "";
       if (label) unresolved.push({ file, label });

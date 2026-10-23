@@ -1,0 +1,27 @@
+<!doctype html>
+<html>
+  <head>
+    <title>Items</title>
+    <script src="vendor.min.js"></script>
+    <script type="application/ld+json">{"@type": "WebSite"}</script>
+  </head>
+  <body>
+    <ul id="items"></ul>
+    <script type="module">
+      import { label } from "./label.js";
+
+      async function loadItems() {
+        const res = await fetch("/api/items");
+        const items = await res.json();
+        render(items);
+      }
+
+      function render(items) {
+        const list = document.getElementById("items");
+        list.innerHTML = items.map((i) => `<li>${label(i)}</li>`).join("");
+      }
+
+      loadItems();
+    </script>
+  </body>
+</html>
